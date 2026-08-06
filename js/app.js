@@ -159,7 +159,8 @@ window.handleLoginSubmit = async function(e) {
     const { user, error } = await db.login(email, password);
     
     if (error || !user) {
-        showToast(t('invalid_credentials'), 'danger');
+        console.error("Login Error:", error);
+        showToast(error?.message || t('invalid_credentials'), 'danger');
         return;
     }
     
