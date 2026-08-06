@@ -1,6 +1,6 @@
 // IMPORTANT: Replace these with your actual Supabase Project URL and Anon Key
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://bbbetcdioiaozdjkvwxu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJiYmV0Y2Rpb2lhb3pkamt2d3h1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTM0NjQsImV4cCI6MjEwMTU4OTQ2NH0.GhV7HsGnAXA8Zb_IV3hxhwI9qmbM3qhcuWRMSXKUNcw';
 
 // Initialize the Supabase client
 // This uses the global supabase object loaded via the CDN in index.html
@@ -27,7 +27,7 @@ const db = {
                 .insert([
                     { punch_type: 'IN', employee_id: '00000000-0000-0000-0000-000000000000' } // Dummy UUID for prototype
                 ]);
-            
+
             if (error) throw error;
             return true;
         } catch (error) {
@@ -46,56 +46,12 @@ const db = {
                 .from('announcements')
                 .select('*')
                 .order('created_at', { ascending: false });
-            
+
             if (error) throw error;
             return data;
         } catch (error) {
             console.error("Error fetching announcements:", error.message);
             return null;
-        }
-    },
-
-    // --- Authentication ---
-    async login(email, password) {
-        if (!supabaseClient) {
-            console.warn("Mock Login Success");
-            return { user: { email }, error: null };
-        }
-        
-        try {
-            const { data, error } = await supabaseClient.auth.signInWithPassword({
-                email: email,
-                password: password
-            });
-            return { user: data?.user, error };
-        } catch (error) {
-            return { user: null, error };
-        }
-    },
-
-    async logout() {
-        if (supabaseClient) {
-            await supabaseClient.auth.signOut();
-        }
-    },
-
-    async getUserProfile(userId) {
-        if (!supabaseClient) {
-            return { role: 'EMPLOYEE' }; // Mock fallback, email is not available here
-        }
-
-        try {
-            const { data, error } = await supabaseClient
-                .from('profiles')
-                .select('role')
-                .eq('id', userId)
-                .single();
-            
-            if (error) throw error;
-            return data;
-        } catch (error) {
-            console.error("Error fetching profile:", error.message);
-            return { role: 'EMPLOYEE' }; // Default fallback
         }
     }
 };
