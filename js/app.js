@@ -135,6 +135,17 @@ function showToast(message, type = 'info') {
     }, 3500);
 }
 
+// Global Handlers
+window.handleClockIn = async function() {
+    const success = await db.clockIn();
+    const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    if (success) {
+        showToast(t('toast_clock_in') + ' ' + now, 'success');
+    } else {
+        showToast("Error clocking in. Check DB connection.", "danger");
+    }
+}
+
 // Render Employee Dashboard
 function renderDashboard() {
     const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -144,7 +155,7 @@ function renderDashboard() {
                 <h1 class="page-title">${t('welcome')}</h1>
                 <p class="page-subtitle">${t('welcome_sub')}</p>
             </div>
-            <button class="btn-primary" onclick="showToast(t('toast_clock_in') + ' ' + '${now}', 'success')">${t('clock_in')}</button>
+            <button class="btn-primary" onclick="handleClockIn()">${t('clock_in')}</button>
         </div>
 
         <div class="dashboard-grid">
@@ -156,7 +167,7 @@ function renderDashboard() {
                         <i data-lucide="calendar-plus"></i>
                         <span>${t('apply_leave')}</span>
                     </button>
-                    <button class="action-btn" onclick="showToast(t('toast_clock_in') + ' ' + '${now}', 'success')">
+                    <button class="action-btn" onclick="handleClockIn()">
                         <i data-lucide="clock"></i>
                         <span>${t('clock_in')}</span>
                     </button>
