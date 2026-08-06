@@ -1,7 +1,9 @@
 // App State
 let currentLang = 'en';
 let currentTheme = 'light';
-let currentView = 'dashboard';
+let currentView = 'login';
+let currentUser = null;
+let currentUserRole = null;
 
 // DOM Elements
 const htmlElement = document.documentElement;
@@ -122,6 +124,9 @@ function showToast(message, type = 'info') {
     } else if (type === 'warning') {
         icon = 'alert-triangle';
         color = 'var(--color-warning)';
+    } else if (type === 'danger') {
+        icon = 'x-circle';
+        color = '#ef4444';
     }
     
     toast.style.borderInlineStartColor = color;
@@ -144,6 +149,76 @@ window.handleClockIn = async function() {
     } else {
         showToast("Error clocking in. Check DB connection.", "danger");
     }
+}
+
+window.handleLoginSubmit = async function(e) {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    
+    const { user, error } = await db.login(email, password);
+    
+    if (error || !user) {
+        showToast(t('invalid_credentials'), 'danger');
+        return;
+    }
+    
+    currentUser = user;
+    const profile = await db.getUserProfile(user.id);
+    currentUserRole = profile.role;
+    
+    // Show sidebar and topbar again
+    document.getElementById('sidebar').style.display = 'block';
+    document.querySelector('.topbar').style.display = 'flex';
+    
+    // Route based on role
+    if (currentUserRole === 'ADMIN') {
+        currentView = 'admin';
+    } else {
+        currentView = 'dashboard';
+    }
+    renderView(currentView);
+}
+
+// Render Login View
+function renderLogin() {
+    // Hide sidebar and topbar for full screen login
+    const sidebar = document.getElementById('sidebar');
+    const topbar = document.querySelector('.topbar');
+    if (sidebar) sidebar.style.display = 'none';
+    if (topbar) topbar.style.display = 'none';
+    
+    return `
+        <div style="display: flex; height: 100vh; align-items: center; justify-content: center; width: 100vw; position: fixed; top: 0; left: 0; background: var(--color-bg); z-index: 9999;">
+            <div class="card" style="width: 100%; max-width: 400px; padding: 2.5rem 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
+                <div style="text-align: center; margin-bottom: 2rem;">
+                    <div style="font-size: 2.5rem; color: var(--color-primary); font-weight: 800; letter-spacing: -1px; margin-bottom: 0.5rem;">AEGIS</div>
+                    <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
+                    <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>
+                </div>
+                <form onsubmit="handleLoginSubmit(event)">
+                    <div class="form-group">
+                        <label class="form-label">${t('email_label')}</label>
+                        <input type="email" id="email" class="form-control" placeholder="name@company.com" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label class="form-label">${t('password_label')}</label>
+                        <input type="password" id="password" class="form-control" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%; padding: 0.875rem; font-size: 1rem;">${t('sign_in')}</button>
+                </form>
+            </div>
+            
+            <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 10000;">
+                <button class="icon-btn" onclick="toggleLanguage()">
+                    <i data-lucide="globe"></i> <span id="langText" style="font-size: 0.875rem; font-weight: 600; margin-inline-start: 4px;">${currentLang === 'en' ? 'AR' : 'EN'}</span>
+                </button>
+                <button class="icon-btn" onclick="toggleTheme()">
+                    <i id="themeIcon" data-lucide="${currentTheme === 'light' ? 'moon' : 'sun'}"></i>
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 // Render Employee Dashboard
@@ -427,9 +502,17 @@ function renderAdmin() {
 
 // Router
 function renderView(viewId) {
+    if (!currentUser && viewId !== 'login') {
+        viewId = 'login';
+        currentView = 'login';
+    }
+
     let content = '';
     
     switch(viewId) {
+        case 'login':
+            content = renderLogin();
+            break;
         case 'dashboard':
             content = renderDashboard();
             break;

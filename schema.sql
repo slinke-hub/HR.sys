@@ -54,3 +54,54 @@ CREATE POLICY "Allow anonymous selects" ON announcements FOR SELECT USING (true)
 INSERT INTO announcements (title, content, icon) VALUES 
 ('Q3 Townhall Meeting', 'Join us this Friday for the quarterly company update. Location: Main Auditorium & Zoom.', 'megaphone'),
 ('New Wellness Benefits Added', 'We have added gym memberships to our health coverage. Check your benefits portal.', 'heart-pulse');
+
+-- 4. Profiles Table (For Role Management)
+CREATE TABLE profiles (
+    id UUID REFERENCES auth.users(id) PRIMARY KEY,
+    role VARCHAR(20) DEFAULT 'EMPLOYEE' CHECK (role IN ('ADMIN', 'EMPLOYEE')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read their own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+
+-- ==========================================
+-- ADMIN SEED SCRIPT
+-- ==========================================
+-- Run this block in the Supabase SQL Editor to securely inject the admin account.
+-- Email: privatepple@gmail.com
+-- Password: 0912577754
+
+DO $$
+DECLARE
+  new_user_id UUID := gen_random_uuid();
+BEGIN
+  -- 1. Insert into auth.users using pgcrypto for the bcrypt password hash
+  INSERT INTO auth.users (
+    instance_id, id, aud, role, email, encrypted_password, 
+    email_confirmed_at, recovery_sent_at, last_sign_in_at, 
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at, 
+    confirmation_token, email_change, email_change_token_new, recovery_token
+  )
+  VALUES (
+    '00000000-0000-0000-0000-000000000000', new_user_id, 'authenticated', 'authenticated', 'privatepple@gmail.com', 
+    crypt('0912577754', gen_salt('bf')), 
+    now(), now(), now(), 
+    '{"provider":"email","providers":["email"]}', '{}', now(), now(), 
+    '', '', '', ''
+  );
+
+  -- 2. Insert into the identities table
+  INSERT INTO auth.identities (
+    provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at, id
+  )
+  VALUES (
+    new_user_id::text, new_user_id, format('{"sub":"%s","email":"%s"}', new_user_id::text, 'privatepple@gmail.com')::jsonb, 'email', now(), now(), now(), gen_random_uuid()
+  );
+
+  -- 3. Assign the ADMIN role in our profiles table
+  INSERT INTO public.profiles (id, role)
+  VALUES (new_user_id, 'ADMIN');
+
+END $$;
+

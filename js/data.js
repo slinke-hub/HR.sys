@@ -26,6 +26,15 @@ const i18n = {
     diversity: "Diversity Ratio",
     open_roles: "Open Roles",
     toast_clock_in: "Successfully clocked in at",
+    toast_payroll_downloaded: 'Payslip downloaded successfully!',
+
+    // Login
+    login_title: 'Sign In to Aegis',
+    login_subtitle: 'Enter your credentials to access your portal',
+    email_label: 'Email Address',
+    password_label: 'Password',
+    sign_in: 'Sign In',
+    invalid_credentials: 'Invalid email or password',
     toast_leave_applied: "Leave request submitted successfully.",
     toast_doc_req: "Document requested. You will receive an email shortly.",
     toast_payslip: "Downloading payslip...",
@@ -84,7 +93,17 @@ const i18n = {
     diversity: "نسبة التنوع",
     open_roles: "الوظائف المتاحة",
     toast_clock_in: "تم تسجيل الدخول بنجاح في",
-    toast_leave_applied: "تم تقديم طلب الإجازة بنجاح.",
+    toast_payroll_downloaded: 'تم تحميل قسيمة الراتب بنجاح!',
+
+    // Login (Arabic)
+    login_title: 'تسجيل الدخول إلى إيجيس',
+    login_subtitle: 'أدخل بيانات الاعتماد الخاصة بك للوصول إلى بوابتك',
+    email_label: 'البريد الإلكتروني',
+    password_label: 'كلمة المرور',
+    sign_in: 'تسجيل الدخول',
+    invalid_credentials: 'البريد الإلكتروني أو كلمة المرور غير صالحة',
+    
+    toast_leave_applied: "تم إرسال طلب الإجازة بنجاح.",
     toast_doc_req: "تم طلب المستند. ستتلقى بريدًا إلكترونيًا قريبًا.",
     toast_payslip: "جاري تحميل قسيمة الراتب...",
     timesheet: "الجدول الزمني الأسبوعي",

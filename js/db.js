@@ -53,5 +53,49 @@ const db = {
             console.error("Error fetching announcements:", error.message);
             return null;
         }
+    },
+
+    // --- Authentication ---
+    async login(email, password) {
+        if (!supabaseClient) {
+            console.warn("Mock Login Success");
+            return { user: { email }, error: null };
+        }
+        
+        try {
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
+            return { user: data?.user, error };
+        } catch (error) {
+            return { user: null, error };
+        }
+    },
+
+    async logout() {
+        if (supabaseClient) {
+            await supabaseClient.auth.signOut();
+        }
+    },
+
+    async getUserProfile(userId) {
+        if (!supabaseClient) {
+            return { role: 'EMPLOYEE' }; // Mock fallback, email is not available here
+        }
+
+        try {
+            const { data, error } = await supabaseClient
+                .from('profiles')
+                .select('role')
+                .eq('id', userId)
+                .single();
+            
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("Error fetching profile:", error.message);
+            return { role: 'EMPLOYEE' }; // Default fallback
+        }
     }
 };
