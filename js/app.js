@@ -169,7 +169,7 @@ window.handleLoginSubmit = async function(e) {
     currentUserRole = profile.role;
     
     // Show sidebar and topbar again
-    document.getElementById('sidebar').style.display = 'block';
+    document.querySelector('.sidebar').style.display = 'block';
     document.querySelector('.topbar').style.display = 'flex';
     
     // Route based on role
@@ -184,7 +184,7 @@ window.handleLoginSubmit = async function(e) {
 // Render Login View
 function renderLogin() {
     // Hide sidebar and topbar for full screen login
-    const sidebar = document.getElementById('sidebar');
+    const sidebar = document.querySelector('.sidebar');
     const topbar = document.querySelector('.topbar');
     if (sidebar) sidebar.style.display = 'none';
     if (topbar) topbar.style.display = 'none';
