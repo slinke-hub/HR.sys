@@ -29,7 +29,7 @@ const i18n = {
     toast_payroll_downloaded: 'Payslip downloaded successfully!',
 
     // Login
-    login_title: 'Sign In to Aegis',
+    login_title: 'Sign In to MUQAM',
     login_subtitle: 'Enter your credentials to access your portal',
     email_label: 'Email Address',
     password_label: 'Password',
@@ -96,7 +96,7 @@ const i18n = {
     toast_payroll_downloaded: 'تم تحميل قسيمة الراتب بنجاح!',
 
     // Login (Arabic)
-    login_title: 'تسجيل الدخول إلى إيجيس',
+    login_title: 'تسجيل الدخول إلى مقام',
     login_subtitle: 'أدخل بيانات الاعتماد الخاصة بك للوصول إلى بوابتك',
     email_label: 'البريد الإلكتروني',
     password_label: 'كلمة المرور',

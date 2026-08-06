@@ -192,7 +192,7 @@ function renderLogin() {
         <div style="display: flex; height: 100vh; align-items: center; justify-content: center; width: 100vw; position: fixed; top: 0; left: 0; background: var(--color-bg); z-index: 9999;">
             <div class="card" style="width: 100%; max-width: 400px; padding: 2.5rem 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
                 <div style="text-align: center; margin-bottom: 2rem;">
-                    <div style="font-size: 2.5rem; color: var(--color-primary); font-weight: 800; letter-spacing: -1px; margin-bottom: 0.5rem;">AEGIS</div>
+                    <div style="font-size: 2.5rem; color: var(--color-primary); font-weight: 800; letter-spacing: -1px; margin-bottom: 0.5rem;">MUQAM</div>
                     <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
                     <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>
                 </div>

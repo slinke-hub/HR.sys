@@ -1,4 +1,4 @@
--- Supabase Schema for Aegis HR
+-- Supabase Schema for MUQAM HR
 
 -- 1. Time Punches Table
 CREATE TABLE time_punches (
