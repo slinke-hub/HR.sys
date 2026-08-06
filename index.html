@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aegis HR</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i data-lucide="shield"></i>
+                    <span>Aegis HR</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-view="dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span data-i18n="nav_dashboard">Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" data-view="time">
+                    <i data-lucide="clock"></i>
+                    <span data-i18n="nav_time">Time & Attendance</span>
+                </a>
+                <a href="#" class="nav-item" data-view="leave">
+                    <i data-lucide="calendar-off"></i>
+                    <span data-i18n="nav_leave">Leave</span>
+                </a>
+                <a href="#" class="nav-item" data-view="payroll">
+                    <i data-lucide="banknote"></i>
+                    <span data-i18n="nav_payroll">Payroll</span>
+                </a>
+                <a href="#" class="nav-item" data-view="admin">
+                    <i data-lucide="shield-check"></i>
+                    <span data-i18n="nav_admin">Admin Hub</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <div class="search-container">
+                    <i data-lucide="search" class="search-icon"></i>
+                    <input type="text" placeholder="Search (Cmd/Ctrl + K)" class="search-input" data-i18n-placeholder="search_placeholder">
+                </div>
+                
+                <div class="topbar-actions">
+                    <button class="icon-btn" id="langToggle" title="Toggle Language">
+                        <i data-lucide="globe"></i>
+                        <span class="lang-text" id="langText">AR</span>
+                    </button>
+                    <button class="icon-btn" id="themeToggle" title="Toggle Theme">
+                        <i data-lucide="moon" id="themeIcon"></i>
+                    </button>
+                    <button class="icon-btn" title="Notifications">
+                        <i data-lucide="bell"></i>
+                        <span class="badge">3</span>
+                    </button>
+                    <div class="user-profile">
+                        <img src="https://ui-avatars.com/api/?name=Sarah+Jen&background=007AFF&color=fff" alt="User Profile" class="avatar">
+                        <div class="user-info">
+                            <span class="user-name">Sarah Jen</span>
+                            <span class="user-role" data-i18n="role_employee">Employee</span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dynamic Views Container -->
+            <div class="view-container" id="viewContainer">
+                <!-- Views will be injected here by app.js -->
+            </div>
+        </main>
+    </div>
+
+    <!-- JS -->
+    <script src="js/data.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
