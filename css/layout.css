@@ -2,6 +2,14 @@
   display: flex;
   height: 100vh;
   overflow: hidden;
+  background-color: var(--color-bg-base);
+  background-image: url('../images/bg.png');
+  background-size: cover;
+  background-position: center;
+  background-blend-mode: soft-light; /* Looks better for light mode */
+}
+[data-theme="dark"] .app-container {
+  background-blend-mode: overlay; /* Deep blend for dark navy */
 }
 
 /* Sidebar */
@@ -32,9 +40,20 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #FFFFFF;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #fff, var(--color-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+.logo:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 8px rgba(var(--color-accent-rgb), 0.5));
 }
 
 .logo i {
@@ -246,4 +265,116 @@
   .user-info {
     display: none;
   }
+}
+
+/* Glassmorphism Classes for Navigation */
+.sidebar, .topbar {
+  background: var(--color-bg-surface);
+  border-color: var(--color-border);
+}
+
+/* Light Mode Glassmorphism Override */
+[data-theme="light"] .sidebar, [data-theme="light"] .topbar {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Dark Mode Glassmorphism Override */
+[data-theme="dark"] .sidebar, [data-theme="dark"] .topbar {
+  background: rgba(11, 25, 44, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.login-logo {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -1px;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(to right, var(--color-primary) 20%, var(--color-accent) 40%, var(--color-accent) 60%, var(--color-primary) 80%);
+  background-size: 200% auto;
+  color: #000;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine 3s linear infinite;
+}
+
+@keyframes shine {
+  to {
+    background-position: 200% center;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0.5rem 1rem;
+    gap: 1rem;
+    z-index: 1000;
+  }
+  
+  .sidebar-header {
+    display: none;
+  }
+
+  .nav-menu {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    overflow-x: auto;
+  }
+
+  .nav-item {
+    padding: 0.5rem;
+  }
+
+  .nav-item span {
+    display: none; /* Show icons only on mobile */
+  }
+
+  .main-content {
+    height: calc(100vh - 60px); /* Adjust based on new sidebar size */
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr; /* Stack columns */
+  }
+  
+  .card.col-span-4, .card.col-span-8, .card.col-span-5, .card.col-span-7, .card.col-span-12 {
+    grid-column: span 12 / span 12;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}
+
+/* Table Responsive Wrapper */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+[data-theme="dark"] .login-logo {
+  background: linear-gradient(to right, #ffffff 20%, var(--color-accent) 40%, var(--color-accent) 60%, #ffffff 80%);
+  background-size: 200% auto;
+  color: transparent;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }

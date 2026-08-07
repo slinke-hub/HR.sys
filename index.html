@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr" data-theme="light">
+<html lang="en" dir="ltr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -40,13 +40,41 @@
                     <i data-lucide="calendar-off"></i>
                     <span data-i18n="nav_leave">Leave</span>
                 </a>
+                <a href="#" class="nav-item" data-view="expenses">
+                    <i data-lucide="receipt"></i>
+                    <span>Expenses</span>
+                </a>
                 <a href="#" class="nav-item" data-view="payroll">
                     <i data-lucide="banknote"></i>
                     <span data-i18n="nav_payroll">Payroll</span>
                 </a>
+                <a href="#" class="nav-item" data-view="tasks">
+                    <i data-lucide="check-square"></i>
+                    <span data-i18n="nav_tasks">Tasks</span>
+                </a>
+                <a href="#" class="nav-item" data-view="performance">
+                    <i data-lucide="target"></i>
+                    <span data-i18n="nav_performance">Performance</span>
+                </a>
+                <a href="#" class="nav-item" data-view="documents">
+                    <i data-lucide="file-text"></i>
+                    <span data-i18n="nav_documents">Documents</span>
+                </a>
                 <a href="#" class="nav-item" data-view="admin">
                     <i data-lucide="shield-check"></i>
                     <span data-i18n="nav_admin">Admin Hub</span>
+                </a>
+                <a href="#" class="nav-item" data-view="users">
+                    <i data-lucide="users"></i>
+                    <span data-i18n="nav_users">User Management</span>
+                </a>
+                <a href="#" class="nav-item" data-view="employees">
+                    <i data-lucide="briefcase"></i>
+                    <span>Employees & Contracts</span>
+                </a>
+                <a href="#" class="nav-item" data-view="profile">
+                    <i data-lucide="user"></i>
+                    <span data-i18n="nav_profile">My Profile</span>
                 </a>
             </nav>
         </aside>
@@ -68,14 +96,28 @@
                     <button class="icon-btn" id="themeToggle" title="Toggle Theme">
                         <i data-lucide="moon" id="themeIcon"></i>
                     </button>
-                    <button class="icon-btn" title="Notifications">
-                        <i data-lucide="bell"></i>
-                        <span class="badge">3</span>
+                    <button class="icon-btn" title="Logout" onclick="window.handleLogout()">
+                        <i data-lucide="log-out"></i>
                     </button>
+                    <div class="notifications-wrapper" style="position: relative;">
+                        <button class="icon-btn" title="Notifications" onclick="window.toggleNotifications()">
+                            <i data-lucide="bell"></i>
+                            <span class="badge" id="notificationBadge" style="display: none;">0</span>
+                        </button>
+                        <div class="notifications-dropdown" id="notificationsDropdown" style="display: none; position: absolute; right: 0; top: 120%; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); width: 320px; max-height: 400px; overflow-y: auto; z-index: 1000; box-shadow: var(--shadow-lg);">
+                            <div style="padding: 1rem; border-bottom: 1px solid var(--color-border); font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
+                                <span>Notifications</span>
+                                <button class="btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="window.markAllNotificationsRead()">Mark all read</button>
+                            </div>
+                            <div id="notificationsList">
+                                <div style="padding: 1rem; text-align: center; color: var(--color-text-secondary);">No notifications</div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="user-profile">
-                        <img src="https://ui-avatars.com/api/?name=Sarah+Jen&background=007AFF&color=fff" alt="User Profile" class="avatar">
+                        <img id="topbarAvatar" src="https://ui-avatars.com/api/?name=User&background=007AFF&color=fff" alt="User Profile" class="avatar">
                         <div class="user-info">
-                            <span class="user-name">Sarah Jen</span>
+                            <span id="topbarName" class="user-name">User</span>
                             <span class="user-role" data-i18n="role_employee">Employee</span>
                         </div>
                     </div>
@@ -89,8 +131,9 @@
         </main>
     </div>
 
-    <!-- Supabase & JS -->
+    <!-- Supabase & JS & Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/db.js"></script>
     <script src="js/data.js"></script>
     <script src="js/app.js"></script>
