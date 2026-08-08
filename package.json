@@ -1,0 +1,16 @@
+{
+  "name": "hr-system",
+  "version": "1.0.0",
+  "description": "HR Management System",
+  "main": "index.js",
+  "scripts": {
+    "dev": "serve",
+    "start": "serve"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "serve": "^14.2.4"
+  }
+}

@@ -68,8 +68,8 @@ const db = {
                 .eq('employee_id', userId)
                 .order('punch_time', { ascending: false })
                 .limit(1)
-                .single();
-            if (error && error.code !== 'PGRST116') throw error; // Ignore no rows error
+                .maybeSingle();
+            if (error) throw error;
             return data?.punch_type === 'IN';
         } catch(e) {
             return false;
@@ -154,19 +154,36 @@ const db = {
         }
     },
 
-    async fetchLeaveRequests(userId) {
+    async fetchLeaveRequests(userId = null) {
         if (!supabaseClient) return [];
         try {
-            const { data, error } = await supabaseClient
-                .from('leave_requests')
-                .select('*')
-                .eq('employee_id', userId)
-                .order('created_at', { ascending: false });
+            let query = supabaseClient.from('leave_requests').select('*').order('created_at', { ascending: false });
+            if (userId) {
+                query = query.eq('employee_id', userId);
+            }
+            const { data, error } = await query;
             if (error) throw error;
             return data;
         } catch (error) {
             console.error("Error fetching leave requests:", error.message);
             return [];
+        }
+    },
+
+    async updateLeaveStatus(requestId, status) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('leave_requests')
+                .update({ status })
+                .eq('id', requestId)
+                .select();
+            if (error) throw error;
+            if (!data || data.length === 0) throw new Error("No rows updated. You might lack permissions (RLS).");
+            return { success: true };
+        } catch (error) {
+            console.error("Error updating leave request:", error.message);
+            return { success: false, error };
         }
     },
 
@@ -218,19 +235,7 @@ const db = {
         }
     },
 
-    async updateLeaveStatus(leaveId, status) {
-        if (!supabaseClient) return true;
-        try {
-            const { error } = await supabaseClient
-                .from('leave_requests')
-                .update({ status: status })
-                .eq('id', leaveId);
-            if (error) throw error;
-            return true;
-        } catch (e) {
-            return false;
-        }
-    },
+
     // USER MANAGEMENT (ADMIN)
     // ==========================================
     async fetchUsers() {
@@ -370,6 +375,22 @@ const db = {
             return { success: false, error };
         }
     },
+    async updateDocumentStatus(docId, status) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('document_requests')
+                .update({ status })
+                .eq('id', docId)
+                .select();
+            if (error) throw error;
+            if (!data || data.length === 0) throw new Error("No rows updated. You might lack permissions (RLS).");
+            return { success: true };
+        } catch (error) {
+            console.error("updateDocumentStatus Error:", error);
+            return { success: false, error };
+        }
+    },
     // ==========================================
     // PROFILE MANAGEMENT
     // ==========================================
@@ -388,9 +409,9 @@ const db = {
         }
     },
     async updateProfilePhoto(userId, base64Url) {
-        if (!supabaseClient) return { success: false };
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {
-            const { data, error } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('profiles')
                 .update({ avatar_url: base64Url })
                 .eq('id', userId);
@@ -401,13 +422,32 @@ const db = {
             return { success: false, error };
         }
     },
+
+    async updateUserProfileDetails(userId, fullName, iqama, phone) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { error } = await supabaseClient
+                .from('profiles')
+                .update({ 
+                    full_name: fullName,
+                    iqama_number: iqama,
+                    phone_number: phone
+                })
+                .eq('id', userId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateUserProfileDetails Error:", error);
+            return { success: false, error };
+        }
+    },
     // ==========================================
     // TASK MANAGER
     // ==========================================
     async fetchTasks(userId = null) {
         if (!supabaseClient) return [];
         try {
-            let query = supabaseClient.from('tasks').select('*, assignee:assignee_id(email), creator:created_by(email)').order('created_at', { ascending: false });
+            let query = supabaseClient.from('tasks').select('*, assignee:assignee_id(full_name), creator:created_by(full_name)').order('created_at', { ascending: false });
             if (userId) {
                 query = query.or(`assignee_id.eq.${userId},created_by.eq.${userId}`);
             }
@@ -522,11 +562,13 @@ const db = {
     async updateExpenseStatus(expenseId, status) {
         if (!supabaseClient) return { success: false };
         try {
-            const { error } = await supabaseClient
+            const { data, error } = await supabaseClient
                 .from('expenses')
                 .update({ status })
-                .eq('id', expenseId);
+                .eq('id', expenseId)
+                .select();
             if (error) throw error;
+            if (!data || data.length === 0) throw new Error("No rows updated. You might lack permissions (RLS).");
             return { success: true };
         } catch (error) {
             console.error("updateExpenseStatus Error:", error);
@@ -631,6 +673,50 @@ const db = {
             return { success: true };
         } catch (error) {
             console.error("upsertContract Error:", error);
+            return { success: false, error };
+        }
+    },
+    // ==========================================
+    // Messaging (New)
+    // ==========================================
+    async fetchAllProfiles() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('profiles')
+                .select('id, full_name, role, avatar_url');
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchAllProfiles Error:", error);
+            return [];
+        }
+    },
+    async fetchMessageHistory(userId1, userId2) {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('messages')
+                .select('*')
+                .or(`and(sender_id.eq.${userId1},receiver_id.eq.${userId2}),and(sender_id.eq.${userId2},receiver_id.eq.${userId1})`)
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchMessageHistory Error:", error);
+            return [];
+        }
+    },
+    async sendMessage(receiverId, content) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('messages')
+                .insert([{ receiver_id: receiverId, content }]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("sendMessage Error:", error);
             return { success: false, error };
         }
     }

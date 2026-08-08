@@ -7,10 +7,6 @@ let currentUserRole = null;
 
 // DOM Elements
 const htmlElement = document.documentElement;
-const themeToggle = document.getElementById('themeToggle');
-const themeIcon = document.getElementById('themeIcon');
-const langToggle = document.getElementById('langToggle');
-const langText = document.getElementById('langText');
 const viewContainer = document.getElementById('viewContainer');
 const navItems = document.querySelectorAll('.nav-item');
 
@@ -18,26 +14,22 @@ const navItems = document.querySelectorAll('.nav-item');
 lucide.createIcons();
 
 // --- THEME MANAGEMENT ---
-function toggleTheme() {
+window.toggleTheme = function() {
     currentTheme = currentTheme === 'light' ? 'dark' : 'light';
     htmlElement.setAttribute('data-theme', currentTheme);
-    
-    if (currentTheme === 'dark') {
-        themeIcon.setAttribute('data-lucide', 'sun');
-    } else {
-        themeIcon.setAttribute('data-lucide', 'moon');
-    }
-    lucide.createIcons(); // Re-render icon
+    lucide.createIcons();
 }
 
-themeToggle.addEventListener('click', toggleTheme);
-
 // --- LANGUAGE MANAGEMENT ---
-function toggleLanguage() {
+window.toggleLanguage = function() {
     currentLang = currentLang === 'en' ? 'ar' : 'en';
     htmlElement.setAttribute('dir', currentLang === 'ar' ? 'rtl' : 'ltr');
     htmlElement.setAttribute('lang', currentLang);
-    langText.textContent = currentLang === 'en' ? 'AR' : 'EN';
+    
+    const langDisplay = document.getElementById('currentLangDisplay');
+    if (langDisplay) {
+        langDisplay.textContent = currentLang === 'en' ? 'EN' : 'AR';
+    }
     
     updateTranslations();
     renderView(currentView); // Re-render view for updated strings inside
@@ -60,8 +52,6 @@ function updateTranslations() {
         }
     });
 }
-
-langToggle.addEventListener('click', toggleLanguage);
 
 // --- NAVIGATION & VIEWS ---
 navItems.forEach(item => {
@@ -164,12 +154,18 @@ window.handleClockOut = async function() {
 }
 
 window.handleLogout = async function() {
-    await db.logout();
-    if(notificationsInterval) clearInterval(notificationsInterval);
-    currentUser = null;
-    currentUserRole = null;
-    currentView = 'login';
-    renderView('login');
+    try {
+        await db.logout();
+    } catch (error) {
+        console.error("Logout error:", error);
+    }
+    
+    // Forcefully wipe all local and session storage to guarantee no stale auth tokens remain
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // A clean reload ensures all intervals, states, and UI elements (like sidebar/topbar) are completely reset
+    window.location.reload();
 }
 
 window.handleLeaveSubmit = async function(e) {
@@ -195,7 +191,7 @@ window.handleLeaveSubmit = async function(e) {
 }
 
 window.handleLeaveAction = async function(id, status, employeeId) {
-    const success = await db.updateLeaveStatus(id, status);
+    const { success } = await db.updateLeaveStatus(id, status);
     if (success) {
         showToast(`Leave request ${status.toLowerCase()}`, 'success');
         if(employeeId) await db.createNotification(employeeId, `Your leave request has been ${status}.`);
@@ -231,7 +227,7 @@ window.handleLoginSubmit = async function(e) {
     const analyticsNav = document.querySelector('.nav-item[data-view="analytics"]');
     const employeesNav = document.querySelector('.nav-item[data-view="employees"]');
     
-    if (adminNav) adminNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
+    if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
     if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
     if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
     if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
@@ -276,14 +272,14 @@ function renderLogin() {
                     <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
                     <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>
                 </div>
-                <form onsubmit="handleLoginSubmit(event)">
+                <form autocomplete="off" onsubmit="handleLoginSubmit(event)">
                     <div class="form-group">
                         <label class="form-label">${t('email_label')}</label>
-                        <input type="email" id="email" class="form-control" placeholder="name@company.com" required>
+                        <input type="email" autocomplete="off" id="email" class="form-control" placeholder="name@company.com" required>
                     </div>
                     <div class="form-group" style="margin-bottom: 1.5rem; position: relative;">
                         <label class="form-label">${t('password_label')}</label>
-                        <input type="password" id="password" class="form-control" placeholder="••••••••" required style="padding-right: 40px;">
+                        <input type="password" autocomplete="new-password" id="password" class="form-control" placeholder="••••••••" required style="padding-right: 40px;">
                         <button type="button" onclick="togglePasswordVisibility('password')" style="position: absolute; right: 10px; bottom: 8px; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); display: flex; align-items: center; justify-content: center; padding: 4px;">
                             <i data-lucide="eye" id="password-eye-icon" style="width: 20px; height: 20px;"></i>
                         </button>
@@ -434,13 +430,24 @@ async function renderTime() {
 }
 
 async function renderLeave() {
+    const isManagerOrAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER';
     const profile = await db.getUserProfile(currentUser?.id);
-    const requests = await db.fetchLeaveRequests(currentUser?.id);
+    const requests = await db.fetchLeaveRequests(isManagerOrAdmin ? null : currentUser?.id);
     
-    const approvedLeaves = requests.filter(r => r.status === 'APPROVED');
+    let profilesMap = {};
+    if (isManagerOrAdmin) {
+        const allProfiles = await db.fetchAllProfiles();
+        allProfiles.forEach(p => {
+            profilesMap[p.id] = p.full_name || 'Unknown User';
+        });
+    }
+
+    const approvedLeaves = requests.filter(r => r.status.startsWith('APPROVED'));
     let annualTaken = 0, sickTaken = 0, unpaidTaken = 0;
     
-    approvedLeaves.forEach(r => {
+    // Only calculate allowance balances for the current user's OWN approved leaves
+    const myApprovedLeaves = approvedLeaves.filter(r => r.employee_id === currentUser?.id);
+    myApprovedLeaves.forEach(r => {
         const start = new Date(r.start_date);
         const end = new Date(r.end_date);
         const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
@@ -454,21 +461,43 @@ async function renderLeave() {
     
     let rowsHTML = requests.map(r => {
         let badgeClass = 'info';
-        if (r.status === 'APPROVED') badgeClass = 'success';
-        if (r.status === 'REJECTED') badgeClass = 'danger';
+        if (r.status.startsWith('APPROVED')) badgeClass = 'success';
+        if (r.status.startsWith('REJECTED')) badgeClass = 'danger';
+        
+        const employeeNameCell = isManagerOrAdmin ? `<td>${profilesMap[r.employee_id] || 'Unknown'}</td>` : '';
+        
+        let actionsCell = '';
+        if (isManagerOrAdmin) {
+            if (r.status === 'PENDING') {
+                actionsCell = `
+                    <td>
+                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleLeaveAction('${r.id}', 'APPROVED', '${r.employee_id}')">Approve</button>
+                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleLeaveAction('${r.id}', 'REJECTED', '${r.employee_id}')">Reject</button>
+                    </td>
+                `;
+            } else {
+                actionsCell = `<td>-</td>`;
+            }
+        }
         
         return `
             <tr>
+                ${employeeNameCell}
                 <td><strong>${r.leave_type}</strong></td>
                 <td>${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}</td>
-                <td><span class="status-badge ${badgeClass}">${r.status}</span></td>
+                <td><span class="status-badge ${badgeClass}">${r.status.replace('_ARCHIVED', '')}</span></td>
+                ${actionsCell}
             </tr>
         `;
     }).join('');
     
     if (requests.length === 0) {
-        rowsHTML = `<tr><td colspan="3" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No leave requests found.</td></tr>`;
+        const colSpan = isManagerOrAdmin ? 5 : 3;
+        rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No leave requests found.</td></tr>`;
     }
+
+    const employeeHeader = isManagerOrAdmin ? `<th>Employee</th>` : '';
+    const actionsHeader = isManagerOrAdmin ? `<th>Actions</th>` : '';
 
     return `
         <div class="page-header fade-in-up">
@@ -503,7 +532,7 @@ async function renderLeave() {
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-4">
                 <div class="card-title">New Request</div>
-                <form onsubmit="handleLeaveSubmit(event)">
+                <form autocomplete="off" onsubmit="handleLeaveSubmit(event)">
                     <div class="form-group">
                         <label class="form-label">${t('leave_type')}</label>
                         <select id="leaveType" class="form-control" required>
@@ -534,9 +563,11 @@ async function renderLeave() {
                     <table class="data-table">
                         <thead>
                             <tr>
+                                ${employeeHeader}
                                 <th>${t('leave_type')}</th>
                                 <th>Dates</th>
                                 <th>${t('status')}</th>
+                                ${actionsHeader}
                             </tr>
                         </thead>
                         <tbody>
@@ -616,7 +647,7 @@ async function renderExpenses() {
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-4">
                 <div class="card-title">Submit New Expense</div>
-                <form onsubmit="handleExpenseSubmit(event)">
+                <form autocomplete="off" onsubmit="handleExpenseSubmit(event)">
                     <div class="form-group">
                         <label class="form-label">Amount ($)</label>
                         <input type="number" step="0.01" id="expAmount" class="form-control" required>
@@ -643,7 +674,7 @@ async function renderExpenses() {
                                 <tr>
                                     <td>${e.description}</td>
                                     <td>$${e.amount.toFixed(2)}</td>
-                                    <td><span class="status-badge ${e.status === 'APPROVED' ? 'success' : (e.status === 'REJECTED' ? 'danger' : 'warning')}">${e.status}</span></td>
+                                    <td><span class="status-badge ${e.status.startsWith('APPROVED') ? 'success' : (e.status.startsWith('REJECTED') ? 'danger' : 'warning')}">${e.status.replace('_ARCHIVED', '')}</span></td>
                                     <td><a href="${e.receipt_base64}" download="receipt_${e.id}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">Download</a></td>
                                 </tr>
                             `).join('')}
@@ -894,27 +925,6 @@ async function renderAdmin() {
                 </div>
             </div>
             
-            <div class="card col-span-12">
-                <div class="card-title">Employee Directory</div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>User ID</th>
-                            <th>Role</th>
-                            <th>Join Date</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${employees.map(e => `
-                            <tr>
-                                <td>${e.id}</td>
-                                <td><span class="status-badge ${e.role === 'ADMIN' ? 'success' : 'info'}">${e.role}</span></td>
-                                <td>${new Date(e.created_at).toLocaleDateString()}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
         </div>
     `;
 }
@@ -971,30 +981,30 @@ async function renderUsers() {
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-4">
                 <div class="card-title">Add New Employee <i data-lucide="user-plus"></i></div>
-                <form onsubmit="handleCreateUser(event)">
+                <form autocomplete="off" onsubmit="handleCreateUser(event)">
                     <div class="form-group">
                         <label class="form-label">Full Name</label>
-                        <input type="text" id="newFullName" class="form-control" placeholder="e.g. John Doe">
+                        <input type="text" autocomplete="off" id="newFullName" class="form-control" placeholder="e.g. John Doe">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Iqama Number</label>
-                        <input type="text" id="newIqama" class="form-control" placeholder="e.g. 2xxxxxxxxx">
+                        <input type="text" autocomplete="off" id="newIqama" class="form-control" placeholder="e.g. 2xxxxxxxxx">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Phone Number</label>
-                        <input type="text" id="newPhone" class="form-control" placeholder="e.g. +9665xxxxxxx">
+                        <input type="text" autocomplete="off" id="newPhone" class="form-control" placeholder="e.g. +9665xxxxxxx">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Email</label>
-                        <input type="email" id="newEmail" class="form-control" required>
+                        <input type="email" autocomplete="off" id="newEmail" class="form-control" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Temporary Password</label>
-                        <input type="password" id="newPassword" class="form-control" required>
+                        <input type="password" autocomplete="new-password" id="newPassword" class="form-control" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Job Title</label>
-                        <input type="text" id="newJobTitle" class="form-control" placeholder="e.g. Software Engineer">
+                        <input type="text" autocomplete="off" id="newJobTitle" class="form-control" placeholder="e.g. Software Engineer">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Role</label>
@@ -1016,7 +1026,9 @@ async function renderUsers() {
                                 <th>Employee Details</th>
                                 <th>Role</th>
                                 <th>Job Title</th>
-                                <th>Actions</th>
+                                <th>Assign Role</th>
+                                <th>Assign Manager</th>
+                                <th>Contract</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1033,7 +1045,7 @@ async function renderUsers() {
                                     </td>
                                     <td><span class="status-badge ${u.role === 'ADMIN' ? 'success' : 'info'}">${u.role}</span></td>
                                     <td>
-                                        <input type="text" class="form-control" style="width: 160px; padding: 0.25rem; font-size: 0.8rem;" value="${u.job_title || ''}" placeholder="Job Title" onblur="handleChangeJobTitle('${u.id}', this.value)">
+                                        <input type="text" autocomplete="off" class="form-control" style="width: 160px; padding: 0.25rem; font-size: 0.8rem;" value="${u.job_title || ''}" placeholder="Job Title" onblur="handleChangeJobTitle('${u.id}', this.value)">
                                     </td>
                                     <td>
                                         <select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
@@ -1048,11 +1060,62 @@ async function renderUsers() {
                                             ${users.filter(m => m.role === 'MANAGER' || m.role === 'ADMIN').map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${m.job_title || 'Mgr'}</option>`).join('')}
                                         </select>
                                     </td>
+                                    <td>
+                                        <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="showContractModal('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')">
+                                            <i data-lucide="file-signature" style="width:14px;height:14px;margin-right:4px;"></i> Contract
+                                        </button>
+                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <!-- Contract Modal -->
+        <div id="contractModal" class="modal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h2>Contract: <span id="contractEmpName" style="color: var(--primary-color);"></span></h2>
+                    <button class="icon-btn" onclick="closeContractModal()"><i data-lucide="x"></i></button>
+                </div>
+                <form autocomplete="off" onsubmit="handleSaveContract(event)" style="margin-top: 1.5rem;">
+                    <input type="hidden" id="contractEmployeeId">
+                    <div class="form-group">
+                        <label class="form-label">Contract Type</label>
+                        <select id="contractType" class="form-control" required>
+                            <option value="Full-time">Full-time</option>
+                            <option value="Part-time">Part-time</option>
+                            <option value="Contractor">Contractor</option>
+                            <option value="Freelance">Freelance</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" id="contractStartDate" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">End Date (Optional)</label>
+                        <input type="date" id="contractEndDate" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Salary (Monthly)</label>
+                        <input type="number" id="contractSalary" class="form-control" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <select id="contractStatus" class="form-control" required>
+                            <option value="Active">Active</option>
+                            <option value="Terminated">Terminated</option>
+                            <option value="Expired">Expired</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                        <button type="button" class="btn-secondary" style="flex: 1;" onclick="closeContractModal()">Cancel</button>
+                        <button type="submit" class="btn-primary" style="flex: 1;">Save Contract</button>
+                    </div>
+                </form>
             </div>
         </div>
     `;
@@ -1144,7 +1207,7 @@ async function renderDocuments() {
             <!-- Upload Official Document -->
             <div class="card col-span-4">
                 <div class="card-title">Upload Official Document</div>
-                <form onsubmit="handleEmployeeDocUpload(event)">
+                <form autocomplete="off" onsubmit="handleEmployeeDocUpload(event)">
                     <div class="form-group">
                         <label class="form-label">Document Type</label>
                         <select id="empDocType" class="form-control">
@@ -1184,7 +1247,7 @@ async function renderDocuments() {
             <!-- HR Letter Requests -->
             <div class="card col-span-4">
                 <div class="card-title">Request Letter</div>
-                <form onsubmit="handleDocSubmit(event)">
+                <form autocomplete="off" onsubmit="handleDocSubmit(event)">
                     <div class="form-group">
                         <label class="form-label">Document Type</label>
                         <select id="docType" class="form-control">
@@ -1210,7 +1273,7 @@ async function renderDocuments() {
                                 <tr>
                                     <td>${d.doc_type}</td>
                                     <td>${d.purpose.substring(0, 30)}...</td>
-                                    <td><span class="status-badge ${d.status === 'PENDING' ? 'warning' : 'success'}">${d.status}</span></td>
+                                    <td><span class="status-badge ${d.status === 'PENDING' ? 'warning' : (d.status.startsWith('REJECTED') ? 'danger' : 'success')}">${d.status.replace('_ARCHIVED', '')}</span></td>
                                     <td>${new Date(d.created_at).toLocaleDateString()}</td>
                                 </tr>
                             `).join('')}
@@ -1223,6 +1286,121 @@ async function renderDocuments() {
 }
 
 // --- NEW VIEWS: PROFILE & TASKS ---
+// ==========================================
+// Messages (New)
+// ==========================================
+let currentChatUser = null;
+let messagePollingInterval = null;
+
+async function renderMessages() {
+    const users = await db.fetchAllProfiles();
+    
+    // Clear old polling if exists
+    if(messagePollingInterval) clearInterval(messagePollingInterval);
+
+    // Build user list (excluding self)
+    const otherUsers = users.filter(u => u.id !== currentUser.id);
+    let usersHtml = otherUsers.map(u => `
+        <div class="chat-user-item" onclick="window.selectChatUser('${u.id}', '${u.full_name}')" style="padding: 1rem; border-bottom: 1px solid var(--color-border); cursor: pointer; display: flex; align-items: center; gap: 10px;">
+            <img src="${u.avatar_url || 'https://ui-avatars.com/api/?name='+encodeURIComponent(u.full_name)+'&background=007AFF&color=fff'}" class="avatar" style="width: 40px; height: 40px;">
+            <div>
+                <div style="font-weight: 600;">${u.full_name}</div>
+                <div style="font-size: 0.75rem; color: var(--color-text-secondary);">${u.role}</div>
+            </div>
+        </div>
+    `).join('');
+
+    if (otherUsers.length === 0) usersHtml = `<div style="padding: 1rem; color: var(--color-text-secondary);">No other users found.</div>`;
+
+    return `
+        <div class="page-header">
+            <h2>Messages</h2>
+        </div>
+        <div class="card" style="display: flex; height: 600px; padding: 0; overflow: hidden;">
+            <!-- Sidebar -->
+            <div style="width: 300px; border-right: 1px solid var(--color-border); overflow-y: auto; background: var(--color-background);">
+                ${usersHtml}
+            </div>
+            <!-- Chat Area -->
+            <div style="flex: 1; display: flex; flex-direction: column;" id="chatArea">
+                <div style="flex: 1; display: flex; justify-content: center; align-items: center; color: var(--color-text-secondary);">
+                    Select a user to start messaging
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+window.selectChatUser = async function(userId, userName) {
+    currentChatUser = { id: userId, name: userName };
+    const chatArea = document.getElementById('chatArea');
+    if(!chatArea) return;
+
+    chatArea.innerHTML = `
+        <div style="padding: 1rem; border-bottom: 1px solid var(--color-border); font-weight: 600; display: flex; align-items: center; gap: 10px; background: var(--color-surface);">
+            <span>Chat with ${userName}</span>
+            <button class="btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; margin-left: auto;" onclick="window.refreshMessages()">Refresh</button>
+        </div>
+        <div id="messageHistory" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 10px; background: var(--color-background);">
+            <div style="text-align:center; color:var(--color-text-secondary);">Loading messages...</div>
+        </div>
+        <div style="padding: 1rem; border-top: 1px solid var(--color-border); display: flex; gap: 10px; background: var(--color-surface);">
+            <input type="text" id="messageInput" class="form-control" placeholder="Type a message..." style="flex: 1;" onkeypress="if(event.key === 'Enter') window.sendChatMessage()">
+            <button class="btn-primary" onclick="window.sendChatMessage()">Send</button>
+        </div>
+    `;
+
+    await window.refreshMessages();
+    
+    // Set up basic polling every 10 seconds
+    if(messagePollingInterval) clearInterval(messagePollingInterval);
+    messagePollingInterval = setInterval(() => window.refreshMessages(true), 10000);
+}
+
+window.refreshMessages = async function(isPolling = false) {
+    if(!currentChatUser) return;
+    const historyContainer = document.getElementById('messageHistory');
+    if(!historyContainer) return;
+
+    const messages = await db.fetchMessageHistory(currentUser.id, currentChatUser.id);
+    
+    if(messages.length === 0) {
+        historyContainer.innerHTML = `<div style="text-align:center; color:var(--color-text-secondary); margin-top: 2rem;">No messages yet. Say hi!</div>`;
+        return;
+    }
+
+    let isAtBottom = historyContainer.scrollHeight - historyContainer.scrollTop <= historyContainer.clientHeight + 50;
+
+    historyContainer.innerHTML = messages.map(m => {
+        const isMine = m.sender_id === currentUser.id;
+        return `
+            <div style="align-self: ${isMine ? 'flex-end' : 'flex-start'}; max-width: 70%; background: ${isMine ? 'var(--color-primary)' : 'var(--color-surface)'}; color: ${isMine ? 'white' : 'var(--color-text)'}; padding: 0.75rem 1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border: ${isMine ? 'none' : '1px solid var(--color-border)'};">
+                <div style="margin-bottom: 0.25rem;">${m.content}</div>
+                <div style="font-size: 0.7rem; opacity: 0.7; text-align: right;">${new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+            </div>
+        `;
+    }).join('');
+
+    if(!isPolling || isAtBottom) {
+        historyContainer.scrollTop = historyContainer.scrollHeight;
+    }
+}
+
+window.sendChatMessage = async function() {
+    if(!currentChatUser) return;
+    const input = document.getElementById('messageInput');
+    const content = input.value.trim();
+    if(!content) return;
+
+    input.value = '';
+    const { success, error } = await db.sendMessage(currentChatUser.id, content);
+    if(success) {
+        await window.refreshMessages();
+    } else {
+        showToast("Failed to send message.", "danger");
+    }
+}
+
 async function renderProfile() {
     const profile = await db.getUserProfile(currentUser.id);
     const avatar = profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.email.split('@')[0])}&background=007AFF&color=fff`;
@@ -1230,28 +1408,63 @@ async function renderProfile() {
         <div class="page-header">
             <div>
                 <h1 class="page-title">${t('nav_profile')}</h1>
-                <p class="page-subtitle">Manage your account settings.</p>
+                <p class="page-subtitle">Manage your account settings and personal information.</p>
             </div>
         </div>
         <div class="dashboard-grid fade-in-up">
+            <!-- Profile Photo & Summary -->
             <div class="card col-span-4" style="text-align: center;">
-                <img src="${avatar}" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem; border: 4px solid var(--color-border);" />
-                <h3>${currentUser.email}</h3>
-                <p style="color: var(--color-text-secondary); margin-bottom: 2rem;">${currentUserRole}</p>
-                <form onsubmit="handleUpdateProfilePhoto(event)" style="margin-bottom: 2rem;">
-                    <input type="file" id="avatarFile" accept="image/*" class="form-control" style="margin-bottom: 1rem;" required>
-                    <button type="submit" class="btn-secondary" style="width: 100%;">Upload Photo</button>
+                <div style="position: relative; display: inline-block;">
+                    <img src="${avatar}" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem; border: 4px solid var(--color-background); box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
+                </div>
+                <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem;">${profile.full_name || currentUser.email.split('@')[0]}</h3>
+                <p style="color: var(--color-primary); font-weight: 500; margin-bottom: 1.5rem;">${currentUserRole}</p>
+                <form autocomplete="off" onsubmit="handleUpdateProfilePhoto(event)" style="margin-bottom: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
+                    <div class="form-group" style="text-align: left;">
+                        <label class="form-label" style="font-size: 0.85rem;">Update Profile Picture</label>
+                        <input type="file" id="avatarFile" accept="image/*" class="form-control" style="font-size: 0.85rem;" required>
+                    </div>
+                    <button type="submit" class="btn-secondary" style="width: 100%; transition: all 0.2s;">Upload Photo</button>
                 </form>
             </div>
-            <div class="card col-span-8">
-                <div class="card-title">Change Password</div>
-                <form onsubmit="handleUpdatePassword(event)">
-                    <div class="form-group">
-                        <label class="form-label">New Password</label>
-                        <input type="password" id="newPassword" class="form-control" required minlength="6">
-                    </div>
-                    <button type="submit" class="btn-primary">Update Password</button>
-                </form>
+
+            <!-- Account Details & Password -->
+            <div class="col-span-8" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="card">
+                    <div class="card-title">Account Details</div>
+                    <form autocomplete="off" onsubmit="handleUpdateProfileDetails(event)">
+                        <div class="dashboard-grid" style="gap: 1rem; margin-bottom: 1rem;">
+                            <div class="form-group col-span-6">
+                                <label class="form-label">Full Name</label>
+                                <input type="text" id="profileFullName" class="form-control" value="${profile.full_name || ''}" placeholder="e.g. John Doe">
+                            </div>
+                            <div class="form-group col-span-6">
+                                <label class="form-label">Email Address</label>
+                                <input type="email" class="form-control" value="${currentUser.email}" disabled style="background-color: var(--color-surface); opacity: 0.7; cursor: not-allowed;">
+                            </div>
+                            <div class="form-group col-span-6">
+                                <label class="form-label">Iqama Number</label>
+                                <input type="text" id="profileIqama" class="form-control" value="${profile.iqama_number || ''}" placeholder="e.g. 2xxxxxxxxx">
+                            </div>
+                            <div class="form-group col-span-6">
+                                <label class="form-label">Phone Number</label>
+                                <input type="text" id="profilePhone" class="form-control" value="${profile.phone_number || ''}" placeholder="e.g. +9665xxxxxxx">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary" style="transition: all 0.2s;">Save Changes</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Security</div>
+                    <form autocomplete="off" onsubmit="handleUpdatePassword(event)" style="display: flex; gap: 1rem; align-items: flex-end;">
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label class="form-label">New Password</label>
+                            <input type="password" autocomplete="new-password" id="newPassword" class="form-control" placeholder="Enter new password" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn-secondary" style="transition: all 0.2s;">Update Password</button>
+                    </form>
+                </div>
             </div>
         </div>
     `;
@@ -1290,6 +1503,25 @@ window.handleUpdatePassword = async function(e) {
     }
 }
 
+window.handleUpdateProfileDetails = async function(e) {
+    e.preventDefault();
+    const fullName = document.getElementById('profileFullName').value;
+    const iqama = document.getElementById('profileIqama').value;
+    const phone = document.getElementById('profilePhone').value;
+    
+    const { success, error } = await db.updateUserProfileDetails(currentUser.id, fullName, iqama, phone);
+    if (success) {
+        showToast("Profile details updated successfully!", "success");
+        renderView('profile');
+        
+        // Update topbar silently
+        const profile = await db.getUserProfile(currentUser.id);
+        updateTopbarProfile(profile);
+    } else {
+        showToast(error?.message || "Error updating profile details.", "danger");
+    }
+}
+
 async function renderTasks() {
     let tasks = [];
     if (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') {
@@ -1325,10 +1557,10 @@ async function renderTasks() {
         adminForm = `
             <div class="card col-span-12" style="margin-bottom: 1rem;">
                 <div class="card-title">Assign New Task</div>
-                <form onsubmit="handleCreateTask(event)" style="display: flex; gap: 1rem; align-items: flex-end;">
+                <form autocomplete="off" onsubmit="handleCreateTask(event)" style="display: flex; gap: 1rem; align-items: flex-end;">
                     <div class="form-group" style="flex: 2;">
                         <label class="form-label">Task Title</label>
-                        <input type="text" id="taskTitle" class="form-control" required>
+                        <input type="text" autocomplete="off" id="taskTitle" class="form-control" required>
                     </div>
                     <div class="form-group" style="flex: 2;">
                         <label class="form-label">Assign To</label>
@@ -1353,7 +1585,7 @@ async function renderTasks() {
                 <h4 style="margin-bottom: 0.5rem; font-size: 1rem;">${t.title}</h4>
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 1rem;">
                     <i data-lucide="calendar" style="width: 12px; height: 12px; display: inline-block;"></i> Due: ${t.due_date || 'No date'}<br/>
-                    <i data-lucide="user" style="width: 12px; height: 12px; display: inline-block;"></i> Assigned: ${t.assignee?.email?.split('@')[0] || 'Unknown'}
+                    <i data-lucide="user" style="width: 12px; height: 12px; display: inline-block;"></i> Assigned: ${t.assignee?.full_name || 'Unknown'}
                 </div>
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                     ${t.status !== 'TODO' ? `<button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleUpdateTaskStatus('${t.id}', 'TODO')">To Do</button>` : ''}
@@ -1469,18 +1701,16 @@ window.handleSaveContract = async function(e) {
     if (success) {
         showToast("Contract saved successfully", "success");
         closeContractModal();
-        renderView('employees');
+        renderView('users');
     } else {
         showToast(error?.message || "Failed to save contract", "danger");
     }
 }
 
 async function renderEmployeesDirectory() {
-    if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MANAGER') {
-        return '<div style="padding: 2rem;">Unauthorized. Only Admins and Managers can view the Employee Directory.</div>';
-    }
-
     const users = await db.fetchUsers();
+
+    // Directory is visible to everyone, but we only show basic info.
 
     // Only Admins or the Manager themselves can see team members' contracts
     // For now, let's allow ADMIN to see all, Manager to see their team
@@ -1506,7 +1736,6 @@ async function renderEmployeesDirectory() {
                                 <th>Employee Name</th>
                                 <th>Contact Info</th>
                                 <th>Role / Title</th>
-                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1527,11 +1756,6 @@ async function renderEmployeesDirectory() {
                                         <span class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${u.role}</span><br/>
                                         <span style="font-size: 0.85rem; color: var(--text-light); margin-top: 4px; display: inline-block;">${u.job_title || 'No Title'}</span>
                                     </td>
-                                    <td>
-                                        <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="showContractModal('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')">
-                                            <i data-lucide="file-signature" style="width:14px;height:14px;margin-right:4px;"></i> Contract
-                                        </button>
-                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -1540,50 +1764,6 @@ async function renderEmployeesDirectory() {
             </div>
         </div>
 
-        <!-- Contract Modal -->
-        <div id="contractModal" class="modal">
-            <div class="modal-content" style="max-width: 500px;">
-                <div class="modal-header">
-                    <h2>Contract: <span id="contractEmpName" style="color: var(--primary-color);"></span></h2>
-                    <button class="icon-btn" onclick="closeContractModal()"><i data-lucide="x"></i></button>
-                </div>
-                <form onsubmit="handleSaveContract(event)" style="margin-top: 1.5rem;">
-                    <input type="hidden" id="contractEmployeeId">
-                    <div class="form-group">
-                        <label class="form-label">Contract Type</label>
-                        <select id="contractType" class="form-control" required>
-                            <option value="Full-time">Full-time</option>
-                            <option value="Part-time">Part-time</option>
-                            <option value="Contractor">Contractor</option>
-                            <option value="Freelance">Freelance</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Start Date</label>
-                        <input type="date" id="contractStartDate" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">End Date (Optional)</label>
-                        <input type="date" id="contractEndDate" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Salary (Monthly)</label>
-                        <input type="number" id="contractSalary" class="form-control" step="0.01">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Status</label>
-                        <select id="contractStatus" class="form-control" required>
-                            <option value="Active">Active</option>
-                            <option value="Terminated">Terminated</option>
-                            <option value="Expired">Expired</option>
-                        </select>
-                    </div>
-                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-                        <button type="button" class="btn-secondary" style="flex: 1;" onclick="closeContractModal()">Cancel</button>
-                        <button type="submit" class="btn-primary" style="flex: 1;">Save Contract</button>
-                    </div>
-                </form>
-            </div>
         </div>
     `;
 }
@@ -1615,6 +1795,12 @@ async function renderView(viewId) {
         case 'leave':
             content = await renderLeave();
             break;
+        case 'requests':
+            content = await renderRequests();
+            break;
+        case 'archived':
+            content = await renderArchivedRequests();
+            break;
         case 'payroll':
             content = await renderPayroll();
             break;
@@ -1632,6 +1818,12 @@ async function renderView(viewId) {
             break;
         case 'employees':
             content = await renderEmployeesDirectory();
+            break;
+        case 'messages':
+            content = await renderMessages();
+            break;
+        case 'notifications':
+            content = await renderNotifications();
             break;
         case 'performance':
             content = await renderPerformance();
@@ -1684,6 +1876,55 @@ function updateTopbarProfile(profile) {
 }
 
 // ==========================================
+// NOTIFICATIONS VIEW
+// ==========================================
+async function renderNotifications() {
+    if (!currentUser) return '<div class="page-header"><h1 class="page-title">Notifications</h1></div><div class="card">Please log in to view notifications.</div>';
+
+    const notifs = await db.fetchNotifications(currentUser.id);
+    
+    // Mark as read when viewing the page
+    await db.markNotificationsRead(currentUser.id);
+    const badge = document.querySelector('.notification-badge');
+    if (badge) badge.style.display = 'none';
+
+    let listHtml = '<div class="card" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No notifications found.</div>';
+    
+    if (notifs && notifs.length > 0) {
+        listHtml = notifs.map(n => `
+            <div class="card fade-in-up" style="margin-bottom: 1rem; ${!n.is_read ? 'border-left: 4px solid var(--color-primary); background: rgba(37,99,235,0.02);' : ''}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--color-surface); display: flex; align-items: center; justify-content: center; color: var(--color-primary);">
+                            <i data-lucide="bell"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight: 500; font-size: 1rem; color: var(--color-text);">${n.message}</div>
+                            <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(n.created_at).toLocaleString()}</div>
+                        </div>
+                    </div>
+                    ${!n.is_read ? '<span class="badge" style="background: var(--color-primary); color: white;">New</span>' : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title">Notifications</h1>
+                <p class="page-subtitle">View all your system alerts and messages.</p>
+            </div>
+        </div>
+        <div class="dashboard-grid">
+            <div class="col-span-12">
+                ${listHtml}
+            </div>
+        </div>
+    `;
+}
+
+// ==========================================
 // NOTIFICATIONS POLLING
 // ==========================================
 let notificationsInterval;
@@ -1723,13 +1964,48 @@ window.toggleNotifications = async function() {
     if (!dropdown) return;
     dropdown.classList.toggle('show');
     
-    if (dropdown.classList.contains('show')) {
+    if (dropdown.classList.contains('show') || dropdown.style.display === 'block') {
         await db.markNotificationsRead(currentUser.id);
         const badge = document.querySelector('.notification-badge');
         if(badge) badge.style.display = 'none';
+        
+        // Hide profile badge if shown
+        const pBadge = document.getElementById('profileNotificationBadge');
+        if(pBadge) pBadge.style.display = 'none';
+        
         pollNotifications(); // Refresh list to show as read
     }
 }
+
+window.toggleProfileDropdown = function() {
+    const dropdown = document.getElementById('profileDropdown');
+    const notifDropdown = document.getElementById('notificationsDropdown');
+    
+    if (dropdown) {
+        const isShowing = dropdown.style.display === 'block';
+        dropdown.style.display = isShowing ? 'none' : 'block';
+        
+        // Hide notifications dropdown if profile dropdown is closing
+        if(isShowing && notifDropdown) {
+            notifDropdown.style.display = 'none';
+            notifDropdown.classList.remove('show');
+        }
+    }
+}
+
+// Close dropdowns when clicking outside
+window.addEventListener('click', function(e) {
+    if (!e.target.closest('.profile-dropdown-wrapper')) {
+        const dropdown = document.getElementById('profileDropdown');
+        if (dropdown) dropdown.style.display = 'none';
+        
+        const notifDropdown = document.getElementById('notificationsDropdown');
+        if (notifDropdown) {
+            notifDropdown.style.display = 'none';
+            notifDropdown.classList.remove('show');
+        }
+    }
+});
 
 // Init
 async function initApp() {
@@ -1754,7 +2030,7 @@ async function initApp() {
         const analyticsNav = document.querySelector('.nav-item[data-view="analytics"]');
         const employeesNav = document.querySelector('.nav-item[data-view="employees"]');
         
-        if (adminNav) adminNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
+        if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
         if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
         if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
         if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
@@ -1769,6 +2045,312 @@ async function initApp() {
     }
     
     renderView(currentView);
+}
+
+window.handleRequestAction = async function(type, id, status, employeeId) {
+    let success = false;
+    if (type === 'Leave') {
+        const res = await db.updateLeaveStatus(id, status);
+        success = res.success;
+    } else if (type === 'Document') {
+        const res = await db.updateDocumentStatus(id, status);
+        success = res.success;
+    } else if (type === 'Expense') {
+        const res = await db.updateExpenseStatus(id, status);
+        success = res.success;
+    }
+    
+    if (success) {
+        const displayStatus = status.includes('_ARCHIVED') ? 'archived' : status.toLowerCase();
+        showToast(`${type} request ${displayStatus}`, "success");
+        if(employeeId && !status.includes('_ARCHIVED')) await db.createNotification(employeeId, `Your ${type.toLowerCase()} request has been ${status.toLowerCase()}.`);
+        renderView('requests');
+    } else {
+        showToast(`Failed to update ${type} request`, "danger");
+    }
+}
+
+// Unified Requests Page
+async function renderRequests() {
+    const isManagerOrAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER';
+    
+    // Fetch data
+    const leaves = await db.fetchLeaveRequests(isManagerOrAdmin ? null : currentUser?.id);
+    const docs = await db.fetchDocuments(isManagerOrAdmin ? null : currentUser?.id);
+    const expenses = await db.fetchExpenses(isManagerOrAdmin ? null : currentUser?.id);
+    
+    let profilesMap = {};
+    if (isManagerOrAdmin) {
+        const allProfiles = await db.fetchAllProfiles();
+        allProfiles.forEach(p => {
+            profilesMap[p.id] = p.full_name || 'Unknown User';
+        });
+    }
+
+    // Normalize requests
+    let allRequests = [];
+    leaves.forEach(r => {
+        allRequests.push({
+            id: r.id,
+            type: 'Leave',
+            employee_id: r.employee_id,
+            details: `${r.leave_type}: ${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}`,
+            status: r.status,
+            created_at: r.created_at,
+            raw: r
+        });
+    });
+    
+    docs.forEach(r => {
+        allRequests.push({
+            id: r.id,
+            type: 'Document',
+            employee_id: r.employee_id,
+            details: `${r.doc_type} - ${r.purpose}`,
+            status: r.status,
+            created_at: r.created_at,
+            raw: r
+        });
+    });
+    
+    expenses.forEach(r => {
+        allRequests.push({
+            id: r.id,
+            type: 'Expense',
+            employee_id: r.employee_id,
+            details: `SAR ${r.amount} - ${r.description}`,
+            status: r.status,
+            created_at: r.created_at,
+            raw: r
+        });
+    });
+    
+    // Sort by created_at desc
+    allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    // Filter out archived
+    allRequests = allRequests.filter(r => !r.status.endsWith('_ARCHIVED'));
+    
+    // Render UI
+    let rowsHTML = allRequests.map(r => {
+        let badgeClass = 'info';
+        if (r.status === 'APPROVED') badgeClass = 'success';
+        if (r.status === 'REJECTED') badgeClass = 'danger';
+        
+        const employeeName = isManagerOrAdmin ? (profilesMap[r.employee_id] || 'Unknown') : 'Me';
+        
+        let actionsCell = '';
+        if (isManagerOrAdmin) {
+            if (r.status === 'PENDING') {
+                actionsCell = `
+                    <td>
+                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleRequestAction('${r.type}', '${r.id}', 'APPROVED', '${r.employee_id}')">Approve</button>
+                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleRequestAction('${r.type}', '${r.id}', 'REJECTED', '${r.employee_id}')">Reject</button>
+                    </td>
+                `;
+            } else if (r.status === 'APPROVED' || r.status === 'REJECTED') {
+                actionsCell = `
+                    <td>
+                        <button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleRequestAction('${r.type}', '${r.id}', '${r.status}_ARCHIVED', '${r.employee_id}')">
+                            <i data-lucide="archive" style="width:12px;height:12px;"></i> Archive
+                        </button>
+                    </td>
+                `;
+            } else {
+                actionsCell = `<td>-</td>`;
+            }
+        }
+        
+        return `
+            <tr class="request-row" data-type="${r.type}" data-status="${r.status}" data-emp="${employeeName.toLowerCase()}" data-details="${r.details.toLowerCase()}">
+                <td>${new Date(r.created_at).toLocaleDateString()}</td>
+                ${isManagerOrAdmin ? `<td>${employeeName}</td>` : ''}
+                <td><strong>${r.type}</strong></td>
+                <td>${r.details}</td>
+                <td><span class="status-badge ${badgeClass}">${r.status}</span></td>
+                ${actionsCell}
+            </tr>
+        `;
+    }).join('');
+    
+    if (allRequests.length === 0) {
+        const colSpan = isManagerOrAdmin ? 6 : 4;
+        rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No requests found.</td></tr>`;
+    }
+    
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title">All Requests</h1>
+                <p class="page-subtitle">View and filter all Leave, Document, and Expense requests.</p>
+            </div>
+        </div>
+        
+        <div class="card fade-in-up" style="margin-bottom: 2rem;">
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 200px;">
+                    <label class="form-label">Search</label>
+                    <input type="text" id="reqSearch" class="form-control" placeholder="Search by name or details..." onkeyup="filterRequests()">
+                </div>
+                <div style="width: 150px;">
+                    <label class="form-label">Type</label>
+                    <select id="reqType" class="form-control" onchange="filterRequests()">
+                        <option value="ALL">All Types</option>
+                        <option value="Leave">Leave</option>
+                        <option value="Document">Document</option>
+                        <option value="Expense">Expense</option>
+                    </select>
+                </div>
+                <div style="width: 150px;">
+                    <label class="form-label">Status</label>
+                    <select id="reqStatus" class="form-control" onchange="filterRequests()">
+                        <option value="ALL">All Statuses</option>
+                        <option value="PENDING">Pending</option>
+                        <option value="APPROVED">Approved</option>
+                        <option value="REJECTED">Rejected</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card fade-in-up">
+            <div style="overflow-x: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            ${isManagerOrAdmin ? `<th>Employee</th>` : ''}
+                            <th>Type</th>
+                            <th>Details</th>
+                            <th>Status</th>
+                            ${isManagerOrAdmin ? `<th>Actions</th>` : ''}
+                        </tr>
+                    </thead>
+                    <tbody id="requestsTableBody">
+                        ${rowsHTML}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+window.filterRequests = function() {
+    const searchVal = document.getElementById('reqSearch').value.toLowerCase();
+    const typeVal = document.getElementById('reqType').value;
+    const statusVal = document.getElementById('reqStatus').value;
+    
+    const rows = document.querySelectorAll('.request-row');
+    rows.forEach(row => {
+        const t = row.getAttribute('data-type');
+        const s = row.getAttribute('data-status');
+        const emp = row.getAttribute('data-emp');
+        const det = row.getAttribute('data-details');
+        
+        const matchSearch = emp.includes(searchVal) || det.includes(searchVal);
+        const matchType = typeVal === 'ALL' || t === typeVal;
+        const matchStatus = statusVal === 'ALL' || s === statusVal;
+        
+        if (matchSearch && matchType && matchStatus) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+};
+
+// Render Archived Requests
+async function renderArchivedRequests() {
+    const isManagerOrAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER';
+    if (!isManagerOrAdmin) {
+        return '<div style="padding: 2rem;">Unauthorized. Only Admins and Managers can view Archived Requests.</div>';
+    }
+    
+    // Fetch data
+    const leaves = await db.fetchLeaveRequests();
+    const docs = await db.fetchDocuments();
+    const expenses = await db.fetchExpenses();
+    
+    let profilesMap = {};
+    const allProfiles = await db.fetchAllProfiles();
+    allProfiles.forEach(p => {
+        profilesMap[p.id] = p.full_name || 'Unknown User';
+    });
+
+    // Normalize requests
+    let allRequests = [];
+    const addToRequests = (items, type, getDetails) => {
+        items.forEach(r => {
+            if (r.status.endsWith('_ARCHIVED')) {
+                allRequests.push({
+                    id: r.id,
+                    type: type,
+                    employee_id: r.employee_id,
+                    details: getDetails(r),
+                    status: r.status.replace('_ARCHIVED', ''), // Show original status
+                    created_at: r.created_at
+                });
+            }
+        });
+    };
+
+    addToRequests(leaves, 'Leave', r => `${r.leave_type}: ${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}`);
+    addToRequests(docs, 'Document', r => `${r.doc_type} - ${r.purpose}`);
+    addToRequests(expenses, 'Expense', r => `SAR ${r.amount} - ${r.description}`);
+    
+    // Sort by created_at desc
+    allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    // Render UI
+    let rowsHTML = allRequests.map(r => {
+        let badgeClass = 'info';
+        if (r.status === 'APPROVED') badgeClass = 'success';
+        if (r.status === 'REJECTED') badgeClass = 'danger';
+        
+        const employeeName = profilesMap[r.employee_id] || 'Unknown';
+        
+        return `
+            <tr>
+                <td>${new Date(r.created_at).toLocaleDateString()}</td>
+                <td>${employeeName}</td>
+                <td><strong>${r.type}</strong></td>
+                <td>${r.details}</td>
+                <td><span class="status-badge ${badgeClass}">${r.status}</span> <span style="font-size: 0.7rem; color: var(--color-text-secondary);">(Archived)</span></td>
+            </tr>
+        `;
+    }).join('');
+    
+    if (allRequests.length === 0) {
+        rowsHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No archived requests found.</td></tr>`;
+    }
+    
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title">Archived Requests</h1>
+                <p class="page-subtitle">Historical record of completed requests.</p>
+            </div>
+        </div>
+        
+        <div class="card fade-in-up">
+            <div style="overflow-x: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Employee</th>
+                            <th>Type</th>
+                            <th>Details</th>
+                            <th>Original Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHTML}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
 }
 
 initApp();
