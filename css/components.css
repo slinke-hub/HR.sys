@@ -278,6 +278,16 @@
   pointer-events: none;
 }
 
+/* Dropdown Menu Items */
+.dropdown-item {
+  transition: all var(--transition-fast);
+}
+
+.dropdown-item:hover {
+  background-color: var(--color-primary);
+  color: #FFFFFF !important;
+}
+
 [dir="rtl"] .toast {
   animation: slideInLeft 0.3s ease-out, fadeOut 0.5s ease-out 3s forwards;
 }
