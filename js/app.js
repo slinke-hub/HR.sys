@@ -4,6 +4,23 @@ let currentTheme = 'dark';
 let currentView = 'login';
 let currentUser = null;
 let currentUserRole = null;
+let currentContractEmployeeId = null;
+let currentContractEmployeeName = '';
+
+// Inactivity Tracker (5 Minutes)
+let inactivityTimeout;
+function resetInactivityTimeout() {
+    clearTimeout(inactivityTimeout);
+    if (currentUser && currentView !== 'login') {
+        inactivityTimeout = setTimeout(() => {
+            showToast(t('timeout_message') || "Logged out due to inactivity", "warning");
+            window.handleLogout();
+        }, 5 * 60 * 1000); // 5 minutes
+    }
+}
+['mousemove', 'keydown', 'mousedown', 'touchstart'].forEach(event => {
+    document.addEventListener(event, resetInactivityTimeout);
+});
 
 // DOM Elements
 const htmlElement = document.documentElement;
@@ -14,23 +31,23 @@ const navItems = document.querySelectorAll('.nav-item');
 lucide.createIcons();
 
 // --- THEME MANAGEMENT ---
-window.toggleTheme = function() {
+window.toggleTheme = function () {
     currentTheme = currentTheme === 'light' ? 'dark' : 'light';
     htmlElement.setAttribute('data-theme', currentTheme);
     lucide.createIcons();
 }
 
 // --- LANGUAGE MANAGEMENT ---
-window.toggleLanguage = function() {
+window.toggleLanguage = function () {
     currentLang = currentLang === 'en' ? 'ar' : 'en';
     htmlElement.setAttribute('dir', currentLang === 'ar' ? 'rtl' : 'ltr');
     htmlElement.setAttribute('lang', currentLang);
-    
+
     const langDisplay = document.getElementById('currentLangDisplay');
     if (langDisplay) {
         langDisplay.textContent = currentLang === 'en' ? 'EN' : 'AR';
     }
-    
+
     updateTranslations();
     renderView(currentView); // Re-render view for updated strings inside
 }
@@ -59,7 +76,7 @@ navItems.forEach(item => {
         e.preventDefault();
         navItems.forEach(nav => nav.classList.remove('active'));
         item.classList.add('active');
-        
+
         currentView = item.getAttribute('data-view');
         renderView(currentView);
     });
@@ -101,13 +118,13 @@ function showToast(message, type = 'info') {
         container.className = 'toast-container';
         document.body.appendChild(container);
     }
-    
+
     const toast = document.createElement('div');
     toast.className = 'toast';
-    
+
     let icon = 'info';
     let color = 'var(--color-accent)';
-    
+
     if (type === 'success') {
         icon = 'check-circle';
         color = 'var(--color-success)';
@@ -118,32 +135,32 @@ function showToast(message, type = 'info') {
         icon = 'x-circle';
         color = '#ef4444';
     }
-    
+
     toast.style.borderInlineStartColor = color;
     toast.innerHTML = `<i data-lucide="${icon}" style="color: ${color}"></i> <span>${message}</span>`;
-    
+
     container.appendChild(toast);
     lucide.createIcons();
-    
+
     setTimeout(() => {
         toast.remove();
     }, 3500);
 }
 
 // Global Handlers
-window.handleClockIn = async function() {
-    if(!currentUser) return;
+window.handleClockIn = async function () {
+    if (!currentUser) return;
     const success = await db.clockIn(currentUser.id);
     if (success) {
-        showToast(t('toast_clock_in') + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 'success');
+        showToast(t('toast_clock_in') + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'success');
         renderView(currentView);
     } else {
         showToast("Error clocking in. Check DB connection.", "danger");
     }
 }
 
-window.handleClockOut = async function() {
-    if(!currentUser) return;
+window.handleClockOut = async function () {
+    if (!currentUser) return;
     const success = await db.clockOut(currentUser.id);
     if (success) {
         showToast("Clocked out successfully.", 'success');
@@ -153,35 +170,85 @@ window.handleClockOut = async function() {
     }
 }
 
-window.handleLogout = async function() {
+// Community View
+async function renderCommunity() {
+    const messages = await db.fetchCommunityChat();
+
+    let chatHTML = messages.map(m => `
+        <div style="display:flex; gap:1rem; margin-bottom:1.5rem; ${m.user_id === currentUser.id ? 'flex-direction:row-reverse;' : ''}">
+            <div style="width:40px; height:40px; border-radius:50%; background:var(--color-surface-hover); flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+                ${m.profiles.avatar_url ? `<img src="${m.profiles.avatar_url}" style="width:100%;height:100%;object-fit:cover;">` : `<i data-lucide="user"></i>`}
+            </div>
+            <div style="max-width:70%; ${m.is_birthday_alert ? 'background: linear-gradient(135deg, #fce7f3, #fbcfe8); border: 1px solid #f9a8d4;' : (m.user_id === currentUser.id ? 'background:var(--color-primary); color:white;' : 'background:var(--color-surface); border:1px solid var(--color-border);')} padding:1rem; border-radius:8px;">
+                <div style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; ${m.user_id === currentUser.id ? 'color:rgba(255,255,255,0.9);' : 'color:var(--color-text-secondary);'}">${m.profiles.full_name}</div>
+                <div style="${m.is_birthday_alert ? 'font-weight:bold; font-size:1.1rem; color: #be185d;' : ''}">${m.message}</div>
+                <div style="font-size:0.75rem; margin-top:0.5rem; ${m.user_id === currentUser.id ? 'color:rgba(255,255,255,0.7);' : 'color:var(--color-text-tertiary);'}">${new Date(m.created_at).toLocaleString()}</div>
+            </div>
+        </div>
+    `).join('');
+
+    if (messages.length === 0) chatHTML = `<p style="text-align:center; color:var(--color-text-secondary);">No messages yet. Be the first to post!</p>`;
+
+    return `
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">${t('community_chat')}</h1>
+                <p class="page-subtitle">Connect with your colleagues!</p>
+            </div>
+        </div>
+        <div class="dashboard-grid">
+            <div class="card col-span-12">
+                <div style="max-height:600px; overflow-y:auto; padding-right:1rem; display:flex; flex-direction:column-reverse;" id="communityChatBox">
+                    ${chatHTML}
+                </div>
+                <form onsubmit="handlePostCommunityMessage(event)" style="margin-top:1.5rem; display:flex; gap:1rem;">
+                    <input type="text" id="communityMessageInput" class="form-control" placeholder="Type a message..." required style="flex:1;">
+                    <button type="submit" class="btn-primary">Post</button>
+                </form>
+            </div>
+        </div>
+    `;
+}
+
+window.handlePostCommunityMessage = async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('communityMessageInput');
+    const msg = input.value.trim();
+    if (msg) {
+        await db.postCommunityMessage(currentUser.id, msg);
+        renderView('community');
+    }
+};
+
+window.handleLogout = async function () {
     try {
         await db.logout();
     } catch (error) {
         console.error("Logout error:", error);
     }
-    
+
     // Forcefully wipe all local and session storage to guarantee no stale auth tokens remain
     localStorage.clear();
     sessionStorage.clear();
-    
+
     // A clean reload ensures all intervals, states, and UI elements (like sidebar/topbar) are completely reset
     window.location.reload();
 }
 
-window.handleLeaveSubmit = async function(e) {
+window.handleLeaveSubmit = async function (e) {
     e.preventDefault();
     const type = document.getElementById('leaveType').value;
     const start = document.getElementById('leaveStart').value;
     const end = document.getElementById('leaveEnd').value;
     const reason = document.getElementById('leaveReason').value;
-    
+
     const success = await db.submitLeaveRequest(currentUser.id, {
         leave_type: type,
         start_date: start,
         end_date: end,
         reason: reason
     });
-    
+
     if (success) {
         showToast(t('toast_leave_applied'), 'success');
         renderView('leave');
@@ -190,52 +257,78 @@ window.handleLeaveSubmit = async function(e) {
     }
 }
 
-window.handleLeaveAction = async function(id, status, employeeId) {
+window.handleLeaveAction = async function (id, status, employeeId) {
     const { success } = await db.updateLeaveStatus(id, status);
     if (success) {
         showToast(`Leave request ${status.toLowerCase()}`, 'success');
-        if(employeeId) await db.createNotification(employeeId, `Your leave request has been ${status}.`);
+        if (employeeId) await db.createNotification(employeeId, `Your leave request has been ${status}.`);
         renderView(currentView);
     }
 }
 
-window.handleLoginSubmit = async function(e) {
+window.handleLoginSubmit = async function (e) {
     e.preventDefault();
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
-    
+
     const { user, error } = await db.login(email, password);
-    
+
     if (error || !user) {
         console.error("Login Error:", error);
         showToast(error?.message || t('invalid_credentials'), 'danger');
         return;
     }
-    
+
     currentUser = user;
+
+    // Update last_login
+    db.updateLastLogin(user.id);
+
     const profile = await db.getUserProfile(user.id);
-    currentUserRole = profile.role;
-    updateTopbarProfile(profile);
-    
+    if (profile) {
+        currentUserRole = profile.role;
+        updateTopbarProfile(profile);
+        // Check for Birthday
+        if (profile.birth_date) {
+            const today = new Date();
+            const bday = new Date(profile.birth_date);
+            if (today.getMonth() === bday.getMonth() && today.getDate() === bday.getDate()) {
+                const bdayMessage = `🎉 ${t('birthday_msg')} ${profile.full_name}! 🎂🎈`;
+
+                // Check if we already posted it today to prevent duplicates
+                const chat = await db.fetchCommunityChat();
+                const alreadyPosted = chat.some(m => m.user_id === user.id && m.is_birthday_alert && new Date(m.created_at).toDateString() === today.toDateString());
+
+                if (!alreadyPosted) {
+                    await db.postCommunityMessage(user.id, bdayMessage, true);
+                    showToast(t('birthday_msg'), 'success');
+                }
+            }
+        }
+    }
+
+    // Start inactivity tracker
+    resetInactivityTimeout();
+
     // Show sidebar and topbar again
     document.querySelector('.sidebar').style.display = 'block';
     document.querySelector('.topbar').style.display = 'flex';
-    
+
     // Hide/Show Role-Specific Nav Items
     const adminNav = document.querySelector('.nav-item[data-view="admin"]');
     const usersNav = document.querySelector('.nav-item[data-view="users"]');
     const analyticsNav = document.querySelector('.nav-item[data-view="analytics"]');
     const employeesNav = document.querySelector('.nav-item[data-view="employees"]');
-    
-    if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
+
+    if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
     if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
-    if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
-    if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
-    
+    if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
+    if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
+
     // Route based on role
     if (currentUserRole === 'ADMIN') {
         currentView = 'admin';
-    } else if (currentUserRole === 'MANAGER') {
+    } else if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
         currentView = 'dashboard';
     } else {
         currentView = 'dashboard';
@@ -244,7 +337,7 @@ window.handleLoginSubmit = async function(e) {
 }
 
 // Render Login View
-window.togglePasswordVisibility = function(inputId) {
+window.togglePasswordVisibility = function (inputId) {
     const input = document.getElementById(inputId);
     const icon = document.getElementById(inputId + '-eye-icon');
     if (input.type === 'password') {
@@ -263,10 +356,10 @@ function renderLogin() {
     const topbar = document.querySelector('.topbar');
     if (sidebar) sidebar.style.display = 'none';
     if (topbar) topbar.style.display = 'none';
-    
+
     return `
-        <div style="display: flex; height: 100vh; align-items: center; justify-content: center; width: 100vw; position: fixed; top: 0; left: 0; background: var(--color-bg); z-index: 9999;">
-            <div class="card" style="width: 100%; max-width: 400px; padding: 2.5rem 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
+        <div style="display: flex; height: 100vh; align-items: center; justify-content: center; width: 100vw; position: fixed; top: 0; left: 0; background: url('images/login_bg.png') center/cover no-repeat; z-index: 9999;">
+            <div class="card" style="width: 100%; max-width: 400px; padding: 2.5rem 2rem; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 30px 60px rgba(0,0,0,0.3); color: white;">
                 <div style="text-align: center; margin-bottom: 2rem;">
                     <div class="login-logo">MUQAM</div>
                     <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
@@ -280,7 +373,7 @@ function renderLogin() {
                     <div class="form-group" style="margin-bottom: 1.5rem; position: relative;">
                         <label class="form-label">${t('password_label')}</label>
                         <input type="password" autocomplete="new-password" id="password" class="form-control" placeholder="••••••••" required style="padding-right: 40px;">
-                        <button type="button" onclick="togglePasswordVisibility('password')" style="position: absolute; right: 10px; bottom: 8px; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); display: flex; align-items: center; justify-content: center; padding: 4px;">
+                        <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('password')" style="color: rgba(255, 255, 255, 0.7);">
                             <i data-lucide="eye" id="password-eye-icon" style="width: 20px; height: 20px;"></i>
                         </button>
                     </div>
@@ -300,25 +393,87 @@ function renderLogin() {
     `;
 }
 
-// Render Employee Dashboard
 async function renderDashboard() {
-    const isClockedIn = await db.checkClockInStatus(currentUser?.id);
+    const isClockedIn = await db.fetchTodayAttendance(currentUser?.id) != null && !(await db.fetchTodayAttendance(currentUser?.id)).clock_out_time;
+    const todayAttendance = await db.fetchTodayAttendance(currentUser?.id);
     const announcements = await db.fetchAnnouncements() || [];
-    
+
     let announcementsHTML = announcements.map(a => `
         <div class="announcement-item">
-            <div class="announcement-icon" style="${a.icon === 'heart-pulse' ? 'background: rgba(16, 185, 129, 0.1); color: var(--color-success);' : ''}">
-                <i data-lucide="${a.icon || 'megaphone'}"></i>
+            <div class="announcement-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--color-success);">
+                <i data-lucide="megaphone"></i>
             </div>
             <div class="announcement-content">
                 <h4>${a.title}</h4>
                 <p>${a.content}</p>
+                <small style="color:var(--color-text-secondary);">${new Date(a.created_at).toLocaleDateString()}</small>
             </div>
         </div>
     `).join('');
-
     if (announcements.length === 0) {
         announcementsHTML = `<p style="color: var(--color-text-secondary); padding: 1rem 0;">${t('dash_no_announcements')}</p>`;
+    }
+
+    // News Hub
+    let newsHTML = '<p>Loading news...</p>';
+    try {
+        const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://www.arabnews.com/cat/1/rss.xml');
+        const newsData = await res.json();
+        if (newsData.status === 'ok') {
+            newsHTML = newsData.items.slice(0, 5).map(item => `
+                <div style="margin-bottom: 1rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem;">
+                    <a href="${item.link}" target="_blank" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">${item.title}</a>
+                    <div style="font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(item.pubDate).toLocaleDateString()}</div>
+                </div>
+            `).join('');
+        }
+    } catch (e) {
+        newsHTML = '<p>Failed to load news.</p>';
+    }
+
+    // Expiration Alerts
+    let expirationAlerts = '';
+    try {
+        // Docs expiring in 30 days
+        const { data: docs } = await supabaseClient.from('employee_documents').select('*').eq('employee_id', currentUser.id);
+        const expiringDocs = (docs || []).filter(d => d.expiration_date && (new Date(d.expiration_date) - new Date()) / (1000 * 60 * 60 * 24) < 30);
+        if (expiringDocs.length > 0) {
+            expirationAlerts += `
+                <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--color-danger); padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
+                    <strong style="color: var(--color-danger);">${t('docs_expiring')}:</strong> ${expiringDocs.length} document(s) expire soon.
+                </div>
+            `;
+        }
+    } catch (e) { }
+
+    // Admin Widgets
+    let adminWidgets = '';
+    if (currentUserRole === 'ADMIN') {
+        try {
+            const { data: contracts } = await supabaseClient.from('contracts').select('*, profiles:employee_id(full_name)');
+            const expiringContracts = (contracts || []).filter(c => c.end_date && (new Date(c.end_date) - new Date()) / (1000 * 60 * 60 * 24) < 30);
+            if (expiringContracts.length > 0) {
+                expirationAlerts += `
+                    <div style="background: rgba(245, 158, 11, 0.1); border-left: 4px solid var(--color-warning); padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
+                        <strong style="color: var(--color-warning);">${t('contract_expiring')}:</strong> ${expiringContracts.length} contract(s) expire soon.
+                    </div>
+                `;
+            }
+        } catch (e) { }
+        const allProfiles = await db.fetchAllProfiles();
+        const lastLoginsHTML = allProfiles.filter(p => p.last_login).sort((a, b) => new Date(b.last_login) - new Date(a.last_login)).slice(0, 5).map(p => `
+            <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem;">
+                <span>${p.full_name}</span>
+                <span style="color:var(--color-text-secondary); font-size:0.85rem;">${new Date(p.last_login).toLocaleString()}</span>
+            </div>
+        `).join('') || '<p>No recent logins.</p>';
+
+        adminWidgets += `
+            <div class="card col-span-12 md:col-span-6">
+                <div class="card-title">${t('last_login')}</div>
+                <div>${lastLoginsHTML}</div>
+            </div>
+        `;
     }
 
     return `
@@ -327,77 +482,142 @@ async function renderDashboard() {
                 <h1 class="page-title">${t('welcome')}</h1>
                 <p class="page-subtitle">${t('welcome_sub')}</p>
             </div>
-            ${isClockedIn 
-                ? `<button class="btn-primary" style="background: var(--color-danger);" onclick="handleClockOut()">${t('clock_out')}</button>`
-                : `<button class="btn-primary" onclick="handleClockIn()">${t('clock_in')}</button>`
-            }
+            ${isClockedIn
+            ? `<button class="btn-primary" style="background: var(--color-danger);" onclick="handleClockOutPrompt('${todayAttendance.id}')">${t('attendance_clock_out')}</button>`
+            : `<button class="btn-primary" onclick="handleClockIn()">${t('attendance_clock_in')}</button>`
+        }
         </div>
 
         <div class="dashboard-grid">
-            <!-- Quick Actions -->
-            <div class="card col-span-8">
-                <div class="card-title">${t('quick_actions')}</div>
-                <div class="quick-action-grid">
-                    <button class="action-btn" onclick="renderView('leave')">
-                        <i data-lucide="calendar-plus"></i>
-                        <span>${t('apply_leave')}</span>
-                    </button>
-                    ${isClockedIn 
-                        ? `<button class="action-btn" onclick="handleClockOut()">
-                             <i data-lucide="log-out"></i>
-                             <span>${t('clock_out')}</span>
-                           </button>`
-                        : `<button class="action-btn" onclick="handleClockIn()">
-                             <i data-lucide="clock"></i>
-                             <span>${t('clock_in')}</span>
-                           </button>`
-                    }
-                    <button class="action-btn" onclick="renderView('payroll')">
-                        <i data-lucide="file-text"></i>
-                        <span>${t('view_payslip')}</span>
-                    </button>
-                    <button class="action-btn" onclick="showToast(t('toast_doc_req'), 'info')">
-                        <i data-lucide="folder-plus"></i>
-                        <span>${t('req_doc')}</span>
-                    </button>
+            ${expirationAlerts ? `<div class="col-span-12">${expirationAlerts}</div>` : ''}
+            
+            <div class="card col-span-12 md:col-span-8">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                    <div class="card-title" style="margin:0;">${t('announcements')}</div>
+                    ${currentUserRole === 'ADMIN' ? `<button class="btn-primary btn-sm" onclick="showAnnouncementModal()">${t('post_announcement')}</button>` : ''}
                 </div>
-            </div>
-
-            <!-- Leave Balances -->
-            <div class="card col-span-4">
-                <div class="card-title">${t('leave_balances')}</div>
-                <div class="ring-container">
-                    ${getRingSVG(65, 'var(--color-accent)', 'annual_leave')}
-                    ${getRingSVG(80, 'var(--color-success)', 'sick_leave')}
-                    ${getRingSVG(20, 'var(--color-warning)', 'unpaid_leave')}
-                </div>
-            </div>
-
-            <!-- Announcements -->
-            <div class="card col-span-12">
-                <div class="card-title">${t('announcements')}</div>
-                <div class="announcement-list">
+                <div class="announcement-list" style="max-height: 300px; overflow-y:auto;">
                     ${announcementsHTML}
+                </div>
+            </div>
+
+            <div class="card col-span-12 md:col-span-4">
+                <div class="card-title">${t('news_hub')}</div>
+                <div style="max-height: 300px; overflow-y:auto;">
+                    ${newsHTML}
+                </div>
+            </div>
+            ${adminWidgets}
+        </div>
+
+        <!-- Announcement Modal -->
+        <div class="modal" id="announcementModal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3>${t('post_announcement')}</h3>
+                    <button class="close-modal" onclick="closeAnnouncementModal()">&times;</button>
+                </div>
+                <form onsubmit="handlePostAnnouncement(event)">
+                    <div class="form-group">
+                        <label class="form-label">Title</label>
+                        <input type="text" id="announceTitle" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Content</label>
+                        <textarea id="announceContent" class="form-control" rows="4" required></textarea>
+                    </div>
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button type="submit" class="btn-primary" style="flex: 1;">Post</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Clock Out Modal -->
+        <div class="modal" id="clockOutModal">
+            <div class="modal-content" style="max-width: 400px; text-align:center;">
+                <div class="modal-header">
+                    <h3>${t('attendance_clock_out')}</h3>
+                    <button class="close-modal" onclick="closeClockOutModal()">&times;</button>
+                </div>
+                <p style="margin-bottom: 1.5rem; color:var(--color-text-secondary);">Please select your logout location:</p>
+                <div style="display: flex; flex-direction:column; gap: 1rem;">
+                    <button class="btn-primary" onclick="executeClockOut('OFFICE')">${t('attendance_location_office')}</button>
+                    <button class="btn-primary" style="background:var(--color-warning);" onclick="executeClockOut('ORDER')">${t('attendance_location_order')}</button>
                 </div>
             </div>
         </div>
     `;
 }
 
+window.showAnnouncementModal = () => document.getElementById('announcementModal').style.display = 'block';
+window.closeAnnouncementModal = () => document.getElementById('announcementModal').style.display = 'none';
+window.handlePostAnnouncement = async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('announceTitle').value;
+    const content = document.getElementById('announceContent').value;
+    await db.postAnnouncement(currentUser.id, title, content);
+    closeAnnouncementModal();
+    renderView('dashboard');
+};
+
+let currentAttendanceId = null;
+window.handleClockIn = () => {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const loc = position.coords.latitude + ',' + position.coords.longitude;
+            await db.clockIn(currentUser.id, loc);
+            showToast("Clocked in successfully!", "success");
+            renderView('dashboard');
+        }, (error) => {
+            showToast("Geolocation is required to clock in.", "danger");
+        });
+    } else {
+        showToast("Geolocation is not supported by this browser.", "danger");
+    }
+};
+
+window.handleClockOutPrompt = (attendanceId) => {
+    currentAttendanceId = attendanceId;
+    document.getElementById('clockOutModal').style.display = 'block';
+};
+window.closeClockOutModal = () => document.getElementById('clockOutModal').style.display = 'none';
+
+window.executeClockOut = (type) => {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const loc = position.coords.latitude + ',' + position.coords.longitude;
+
+            // Calculate Overtime (stub: simple 8 hours check)
+            const attendance = await db.fetchTodayAttendance(currentUser.id);
+            const inTime = new Date(attendance.clock_in_time);
+            const diffHours = (new Date() - inTime) / (1000 * 60 * 60);
+            const overtime = Math.max(0, diffHours - 8).toFixed(2);
+
+            await db.clockOut(currentAttendanceId, loc, type, overtime);
+            closeClockOutModal();
+            showToast("Clocked out successfully!", "success");
+            renderView('dashboard');
+        }, (error) => {
+            showToast("Geolocation is required to clock out.", "danger");
+        });
+    }
+};
+
 // Render Time & Attendance
 async function renderTime() {
     const punches = await db.fetchTimePunches(currentUserRole === 'ADMIN' ? null : currentUser?.id);
-    
+
     let tableRows = punches.map(p => `
         <tr>
             <td>${new Date(p.punch_time).toLocaleDateString()}</td>
             <td>${new Date(p.punch_time).toLocaleTimeString()}</td>
-            ${currentUserRole === 'ADMIN' ? `<td><span style="font-size: 0.75rem; color: var(--color-text-secondary);">${p.employee_id.substring(0,8)}...</span></td>` : ''}
+            ${currentUserRole === 'ADMIN' ? `<td><span style="font-size: 0.75rem; color: var(--color-text-secondary);">${p.employee_id.substring(0, 8)}...</span></td>` : ''}
             <td>${p.punch_type}</td>
             <td><span class="status-badge ${p.punch_type === 'IN' ? 'success' : 'info'}">${p.punch_type}</span></td>
         </tr>
     `).join('');
-    
+
     if (punches.length === 0) {
         tableRows = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
     }
@@ -430,10 +650,10 @@ async function renderTime() {
 }
 
 async function renderLeave() {
-    const isManagerOrAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER';
+    const isManagerOrAdmin = currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR');
     const profile = await db.getUserProfile(currentUser?.id);
     const requests = await db.fetchLeaveRequests(isManagerOrAdmin ? null : currentUser?.id);
-    
+
     let profilesMap = {};
     if (isManagerOrAdmin) {
         const allProfiles = await db.fetchAllProfiles();
@@ -444,28 +664,28 @@ async function renderLeave() {
 
     const approvedLeaves = requests.filter(r => r.status.startsWith('APPROVED'));
     let annualTaken = 0, sickTaken = 0, unpaidTaken = 0;
-    
+
     // Only calculate allowance balances for the current user's OWN approved leaves
     const myApprovedLeaves = approvedLeaves.filter(r => r.employee_id === currentUser?.id);
     myApprovedLeaves.forEach(r => {
         const start = new Date(r.start_date);
         const end = new Date(r.end_date);
         const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
-        if(r.leave_type === 'Annual Leave') annualTaken += days;
-        else if(r.leave_type === 'Sick Leave') sickTaken += days;
-        else if(r.leave_type === 'Unpaid Leave') unpaidTaken += days;
+        if (r.leave_type === 'Annual Leave') annualTaken += days;
+        else if (r.leave_type === 'Sick Leave') sickTaken += days;
+        else if (r.leave_type === 'Unpaid Leave') unpaidTaken += days;
     });
 
     const annualAllowance = profile.annual_leave_allowance || 30;
     const sickAllowance = profile.sick_leave_allowance || 10;
-    
+
     let rowsHTML = requests.map(r => {
         let badgeClass = 'info';
         if (r.status.startsWith('APPROVED')) badgeClass = 'success';
         if (r.status.startsWith('REJECTED')) badgeClass = 'danger';
-        
+
         const employeeNameCell = isManagerOrAdmin ? `<td>${profilesMap[r.employee_id] || 'Unknown'}</td>` : '';
-        
+
         let actionsCell = '';
         if (isManagerOrAdmin) {
             if (r.status === 'PENDING') {
@@ -479,7 +699,7 @@ async function renderLeave() {
                 actionsCell = `<td>-</td>`;
             }
         }
-        
+
         return `
             <tr>
                 ${employeeNameCell}
@@ -490,7 +710,7 @@ async function renderLeave() {
             </tr>
         `;
     }).join('');
-    
+
     if (requests.length === 0) {
         const colSpan = isManagerOrAdmin ? 5 : 3;
         rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('leave_no_reqs')}</td></tr>`;
@@ -583,20 +803,20 @@ async function renderLeave() {
 // ==========================================
 // EXPENSES
 // ==========================================
-window.handleExpenseSubmit = async function(e) {
+window.handleExpenseSubmit = async function (e) {
     e.preventDefault();
     const amount = document.getElementById('expAmount').value;
     const description = document.getElementById('expDesc').value;
     const fileInput = document.getElementById('expReceipt');
-    
+
     if (!fileInput.files || fileInput.files.length === 0) {
         showToast("Please upload a receipt.", "warning");
         return;
     }
-    
+
     const file = fileInput.files[0];
     const reader = new FileReader();
-    reader.onload = async function(event) {
+    reader.onload = async function (event) {
         const base64Url = event.target.result;
         const { success } = await db.submitExpense(currentUser.id, amount, description, base64Url);
         if (success) {
@@ -609,22 +829,22 @@ window.handleExpenseSubmit = async function(e) {
     reader.readAsDataURL(file);
 }
 
-window.handleExpenseAction = async function(id, status, employeeId) {
+window.handleExpenseAction = async function (id, status, employeeId) {
     const { success } = await db.updateExpenseStatus(id, status);
     if (success) {
         showToast(`Expense ${status.toLowerCase()}`, "success");
-        if(employeeId) await db.createNotification(employeeId, `Your expense request has been ${status}.`);
+        if (employeeId) await db.createNotification(employeeId, `Your expense request has been ${status}.`);
         renderView('expenses');
     }
 }
 
 async function renderExpenses() {
-    const isManagerOrAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER';
-    
+    const isManagerOrAdmin = currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR');
+
     let expenses = [];
     if (currentUserRole === 'ADMIN') {
         expenses = await db.fetchExpenses(null);
-    } else if (currentUserRole === 'MANAGER') {
+    } else if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
         const allExpenses = await db.fetchExpenses(null);
         const users = await db.fetchUsers();
         const myTeamIds = users.filter(u => u.manager_id === currentUser.id).map(u => u.id);
@@ -633,7 +853,7 @@ async function renderExpenses() {
     } else {
         expenses = await db.fetchExpenses(currentUser.id);
     }
-    
+
     const pendingExpenses = expenses.filter(e => e.status === 'PENDING' && e.employee_id !== currentUser.id);
     const myExpenses = expenses.filter(e => e.employee_id === currentUser.id);
 
@@ -692,7 +912,7 @@ async function renderExpenses() {
                         <tbody>
                             ${pendingExpenses.length === 0 ? `<tr><td colspan="5" style="text-align: center;">${t('exp_no_pending')}</td></tr>` : pendingExpenses.map(e => `
                                 <tr>
-                                    <td><span style="font-size: 0.75rem;">${e.employee_id.substring(0,8)}...</span></td>
+                                    <td><span style="font-size: 0.75rem;">${e.employee_id.substring(0, 8)}...</span></td>
                                     <td>${e.description}</td>
                                     <td>$${e.amount.toFixed(2)}</td>
                                     <td><a href="${e.receipt_base64}" download="receipt_${e.id}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">${t('exp_download')}</a></td>
@@ -775,7 +995,7 @@ function initCharts() {
 // ==========================================
 // PAYROLL
 // ==========================================
-window.handleViewPayslip = function(month, netPay) {
+window.handleViewPayslip = function (month, netPay) {
     alert(`SAP Detailed Payslip for ${month}\n------------------------\nBase Salary: $${(netPay * 0.8).toFixed(2)}\nAllowances: $${(netPay * 0.2).toFixed(2)}\n\nNet Pay: $${netPay.toFixed(2)}`);
 }
 
@@ -790,11 +1010,11 @@ async function renderPayroll() {
             <td><button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">${t('pay_view_det')}</button></td>
         </tr>
     `).join('');
-    
+
     let totalNet = payrolls.length > 0 ? payrolls[0].net_pay.toFixed(2) : '0.00';
     let extras = payrolls.length > 0 ? payrolls[0].overtime_pay.toFixed(2) : '0.00';
     let base = payrolls.length > 0 ? (payrolls[0].net_pay - payrolls[0].overtime_pay).toFixed(2) : '0.00';
-    
+
     if (payrolls.length === 0) {
         rowsHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('pay_no_slips')}</td></tr>`;
     }
@@ -851,21 +1071,21 @@ async function renderAdmin() {
     if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MANAGER') {
         return `<div class="page-header"><h1 class="page-title">${t('analy_unauth')}</h1></div>`;
     }
-    
+
     const employees = await db.fetchAllEmployees();
     let pendingLeaves = await db.fetchAllPendingLeaves();
-    
-    if (currentUserRole === 'MANAGER') {
+
+    if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
         const myTeamIds = employees.filter(e => e.manager_id === currentUser.id).map(e => e.id);
         pendingLeaves = pendingLeaves.filter(l => myTeamIds.includes(l.employee_id));
     }
-    
+
     let leaveHTML = pendingLeaves.map(r => `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--color-border);">
             <div>
                 <h4 style="margin-bottom: 4px;">${r.leave_type}</h4>
                 <p style="font-size: 0.875rem; color: var(--color-text-secondary);">${new Date(r.start_date).toLocaleDateString()} - ${new Date(r.end_date).toLocaleDateString()}</p>
-                <p style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">Employee ID: ${r.employee_id.substring(0,8)}...</p>
+                <p style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">Employee ID: ${r.employee_id.substring(0, 8)}...</p>
             </div>
             <div style="display: flex; gap: 8px;">
                 <button class="btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;" onclick="handleLeaveAction('${r.id}', 'APPROVED', '${r.employee_id}')">${t('leave_approve')}</button>
@@ -930,7 +1150,7 @@ async function renderAdmin() {
 }
 
 // Render User Management (Admin Only)
-window.handleCreateUser = async function(e) {
+window.handleCreateUser = async function (e) {
     e.preventDefault();
     const email = document.getElementById('newEmail').value;
     const password = document.getElementById('newPassword').value;
@@ -939,7 +1159,7 @@ window.handleCreateUser = async function(e) {
     const fullName = document.getElementById('newFullName').value;
     const iqama = document.getElementById('newIqama').value;
     const phone = document.getElementById('newPhone').value;
-    
+
     const { error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone);
     if (!error) {
         showToast("User created successfully!", 'success');
@@ -949,7 +1169,7 @@ window.handleCreateUser = async function(e) {
     }
 }
 
-window.handleChangeRole = async function(id, role) {
+window.handleChangeRole = async function (id, role) {
     const { success } = await db.updateUserRole(id, role);
     if (success) {
         showToast("Role updated", "success");
@@ -957,7 +1177,7 @@ window.handleChangeRole = async function(id, role) {
     }
 }
 
-window.handleChangeJobTitle = async function(id, jobTitle) {
+window.handleChangeJobTitle = async function (id, jobTitle) {
     const { success } = await db.updateUserJobTitle(id, jobTitle);
     if (success) {
         showToast("Job title updated", "success");
@@ -968,9 +1188,9 @@ window.handleChangeJobTitle = async function(id, jobTitle) {
 
 async function renderUsers() {
     if (currentUserRole !== 'ADMIN') return '<div style="padding: 2rem;">Unauthorized</div>';
-    
+
     const users = await db.fetchUsers();
-    
+
     return `
         <div class="page-header fade-in-up">
             <div>
@@ -998,9 +1218,12 @@ async function renderUsers() {
                         <label class="form-label">${t('users_email')}</label>
                         <input type="email" autocomplete="off" id="newEmail" class="form-control" required>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="position: relative;">
                         <label class="form-label">${t('users_temp_pass')}</label>
-                        <input type="password" autocomplete="new-password" id="newPassword" class="form-control" required>
+                        <input type="password" autocomplete="new-password" id="newPassword" class="form-control" required style="padding-right: 40px;">
+                        <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('newPassword')">
+                            <i data-lucide="eye" id="newPassword-eye-icon" style="width: 20px; height: 20px;"></i>
+                        </button>
                     </div>
                     <div class="form-group">
                         <label class="form-label">${t('users_job_title')}</label>
@@ -1038,7 +1261,7 @@ async function renderUsers() {
                                         <div style="font-weight: bold; color: var(--primary-color);">EMP-${u.emp_index || 'New'}</div>
                                         <div style="font-weight: bold;">${u.full_name || 'N/A'}</div>
                                         <div style="font-size: 0.8rem; color: var(--text-light);">
-                                            ID: <span title="${u.id}">${u.id.substring(0,8)}...</span><br/>
+                                            ID: <span title="${u.id}">${u.id.substring(0, 8)}...</span><br/>
                                             Iqama: ${u.iqama_number || 'N/A'}<br/>
                                             Phone: ${u.phone_number || 'N/A'}
                                         </div>
@@ -1059,9 +1282,8 @@ async function renderUsers() {
                                             <option value="">${t('users_no_mgr')}</option>
                                             ${users.filter(m => m.role === 'MANAGER' || m.role === 'ADMIN').map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${m.job_title || 'Mgr'}</option>`).join('')}
                                         </select>
-                                    </td>
-                                    <td>
-                                        <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="showContractModal('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')">
+                                                     <td>
+                                        <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="navigateToContract('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')">
                                             <i data-lucide="file-signature" style="width:14px;height:14px;margin-right:4px;"></i> ${t('users_contract')}
                                         </button>
                                     </td>
@@ -1072,56 +1294,10 @@ async function renderUsers() {
                 </div>
             </div>
         </div>
-
-        <!-- Contract Modal -->
-        <div id="contractModal" class="modal">
-            <div class="modal-content" style="max-width: 500px;">
-                <div class="modal-header">
-                    <h2>${t('users_contract')}: <span id="contractEmpName" style="color: var(--primary-color);"></span></h2>
-                    <button class="icon-btn" onclick="closeContractModal()"><i data-lucide="x"></i></button>
-                </div>
-                <form autocomplete="off" onsubmit="handleSaveContract(event)" style="margin-top: 1.5rem;">
-                    <input type="hidden" id="contractEmployeeId">
-                    <div class="form-group">
-                        <label class="form-label">${t('contract_type')}</label>
-                        <select id="contractType" class="form-control" required>
-                            <option value="Full-time">${t('contract_ft')}</option>
-                            <option value="Part-time">${t('contract_pt')}</option>
-                            <option value="Contractor">${t('contract_c')}</option>
-                            <option value="Freelance">${t('contract_fl')}</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${t('contract_start')}</label>
-                        <input type="date" id="contractStartDate" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${t('contract_end')}</label>
-                        <input type="date" id="contractEndDate" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${t('contract_salary')}</label>
-                        <input type="number" id="contractSalary" class="form-control" step="0.01">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${t('contract_status')}</label>
-                        <select id="contractStatus" class="form-control" required>
-                            <option value="Active">${t('contract_active')}</option>
-                            <option value="Terminated">${t('contract_term')}</option>
-                            <option value="Expired">${t('contract_exp')}</option>
-                        </select>
-                    </div>
-                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-                        <button type="button" class="btn-secondary" style="flex: 1;" onclick="closeContractModal()">${t('contract_cancel')}</button>
-                        <button type="submit" class="btn-primary" style="flex: 1;">${t('contract_save')}</button>
-                    </div>
-                </form>
-            </div>
-        </div>
     `;
 }
 
-window.handleAssignManager = async function(id, managerId) {
+window.handleAssignManager = async function (id, managerId) {
     const { success } = await db.assignManager(id, managerId);
     if (success) {
         showToast("Manager assigned", "success");
@@ -1159,27 +1335,27 @@ async function renderPerformance() {
 }
 
 // Render Documents
-window.handleDocSubmit = async function(e) {
+window.handleDocSubmit = async function (e) {
     e.preventDefault();
     const type = document.getElementById('docType').value;
     const purpose = document.getElementById('docPurpose').value;
     const { success } = await db.requestDocument(currentUser.id, type, purpose);
-    if(success) {
+    if (success) {
         showToast("Document requested", "success");
         renderView('documents');
     }
 }
 
-window.handleEmployeeDocUpload = async function(e) {
+window.handleEmployeeDocUpload = async function (e) {
     e.preventDefault();
     const docType = document.getElementById('empDocType').value;
     const fileInput = document.getElementById('empDocFile');
     if (!fileInput.files || fileInput.files.length === 0) return;
-    
+
     const file = fileInput.files[0];
     const docName = file.name;
     const reader = new FileReader();
-    reader.onload = async function(event) {
+    reader.onload = async function (event) {
         const base64Url = event.target.result;
         const { success } = await db.uploadEmployeeDocument(currentUser.id, docName, docType, base64Url);
         if (success) {
@@ -1294,15 +1470,15 @@ let messagePollingInterval = null;
 
 async function renderMessages() {
     const users = await db.fetchAllProfiles();
-    
+
     // Clear old polling if exists
-    if(messagePollingInterval) clearInterval(messagePollingInterval);
+    if (messagePollingInterval) clearInterval(messagePollingInterval);
 
     // Build user list (excluding self)
     const otherUsers = users.filter(u => u.id !== currentUser.id);
     let usersHtml = otherUsers.map(u => `
         <div class="chat-user-item" onclick="window.selectChatUser('${u.id}', '${u.full_name}')" style="padding: 1rem; border-bottom: 1px solid var(--color-border); cursor: pointer; display: flex; align-items: center; gap: 10px;">
-            <img src="${u.avatar_url || 'https://ui-avatars.com/api/?name='+encodeURIComponent(u.full_name)+'&background=007AFF&color=fff'}" class="avatar" style="width: 40px; height: 40px;">
+            <img src="${u.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(u.full_name) + '&background=007AFF&color=fff'}" class="avatar" style="width: 40px; height: 40px;">
             <div>
                 <div style="font-weight: 600;">${u.full_name}</div>
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary);">${u.role}</div>
@@ -1331,10 +1507,10 @@ async function renderMessages() {
     `;
 }
 
-window.selectChatUser = async function(userId, userName) {
+window.selectChatUser = async function (userId, userName) {
     currentChatUser = { id: userId, name: userName };
     const chatArea = document.getElementById('chatArea');
-    if(!chatArea) return;
+    if (!chatArea) return;
 
     chatArea.innerHTML = `
         <div style="padding: 1rem; border-bottom: 1px solid var(--color-border); font-weight: 600; display: flex; align-items: center; gap: 10px; background: var(--color-surface);">
@@ -1351,20 +1527,20 @@ window.selectChatUser = async function(userId, userName) {
     `;
 
     await window.refreshMessages();
-    
+
     // Set up basic polling every 10 seconds
-    if(messagePollingInterval) clearInterval(messagePollingInterval);
+    if (messagePollingInterval) clearInterval(messagePollingInterval);
     messagePollingInterval = setInterval(() => window.refreshMessages(true), 10000);
 }
 
-window.refreshMessages = async function(isPolling = false) {
-    if(!currentChatUser) return;
+window.refreshMessages = async function (isPolling = false) {
+    if (!currentChatUser) return;
     const historyContainer = document.getElementById('messageHistory');
-    if(!historyContainer) return;
+    if (!historyContainer) return;
 
     const messages = await db.fetchMessageHistory(currentUser.id, currentChatUser.id);
-    
-    if(messages.length === 0) {
+
+    if (messages.length === 0) {
         historyContainer.innerHTML = `<div style="text-align:center; color:var(--color-text-secondary); margin-top: 2rem;">${t('msg_no_msgs')}</div>`;
         return;
     }
@@ -1376,25 +1552,25 @@ window.refreshMessages = async function(isPolling = false) {
         return `
             <div style="align-self: ${isMine ? 'flex-end' : 'flex-start'}; max-width: 70%; background: ${isMine ? 'var(--color-primary)' : 'var(--color-surface)'}; color: ${isMine ? 'white' : 'var(--color-text)'}; padding: 0.75rem 1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border: ${isMine ? 'none' : '1px solid var(--color-border)'};">
                 <div style="margin-bottom: 0.25rem;">${m.content}</div>
-                <div style="font-size: 0.7rem; opacity: 0.7; text-align: right;">${new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                <div style="font-size: 0.7rem; opacity: 0.7; text-align: right;">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
             </div>
         `;
     }).join('');
 
-    if(!isPolling || isAtBottom) {
+    if (!isPolling || isAtBottom) {
         historyContainer.scrollTop = historyContainer.scrollHeight;
     }
 }
 
-window.sendChatMessage = async function() {
-    if(!currentChatUser) return;
+window.sendChatMessage = async function () {
+    if (!currentChatUser) return;
     const input = document.getElementById('messageInput');
     const content = input.value.trim();
-    if(!content) return;
+    if (!content) return;
 
     input.value = '';
     const { success, error } = await db.sendMessage(currentChatUser.id, content);
-    if(success) {
+    if (success) {
         await window.refreshMessages();
     } else {
         showToast("Failed to send message.", "danger");
@@ -1458,9 +1634,12 @@ async function renderProfile() {
                 <div class="card">
                     <div class="card-title">${t('prof_security')}</div>
                     <form autocomplete="off" onsubmit="handleUpdatePassword(event)" style="display: flex; gap: 1rem; align-items: flex-end;">
-                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <div class="form-group" style="flex: 1; margin-bottom: 0; position: relative;">
                             <label class="form-label">${t('prof_new_pass')}</label>
-                            <input type="password" autocomplete="new-password" id="newPassword" class="form-control" placeholder="${t('prof_new_pass_ph')}" required minlength="6">
+                            <input type="password" autocomplete="new-password" id="newPassword" class="form-control" placeholder="${t('prof_new_pass_ph')}" required minlength="6" style="padding-right: 40px;">
+                            <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('newPassword')">
+                                <i data-lucide="eye" id="newPassword-eye-icon" style="width: 20px; height: 20px;"></i>
+                            </button>
                         </div>
                         <button type="submit" class="btn-secondary" style="transition: all 0.2s;">${t('prof_update_pass')}</button>
                     </form>
@@ -1470,14 +1649,14 @@ async function renderProfile() {
     `;
 }
 
-window.handleUpdateProfilePhoto = async function(e) {
+window.handleUpdateProfilePhoto = async function (e) {
     e.preventDefault();
     const fileInput = document.getElementById('avatarFile');
     if (!fileInput.files || fileInput.files.length === 0) return;
-    
+
     const file = fileInput.files[0];
     const reader = new FileReader();
-    reader.onload = async function(event) {
+    reader.onload = async function (event) {
         const base64Url = event.target.result;
         const { success, error } = await db.updateProfilePhoto(currentUser.id, base64Url);
         if (success) {
@@ -1491,7 +1670,7 @@ window.handleUpdateProfilePhoto = async function(e) {
     reader.readAsDataURL(file);
 }
 
-window.handleUpdatePassword = async function(e) {
+window.handleUpdatePassword = async function (e) {
     e.preventDefault();
     const newPwd = document.getElementById('newPassword').value;
     const { success, error } = await db.updateUserPassword(newPwd);
@@ -1503,17 +1682,17 @@ window.handleUpdatePassword = async function(e) {
     }
 }
 
-window.handleUpdateProfileDetails = async function(e) {
+window.handleUpdateProfileDetails = async function (e) {
     e.preventDefault();
     const fullName = document.getElementById('profileFullName').value;
     const iqama = document.getElementById('profileIqama').value;
     const phone = document.getElementById('profilePhone').value;
-    
+
     const { success, error } = await db.updateUserProfileDetails(currentUser.id, fullName, iqama, phone);
     if (success) {
         showToast("Profile details updated successfully!", "success");
         renderView('profile');
-        
+
         // Update topbar silently
         const profile = await db.getUserProfile(currentUser.id);
         updateTopbarProfile(profile);
@@ -1524,15 +1703,15 @@ window.handleUpdateProfileDetails = async function(e) {
 
 async function renderTasks() {
     let tasks = [];
-    if (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') {
+    if (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
         tasks = await db.fetchTasks(); // The manager fetchTasks will rely on RLS policies to restrict, or we filter here
     } else {
         tasks = await db.fetchTasks(currentUser.id);
     }
-    
+
     // In db.js, fetchTasks uses 'or(assignee_id.eq,created_by.eq)' if userId is passed. If null, it gets all visible.
     // Let's filter to just the manager's created tasks + assigned to them just to be safe if RLS doesn't restrict.
-    if (currentUserRole === 'MANAGER') {
+    if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
         let users = await db.fetchUsers();
         let teamIds = users.filter(u => u.manager_id === currentUser.id).map(u => u.id);
         teamIds.push(currentUser.id);
@@ -1542,18 +1721,18 @@ async function renderTasks() {
     const todo = tasks.filter(t => t.status === 'TODO');
     const inProgress = tasks.filter(t => t.status === 'IN_PROGRESS');
     const done = tasks.filter(t => t.status === 'DONE');
-    
+
     let adminForm = '';
-    if (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') {
+    if (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
         let users = await db.fetchUsers();
-        if (currentUserRole === 'MANAGER') {
+        if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
             users = users.filter(u => u.manager_id === currentUser.id || u.id === currentUser.id);
         }
         const userOptions = users.map(u => {
-            const label = u.job_title || u.id.substring(0,8);
+            const label = u.job_title || u.id.substring(0, 8);
             return `<option value="${u.id}">${label} (${u.role})</option>`;
         }).join('');
-        
+
         adminForm = `
             <div class="card col-span-12" style="margin-bottom: 1rem;">
                 <div class="card-title">${t('task_assign_new')}</div>
@@ -1578,7 +1757,7 @@ async function renderTasks() {
             </div>
         `;
     }
-    
+
     function renderTaskCard(t) {
         return `
             <div class="card" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--color-primary); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
@@ -1630,12 +1809,12 @@ async function renderTasks() {
     `;
 }
 
-window.handleCreateTask = async function(e) {
+window.handleCreateTask = async function (e) {
     e.preventDefault();
     const title = document.getElementById('taskTitle').value;
     const assignee = document.getElementById('taskAssignee').value;
     const due = document.getElementById('taskDue').value;
-    
+
     const { success, error } = await db.createTask(title, '', assignee, due, currentUser.id);
     if (success) {
         showToast("Task assigned successfully!", "success");
@@ -1645,7 +1824,7 @@ window.handleCreateTask = async function(e) {
     }
 }
 
-window.handleUpdateTaskStatus = async function(taskId, status) {
+window.handleUpdateTaskStatus = async function (taskId, status) {
     const { success } = await db.updateTaskStatus(taskId, status);
     if (success) {
         showToast(`Task moved to ${status}`, "success");
@@ -1657,54 +1836,150 @@ window.handleUpdateTaskStatus = async function(taskId, status) {
 // ==========================================
 // Employees & Contracts (HR View)
 // ==========================================
-window.showContractModal = async function(employeeId, empName) {
-    document.getElementById('contractEmpName').textContent = empName;
-    document.getElementById('contractEmployeeId').value = employeeId;
-    
-    // Clear form
-    document.getElementById('contractType').value = 'Full-time';
-    document.getElementById('contractStartDate').value = '';
-    document.getElementById('contractEndDate').value = '';
-    document.getElementById('contractSalary').value = '';
-    document.getElementById('contractStatus').value = 'Active';
-
-    // Fetch existing contract
-    const contract = await db.fetchContractByEmployeeId(employeeId);
-    if (contract) {
-        document.getElementById('contractType').value = contract.contract_type || 'Full-time';
-        document.getElementById('contractStartDate').value = contract.start_date || '';
-        document.getElementById('contractEndDate').value = contract.end_date || '';
-        document.getElementById('contractSalary').value = contract.salary || '';
-        document.getElementById('contractStatus').value = contract.status || 'Active';
-    }
-
-    document.getElementById('contractModal').style.display = 'block';
+window.navigateToContract = function (employeeId, empName) {
+    currentContractEmployeeId = employeeId;
+    currentContractEmployeeName = empName;
+    currentView = 'contract';
+    render();
 }
 
-window.closeContractModal = function() {
-    document.getElementById('contractModal').style.display = 'none';
-}
-
-window.handleSaveContract = async function(e) {
+window.handleSaveContract = async function (e) {
     e.preventDefault();
-    const employeeId = document.getElementById('contractEmployeeId').value;
     const contractData = {
-        employee_id: employeeId,
+        employee_id: currentContractEmployeeId,
         contract_type: document.getElementById('contractType').value,
         start_date: document.getElementById('contractStartDate').value,
         end_date: document.getElementById('contractEndDate').value || null,
         salary: document.getElementById('contractSalary').value || null,
+        housing_allowance: document.getElementById('contractHousing').value || null,
+        transportation_allowance: document.getElementById('contractTransport').value || null,
+        other_allowances: document.getElementById('contractOther').value || null,
+        working_hours: document.getElementById('contractHours').value || null,
+        probation_period_days: document.getElementById('contractProbation').value || null,
+        notice_period_days: document.getElementById('contractNotice').value || null,
+        annual_leave_days: document.getElementById('contractLeave').value || null,
         status: document.getElementById('contractStatus').value
     };
 
     const { success, error } = await db.upsertContract(contractData);
     if (success) {
         showToast("Contract saved successfully", "success");
-        closeContractModal();
-        renderView('users');
+        currentView = 'users';
+        render();
     } else {
         showToast(error?.message || "Failed to save contract", "danger");
     }
+}
+
+async function renderContractPage() {
+    if (!currentContractEmployeeId) {
+        return `<div class="card">${t('notif_no_found')}</div>`;
+    }
+
+    // Fetch existing contract
+    const contract = await db.fetchContractByEmployeeId(currentContractEmployeeId);
+
+    // Default values if no contract exists
+    const contractType = contract?.contract_type || 'Full-time';
+    const startDate = contract?.start_date || '';
+    const endDate = contract?.end_date || '';
+    const salary = contract?.salary || '';
+    const housing = contract?.housing_allowance || '';
+    const transport = contract?.transportation_allowance || '';
+    const other = contract?.other_allowances || '';
+    const hours = contract?.working_hours || '8 hours/day';
+    const probation = contract?.probation_period_days || 90;
+    const notice = contract?.notice_period_days || 30;
+    const leave = contract?.annual_leave_days || 30;
+    const status = contract?.status || 'Active';
+
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title">${t('users_contract')}</h1>
+                <p class="page-subtitle">${currentContractEmployeeName}</p>
+            </div>
+            <button class="btn-secondary" onclick="currentView='users'; render();">
+                <i data-lucide="arrow-left" style="width:16px;height:16px;margin-right:4px;"></i> Back to Users
+            </button>
+        </div>
+
+        <div class="dashboard-grid fade-in-up">
+            <div class="card col-span-12 md:col-span-8 md:col-start-3">
+                <form autocomplete="off" onsubmit="handleSaveContract(event)">
+                    <div class="dashboard-grid">
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_type')}</label>
+                            <select id="contractType" class="form-control" required>
+                                <option value="Full-time" ${contractType === 'Full-time' ? 'selected' : ''}>${t('contract_ft')}</option>
+                                <option value="Part-time" ${contractType === 'Part-time' ? 'selected' : ''}>${t('contract_pt')}</option>
+                                <option value="Contractor" ${contractType === 'Contractor' ? 'selected' : ''}>${t('contract_c')}</option>
+                                <option value="Freelance" ${contractType === 'Freelance' ? 'selected' : ''}>${t('contract_fl')}</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_status')}</label>
+                            <select id="contractStatus" class="form-control" required>
+                                <option value="Active" ${status === 'Active' ? 'selected' : ''}>${t('contract_active')}</option>
+                                <option value="Terminated" ${status === 'Terminated' ? 'selected' : ''}>${t('contract_term')}</option>
+                                <option value="Expired" ${status === 'Expired' ? 'selected' : ''}>${t('contract_exp')}</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_start')}</label>
+                            <input type="date" id="contractStartDate" class="form-control" required value="${startDate}">
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_end')}</label>
+                            <input type="date" id="contractEndDate" class="form-control" value="${endDate}">
+                        </div>
+
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_salary')}</label>
+                            <input type="number" id="contractSalary" class="form-control" step="0.01" value="${salary}">
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_housing')}</label>
+                            <input type="number" id="contractHousing" class="form-control" step="0.01" value="${housing}">
+                        </div>
+
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_transport')}</label>
+                            <input type="number" id="contractTransport" class="form-control" step="0.01" value="${transport}">
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_other')}</label>
+                            <input type="number" id="contractOther" class="form-control" step="0.01" value="${other}">
+                        </div>
+
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_hours')}</label>
+                            <input type="text" id="contractHours" class="form-control" placeholder="e.g. 8 hours/day" value="${hours}">
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_probation')}</label>
+                            <input type="number" id="contractProbation" class="form-control" value="${probation}">
+                        </div>
+
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_notice')}</label>
+                            <input type="number" id="contractNotice" class="form-control" value="${notice}">
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_leave')}</label>
+                            <input type="number" id="contractLeave" class="form-control" value="${leave}">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; border-top: 1px solid var(--color-border); padding-top: 1.5rem;">
+                        <button type="button" class="btn-secondary" onclick="currentView='users'; render();">${t('contract_cancel')}</button>
+                        <button type="submit" class="btn-primary">${t('contract_save')}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
 }
 
 async function renderEmployeesDirectory() {
@@ -1715,7 +1990,7 @@ async function renderEmployeesDirectory() {
     // Only Admins or the Manager themselves can see team members' contracts
     // For now, let's allow ADMIN to see all, Manager to see their team
     let visibleUsers = users;
-    if (currentUserRole === 'MANAGER') {
+    if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
         visibleUsers = users.filter(u => u.manager_id === currentUser.id || u.id === currentUser.id);
     }
 
@@ -1775,19 +2050,25 @@ async function renderView(viewId) {
     }
 
     let content = '';
-    
+
     // Add loading state
     if (viewId !== 'login') {
         viewContainer.innerHTML = `<div style="display:flex; justify-content:center; padding: 4rem; color: var(--color-primary);"><i data-lucide="loader" class="spin"></i></div>`;
         lucide.createIcons();
     }
-    
-    switch(viewId) {
+
+    switch (viewId) {
+        case 'contract':
+            content = await renderContractPage();
+            break;
         case 'login':
             content = renderLogin();
             break;
         case 'dashboard':
             content = await renderDashboard();
+            break;
+        case 'community':
+            content = await renderCommunity();
             break;
         case 'time':
             content = await renderTime();
@@ -1850,10 +2131,10 @@ async function renderView(viewId) {
                 </div>
             `;
     }
-    
+
     viewContainer.innerHTML = content;
     lucide.createIcons();
-    
+
     if (viewId === 'analytics') {
         setTimeout(initCharts, 100);
     }
@@ -1882,14 +2163,14 @@ async function renderNotifications() {
     if (!currentUser) return `<div class="page-header"><h1 class="page-title">${t('notif_title')}</h1></div><div class="card">${t('notif_login')}</div>`;
 
     const notifs = await db.fetchNotifications(currentUser.id);
-    
+
     // Mark as read when viewing the page
     await db.markNotificationsRead(currentUser.id);
     const badge = document.querySelector('.notification-badge');
     if (badge) badge.style.display = 'none';
 
     let listHtml = `<div class="card" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('notif_no_found')}</div>`;
-    
+
     if (notifs && notifs.length > 0) {
         listHtml = notifs.map(n => `
             <div class="card fade-in-up" style="margin-bottom: 1rem; ${!n.is_read ? 'border-left: 4px solid var(--color-primary); background: rgba(37,99,235,0.02);' : ''}">
@@ -1932,10 +2213,10 @@ async function pollNotifications() {
     if (!currentUser) return;
     const notifs = await db.fetchNotifications(currentUser.id);
     const unread = notifs.filter(n => !n.is_read);
-    
+
     const badge = document.querySelector('.notification-badge');
     const dropdown = document.getElementById('notificationsDropdown');
-    
+
     if (badge) {
         if (unread.length > 0) {
             badge.style.display = 'flex';
@@ -1944,7 +2225,7 @@ async function pollNotifications() {
             badge.style.display = 'none';
         }
     }
-    
+
     if (dropdown) {
         if (notifs.length === 0) {
             dropdown.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--color-text-secondary);">${t('notif_no_dropdown')}</div>`;
@@ -1959,34 +2240,34 @@ async function pollNotifications() {
     }
 }
 
-window.toggleNotifications = async function() {
+window.toggleNotifications = async function () {
     const dropdown = document.getElementById('notificationsDropdown');
     if (!dropdown) return;
     dropdown.classList.toggle('show');
-    
+
     if (dropdown.classList.contains('show') || dropdown.style.display === 'block') {
         await db.markNotificationsRead(currentUser.id);
         const badge = document.querySelector('.notification-badge');
-        if(badge) badge.style.display = 'none';
-        
+        if (badge) badge.style.display = 'none';
+
         // Hide profile badge if shown
         const pBadge = document.getElementById('profileNotificationBadge');
-        if(pBadge) pBadge.style.display = 'none';
-        
+        if (pBadge) pBadge.style.display = 'none';
+
         pollNotifications(); // Refresh list to show as read
     }
 }
 
-window.toggleProfileDropdown = function() {
+window.toggleProfileDropdown = function () {
     const dropdown = document.getElementById('profileDropdown');
     const notifDropdown = document.getElementById('notificationsDropdown');
-    
+
     if (dropdown) {
         const isShowing = dropdown.style.display === 'block';
         dropdown.style.display = isShowing ? 'none' : 'block';
-        
+
         // Hide notifications dropdown if profile dropdown is closing
-        if(isShowing && notifDropdown) {
+        if (isShowing && notifDropdown) {
             notifDropdown.style.display = 'none';
             notifDropdown.classList.remove('show');
         }
@@ -1994,11 +2275,11 @@ window.toggleProfileDropdown = function() {
 }
 
 // Close dropdowns when clicking outside
-window.addEventListener('click', function(e) {
+window.addEventListener('click', function (e) {
     if (!e.target.closest('.profile-dropdown-wrapper')) {
         const dropdown = document.getElementById('profileDropdown');
         if (dropdown) dropdown.style.display = 'none';
-        
+
         const notifDropdown = document.getElementById('notificationsDropdown');
         if (notifDropdown) {
             notifDropdown.style.display = 'none';
@@ -2010,44 +2291,44 @@ window.addEventListener('click', function(e) {
 // Init
 async function initApp() {
     updateTranslations();
-    
+
     // Check for existing session
     const { data: { session } } = await db.getSession();
-    
+
     if (session && session.user) {
         currentUser = session.user;
         const profile = await db.getUserProfile(currentUser.id);
         currentUserRole = profile.role;
         updateTopbarProfile(profile);
-        
+
         // Show navigation
         document.querySelector('.sidebar').style.display = 'block';
         document.querySelector('.topbar').style.display = 'flex';
-        
+
         // Hide/Show Role-Specific Nav Items
         const adminNav = document.querySelector('.nav-item[data-view="admin"]');
         const usersNav = document.querySelector('.nav-item[data-view="users"]');
         const analyticsNav = document.querySelector('.nav-item[data-view="analytics"]');
         const employeesNav = document.querySelector('.nav-item[data-view="employees"]');
-        
-        if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
+
+        if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
         if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
-        if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
-        if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') ? 'flex' : 'none';
-        
+        if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
+        if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
+
         currentView = currentUserRole === 'ADMIN' ? 'admin' : 'dashboard';
-        
+
         pollNotifications();
-        if(notificationsInterval) clearInterval(notificationsInterval);
+        if (notificationsInterval) clearInterval(notificationsInterval);
         notificationsInterval = setInterval(pollNotifications, 60000);
     } else {
         currentView = 'login';
     }
-    
+
     renderView(currentView);
 }
 
-window.handleRequestAction = async function(type, id, status, employeeId) {
+window.handleRequestAction = async function (type, id, status, employeeId) {
     let success = false;
     if (type === 'Leave') {
         const res = await db.updateLeaveStatus(id, status);
@@ -2059,11 +2340,11 @@ window.handleRequestAction = async function(type, id, status, employeeId) {
         const res = await db.updateExpenseStatus(id, status);
         success = res.success;
     }
-    
+
     if (success) {
         const displayStatus = status.includes('_ARCHIVED') ? 'archived' : status.toLowerCase();
         showToast(`${type} request ${displayStatus}`, "success");
-        if(employeeId && !status.includes('_ARCHIVED')) await db.createNotification(employeeId, `Your ${type.toLowerCase()} request has been ${status.toLowerCase()}.`);
+        if (employeeId && !status.includes('_ARCHIVED')) await db.createNotification(employeeId, `Your ${type.toLowerCase()} request has been ${status.toLowerCase()}.`);
         renderView('requests');
     } else {
         showToast(`Failed to update ${type} request`, "danger");
@@ -2072,13 +2353,13 @@ window.handleRequestAction = async function(type, id, status, employeeId) {
 
 // Unified Requests Page
 async function renderRequests() {
-    const isManagerOrAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER';
-    
+    const isManagerOrAdmin = currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR');
+
     // Fetch data
     const leaves = await db.fetchLeaveRequests(isManagerOrAdmin ? null : currentUser?.id);
     const docs = await db.fetchDocuments(isManagerOrAdmin ? null : currentUser?.id);
     const expenses = await db.fetchExpenses(isManagerOrAdmin ? null : currentUser?.id);
-    
+
     let profilesMap = {};
     if (isManagerOrAdmin) {
         const allProfiles = await db.fetchAllProfiles();
@@ -2100,7 +2381,7 @@ async function renderRequests() {
             raw: r
         });
     });
-    
+
     docs.forEach(r => {
         allRequests.push({
             id: r.id,
@@ -2112,7 +2393,7 @@ async function renderRequests() {
             raw: r
         });
     });
-    
+
     expenses.forEach(r => {
         allRequests.push({
             id: r.id,
@@ -2124,21 +2405,21 @@ async function renderRequests() {
             raw: r
         });
     });
-    
+
     // Sort by created_at desc
     allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    
+
     // Filter out archived
-    allRequests = allRequests.filter(r => !r.status.endsWith('_ARCHIVED'));
-    
+    allRequests = allRequests.filter(r => r.status === 'PENDING');
+
     // Render UI
     let rowsHTML = allRequests.map(r => {
         let badgeClass = 'info';
         if (r.status === 'APPROVED') badgeClass = 'success';
         if (r.status === 'REJECTED') badgeClass = 'danger';
-        
+
         const employeeName = isManagerOrAdmin ? (profilesMap[r.employee_id] || 'Unknown') : 'Me';
-        
+
         let actionsCell = '';
         if (isManagerOrAdmin) {
             if (r.status === 'PENDING') {
@@ -2160,7 +2441,7 @@ async function renderRequests() {
                 actionsCell = `<td>-</td>`;
             }
         }
-        
+
         return `
             <tr class="request-row" data-type="${r.type}" data-status="${r.status}" data-emp="${employeeName.toLowerCase()}" data-details="${r.details.toLowerCase()}">
                 <td>${new Date(r.created_at).toLocaleDateString()}</td>
@@ -2172,12 +2453,12 @@ async function renderRequests() {
             </tr>
         `;
     }).join('');
-    
+
     if (allRequests.length === 0) {
         const colSpan = isManagerOrAdmin ? 6 : 4;
         rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('req_no_found')}</td></tr>`;
     }
-    
+
     return `
         <div class="page-header fade-in-up">
             <div>
@@ -2235,22 +2516,22 @@ async function renderRequests() {
     `;
 }
 
-window.filterRequests = function() {
+window.filterRequests = function () {
     const searchVal = document.getElementById('reqSearch').value.toLowerCase();
     const typeVal = document.getElementById('reqType').value;
     const statusVal = document.getElementById('reqStatus').value;
-    
+
     const rows = document.querySelectorAll('.request-row');
     rows.forEach(row => {
         const t = row.getAttribute('data-type');
         const s = row.getAttribute('data-status');
         const emp = row.getAttribute('data-emp');
         const det = row.getAttribute('data-details');
-        
+
         const matchSearch = emp.includes(searchVal) || det.includes(searchVal);
         const matchType = typeVal === 'ALL' || t === typeVal;
         const matchStatus = statusVal === 'ALL' || s === statusVal;
-        
+
         if (matchSearch && matchType && matchStatus) {
             row.style.display = '';
         } else {
@@ -2261,16 +2542,16 @@ window.filterRequests = function() {
 
 // Render Archived Requests
 async function renderArchivedRequests() {
-    const isManagerOrAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER';
+    const isManagerOrAdmin = currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR');
     if (!isManagerOrAdmin) {
         return `<div style="padding: 2rem;">${t('req_unauthorized')}</div>`;
     }
-    
+
     // Fetch data
     const leaves = await db.fetchLeaveRequests();
     const docs = await db.fetchDocuments();
     const expenses = await db.fetchExpenses();
-    
+
     let profilesMap = {};
     const allProfiles = await db.fetchAllProfiles();
     allProfiles.forEach(p => {
@@ -2297,18 +2578,18 @@ async function renderArchivedRequests() {
     addToRequests(leaves, 'Leave', r => `${r.leave_type}: ${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}`);
     addToRequests(docs, 'Document', r => `${r.doc_type} - ${r.purpose}`);
     addToRequests(expenses, 'Expense', r => `SAR ${r.amount} - ${r.description}`);
-    
+
     // Sort by created_at desc
     allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    
+
     // Render UI
     let rowsHTML = allRequests.map(r => {
         let badgeClass = 'info';
         if (r.status === 'APPROVED') badgeClass = 'success';
         if (r.status === 'REJECTED') badgeClass = 'danger';
-        
+
         const employeeName = profilesMap[r.employee_id] || 'Unknown';
-        
+
         return `
             <tr>
                 <td>${new Date(r.created_at).toLocaleDateString()}</td>
@@ -2319,11 +2600,11 @@ async function renderArchivedRequests() {
             </tr>
         `;
     }).join('');
-    
+
     if (allRequests.length === 0) {
         rowsHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('req_no_archived')}</td></tr>`;
     }
-    
+
     return `
         <div class="page-header fade-in-up">
             <div>

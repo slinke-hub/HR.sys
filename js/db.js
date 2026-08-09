@@ -719,5 +719,163 @@ const db = {
             console.error("sendMessage Error:", error);
             return { success: false, error };
         }
+    },
+    // ==========================================
+    // Phase 2 Features
+    // ==========================================
+    async updateLastLogin(userId) {
+        if (!supabaseClient) return;
+        try {
+            await supabaseClient.from('profiles').update({ last_login: new Date().toISOString() }).eq('id', userId);
+        } catch (error) {
+            console.error("updateLastLogin Error:", error);
+        }
+    },
+    async fetchTodayAttendance(employeeId) {
+        if (!supabaseClient) return null;
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const { data, error } = await supabaseClient
+                .from('attendance')
+                .select('*')
+                .eq('employee_id', employeeId)
+                .eq('date', today)
+                .single();
+            if (error && error.code !== 'PGRST116') throw error;
+            return data || null;
+        } catch (error) {
+            console.error("fetchTodayAttendance Error:", error);
+            return null;
+        }
+    },
+    async fetchAttendanceByEmployee(employeeId) {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('attendance')
+                .select('*')
+                .eq('employee_id', employeeId)
+                .order('date', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchAttendanceByEmployee Error:", error);
+            return [];
+        }
+    },
+    async fetchAllAttendance() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('attendance')
+                .select(`
+                    *,
+                    profiles:employee_id(full_name, emp_index)
+                `)
+                .order('date', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchAllAttendance Error:", error);
+            return [];
+        }
+    },
+    async clockIn(employeeId, location) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const { error } = await supabaseClient
+                .from('attendance')
+                .insert([{ 
+                    employee_id: employeeId, 
+                    date: today,
+                    clock_in_time: new Date().toISOString(),
+                    clock_in_location: location
+                }]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("clockIn Error:", error);
+            return { success: false, error };
+        }
+    },
+    async clockOut(attendanceId, location, type, overtimeHours) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('attendance')
+                .update({ 
+                    clock_out_time: new Date().toISOString(),
+                    clock_out_location: location,
+                    clock_out_type: type,
+                    overtime_hours: overtimeHours
+                })
+                .eq('id', attendanceId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("clockOut Error:", error);
+            return { success: false, error };
+        }
+    },
+    async fetchAnnouncements() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('announcements')
+                .select(`
+                    *,
+                    profiles:admin_id(full_name)
+                `)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchAnnouncements Error:", error);
+            return [];
+        }
+    },
+    async postAnnouncement(adminId, title, content) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('announcements')
+                .insert([{ admin_id: adminId, title, content }]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("postAnnouncement Error:", error);
+            return { success: false, error };
+        }
+    },
+    async fetchCommunityChat() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('community_chat')
+                .select(`
+                    *,
+                    profiles:user_id(full_name, avatar_url)
+                `)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchCommunityChat Error:", error);
+            return [];
+        }
+    },
+    async postCommunityMessage(userId, message, isBirthdayAlert = false) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('community_chat')
+                .insert([{ user_id: userId, message, is_birthday_alert: isBirthdayAlert }]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("postCommunityMessage Error:", error);
+            return { success: false, error };
+        }
     }
 };

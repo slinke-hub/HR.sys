@@ -22,6 +22,10 @@
   flex-direction: column;
   transition: width var(--transition-normal);
   z-index: 10;
+  height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .sidebar-header {
@@ -66,7 +70,23 @@
   flex-direction: column;
   gap: var(--space-2);
   flex: 1;
+  min-height: 0; /* Critical for flex child scrolling */
   overflow-y: auto;
+}
+
+/* Custom Scrollbar for Sidebar */
+.sidebar-nav::-webkit-scrollbar {
+  width: 5px;
+}
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background-color: var(--sidebar-border);
+  border-radius: 10px;
+}
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background-color: var(--sidebar-text-muted);
 }
 
 .nav-item {
@@ -102,6 +122,9 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 /* Topbar */
@@ -243,6 +266,7 @@
 /* Dynamic View Container */
 .view-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-8);
   background-color: var(--color-bg-base);
@@ -380,4 +404,33 @@
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* Password Toggle Button */
+.password-toggle-btn {
+    position: absolute;
+    right: 10px;
+    bottom: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    border-radius: 50%; /* Make the hover background fully round */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0.6;
+}
+
+.password-toggle-btn:hover {
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.15);
+    transform: scale(1.1);
+}
+
+.password-toggle-btn:active {
+    transform: scale(0.9);
+    background: rgba(128, 128, 128, 0.25);
 }
