@@ -521,3 +521,26 @@ textarea.form-control {
     grid-template-columns: 1fr; /* Stack actions vertically */
   }
 }
+ 
+/* Profile Dropdown Base Styles */
+.profile-dropdown-menu {
+    position: absolute;
+    right: 0;
+    top: 120%;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    width: 250px;
+    z-index: 10000;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .profile-dropdown-menu {
+        position: fixed;
+        top: calc(var(--topbar-height) + 10px);
+        right: 10px;
+        width: calc(100% - 20px);
+        max-width: none;
+    }
+}
