@@ -318,7 +318,7 @@ async function renderDashboard() {
     `).join('');
 
     if (announcements.length === 0) {
-        announcementsHTML = `<p style="color: var(--color-text-secondary); padding: 1rem 0;">No new announcements.</p>`;
+        announcementsHTML = `<p style="color: var(--color-text-secondary); padding: 1rem 0;">${t('dash_no_announcements')}</p>`;
     }
 
     return `
@@ -328,7 +328,7 @@ async function renderDashboard() {
                 <p class="page-subtitle">${t('welcome_sub')}</p>
             </div>
             ${isClockedIn 
-                ? `<button class="btn-primary" style="background: var(--color-danger);" onclick="handleClockOut()">Clock Out</button>`
+                ? `<button class="btn-primary" style="background: var(--color-danger);" onclick="handleClockOut()">${t('clock_out')}</button>`
                 : `<button class="btn-primary" onclick="handleClockIn()">${t('clock_in')}</button>`
             }
         </div>
@@ -345,7 +345,7 @@ async function renderDashboard() {
                     ${isClockedIn 
                         ? `<button class="action-btn" onclick="handleClockOut()">
                              <i data-lucide="log-out"></i>
-                             <span>Clock Out</span>
+                             <span>${t('clock_out')}</span>
                            </button>`
                         : `<button class="action-btn" onclick="handleClockIn()">
                              <i data-lucide="clock"></i>
@@ -399,7 +399,7 @@ async function renderTime() {
     `).join('');
     
     if (punches.length === 0) {
-        tableRows = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No recent time punches.</td></tr>`;
+        tableRows = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
     }
 
     return `
@@ -415,9 +415,9 @@ async function renderTime() {
                 <thead>
                     <tr>
                         <th>${t('date')}</th>
-                        <th>Time</th>
-                        ${currentUserRole === 'ADMIN' ? '<th>Employee ID</th>' : ''}
-                        <th>Punch Type</th>
+                        <th>${t('time')}</th>
+                        ${currentUserRole === 'ADMIN' ? `<th>${t('time_emp_id')}</th>` : ''}
+                        <th>${t('time_punch_type')}</th>
                         <th>${t('status')}</th>
                     </tr>
                 </thead>
@@ -471,8 +471,8 @@ async function renderLeave() {
             if (r.status === 'PENDING') {
                 actionsCell = `
                     <td>
-                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleLeaveAction('${r.id}', 'APPROVED', '${r.employee_id}')">Approve</button>
-                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleLeaveAction('${r.id}', 'REJECTED', '${r.employee_id}')">Reject</button>
+                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleLeaveAction('${r.id}', 'APPROVED', '${r.employee_id}')">${t('leave_approve')}</button>
+                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleLeaveAction('${r.id}', 'REJECTED', '${r.employee_id}')">${t('leave_reject')}</button>
                     </td>
                 `;
             } else {
@@ -493,11 +493,11 @@ async function renderLeave() {
     
     if (requests.length === 0) {
         const colSpan = isManagerOrAdmin ? 5 : 3;
-        rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No leave requests found.</td></tr>`;
+        rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('leave_no_reqs')}</td></tr>`;
     }
 
-    const employeeHeader = isManagerOrAdmin ? `<th>Employee</th>` : '';
-    const actionsHeader = isManagerOrAdmin ? `<th>Actions</th>` : '';
+    const employeeHeader = isManagerOrAdmin ? `<th>${t('leave_employee')}</th>` : '';
+    const actionsHeader = isManagerOrAdmin ? `<th>${t('leave_actions')}</th>` : '';
 
     return `
         <div class="page-header fade-in-up">
@@ -510,28 +510,28 @@ async function renderLeave() {
         <!-- SAP-like Summary Cards -->
         <div class="dashboard-grid fade-in-up" style="margin-bottom: 2rem;">
             <div class="card col-span-4" style="border-top: 4px solid var(--color-primary);">
-                <div style="font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">Annual Leave Balance</div>
+                <div style="font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">${t('leave_annual_bal')}</div>
                 <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                    <h2 style="font-size: 2.5rem; margin: 0;">${Math.max(0, annualAllowance - annualTaken)} <span style="font-size: 1rem; color: var(--color-text-secondary);">/ ${annualAllowance} Days</span></h2>
+                    <h2 style="font-size: 2.5rem; margin: 0;">${Math.max(0, annualAllowance - annualTaken)} <span style="font-size: 1rem; color: var(--color-text-secondary);">/ ${annualAllowance} ${t('leave_days')}</span></h2>
                 </div>
             </div>
             <div class="card col-span-4" style="border-top: 4px solid var(--color-success);">
-                <div style="font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">Sick Leave Balance</div>
+                <div style="font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">${t('leave_sick_bal')}</div>
                 <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                    <h2 style="font-size: 2.5rem; margin: 0;">${Math.max(0, sickAllowance - sickTaken)} <span style="font-size: 1rem; color: var(--color-text-secondary);">/ ${sickAllowance} Days</span></h2>
+                    <h2 style="font-size: 2.5rem; margin: 0;">${Math.max(0, sickAllowance - sickTaken)} <span style="font-size: 1rem; color: var(--color-text-secondary);">/ ${sickAllowance} ${t('leave_days')}</span></h2>
                 </div>
             </div>
             <div class="card col-span-4" style="border-top: 4px solid var(--color-warning);">
-                <div style="font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">Unpaid Leave Taken</div>
+                <div style="font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">${t('leave_unpaid_bal')}</div>
                 <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                    <h2 style="font-size: 2.5rem; margin: 0;">${unpaidTaken} <span style="font-size: 1rem; color: var(--color-text-secondary);">Days</span></h2>
+                    <h2 style="font-size: 2.5rem; margin: 0;">${unpaidTaken} <span style="font-size: 1rem; color: var(--color-text-secondary);">${t('leave_days')}</span></h2>
                 </div>
             </div>
         </div>
 
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-4">
-                <div class="card-title">New Request</div>
+                <div class="card-title">${t('leave_new_req')}</div>
                 <form autocomplete="off" onsubmit="handleLeaveSubmit(event)">
                     <div class="form-group">
                         <label class="form-label">${t('leave_type')}</label>
@@ -558,14 +558,14 @@ async function renderLeave() {
             </div>
             
             <div class="card col-span-8">
-                <div class="card-title">Request History</div>
+                <div class="card-title">${t('leave_history')}</div>
                 <div class="table-responsive">
                     <table class="data-table">
                         <thead>
                             <tr>
                                 ${employeeHeader}
                                 <th>${t('leave_type')}</th>
-                                <th>Dates</th>
+                                <th>${t('leave_dates')}</th>
                                 <th>${t('status')}</th>
                                 ${actionsHeader}
                             </tr>
@@ -640,42 +640,42 @@ async function renderExpenses() {
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">Expenses</h1>
-                <p class="page-subtitle">Manage business expenses and reimbursements.</p>
+                <h1 class="page-title">${t('exp_title')}</h1>
+                <p class="page-subtitle">${t('exp_sub')}</p>
             </div>
         </div>
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-4">
-                <div class="card-title">Submit New Expense</div>
+                <div class="card-title">${t('exp_new')}</div>
                 <form autocomplete="off" onsubmit="handleExpenseSubmit(event)">
                     <div class="form-group">
-                        <label class="form-label">Amount ($)</label>
+                        <label class="form-label">${t('exp_amount')}</label>
                         <input type="number" step="0.01" id="expAmount" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Description</label>
+                        <label class="form-label">${t('exp_desc')}</label>
                         <textarea id="expDesc" class="form-control" required></textarea>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Receipt</label>
+                        <label class="form-label">${t('exp_receipt')}</label>
                         <input type="file" id="expReceipt" accept="image/*,application/pdf" class="form-control" required>
                     </div>
-                    <button type="submit" class="btn-primary" style="width: 100%;">Submit Expense</button>
+                    <button type="submit" class="btn-primary" style="width: 100%;">${t('exp_submit')}</button>
                 </form>
             </div>
             
             <div class="card col-span-8">
-                <div class="card-title">My Expenses</div>
+                <div class="card-title">${t('exp_my')}</div>
                 <div class="table-responsive">
                     <table class="data-table">
-                        <thead><tr><th>Description</th><th>Amount</th><th>Status</th><th>Receipt</th></tr></thead>
+                        <thead><tr><th>${t('exp_desc')}</th><th>${t('exp_amount')}</th><th>${t('req_status')}</th><th>${t('exp_receipt')}</th></tr></thead>
                         <tbody>
-                            ${myExpenses.length === 0 ? '<tr><td colspan="4" style="text-align: center;">No expenses.</td></tr>' : myExpenses.map(e => `
+                            ${myExpenses.length === 0 ? `<tr><td colspan="4" style="text-align: center;">${t('exp_no_exp')}</td></tr>` : myExpenses.map(e => `
                                 <tr>
                                     <td>${e.description}</td>
                                     <td>$${e.amount.toFixed(2)}</td>
                                     <td><span class="status-badge ${e.status.startsWith('APPROVED') ? 'success' : (e.status.startsWith('REJECTED') ? 'danger' : 'warning')}">${e.status.replace('_ARCHIVED', '')}</span></td>
-                                    <td><a href="${e.receipt_base64}" download="receipt_${e.id}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">Download</a></td>
+                                    <td><a href="${e.receipt_base64}" download="receipt_${e.id}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">${t('exp_download')}</a></td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -685,20 +685,20 @@ async function renderExpenses() {
             
             ${isManagerOrAdmin ? `
             <div class="card col-span-12" style="margin-top: 1rem;">
-                <div class="card-title">Team Expense Approvals</div>
+                <div class="card-title">${t('exp_team_appr')}</div>
                 <div class="table-responsive">
                     <table class="data-table">
-                        <thead><tr><th>Employee ID</th><th>Description</th><th>Amount</th><th>Receipt</th><th>Actions</th></tr></thead>
+                        <thead><tr><th>${t('leave_employee')} ID</th><th>${t('exp_desc')}</th><th>${t('exp_amount')}</th><th>${t('exp_receipt')}</th><th>${t('leave_actions')}</th></tr></thead>
                         <tbody>
-                            ${pendingExpenses.length === 0 ? '<tr><td colspan="5" style="text-align: center;">No pending approvals.</td></tr>' : pendingExpenses.map(e => `
+                            ${pendingExpenses.length === 0 ? `<tr><td colspan="5" style="text-align: center;">${t('exp_no_pending')}</td></tr>` : pendingExpenses.map(e => `
                                 <tr>
                                     <td><span style="font-size: 0.75rem;">${e.employee_id.substring(0,8)}...</span></td>
                                     <td>${e.description}</td>
                                     <td>$${e.amount.toFixed(2)}</td>
-                                    <td><a href="${e.receipt_base64}" download="receipt_${e.id}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">Download</a></td>
+                                    <td><a href="${e.receipt_base64}" download="receipt_${e.id}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">${t('exp_download')}</a></td>
                                     <td>
-                                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleExpenseAction('${e.id}', 'APPROVED', '${e.employee_id}')">Approve</button>
-                                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleExpenseAction('${e.id}', 'REJECTED', '${e.employee_id}')">Reject</button>
+                                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleExpenseAction('${e.id}', 'APPROVED', '${e.employee_id}')">${t('leave_approve')}</button>
+                                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleExpenseAction('${e.id}', 'REJECTED', '${e.employee_id}')">${t('leave_reject')}</button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -716,22 +716,22 @@ async function renderExpenses() {
 // ==========================================
 async function renderAnalytics() {
     if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MANAGER') {
-        return `<div class="page-header"><h1 class="page-title">Unauthorized</h1></div>`;
+        return `<div class="page-header"><h1 class="page-title">${t('analy_unauth')}</h1></div>`;
     }
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">Analytics</h1>
-                <p class="page-subtitle">Overview of company metrics.</p>
+                <h1 class="page-title">${t('analy_title')}</h1>
+                <p class="page-subtitle">${t('analy_sub')}</p>
             </div>
         </div>
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-6">
-                <div class="card-title">Employee Growth</div>
+                <div class="card-title">${t('analy_growth')}</div>
                 <canvas id="growthChart" width="400" height="200"></canvas>
             </div>
             <div class="card col-span-6">
-                <div class="card-title">Leave Trends</div>
+                <div class="card-title">${t('analy_leave')}</div>
                 <canvas id="leaveChart" width="400" height="200"></canvas>
             </div>
         </div>
@@ -787,7 +787,7 @@ async function renderPayroll() {
             <td><strong>${p.month_year}</strong></td>
             <td>$${p.net_pay.toFixed(2)}</td>
             <td><span class="status-badge ${p.status === 'PAID' ? 'success' : 'info'}">${p.status}</span></td>
-            <td><button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">View Details</button></td>
+            <td><button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">${t('pay_view_det')}</button></td>
         </tr>
     `).join('');
     
@@ -796,7 +796,7 @@ async function renderPayroll() {
     let base = payrolls.length > 0 ? (payrolls[0].net_pay - payrolls[0].overtime_pay).toFixed(2) : '0.00';
     
     if (payrolls.length === 0) {
-        rowsHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No payslips available.</td></tr>`;
+        rowsHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('pay_no_slips')}</td></tr>`;
     }
 
     return `
@@ -809,17 +809,17 @@ async function renderPayroll() {
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-4" style="background: linear-gradient(135deg, #0b192c, #1a365d); color: white; border: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                    <h3 style="color: rgba(255,255,255,0.8); margin: 0;">Latest Payslip</h3>
+                    <h3 style="color: rgba(255,255,255,0.8); margin: 0;">${t('pay_latest')}</h3>
                     <i data-lucide="file-text" style="color: rgba(255,255,255,0.5);"></i>
                 </div>
                 <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">$${totalNet}</h1>
                 <div style="display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem; margin-top: 1rem;">
                     <div>
-                        <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6);">Base Salary</div>
+                        <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6);">${t('pay_base')}</div>
                         <div>$${base}</div>
                     </div>
                     <div style="text-align: right;">
-                        <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6);">Overtime/Bonus</div>
+                        <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6);">${t('pay_extras')}</div>
                         <div style="color: var(--color-success);">+$${extras}</div>
                     </div>
                 </div>
@@ -832,8 +832,8 @@ async function renderPayroll() {
                             <tr>
                                 <th>${t('month')}</th>
                                 <th>${t('net_pay')}</th>
-                                <th>Status</th>
-                                <th>Actions</th>
+                                <th>${t('req_status')}</th>
+                                <th>${t('pay_actions')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -849,7 +849,7 @@ async function renderPayroll() {
 // Render Admin Hub
 async function renderAdmin() {
     if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MANAGER') {
-        return `<div class="page-header"><h1 class="page-title">Unauthorized</h1></div>`;
+        return `<div class="page-header"><h1 class="page-title">${t('analy_unauth')}</h1></div>`;
     }
     
     const employees = await db.fetchAllEmployees();
@@ -868,14 +868,14 @@ async function renderAdmin() {
                 <p style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">Employee ID: ${r.employee_id.substring(0,8)}...</p>
             </div>
             <div style="display: flex; gap: 8px;">
-                <button class="btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;" onclick="handleLeaveAction('${r.id}', 'APPROVED', '${r.employee_id}')">Approve</button>
-                <button class="btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleLeaveAction('${r.id}', 'REJECTED', '${r.employee_id}')">Reject</button>
+                <button class="btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;" onclick="handleLeaveAction('${r.id}', 'APPROVED', '${r.employee_id}')">${t('leave_approve')}</button>
+                <button class="btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleLeaveAction('${r.id}', 'REJECTED', '${r.employee_id}')">${t('leave_reject')}</button>
             </div>
         </div>
     `).join('');
 
     if (pendingLeaves.length === 0) {
-        leaveHTML = `<p style="padding: 1rem; color: var(--color-text-secondary);">No pending leave requests.</p>`;
+        leaveHTML = `<p style="padding: 1rem; color: var(--color-text-secondary);">${t('admin_no_pending')}</p>`;
     }
 
     return `
@@ -889,19 +889,19 @@ async function renderAdmin() {
         <div class="dashboard-grid" style="margin-bottom: 2rem;">
             <div class="card col-span-3" style="text-align: center; cursor: pointer;" onclick="renderView('tasks')">
                 <i data-lucide="check-square" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>Manage Tasks</h4>
+                <h4>${t('admin_manage_tasks')}</h4>
             </div>
             <div class="card col-span-3" style="text-align: center; cursor: pointer;" onclick="renderView('time')">
                 <i data-lucide="clock" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>Time Reports</h4>
+                <h4>${t('admin_time_reports')}</h4>
             </div>
             <div class="card col-span-3" style="text-align: center; cursor: pointer;" onclick="renderView('users')">
                 <i data-lucide="users" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>Employee Directory</h4>
+                <h4>${t('admin_emp_dir')}</h4>
             </div>
             <div class="card col-span-3" style="text-align: center; cursor: pointer;" onclick="renderView('documents')">
                 <i data-lucide="file-text" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>Documents</h4>
+                <h4>${t('admin_docs')}</h4>
             </div>
         </div>
 
@@ -909,17 +909,17 @@ async function renderAdmin() {
             <div class="card col-span-4">
                 <div class="card-title">${t('headcount')} <i data-lucide="users"></i></div>
                 <h2 style="font-size: 2.5rem; margin-top: 10px;">${employees.length}</h2>
-                <p style="color: var(--color-success); font-size: 0.875rem;">Registered Users</p>
+                <p style="color: var(--color-success); font-size: 0.875rem;">${t('admin_reg_users')}</p>
             </div>
             
             <div class="card col-span-4">
-                <div class="card-title">Pending Approvals <i data-lucide="inbox"></i></div>
+                <div class="card-title">${t('admin_pend_appr')} <i data-lucide="inbox"></i></div>
                 <h2 style="font-size: 2.5rem; margin-top: 10px;">${pendingLeaves.length}</h2>
-                <p style="color: var(--color-warning); font-size: 0.875rem;">Requires attention</p>
+                <p style="color: var(--color-warning); font-size: 0.875rem;">${t('admin_req_attn')}</p>
             </div>
             
             <div class="card col-span-8">
-                <div class="card-title">Leave Approvals Inbox</div>
+                <div class="card-title">${t('admin_leave_inbox')}</div>
                 <div style="max-height: 300px; overflow-y: auto;">
                     ${leaveHTML}
                 </div>
@@ -975,60 +975,60 @@ async function renderUsers() {
         <div class="page-header fade-in-up">
             <div>
                 <h1 class="page-title">${t('nav_users')}</h1>
-                <p class="page-subtitle">Manage employee accounts and permissions.</p>
+                <p class="page-subtitle">${t('users_sub')}</p>
             </div>
         </div>
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-4">
-                <div class="card-title">Add New Employee <i data-lucide="user-plus"></i></div>
+                <div class="card-title">${t('users_add_new')} <i data-lucide="user-plus"></i></div>
                 <form autocomplete="off" onsubmit="handleCreateUser(event)">
                     <div class="form-group">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" autocomplete="off" id="newFullName" class="form-control" placeholder="e.g. John Doe">
+                        <label class="form-label">${t('users_fn')}</label>
+                        <input type="text" autocomplete="off" id="newFullName" class="form-control" placeholder="${t('users_fn_ph')}">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Iqama Number</label>
-                        <input type="text" autocomplete="off" id="newIqama" class="form-control" placeholder="e.g. 2xxxxxxxxx">
+                        <label class="form-label">${t('users_iqama')}</label>
+                        <input type="text" autocomplete="off" id="newIqama" class="form-control" placeholder="${t('users_iqama_ph')}">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Phone Number</label>
-                        <input type="text" autocomplete="off" id="newPhone" class="form-control" placeholder="e.g. +9665xxxxxxx">
+                        <label class="form-label">${t('users_phone')}</label>
+                        <input type="text" autocomplete="off" id="newPhone" class="form-control" placeholder="${t('users_phone_ph')}">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Email</label>
+                        <label class="form-label">${t('users_email')}</label>
                         <input type="email" autocomplete="off" id="newEmail" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Temporary Password</label>
+                        <label class="form-label">${t('users_temp_pass')}</label>
                         <input type="password" autocomplete="new-password" id="newPassword" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Job Title</label>
-                        <input type="text" autocomplete="off" id="newJobTitle" class="form-control" placeholder="e.g. Software Engineer">
+                        <label class="form-label">${t('users_job_title')}</label>
+                        <input type="text" autocomplete="off" id="newJobTitle" class="form-control" placeholder="${t('users_job_ph')}">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Role</label>
+                        <label class="form-label">${t('users_role')}</label>
                         <select id="newRole" class="form-control">
-                            <option value="EMPLOYEE">Employee</option>
-                            <option value="MANAGER">Manager</option>
-                            <option value="ADMIN">Admin</option>
+                            <option value="EMPLOYEE">${t('users_role_emp')}</option>
+                            <option value="MANAGER">${t('users_role_mgr')}</option>
+                            <option value="ADMIN">${t('users_role_admin')}</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn-primary" style="width: 100%;">Create Account</button>
+                    <button type="submit" class="btn-primary" style="width: 100%;">${t('users_create_acc')}</button>
                 </form>
             </div>
             <div class="card col-span-8">
-                <div class="card-title">Employee Directory</div>
+                <div class="card-title">${t('users_dir')}</div>
                 <div style="overflow-x: auto;">
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Employee Details</th>
-                                <th>Role</th>
-                                <th>Job Title</th>
-                                <th>Assign Role</th>
-                                <th>Assign Manager</th>
-                                <th>Contract</th>
+                                <th>${t('users_details')}</th>
+                                <th>${t('users_role')}</th>
+                                <th>${t('users_job_title')}</th>
+                                <th>${t('users_assign_role')}</th>
+                                <th>${t('users_assign_mgr')}</th>
+                                <th>${t('users_contract')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1045,24 +1045,24 @@ async function renderUsers() {
                                     </td>
                                     <td><span class="status-badge ${u.role === 'ADMIN' ? 'success' : 'info'}">${u.role}</span></td>
                                     <td>
-                                        <input type="text" autocomplete="off" class="form-control" style="width: 160px; padding: 0.25rem; font-size: 0.8rem;" value="${u.job_title || ''}" placeholder="Job Title" onblur="handleChangeJobTitle('${u.id}', this.value)">
+                                        <input type="text" autocomplete="off" class="form-control" style="width: 160px; padding: 0.25rem; font-size: 0.8rem;" value="${u.job_title || ''}" placeholder="${t('users_job_title')}" onblur="handleChangeJobTitle('${u.id}', this.value)">
                                     </td>
                                     <td>
                                         <select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
-                                            <option value="EMPLOYEE" ${u.role === 'EMPLOYEE' ? 'selected' : ''}>Employee</option>
-                                            <option value="MANAGER" ${u.role === 'MANAGER' ? 'selected' : ''}>Manager</option>
-                                            <option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>Admin</option>
+                                            <option value="EMPLOYEE" ${u.role === 'EMPLOYEE' ? 'selected' : ''}>${t('users_role_emp')}</option>
+                                            <option value="MANAGER" ${u.role === 'MANAGER' ? 'selected' : ''}>${t('users_role_mgr')}</option>
+                                            <option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>${t('users_role_admin')}</option>
                                         </select>
                                     </td>
                                     <td>
                                         <select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleAssignManager('${u.id}', this.value)">
-                                            <option value="">No Manager</option>
+                                            <option value="">${t('users_no_mgr')}</option>
                                             ${users.filter(m => m.role === 'MANAGER' || m.role === 'ADMIN').map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${m.job_title || 'Mgr'}</option>`).join('')}
                                         </select>
                                     </td>
                                     <td>
                                         <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="showContractModal('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')">
-                                            <i data-lucide="file-signature" style="width:14px;height:14px;margin-right:4px;"></i> Contract
+                                            <i data-lucide="file-signature" style="width:14px;height:14px;margin-right:4px;"></i> ${t('users_contract')}
                                         </button>
                                     </td>
                                 </tr>
@@ -1077,43 +1077,43 @@ async function renderUsers() {
         <div id="contractModal" class="modal">
             <div class="modal-content" style="max-width: 500px;">
                 <div class="modal-header">
-                    <h2>Contract: <span id="contractEmpName" style="color: var(--primary-color);"></span></h2>
+                    <h2>${t('users_contract')}: <span id="contractEmpName" style="color: var(--primary-color);"></span></h2>
                     <button class="icon-btn" onclick="closeContractModal()"><i data-lucide="x"></i></button>
                 </div>
                 <form autocomplete="off" onsubmit="handleSaveContract(event)" style="margin-top: 1.5rem;">
                     <input type="hidden" id="contractEmployeeId">
                     <div class="form-group">
-                        <label class="form-label">Contract Type</label>
+                        <label class="form-label">${t('contract_type')}</label>
                         <select id="contractType" class="form-control" required>
-                            <option value="Full-time">Full-time</option>
-                            <option value="Part-time">Part-time</option>
-                            <option value="Contractor">Contractor</option>
-                            <option value="Freelance">Freelance</option>
+                            <option value="Full-time">${t('contract_ft')}</option>
+                            <option value="Part-time">${t('contract_pt')}</option>
+                            <option value="Contractor">${t('contract_c')}</option>
+                            <option value="Freelance">${t('contract_fl')}</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Start Date</label>
+                        <label class="form-label">${t('contract_start')}</label>
                         <input type="date" id="contractStartDate" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">End Date (Optional)</label>
+                        <label class="form-label">${t('contract_end')}</label>
                         <input type="date" id="contractEndDate" class="form-control">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Salary (Monthly)</label>
+                        <label class="form-label">${t('contract_salary')}</label>
                         <input type="number" id="contractSalary" class="form-control" step="0.01">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Status</label>
+                        <label class="form-label">${t('contract_status')}</label>
                         <select id="contractStatus" class="form-control" required>
-                            <option value="Active">Active</option>
-                            <option value="Terminated">Terminated</option>
-                            <option value="Expired">Expired</option>
+                            <option value="Active">${t('contract_active')}</option>
+                            <option value="Terminated">${t('contract_term')}</option>
+                            <option value="Expired">${t('contract_exp')}</option>
                         </select>
                     </div>
                     <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-                        <button type="button" class="btn-secondary" style="flex: 1;" onclick="closeContractModal()">Cancel</button>
-                        <button type="submit" class="btn-primary" style="flex: 1;">Save Contract</button>
+                        <button type="button" class="btn-secondary" style="flex: 1;" onclick="closeContractModal()">${t('contract_cancel')}</button>
+                        <button type="submit" class="btn-primary" style="flex: 1;">${t('contract_save')}</button>
                     </div>
                 </form>
             </div>
@@ -1136,15 +1136,15 @@ async function renderPerformance() {
         <div class="page-header fade-in-up">
             <div>
                 <h1 class="page-title">${t('nav_performance')}</h1>
-                <p class="page-subtitle">Track your KPIs and goals.</p>
+                <p class="page-subtitle">${t('perf_sub')}</p>
             </div>
         </div>
         <div class="card fade-in-up">
-            <div class="card-title">My Goals</div>
+            <div class="card-title">${t('perf_my_goals')}</div>
             <table class="data-table">
-                <thead><tr><th>Title</th><th>Due Date</th><th>Status</th><th>Rating</th></tr></thead>
+                <thead><tr><th>${t('perf_title_th')}</th><th>${t('perf_due_date')}</th><th>${t('req_status')}</th><th>${t('perf_rating')}</th></tr></thead>
                 <tbody>
-                    ${goals.length === 0 ? '<tr><td colspan="4">No goals assigned yet.</td></tr>' : goals.map(g => `
+                    ${goals.length === 0 ? `<tr><td colspan="4">${t('perf_no_goals')}</td></tr>` : goals.map(g => `
                         <tr>
                             <td>${g.title}</td>
                             <td>${new Date(g.due_date).toLocaleDateString()}</td>
@@ -1200,43 +1200,43 @@ async function renderDocuments() {
         <div class="page-header fade-in-up">
             <div>
                 <h1 class="page-title">${t('nav_documents')}</h1>
-                <p class="page-subtitle">Upload official documents or request HR letters.</p>
+                <p class="page-subtitle">${t('doc_sub')}</p>
             </div>
         </div>
         <div class="dashboard-grid fade-in-up">
             <!-- Upload Official Document -->
             <div class="card col-span-4">
-                <div class="card-title">Upload Official Document</div>
+                <div class="card-title">${t('doc_upload_title')}</div>
                 <form autocomplete="off" onsubmit="handleEmployeeDocUpload(event)">
                     <div class="form-group">
-                        <label class="form-label">Document Type</label>
+                        <label class="form-label">${t('doc_type')}</label>
                         <select id="empDocType" class="form-control">
-                            <option value="Passport">Passport</option>
-                            <option value="Iqama">Iqama</option>
-                            <option value="Contract">Contract</option>
-                            <option value="Certificate">Certificate</option>
+                            <option value="Passport">${t('doc_type_passport')}</option>
+                            <option value="Iqama">${t('doc_type_iqama')}</option>
+                            <option value="Contract">${t('doc_type_contract')}</option>
+                            <option value="Certificate">${t('doc_type_cert')}</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">File</label>
+                        <label class="form-label">${t('doc_file')}</label>
                         <input type="file" id="empDocFile" accept="image/*,application/pdf" class="form-control" required>
                     </div>
-                    <button type="submit" class="btn-primary" style="width: 100%;">Upload Document</button>
+                    <button type="submit" class="btn-primary" style="width: 100%;">${t('doc_upload_btn')}</button>
                 </form>
             </div>
             
             <div class="card col-span-8">
-                <div class="card-title">${currentUserRole === 'ADMIN' ? 'All Uploaded Documents' : 'My Uploaded Documents'}</div>
+                <div class="card-title">${currentUserRole === 'ADMIN' ? t('doc_all_uploaded') : t('doc_my_uploaded')}</div>
                 <div class="table-responsive">
                     <table class="data-table">
-                        <thead><tr><th>Type</th><th>File Name</th><th>Date</th><th>Actions</th></tr></thead>
+                        <thead><tr><th>${t('req_type')}</th><th>${t('doc_file_name')}</th><th>${t('date')}</th><th>${t('pay_actions')}</th></tr></thead>
                         <tbody>
-                            ${uploadedDocs.length === 0 ? '<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">No uploaded documents.</td></tr>' : uploadedDocs.map(d => `
+                            ${uploadedDocs.length === 0 ? `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_uploaded')}</td></tr>` : uploadedDocs.map(d => `
                                 <tr>
                                     <td><span class="status-badge info">${d.doc_type}</span></td>
                                     <td>${d.doc_name}</td>
                                     <td>${new Date(d.created_at).toLocaleDateString()}</td>
-                                    <td><a href="${d.doc_base64}" download="${d.doc_name}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">Download</a></td>
+                                    <td><a href="${d.doc_base64}" download="${d.doc_name}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">${t('exp_download')}</a></td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -1246,30 +1246,30 @@ async function renderDocuments() {
 
             <!-- HR Letter Requests -->
             <div class="card col-span-4">
-                <div class="card-title">Request Letter</div>
+                <div class="card-title">${t('doc_req_letter')}</div>
                 <form autocomplete="off" onsubmit="handleDocSubmit(event)">
                     <div class="form-group">
-                        <label class="form-label">Document Type</label>
+                        <label class="form-label">${t('doc_type')}</label>
                         <select id="docType" class="form-control">
-                            <option value="Salary Certificate">Salary Certificate</option>
-                            <option value="NOC">NOC (No Objection Certificate)</option>
-                            <option value="Employment Letter">Employment Letter</option>
+                            <option value="Salary Certificate">${t('doc_type_salary')}</option>
+                            <option value="NOC">${t('doc_type_noc')}</option>
+                            <option value="Employment Letter">${t('doc_type_emp')}</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Purpose</label>
+                        <label class="form-label">${t('doc_purpose')}</label>
                         <textarea id="docPurpose" class="form-control" required></textarea>
                     </div>
-                    <button type="submit" class="btn-secondary" style="width: 100%;">Submit Request</button>
+                    <button type="submit" class="btn-secondary" style="width: 100%;">${t('doc_submit_req')}</button>
                 </form>
             </div>
             <div class="card col-span-8">
-                <div class="card-title">${currentUserRole === 'ADMIN' ? 'All Letter Requests' : 'My Requests'}</div>
+                <div class="card-title">${currentUserRole === 'ADMIN' ? t('doc_all_reqs') : t('doc_my_reqs')}</div>
                 <div class="table-responsive">
                     <table class="data-table">
-                        <thead><tr><th>Type</th><th>Purpose</th><th>Status</th><th>Date</th></tr></thead>
+                        <thead><tr><th>${t('req_type')}</th><th>${t('doc_purpose')}</th><th>${t('req_status')}</th><th>${t('date')}</th></tr></thead>
                         <tbody>
-                            ${docs.length === 0 ? '<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">No requests found.</td></tr>' : docs.map(d => `
+                            ${docs.length === 0 ? `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_reqs')}</td></tr>` : docs.map(d => `
                                 <tr>
                                     <td>${d.doc_type}</td>
                                     <td>${d.purpose.substring(0, 30)}...</td>
@@ -1310,11 +1310,11 @@ async function renderMessages() {
         </div>
     `).join('');
 
-    if (otherUsers.length === 0) usersHtml = `<div style="padding: 1rem; color: var(--color-text-secondary);">No other users found.</div>`;
+    if (otherUsers.length === 0) usersHtml = `<div style="padding: 1rem; color: var(--color-text-secondary);">${t('msg_no_other')}</div>`;
 
     return `
         <div class="page-header">
-            <h2>Messages</h2>
+            <h2>${t('msg_title')}</h2>
         </div>
         <div class="card" style="display: flex; height: 600px; padding: 0; overflow: hidden;">
             <!-- Sidebar -->
@@ -1324,7 +1324,7 @@ async function renderMessages() {
             <!-- Chat Area -->
             <div style="flex: 1; display: flex; flex-direction: column;" id="chatArea">
                 <div style="flex: 1; display: flex; justify-content: center; align-items: center; color: var(--color-text-secondary);">
-                    Select a user to start messaging
+                    ${t('msg_select')}
                 </div>
             </div>
         </div>
@@ -1338,15 +1338,15 @@ window.selectChatUser = async function(userId, userName) {
 
     chatArea.innerHTML = `
         <div style="padding: 1rem; border-bottom: 1px solid var(--color-border); font-weight: 600; display: flex; align-items: center; gap: 10px; background: var(--color-surface);">
-            <span>Chat with ${userName}</span>
-            <button class="btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; margin-left: auto;" onclick="window.refreshMessages()">Refresh</button>
+            <span>${t('msg_chat_with')} ${userName}</span>
+            <button class="btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; margin-left: auto;" onclick="window.refreshMessages()">${t('msg_refresh')}</button>
         </div>
         <div id="messageHistory" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 10px; background: var(--color-background);">
-            <div style="text-align:center; color:var(--color-text-secondary);">Loading messages...</div>
+            <div style="text-align:center; color:var(--color-text-secondary);">${t('msg_loading')}</div>
         </div>
         <div style="padding: 1rem; border-top: 1px solid var(--color-border); display: flex; gap: 10px; background: var(--color-surface);">
-            <input type="text" id="messageInput" class="form-control" placeholder="Type a message..." style="flex: 1;" onkeypress="if(event.key === 'Enter') window.sendChatMessage()">
-            <button class="btn-primary" onclick="window.sendChatMessage()">Send</button>
+            <input type="text" id="messageInput" class="form-control" placeholder="${t('msg_type_ph')}" style="flex: 1;" onkeypress="if(event.key === 'Enter') window.sendChatMessage()">
+            <button class="btn-primary" onclick="window.sendChatMessage()">${t('msg_send')}</button>
         </div>
     `;
 
@@ -1365,7 +1365,7 @@ window.refreshMessages = async function(isPolling = false) {
     const messages = await db.fetchMessageHistory(currentUser.id, currentChatUser.id);
     
     if(messages.length === 0) {
-        historyContainer.innerHTML = `<div style="text-align:center; color:var(--color-text-secondary); margin-top: 2rem;">No messages yet. Say hi!</div>`;
+        historyContainer.innerHTML = `<div style="text-align:center; color:var(--color-text-secondary); margin-top: 2rem;">${t('msg_no_msgs')}</div>`;
         return;
     }
 
@@ -1408,7 +1408,7 @@ async function renderProfile() {
         <div class="page-header">
             <div>
                 <h1 class="page-title">${t('nav_profile')}</h1>
-                <p class="page-subtitle">Manage your account settings and personal information.</p>
+                <p class="page-subtitle">${t('prof_sub')}</p>
             </div>
         </div>
         <div class="dashboard-grid fade-in-up">
@@ -1421,48 +1421,48 @@ async function renderProfile() {
                 <p style="color: var(--color-primary); font-weight: 500; margin-bottom: 1.5rem;">${currentUserRole}</p>
                 <form autocomplete="off" onsubmit="handleUpdateProfilePhoto(event)" style="margin-bottom: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
                     <div class="form-group" style="text-align: left;">
-                        <label class="form-label" style="font-size: 0.85rem;">Update Profile Picture</label>
+                        <label class="form-label" style="font-size: 0.85rem;">${t('prof_update_pic')}</label>
                         <input type="file" id="avatarFile" accept="image/*" class="form-control" style="font-size: 0.85rem;" required>
                     </div>
-                    <button type="submit" class="btn-secondary" style="width: 100%; transition: all 0.2s;">Upload Photo</button>
+                    <button type="submit" class="btn-secondary" style="width: 100%; transition: all 0.2s;">${t('prof_upload_photo')}</button>
                 </form>
             </div>
 
             <!-- Account Details & Password -->
             <div class="col-span-8" style="display: flex; flex-direction: column; gap: 1.5rem;">
                 <div class="card">
-                    <div class="card-title">Account Details</div>
+                    <div class="card-title">${t('prof_acc_details')}</div>
                     <form autocomplete="off" onsubmit="handleUpdateProfileDetails(event)">
                         <div class="dashboard-grid" style="gap: 1rem; margin-bottom: 1rem;">
                             <div class="form-group col-span-6">
-                                <label class="form-label">Full Name</label>
-                                <input type="text" id="profileFullName" class="form-control" value="${profile.full_name || ''}" placeholder="e.g. John Doe">
+                                <label class="form-label">${t('prof_fn')}</label>
+                                <input type="text" id="profileFullName" class="form-control" value="${profile.full_name || ''}" placeholder="${t('users_fn_ph')}">
                             </div>
                             <div class="form-group col-span-6">
-                                <label class="form-label">Email Address</label>
+                                <label class="form-label">${t('prof_email')}</label>
                                 <input type="email" class="form-control" value="${currentUser.email}" disabled style="background-color: var(--color-surface); opacity: 0.7; cursor: not-allowed;">
                             </div>
                             <div class="form-group col-span-6">
-                                <label class="form-label">Iqama Number</label>
-                                <input type="text" id="profileIqama" class="form-control" value="${profile.iqama_number || ''}" placeholder="e.g. 2xxxxxxxxx">
+                                <label class="form-label">${t('prof_iqama')}</label>
+                                <input type="text" id="profileIqama" class="form-control" value="${profile.iqama_number || ''}" placeholder="${t('users_iqama_ph')}">
                             </div>
                             <div class="form-group col-span-6">
-                                <label class="form-label">Phone Number</label>
-                                <input type="text" id="profilePhone" class="form-control" value="${profile.phone_number || ''}" placeholder="e.g. +9665xxxxxxx">
+                                <label class="form-label">${t('prof_phone')}</label>
+                                <input type="text" id="profilePhone" class="form-control" value="${profile.phone_number || ''}" placeholder="${t('users_phone_ph')}">
                             </div>
                         </div>
-                        <button type="submit" class="btn-primary" style="transition: all 0.2s;">Save Changes</button>
+                        <button type="submit" class="btn-primary" style="transition: all 0.2s;">${t('prof_save')}</button>
                     </form>
                 </div>
 
                 <div class="card">
-                    <div class="card-title">Security</div>
+                    <div class="card-title">${t('prof_security')}</div>
                     <form autocomplete="off" onsubmit="handleUpdatePassword(event)" style="display: flex; gap: 1rem; align-items: flex-end;">
                         <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                            <label class="form-label">New Password</label>
-                            <input type="password" autocomplete="new-password" id="newPassword" class="form-control" placeholder="Enter new password" required minlength="6">
+                            <label class="form-label">${t('prof_new_pass')}</label>
+                            <input type="password" autocomplete="new-password" id="newPassword" class="form-control" placeholder="${t('prof_new_pass_ph')}" required minlength="6">
                         </div>
-                        <button type="submit" class="btn-secondary" style="transition: all 0.2s;">Update Password</button>
+                        <button type="submit" class="btn-secondary" style="transition: all 0.2s;">${t('prof_update_pass')}</button>
                     </form>
                 </div>
             </div>
@@ -1556,24 +1556,24 @@ async function renderTasks() {
         
         adminForm = `
             <div class="card col-span-12" style="margin-bottom: 1rem;">
-                <div class="card-title">Assign New Task</div>
+                <div class="card-title">${t('task_assign_new')}</div>
                 <form autocomplete="off" onsubmit="handleCreateTask(event)" style="display: flex; gap: 1rem; align-items: flex-end;">
                     <div class="form-group" style="flex: 2;">
-                        <label class="form-label">Task Title</label>
+                        <label class="form-label">${t('task_title')}</label>
                         <input type="text" autocomplete="off" id="taskTitle" class="form-control" required>
                     </div>
                     <div class="form-group" style="flex: 2;">
-                        <label class="form-label">Assign To</label>
+                        <label class="form-label">${t('task_assign_to')}</label>
                         <select id="taskAssignee" class="form-control" required>
-                            <option value="">Select Employee</option>
+                            <option value="">${t('task_sel_emp')}</option>
                             ${userOptions}
                         </select>
                     </div>
                     <div class="form-group" style="flex: 1;">
-                        <label class="form-label">Due Date</label>
+                        <label class="form-label">${t('task_due')}</label>
                         <input type="date" id="taskDue" class="form-control" required>
                     </div>
-                    <button type="submit" class="btn-primary" style="margin-bottom: 1rem;">Assign Task</button>
+                    <button type="submit" class="btn-primary" style="margin-bottom: 1rem;">${t('task_assign_btn')}</button>
                 </form>
             </div>
         `;
@@ -1584,13 +1584,13 @@ async function renderTasks() {
             <div class="card" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--color-primary); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
                 <h4 style="margin-bottom: 0.5rem; font-size: 1rem;">${t.title}</h4>
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 1rem;">
-                    <i data-lucide="calendar" style="width: 12px; height: 12px; display: inline-block;"></i> Due: ${t.due_date || 'No date'}<br/>
-                    <i data-lucide="user" style="width: 12px; height: 12px; display: inline-block;"></i> Assigned: ${t.assignee?.full_name || 'Unknown'}
+                    <i data-lucide="calendar" style="width: 12px; height: 12px; display: inline-block;"></i> ${t('task_due_lbl')} ${t.due_date || t('task_no_date')}<br/>
+                    <i data-lucide="user" style="width: 12px; height: 12px; display: inline-block;"></i> ${t('task_assigned_lbl')} ${t.assignee?.full_name || t('task_unknown')}
                 </div>
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                    ${t.status !== 'TODO' ? `<button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleUpdateTaskStatus('${t.id}', 'TODO')">To Do</button>` : ''}
-                    ${t.status !== 'IN_PROGRESS' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-warning);" onclick="handleUpdateTaskStatus('${t.id}', 'IN_PROGRESS')">Working</button>` : ''}
-                    ${t.status !== 'DONE' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-success);" onclick="handleUpdateTaskStatus('${t.id}', 'DONE')">Done</button>` : ''}
+                    ${t.status !== 'TODO' ? `<button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleUpdateTaskStatus('${t.id}', 'TODO')">${t('task_todo')}</button>` : ''}
+                    ${t.status !== 'IN_PROGRESS' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-warning);" onclick="handleUpdateTaskStatus('${t.id}', 'IN_PROGRESS')">${t('task_working')}</button>` : ''}
+                    ${t.status !== 'DONE' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-success);" onclick="handleUpdateTaskStatus('${t.id}', 'DONE')">${t('task_done')}</button>` : ''}
                 </div>
             </div>
         `;
@@ -1600,30 +1600,30 @@ async function renderTasks() {
         <div class="page-header">
             <div>
                 <h1 class="page-title">${t('nav_tasks')}</h1>
-                <p class="page-subtitle">Track projects and manage team tasks.</p>
+                <p class="page-subtitle">${t('task_sub')}</p>
             </div>
         </div>
         <div class="dashboard-grid fade-in-up">
             ${adminForm}
             <div class="col-span-4">
                 <div class="card" style="background: rgba(0,0,0,0.02);">
-                    <div class="card-title">To Do <span class="badge" style="float: right;">${todo.length}</span></div>
+                    <div class="card-title">${t('task_todo')} <span class="badge" style="float: right;">${todo.length}</span></div>
                     ${todo.map(renderTaskCard).join('')}
-                    ${todo.length === 0 ? '<p style="text-align: center; color: var(--color-text-secondary); font-size: 0.875rem;">No tasks in this list</p>' : ''}
+                    ${todo.length === 0 ? `<p style="text-align: center; color: var(--color-text-secondary); font-size: 0.875rem;">${t('task_no_tasks')}</p>` : ''}
                 </div>
             </div>
             <div class="col-span-4">
                 <div class="card" style="background: rgba(245, 158, 11, 0.05);">
-                    <div class="card-title">In Progress <span class="badge" style="float: right; background: var(--color-warning); color: #fff;">${inProgress.length}</span></div>
+                    <div class="card-title">${t('task_working')} <span class="badge" style="float: right; background: var(--color-warning); color: #fff;">${inProgress.length}</span></div>
                     ${inProgress.map(renderTaskCard).join('')}
-                    ${inProgress.length === 0 ? '<p style="text-align: center; color: var(--color-text-secondary); font-size: 0.875rem;">No tasks in this list</p>' : ''}
+                    ${inProgress.length === 0 ? `<p style="text-align: center; color: var(--color-text-secondary); font-size: 0.875rem;">${t('task_no_tasks')}</p>` : ''}
                 </div>
             </div>
             <div class="col-span-4">
                 <div class="card" style="background: rgba(16, 185, 129, 0.05);">
-                    <div class="card-title">Done <span class="badge" style="float: right; background: var(--color-success); color: #fff;">${done.length}</span></div>
+                    <div class="card-title">${t('task_done')} <span class="badge" style="float: right; background: var(--color-success); color: #fff;">${done.length}</span></div>
                     ${done.map(renderTaskCard).join('')}
-                    ${done.length === 0 ? '<p style="text-align: center; color: var(--color-text-secondary); font-size: 0.875rem;">No tasks in this list</p>' : ''}
+                    ${done.length === 0 ? `<p style="text-align: center; color: var(--color-text-secondary); font-size: 0.875rem;">${t('task_no_tasks')}</p>` : ''}
                 </div>
             </div>
         </div>
@@ -1722,20 +1722,20 @@ async function renderEmployeesDirectory() {
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">Employees & Contracts</h1>
-                <p class="page-subtitle">Directory of personnel and their contract details.</p>
+                <h1 class="page-title">${t('nav_emp_dir')}</h1>
+                <p class="page-subtitle">${t('emp_dir_sub')}</p>
             </div>
         </div>
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-12">
-                <div class="card-title">Company Directory</div>
+                <div class="card-title">${t('emp_dir_company')}</div>
                 <div style="overflow-x: auto;">
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Employee Name</th>
-                                <th>Contact Info</th>
-                                <th>Role / Title</th>
+                                <th>${t('emp_name')}</th>
+                                <th>${t('emp_contact')}</th>
+                                <th>${t('emp_role_title')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1743,18 +1743,18 @@ async function renderEmployeesDirectory() {
                                 <tr>
                                     <td>
                                         <div style="font-weight: bold; color: var(--primary-color);">EMP-${u.emp_index || '-'}</div>
-                                        <div style="font-weight: 600;">${u.full_name || 'N/A'}</div>
+                                        <div style="font-weight: 600;">${u.full_name || t('emp_na')}</div>
                                     </td>
                                     <td>
                                         <div style="font-size: 0.85rem;">
                                             <i data-lucide="mail" style="width:12px;height:12px;margin-right:4px;vertical-align:middle;"></i> ${u.id}<br/>
-                                            <i data-lucide="phone" style="width:12px;height:12px;margin-right:4px;vertical-align:middle;"></i> ${u.phone_number || 'N/A'}<br/>
-                                            <i data-lucide="credit-card" style="width:12px;height:12px;margin-right:4px;vertical-align:middle;"></i> ${u.iqama_number || 'N/A'}
+                                            <i data-lucide="phone" style="width:12px;height:12px;margin-right:4px;vertical-align:middle;"></i> ${u.phone_number || t('emp_na')}<br/>
+                                            <i data-lucide="credit-card" style="width:12px;height:12px;margin-right:4px;vertical-align:middle;"></i> ${u.iqama_number || t('emp_na')}
                                         </div>
                                     </td>
                                     <td>
                                         <span class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${u.role}</span><br/>
-                                        <span style="font-size: 0.85rem; color: var(--text-light); margin-top: 4px; display: inline-block;">${u.job_title || 'No Title'}</span>
+                                        <span style="font-size: 0.85rem; color: var(--text-light); margin-top: 4px; display: inline-block;">${u.job_title || t('emp_no_title')}</span>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -1840,12 +1840,12 @@ async function renderView(viewId) {
         default:
             content = `
                 <div class="page-header">
-                    <h1 class="page-title">${t('nav_' + viewId) || 'Coming Soon'}</h1>
+                    <h1 class="page-title">${t('nav_' + viewId) || t('nav_coming_soon')}</h1>
                 </div>
                 <div class="card" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
                     <div style="text-align: center; color: var(--color-text-secondary);">
                         <i data-lucide="hammer" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
-                        <h2>Module under construction</h2>
+                        <h2>${t('nav_under_const')}</h2>
                     </div>
                 </div>
             `;
@@ -1879,7 +1879,7 @@ function updateTopbarProfile(profile) {
 // NOTIFICATIONS VIEW
 // ==========================================
 async function renderNotifications() {
-    if (!currentUser) return '<div class="page-header"><h1 class="page-title">Notifications</h1></div><div class="card">Please log in to view notifications.</div>';
+    if (!currentUser) return `<div class="page-header"><h1 class="page-title">${t('notif_title')}</h1></div><div class="card">${t('notif_login')}</div>`;
 
     const notifs = await db.fetchNotifications(currentUser.id);
     
@@ -1888,7 +1888,7 @@ async function renderNotifications() {
     const badge = document.querySelector('.notification-badge');
     if (badge) badge.style.display = 'none';
 
-    let listHtml = '<div class="card" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No notifications found.</div>';
+    let listHtml = `<div class="card" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('notif_no_found')}</div>`;
     
     if (notifs && notifs.length > 0) {
         listHtml = notifs.map(n => `
@@ -1903,7 +1903,7 @@ async function renderNotifications() {
                             <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(n.created_at).toLocaleString()}</div>
                         </div>
                     </div>
-                    ${!n.is_read ? '<span class="badge" style="background: var(--color-primary); color: white;">New</span>' : ''}
+                    ${!n.is_read ? `<span class="badge" style="background: var(--color-primary); color: white;">${t('notif_new')}</span>` : ''}
                 </div>
             </div>
         `).join('');
@@ -1912,8 +1912,8 @@ async function renderNotifications() {
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">Notifications</h1>
-                <p class="page-subtitle">View all your system alerts and messages.</p>
+                <h1 class="page-title">${t('notif_title')}</h1>
+                <p class="page-subtitle">${t('notif_sub')}</p>
             </div>
         </div>
         <div class="dashboard-grid">
@@ -1947,7 +1947,7 @@ async function pollNotifications() {
     
     if (dropdown) {
         if (notifs.length === 0) {
-            dropdown.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--color-text-secondary);">No notifications</div>`;
+            dropdown.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--color-text-secondary);">${t('notif_no_dropdown')}</div>`;
         } else {
             dropdown.innerHTML = notifs.map(n => `
                 <div class="notification-item ${!n.is_read ? 'unread' : ''}" style="padding: 10px; border-bottom: 1px solid var(--color-border); ${!n.is_read ? 'background: rgba(var(--color-primary-rgb), 0.05); font-weight: 500;' : ''}">
@@ -2144,15 +2144,15 @@ async function renderRequests() {
             if (r.status === 'PENDING') {
                 actionsCell = `
                     <td>
-                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleRequestAction('${r.type}', '${r.id}', 'APPROVED', '${r.employee_id}')">Approve</button>
-                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleRequestAction('${r.type}', '${r.id}', 'REJECTED', '${r.employee_id}')">Reject</button>
+                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleRequestAction('${r.type}', '${r.id}', 'APPROVED', '${r.employee_id}')">${t('leave_approve')}</button>
+                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleRequestAction('${r.type}', '${r.id}', 'REJECTED', '${r.employee_id}')">${t('leave_reject')}</button>
                     </td>
                 `;
             } else if (r.status === 'APPROVED' || r.status === 'REJECTED') {
                 actionsCell = `
                     <td>
                         <button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleRequestAction('${r.type}', '${r.id}', '${r.status}_ARCHIVED', '${r.employee_id}')">
-                            <i data-lucide="archive" style="width:12px;height:12px;"></i> Archive
+                            <i data-lucide="archive" style="width:12px;height:12px;"></i> ${t('req_archive_btn')}
                         </button>
                     </td>
                 `;
@@ -2175,39 +2175,39 @@ async function renderRequests() {
     
     if (allRequests.length === 0) {
         const colSpan = isManagerOrAdmin ? 6 : 4;
-        rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No requests found.</td></tr>`;
+        rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('req_no_found')}</td></tr>`;
     }
     
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">All Requests</h1>
-                <p class="page-subtitle">View and filter all Leave, Document, and Expense requests.</p>
+                <h1 class="page-title">${t('req_all')}</h1>
+                <p class="page-subtitle">${t('req_sub')}</p>
             </div>
         </div>
         
         <div class="card fade-in-up" style="margin-bottom: 2rem;">
             <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 200px;">
-                    <label class="form-label">Search</label>
-                    <input type="text" id="reqSearch" class="form-control" placeholder="Search by name or details..." onkeyup="filterRequests()">
+                    <label class="form-label">${t('req_search')}</label>
+                    <input type="text" id="reqSearch" class="form-control" placeholder="${t('req_search_ph')}" onkeyup="filterRequests()">
                 </div>
                 <div style="width: 150px;">
-                    <label class="form-label">Type</label>
+                    <label class="form-label">${t('req_type')}</label>
                     <select id="reqType" class="form-control" onchange="filterRequests()">
-                        <option value="ALL">All Types</option>
-                        <option value="Leave">Leave</option>
-                        <option value="Document">Document</option>
-                        <option value="Expense">Expense</option>
+                        <option value="ALL">${t('req_type_all')}</option>
+                        <option value="Leave">${t('req_type_leave')}</option>
+                        <option value="Document">${t('req_type_doc')}</option>
+                        <option value="Expense">${t('req_type_exp')}</option>
                     </select>
                 </div>
                 <div style="width: 150px;">
-                    <label class="form-label">Status</label>
+                    <label class="form-label">${t('req_status')}</label>
                     <select id="reqStatus" class="form-control" onchange="filterRequests()">
-                        <option value="ALL">All Statuses</option>
-                        <option value="PENDING">Pending</option>
-                        <option value="APPROVED">Approved</option>
-                        <option value="REJECTED">Rejected</option>
+                        <option value="ALL">${t('req_status_all')}</option>
+                        <option value="PENDING">${t('req_pending')}</option>
+                        <option value="APPROVED">${t('req_approved')}</option>
+                        <option value="REJECTED">${t('req_rejected')}</option>
                     </select>
                 </div>
             </div>
@@ -2218,12 +2218,12 @@ async function renderRequests() {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            ${isManagerOrAdmin ? `<th>Employee</th>` : ''}
-                            <th>Type</th>
-                            <th>Details</th>
-                            <th>Status</th>
-                            ${isManagerOrAdmin ? `<th>Actions</th>` : ''}
+                            <th>${t('date')}</th>
+                            ${isManagerOrAdmin ? `<th>${t('leave_employee')}</th>` : ''}
+                            <th>${t('req_type')}</th>
+                            <th>${t('req_details')}</th>
+                            <th>${t('req_status')}</th>
+                            ${isManagerOrAdmin ? `<th>${t('leave_actions')}</th>` : ''}
                         </tr>
                     </thead>
                     <tbody id="requestsTableBody">
@@ -2263,7 +2263,7 @@ window.filterRequests = function() {
 async function renderArchivedRequests() {
     const isManagerOrAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER';
     if (!isManagerOrAdmin) {
-        return '<div style="padding: 2rem;">Unauthorized. Only Admins and Managers can view Archived Requests.</div>';
+        return `<div style="padding: 2rem;">${t('req_unauthorized')}</div>`;
     }
     
     // Fetch data
@@ -2315,20 +2315,20 @@ async function renderArchivedRequests() {
                 <td>${employeeName}</td>
                 <td><strong>${r.type}</strong></td>
                 <td>${r.details}</td>
-                <td><span class="status-badge ${badgeClass}">${r.status}</span> <span style="font-size: 0.7rem; color: var(--color-text-secondary);">(Archived)</span></td>
+                <td><span class="status-badge ${badgeClass}">${r.status}</span> <span style="font-size: 0.7rem; color: var(--color-text-secondary);">${t('req_archived_badge')}</span></td>
             </tr>
         `;
     }).join('');
     
     if (allRequests.length === 0) {
-        rowsHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No archived requests found.</td></tr>`;
+        rowsHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('req_no_archived')}</td></tr>`;
     }
     
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">Archived Requests</h1>
-                <p class="page-subtitle">Historical record of completed requests.</p>
+                <h1 class="page-title">${t('req_archived_title')}</h1>
+                <p class="page-subtitle">${t('req_archived_sub')}</p>
             </div>
         </div>
         
@@ -2337,11 +2337,11 @@ async function renderArchivedRequests() {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Employee</th>
-                            <th>Type</th>
-                            <th>Details</th>
-                            <th>Original Status</th>
+                            <th>${t('date')}</th>
+                            <th>${t('leave_employee')}</th>
+                            <th>${t('req_type')}</th>
+                            <th>${t('req_details')}</th>
+                            <th>${t('req_orig_status')}</th>
                         </tr>
                     </thead>
                     <tbody>

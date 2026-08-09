@@ -117,25 +117,25 @@
                         <div class="profile-dropdown-menu" id="profileDropdown" style="display: none; position: absolute; right: 0; top: 120%; border: 1px solid var(--color-border); border-radius: var(--radius-md); width: 250px; z-index: 10000; box-shadow: var(--shadow-lg); overflow: hidden;">
                             <a href="#" class="dropdown-item" onclick="renderView('messages'); window.toggleProfileDropdown(); return false;" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
                                 <i data-lucide="message-square" style="width: 18px; height: 18px;"></i>
-                                Messages
+                                <span data-i18n="nav_messages">Messages</span>
                             </a>
                             <a href="#" class="dropdown-item" onclick="renderView('notifications'); window.toggleProfileDropdown(); return false;" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
                                 <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
-                                Notifications
+                                <span data-i18n="notif_title">Notifications</span>
                             </a>
                             <a href="#" class="dropdown-item" onclick="window.toggleLanguage(); return false;" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
                                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                                     <i data-lucide="globe" style="width: 18px; height: 18px;"></i>
-                                    Language: <strong id="currentLangDisplay">EN</strong>
+                                    <span data-i18n="nav_language">Language: </span> <strong id="currentLangDisplay">EN</strong>
                                 </div>
                             </a>
                             <a href="#" class="dropdown-item" onclick="window.toggleTheme(); return false;" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
                                 <i data-lucide="moon" style="width: 18px; height: 18px;"></i>
-                                Toggle Theme
+                                <span data-i18n="nav_theme">Toggle Theme</span>
                             </a>
                             <a href="#" class="dropdown-item" onclick="window.handleLogout(); return false;" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; color: var(--color-danger); text-decoration: none;">
                                 <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
-                                Logout
+                                <span data-i18n="nav_logout">Logout</span>
                             </a>
                         </div>
                     </div>
