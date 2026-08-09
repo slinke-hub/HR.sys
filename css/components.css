@@ -521,7 +521,7 @@ textarea.form-control {
     grid-template-columns: 1fr; /* Stack actions vertically */
   }
 }
- 
+ 
 /* Profile Dropdown Base Styles */
 .profile-dropdown-menu {
     position: absolute;
