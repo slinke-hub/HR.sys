@@ -18,6 +18,65 @@ function resetInactivityTimeout() {
         }, 5 * 60 * 1000); // 5 minutes
     }
 }
+
+// ==========================================
+// PWA Installation
+// ==========================================
+let deferredPrompt;
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+                console.log('SW registered: ', registration);
+            })
+            .catch(registrationError => {
+                console.log('SW registration failed: ', registrationError);
+            });
+    });
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the mini-infobar from appearing on mobile
+    e.preventDefault();
+    deferredPrompt = e;
+    
+    // Check if we already appended it, if not, append to body
+    if (!document.getElementById('pwaInstallBanner')) {
+        const banner = document.createElement('div');
+        banner.id = 'pwaInstallBanner';
+        banner.className = 'install-banner';
+        banner.innerHTML = `
+            <div class="install-banner-content">
+                <h4>Install MUQAM HR</h4>
+                <p>Add to your home screen for quick access</p>
+            </div>
+            <button class="install-banner-btn" id="pwaInstallBtn">Install</button>
+            <button class="install-banner-close" id="pwaCloseBtn"><i data-lucide="x"></i></button>
+        `;
+        document.body.appendChild(banner);
+        lucide.createIcons();
+
+        document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
+            banner.classList.remove('show');
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`User response to the install prompt: ${outcome}`);
+                deferredPrompt = null;
+            }
+        });
+
+        document.getElementById('pwaCloseBtn').addEventListener('click', () => {
+            banner.classList.remove('show');
+        });
+
+        // Slight delay to animate in
+        setTimeout(() => {
+            banner.classList.add('show');
+        }, 2000);
+    }
+});
 ['mousemove', 'keydown', 'mousedown', 'touchstart'].forEach(event => {
     document.addEventListener(event, resetInactivityTimeout);
 });
@@ -631,20 +690,22 @@ async function renderTime() {
         </div>
         <div class="card">
             <div class="card-title">${t('timesheet')}</div>
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>${t('date')}</th>
-                        <th>${t('time')}</th>
-                        ${currentUserRole === 'ADMIN' ? `<th>${t('time_emp_id')}</th>` : ''}
-                        <th>${t('time_punch_type')}</th>
-                        <th>${t('status')}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>${t('date')}</th>
+                            <th>${t('time')}</th>
+                            ${currentUserRole === 'ADMIN' ? `<th>${t('time_emp_id')}</th>` : ''}
+                            <th>${t('time_punch_type')}</th>
+                            <th>${t('status')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
 }
@@ -1242,7 +1303,7 @@ async function renderUsers() {
             </div>
             <div class="card col-span-8">
                 <div class="card-title">${t('users_dir')}</div>
-                <div style="overflow-x: auto;">
+                <div class="table-responsive">
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -1317,19 +1378,21 @@ async function renderPerformance() {
         </div>
         <div class="card fade-in-up">
             <div class="card-title">${t('perf_my_goals')}</div>
-            <table class="data-table">
-                <thead><tr><th>${t('perf_title_th')}</th><th>${t('perf_due_date')}</th><th>${t('req_status')}</th><th>${t('perf_rating')}</th></tr></thead>
-                <tbody>
-                    ${goals.length === 0 ? `<tr><td colspan="4">${t('perf_no_goals')}</td></tr>` : goals.map(g => `
-                        <tr>
-                            <td>${g.title}</td>
-                            <td>${new Date(g.due_date).toLocaleDateString()}</td>
-                            <td><span class="status-badge info">${g.status}</span></td>
-                            <td>${g.rating || '-'} / 5</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead><tr><th>${t('perf_title_th')}</th><th>${t('perf_due_date')}</th><th>${t('req_status')}</th><th>${t('perf_rating')}</th></tr></thead>
+                    <tbody>
+                        ${goals.length === 0 ? `<tr><td colspan="4">${t('perf_no_goals')}</td></tr>` : goals.map(g => `
+                            <tr>
+                                <td>${g.title}</td>
+                                <td>${new Date(g.due_date).toLocaleDateString()}</td>
+                                <td><span class="status-badge ${g.status === 'DONE' ? 'success' : 'warning'}">${g.status}</span></td>
+                                <td>${g.rating || '-'} / 5</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
 }
@@ -2004,7 +2067,7 @@ async function renderEmployeesDirectory() {
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-12">
                 <div class="card-title">${t('emp_dir_company')}</div>
-                <div style="overflow-x: auto;">
+                <div class="table-responsive">
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -2495,7 +2558,7 @@ async function renderRequests() {
         </div>
         
         <div class="card fade-in-up">
-            <div style="overflow-x: auto;">
+            <div class="table-responsive">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -2614,7 +2677,7 @@ async function renderArchivedRequests() {
         </div>
         
         <div class="card fade-in-up">
-            <div style="overflow-x: auto;">
+            <div class="table-responsive">
                 <table class="data-table">
                     <thead>
                         <tr>

@@ -464,3 +464,46 @@ textarea.form-control {
   color: var(--color-text-secondary);
   margin-top: 0.25rem;
 }
+
+/* ==========================================
+   Responsive Grid Overrides
+   ========================================== */
+
+/* Tablets / iPads */
+@media (max-width: 1024px) {
+  .col-span-3,
+  .col-span-4,
+  .col-span-5,
+  .col-span-6,
+  .col-span-7,
+  .col-span-8 {
+    grid-column: span 6; /* Most cards become 2 columns */
+  }
+  
+  .quick-action-grid {
+    grid-template-columns: repeat(2, 1fr); /* 2x2 grid instead of 4x1 */
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .col-span-3,
+  .col-span-4,
+  .col-span-5,
+  .col-span-6,
+  .col-span-7,
+  .col-span-8,
+  .col-span-12 {
+    grid-column: span 12;
+    width: 100%;
+  }
+
+  .quick-action-grid {
+    grid-template-columns: 1fr; /* Stack actions vertically */
+  }
+}

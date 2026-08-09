@@ -116,6 +116,18 @@
   color: var(--color-accent);
 }
 
+/* Install Banner */
+.install-banner {
+  padding: var(--space-3);
+  background: var(--color-accent);
+  color: white;
+  text-align: center;
+  border-radius: var(--border-radius-md);
+  margin-bottom: var(--space-4);
+  cursor: pointer;
+  font-weight: 600;
+}
+
 /* Main Content Area */
 .main-content {
   flex: 1;
@@ -323,7 +335,20 @@
   }
 }
 
-/* Responsive Design */
+/* Tablet Responsive Design */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 200px; /* Reduce sidebar width on tablets */
+  }
+  .nav-item span {
+    font-size: 0.9rem; /* Slightly smaller text */
+  }
+  .main-content {
+    padding: var(--space-4); /* Less padding on main content */
+  }
+}
+
+/* Mobile Responsive Design */
 @media (max-width: 768px) {
   .app-container {
     flex-direction: column;
@@ -331,12 +356,12 @@
   
   .sidebar {
     width: 100%;
-    height: 60px; /* fixed height for bottom nav */
+    height: calc(60px + var(--safe-bottom)); /* fixed height + safe area for bottom nav */
     flex-direction: row;
     overflow-x: auto;
     border-inline-end: none;
     border-top: 1px solid var(--sidebar-border);
-    padding: 0 var(--space-4);
+    padding: 0 var(--space-4) var(--safe-bottom) var(--space-4);
     gap: var(--space-4);
     z-index: 1000;
     position: fixed;
@@ -371,8 +396,8 @@
   }
 
   .main-content {
-    height: calc(100vh - 60px); /* Adjust based on new sidebar size */
-    margin-bottom: 60px;
+    height: calc(100vh - 60px - var(--safe-bottom)); /* Adjust based on new sidebar size */
+    margin-bottom: calc(60px + var(--safe-bottom));
   }
 
   .dashboard-grid {
@@ -433,4 +458,67 @@
 .password-toggle-btn:active {
     transform: scale(0.9);
     background: rgba(128, 128, 128, 0.25);
+}
+/* PWA Install Banner */
+.install-banner {
+  position: fixed;
+  bottom: calc(70px + var(--safe-bottom)); /* Above bottom nav on mobile */
+  left: 50%;
+  transform: translateX(-50%) translateY(150%);
+  background: var(--color-primary);
+  color: #fff;
+  padding: 1rem 1.5rem;
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  z-index: 2000;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  width: 90%;
+  max-width: 400px;
+}
+
+.install-banner.show {
+  transform: translateX(-50%) translateY(0);
+}
+
+.install-banner-content {
+  flex: 1;
+}
+
+.install-banner-content h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.install-banner-content p {
+  margin: 0.2rem 0 0 0;
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.install-banner-btn {
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.install-banner-close {
+  background: transparent;
+  color: rgba(255,255,255,0.7);
+  border: none;
+  cursor: pointer;
+  padding: 0.2rem;
+  margin-left: -0.5rem;
+}
+
+.install-banner-close:hover {
+  color: #fff;
 }
