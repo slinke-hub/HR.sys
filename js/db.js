@@ -119,6 +119,20 @@ const db = {
         }
     },
 
+    async sendPasswordResetEmail(email) {
+        if (!supabaseClient) return { error: { message: "Supabase not initialized." } };
+        return await supabaseClient.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + window.location.pathname
+        });
+    },
+
+    async updatePassword(newPassword) {
+        if (!supabaseClient) return { error: { message: "Supabase not initialized." } };
+        return await supabaseClient.auth.updateUser({
+            password: newPassword
+        });
+    },
+
     async getUserProfile(userId) {
         if (!supabaseClient) {
             return { role: 'EMPLOYEE', job_title: '', base_salary: 3000, annual_leave_allowance: 30, sick_leave_allowance: 10, manager_id: null };

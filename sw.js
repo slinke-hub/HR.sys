@@ -40,6 +40,9 @@ self.addEventListener('fetch', (event) => {
   // Only cache GET requests
   if (event.request.method !== 'GET') return;
   
+  // Only cache http/https requests (ignore chrome-extension:// etc)
+  if (!event.request.url.startsWith('http')) return;
+  
   // Exclude Supabase API requests from caching
   if (event.request.url.includes('supabase.co')) return;
 

@@ -500,7 +500,7 @@ textarea.form-control {
 }
 
 /* Mobile */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .dashboard-grid {
     display: flex;
     flex-direction: column;
@@ -530,17 +530,10 @@ textarea.form-control {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     width: 250px;
+    max-width: calc(100vw - 20px);
     z-index: 10000;
     box-shadow: var(--shadow-lg);
     overflow: hidden;
 }
 
-@media (max-width: 768px) {
-    .profile-dropdown-menu {
-        position: fixed;
-        top: calc(var(--topbar-height) + 10px);
-        right: 10px;
-        width: calc(100% - 20px);
-        max-width: none;
-    }
-}
+

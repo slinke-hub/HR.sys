@@ -2,6 +2,7 @@
 let currentLang = 'en';
 let currentTheme = 'dark';
 let currentView = 'login';
+let loginMode = 'login';
 let currentUser = null;
 let currentUserRole = null;
 let currentContractEmployeeId = null;
@@ -36,17 +37,21 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevent the mini-infobar from appearing on mobile
-    e.preventDefault();
-    deferredPrompt = e;
+function showInstallBanner() {
+    if (localStorage.getItem('pwaPromptDismissed')) return;
     
-    // Check if we already appended it, if not, append to body
+    // Don't show if already installed (standalone mode)
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+        return;
+    }
+
     if (!document.getElementById('pwaInstallBanner')) {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
         const banner = document.createElement('div');
         banner.id = 'pwaInstallBanner';
         banner.className = 'install-banner';
-        banner.innerHTML = `
+        
+        let contentHtml = `
             <div class="install-banner-content">
                 <h4>Install MUQAM HR</h4>
                 <p>Add to your home screen for quick access</p>
@@ -54,21 +59,40 @@ window.addEventListener('beforeinstallprompt', (e) => {
             <button class="install-banner-btn" id="pwaInstallBtn">Install</button>
             <button class="install-banner-close" id="pwaCloseBtn"><i data-lucide="x"></i></button>
         `;
-        document.body.appendChild(banner);
-        lucide.createIcons();
 
-        document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
-            banner.classList.remove('show');
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                console.log(`User response to the install prompt: ${outcome}`);
-                deferredPrompt = null;
-            }
-        });
+        if (isIOS) {
+            contentHtml = `
+                <div class="install-banner-content">
+                    <h4>Install MUQAM HR</h4>
+                    <p>Tap <i data-lucide="share" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"></i> and then "Add to Home Screen"</p>
+                </div>
+                <button class="install-banner-close" id="pwaCloseBtn"><i data-lucide="x"></i></button>
+            `;
+        }
+
+        banner.innerHTML = contentHtml;
+        document.body.appendChild(banner);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        const installBtn = document.getElementById('pwaInstallBtn');
+        if (installBtn) {
+            installBtn.addEventListener('click', async () => {
+                banner.classList.remove('show');
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`User response to the install prompt: ${outcome}`);
+                    deferredPrompt = null;
+                } else {
+                    alert("To install, open your browser's menu and select 'Add to Home Screen' or 'Install App'.");
+                }
+                localStorage.setItem('pwaPromptDismissed', 'true');
+            });
+        }
 
         document.getElementById('pwaCloseBtn').addEventListener('click', () => {
             banner.classList.remove('show');
+            localStorage.setItem('pwaPromptDismissed', 'true');
         });
 
         // Slight delay to animate in
@@ -76,6 +100,20 @@ window.addEventListener('beforeinstallprompt', (e) => {
             banner.classList.add('show');
         }, 2000);
     }
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+});
+
+window.addEventListener('load', () => {
+    if (window.location.hash.includes('type=recovery')) {
+        currentView = 'login';
+        loginMode = 'reset';
+        setTimeout(() => renderView('login'), 100);
+    }
+    setTimeout(showInstallBanner, 1000); // Check 1s after load
 });
 ['mousemove', 'keydown', 'mousedown', 'touchstart'].forEach(event => {
     document.addEventListener(event, resetInactivityTimeout);
@@ -409,6 +447,36 @@ window.togglePasswordVisibility = function (inputId) {
     lucide.createIcons();
 }
 
+window.setLoginMode = function(mode) {
+    loginMode = mode;
+    renderView('login');
+}
+
+window.handleForgotPasswordSubmit = async function(e) {
+    e.preventDefault();
+    const email = document.getElementById('reset-email').value;
+    const { error } = await db.sendPasswordResetEmail(email);
+    if (error) {
+        showToast(error.message, 'danger');
+    } else {
+        showToast(t('reset_link_sent'), 'success');
+        setLoginMode('login');
+    }
+}
+
+window.handleResetPasswordSubmit = async function(e) {
+    e.preventDefault();
+    const newPassword = document.getElementById('new-password').value;
+    const { data, error } = await db.updatePassword(newPassword);
+    if (error) {
+        showToast(error.message, 'danger');
+    } else {
+        showToast("Password updated successfully!", 'success');
+        window.location.hash = ''; // Clear hash
+        setLoginMode('login');
+    }
+}
+
 function renderLogin() {
     // Hide sidebar and topbar for full screen login
     const sidebar = document.querySelector('.sidebar');
@@ -416,28 +484,74 @@ function renderLogin() {
     if (sidebar) sidebar.style.display = 'none';
     if (topbar) topbar.style.display = 'none';
 
+    let formHTML = '';
+
+    if (loginMode === 'forgot') {
+        formHTML = `
+            <div style="text-align: center; margin-bottom: 2rem;">
+                <div class="login-logo">MUQAM</div>
+                <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('reset_password')}</h2>
+                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('reset_email_instruction')}</p>
+            </div>
+            <form autocomplete="off" onsubmit="handleForgotPasswordSubmit(event)">
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label">${t('email_label')}</label>
+                    <input type="email" autocomplete="off" id="reset-email" class="form-control" placeholder="name@company.com" required>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 0.875rem; font-size: 1rem;">${t('send_reset_link')}</button>
+                <div style="text-align: center; margin-top: 1rem;">
+                    <a href="#" onclick="setLoginMode('login')" style="color: var(--color-primary); font-size: 0.875rem;">${t('back_to_login')}</a>
+                </div>
+            </form>
+        `;
+    } else if (loginMode === 'reset') {
+        formHTML = `
+            <div style="text-align: center; margin-bottom: 2rem;">
+                <div class="login-logo">MUQAM</div>
+                <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('set_new_password')}</h2>
+            </div>
+            <form autocomplete="off" onsubmit="handleResetPasswordSubmit(event)">
+                <div class="form-group" style="margin-bottom: 1.5rem; position: relative;">
+                    <label class="form-label">${t('new_password_label')}</label>
+                    <input type="password" autocomplete="new-password" id="new-password" class="form-control" placeholder="••••••••" required style="padding-right: 40px;">
+                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-password')" style="color: rgba(255, 255, 255, 0.7);">
+                        <i data-lucide="eye" id="new-password-eye-icon" style="width: 20px; height: 20px;"></i>
+                    </button>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 0.875rem; font-size: 1rem;">${t('set_new_password')}</button>
+            </form>
+        `;
+    } else {
+        formHTML = `
+            <div style="text-align: center; margin-bottom: 2rem;">
+                <div class="login-logo">MUQAM</div>
+                <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
+                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>
+            </div>
+            <form autocomplete="off" onsubmit="handleLoginSubmit(event)">
+                <div class="form-group">
+                    <label class="form-label">${t('email_label')}</label>
+                    <input type="email" autocomplete="off" id="email" class="form-control" placeholder="name@company.com" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0.5rem; position: relative;">
+                    <label class="form-label">${t('password_label')}</label>
+                    <input type="password" autocomplete="new-password" id="password" class="form-control" placeholder="••••••••" required style="padding-right: 40px;">
+                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('password')" style="color: rgba(255, 255, 255, 0.7);">
+                        <i data-lucide="eye" id="password-eye-icon" style="width: 20px; height: 20px;"></i>
+                    </button>
+                </div>
+                <div style="text-align: right; margin-bottom: 1.5rem;">
+                    <a href="#" onclick="setLoginMode('forgot')" style="color: var(--color-primary); font-size: 0.85rem; text-decoration: none;">${t('forgot_password')}</a>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 0.875rem; font-size: 1rem;">${t('sign_in')}</button>
+            </form>
+        `;
+    }
+
     return `
         <div style="display: flex; height: 100vh; align-items: center; justify-content: center; width: 100vw; position: fixed; top: 0; left: 0; background: url('images/login_bg.png') center/cover no-repeat; z-index: 9999;">
             <div class="card" style="width: 100%; max-width: 400px; padding: 2.5rem 2rem; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 30px 60px rgba(0,0,0,0.3); color: white;">
-                <div style="text-align: center; margin-bottom: 2rem;">
-                    <div class="login-logo">MUQAM</div>
-                    <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
-                    <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>
-                </div>
-                <form autocomplete="off" onsubmit="handleLoginSubmit(event)">
-                    <div class="form-group">
-                        <label class="form-label">${t('email_label')}</label>
-                        <input type="email" autocomplete="off" id="email" class="form-control" placeholder="name@company.com" required>
-                    </div>
-                    <div class="form-group" style="margin-bottom: 1.5rem; position: relative;">
-                        <label class="form-label">${t('password_label')}</label>
-                        <input type="password" autocomplete="new-password" id="password" class="form-control" placeholder="••••••••" required style="padding-right: 40px;">
-                        <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('password')" style="color: rgba(255, 255, 255, 0.7);">
-                            <i data-lucide="eye" id="password-eye-icon" style="width: 20px; height: 20px;"></i>
-                        </button>
-                    </div>
-                    <button type="submit" class="btn-primary" style="width: 100%; padding: 0.875rem; font-size: 1rem;">${t('sign_in')}</button>
-                </form>
+                ${formHTML}
             </div>
             
             <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 10000;">
