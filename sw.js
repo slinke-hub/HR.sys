@@ -1,4 +1,4 @@
-const CACHE_NAME = 'muqam-hr-v1';
+const CACHE_NAME = 'muqam-hr-v26';
 const ASSETS = [
   '/',
   '/index.html',

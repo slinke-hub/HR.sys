@@ -18,8 +18,9 @@
   --sidebar-bg: rgba(255, 255, 255, 0.85);
   --sidebar-text: #1A1A1A;
   --sidebar-text-muted: #6B7280;
-  --sidebar-item-hover: rgba(11, 25, 44, 0.1);
-  --sidebar-item-active: rgba(11, 25, 44, 0.15);
+  --sidebar-item-hover: rgba(11, 25, 44, 0.05);
+  --sidebar-item-active: #000000;
+  --sidebar-text-active: #ffffff;
   --sidebar-border: rgba(0, 0, 0, 0.1);
 
   /* Typography */
@@ -40,6 +41,7 @@
   /* Layout */
   --sidebar-width: 260px;
   --topbar-height: 72px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   
   /* Radii */
   --radius-sm: 6px;
@@ -75,8 +77,9 @@
   --sidebar-bg: rgba(11, 25, 44, 0.75);
   --sidebar-text: #F3F4F6;
   --sidebar-text-muted: #9CA3AF;
-  --sidebar-item-hover: rgba(255,255,255,0.08);
-  --sidebar-item-active: rgba(255,255,255,0.15);
+  --sidebar-item-hover: rgba(255,255,255,0.05);
+  --sidebar-item-active: #ffffff;
+  --sidebar-text-active: #000000;
   --sidebar-border: rgba(255, 255, 255, 0.15);
 
   --shadow-sm: 0 1px 2px var(--color-shadow);

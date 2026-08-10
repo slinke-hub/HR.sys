@@ -412,6 +412,12 @@ const db = {
         if (!supabaseClient) return { data: { session: null } };
         return await supabaseClient.auth.getSession();
     },
+
+    onAuthStateChange(callback) {
+        if (!supabaseClient) return;
+        return supabaseClient.auth.onAuthStateChange(callback);
+    },
+
     async updateUserPassword(newPassword) {
         try {
             const { data, error } = await supabaseClient.auth.updateUser({ password: newPassword });
@@ -461,7 +467,7 @@ const db = {
     async fetchTasks(userId = null) {
         if (!supabaseClient) return [];
         try {
-            let query = supabaseClient.from('tasks').select('*, assignee:assignee_id(full_name), creator:created_by(full_name)').order('created_at', { ascending: false });
+            let query = supabaseClient.from('tasks').select('*').order('created_at', { ascending: false });
             if (userId) {
                 query = query.or(`assignee_id.eq.${userId},created_by.eq.${userId}`);
             }
@@ -483,7 +489,8 @@ const db = {
                     description, 
                     assignee_id: assigneeId, 
                     due_date: dueDate,
-                    created_by: createdBy
+                    created_by: createdBy,
+                    status: 'TODO'
                 }]);
             if (error) throw error;
             return { success: true };
@@ -669,8 +676,9 @@ const db = {
                 .from('contracts')
                 .select('*')
                 .eq('employee_id', employeeId)
-                .single();
-            if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "No rows found"
+                .limit(1)
+                .maybeSingle();
+            if (error) throw error;
             return data || null;
         } catch (error) {
             console.error("fetchContractByEmployeeId Error:", error);
@@ -721,12 +729,12 @@ const db = {
             return [];
         }
     },
-    async sendMessage(receiverId, content) {
+    async sendMessage(senderId, receiverId, content) {
         if (!supabaseClient) return { success: false };
         try {
             const { error } = await supabaseClient
                 .from('messages')
-                .insert([{ receiver_id: receiverId, content }]);
+                .insert([{ sender_id: senderId, receiver_id: receiverId, content }]);
             if (error) throw error;
             return { success: true };
         } catch (error) {
@@ -754,8 +762,9 @@ const db = {
                 .select('*')
                 .eq('employee_id', employeeId)
                 .eq('date', today)
-                .single();
-            if (error && error.code !== 'PGRST116') throw error;
+                .limit(1)
+                .maybeSingle();
+            if (error) throw error;
             return data || null;
         } catch (error) {
             console.error("fetchTodayAttendance Error:", error);
@@ -782,10 +791,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('attendance')
-                .select(`
-                    *,
-                    profiles:employee_id(full_name, emp_index)
-                `)
+                .select('*')
                 .order('date', { ascending: false });
             if (error) throw error;
             return data || [];
@@ -837,10 +843,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('announcements')
-                .select(`
-                    *,
-                    profiles:admin_id(full_name)
-                `)
+                .select('*')
                 .order('created_at', { ascending: false });
             if (error) throw error;
             return data || [];

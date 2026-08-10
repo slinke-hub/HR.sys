@@ -4,6 +4,20 @@ let currentTheme = 'dark';
 let currentView = 'login';
 let loginMode = 'login';
 let currentUser = null;
+let viewHistory = [];
+
+window.goBack = function() {
+    if (viewHistory.length > 1) {
+        viewHistory.pop(); // remove current
+        const prevView = viewHistory[viewHistory.length - 1];
+        currentView = prevView;
+        renderView(prevView, true);
+    } else {
+        const root = currentUserRole === 'ADMIN' ? 'admin' : 'dashboard';
+        currentView = root;
+        renderView(root, true);
+    }
+};
 let currentUserRole = null;
 let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
@@ -78,6 +92,7 @@ function showInstallBanner() {
         if (installBtn) {
             installBtn.addEventListener('click', async () => {
                 banner.classList.remove('show');
+                setTimeout(() => banner.remove(), 400); // Wait for transition then remove
                 if (deferredPrompt) {
                     deferredPrompt.prompt();
                     const { outcome } = await deferredPrompt.userChoice;
@@ -90,10 +105,14 @@ function showInstallBanner() {
             });
         }
 
-        document.getElementById('pwaCloseBtn').addEventListener('click', () => {
-            banner.classList.remove('show');
-            localStorage.setItem('pwaPromptDismissed', 'true');
-        });
+        const closeBtn = document.getElementById('pwaCloseBtn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                banner.classList.remove('show');
+                setTimeout(() => banner.remove(), 400);
+                localStorage.setItem('pwaPromptDismissed', 'true');
+            });
+        }
 
         // Slight delay to animate in
         setTimeout(() => {
@@ -132,6 +151,8 @@ window.toggleTheme = function () {
     currentTheme = currentTheme === 'light' ? 'dark' : 'light';
     htmlElement.setAttribute('data-theme', currentTheme);
     lucide.createIcons();
+    const dropdown = document.getElementById('profileDropdown');
+    if (dropdown) dropdown.style.display = 'none';
 }
 
 // --- LANGUAGE MANAGEMENT ---
@@ -147,6 +168,8 @@ window.toggleLanguage = function () {
 
     updateTranslations();
     renderView(currentView); // Re-render view for updated strings inside
+    const dropdown = document.getElementById('profileDropdown');
+    if (dropdown) dropdown.style.display = 'none';
 }
 
 function updateTranslations() {
@@ -489,7 +512,9 @@ function renderLogin() {
     if (loginMode === 'forgot') {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div class="login-logo">MUQAM</div>
+                <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
+                    <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo" style="max-height: 60px;">
+                </div>
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('reset_password')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('reset_email_instruction')}</p>
             </div>
@@ -507,7 +532,9 @@ function renderLogin() {
     } else if (loginMode === 'reset') {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div class="login-logo">MUQAM</div>
+                <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
+                    <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo" style="max-height: 60px;">
+                </div>
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('set_new_password')}</h2>
             </div>
             <form autocomplete="off" onsubmit="handleResetPasswordSubmit(event)">
@@ -524,7 +551,9 @@ function renderLogin() {
     } else {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div class="login-logo">MUQAM</div>
+                <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
+                    <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo" style="max-height: 60px;">
+                </div>
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>
             </div>
@@ -590,7 +619,7 @@ async function renderDashboard() {
     // News Hub
     let newsHTML = '<p>Loading news...</p>';
     try {
-        const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://www.arabnews.com/cat/1/rss.xml');
+        const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://feeds.bbci.co.uk/news/world/rss.xml');
         const newsData = await res.json();
         if (newsData.status === 'ok') {
             newsHTML = newsData.items.slice(0, 5).map(item => `
@@ -623,7 +652,7 @@ async function renderDashboard() {
     let adminWidgets = '';
     if (currentUserRole === 'ADMIN') {
         try {
-            const { data: contracts } = await supabaseClient.from('contracts').select('*, profiles:employee_id(full_name)');
+            const { data: contracts } = await supabaseClient.from('contracts').select('*');
             const expiringContracts = (contracts || []).filter(c => c.end_date && (new Date(c.end_date) - new Date()) / (1000 * 60 * 60 * 24) < 30);
             if (expiringContracts.length > 0) {
                 expirationAlerts += `
@@ -827,14 +856,19 @@ async function renderTime() {
 async function renderLeave() {
     const isManagerOrAdmin = currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR');
     const profile = await db.getUserProfile(currentUser?.id);
-    const requests = await db.fetchLeaveRequests(isManagerOrAdmin ? null : currentUser?.id);
+    let requests = await db.fetchLeaveRequests(isManagerOrAdmin ? null : currentUser?.id);
 
     let profilesMap = {};
     if (isManagerOrAdmin) {
         const allProfiles = await db.fetchAllProfiles();
+        let teamIds = [currentUser.id];
         allProfiles.forEach(p => {
             profilesMap[p.id] = p.full_name || 'Unknown User';
+            if (p.manager_id === currentUser.id) teamIds.push(p.id);
         });
+        if (currentUserRole !== 'ADMIN') {
+            requests = requests.filter(r => teamIds.includes(r.employee_id));
+        }
     }
 
     const approvedLeaves = requests.filter(r => r.status.startsWith('APPROVED'));
@@ -1455,7 +1489,7 @@ async function renderUsers() {
                                     <td>
                                         <select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleAssignManager('${u.id}', this.value)">
                                             <option value="">${t('users_no_mgr')}</option>
-                                            ${users.filter(m => m.role === 'MANAGER' || m.role === 'ADMIN').map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${m.job_title || 'Mgr'}</option>`).join('')}
+                                            ${users.filter(m => m.role === 'MANAGER' || m.role === 'ADMIN').map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${m.full_name || 'Mgr'}</option>`).join('')}
                                         </select>
                                                      <td>
                                         <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="navigateToContract('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')">
@@ -1546,8 +1580,17 @@ window.handleEmployeeDocUpload = async function (e) {
 }
 
 async function renderDocuments() {
-    const docs = await db.fetchDocuments(currentUserRole === 'ADMIN' ? null : currentUser.id);
-    const uploadedDocs = await db.fetchEmployeeDocuments(currentUserRole === 'ADMIN' ? null : currentUser.id);
+    const isManagerOrAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    let docs = await db.fetchDocuments(isManagerOrAdmin ? null : currentUser.id);
+    let uploadedDocs = await db.fetchEmployeeDocuments(isManagerOrAdmin ? null : currentUser.id);
+
+    if (isManagerOrAdmin && currentUserRole !== 'ADMIN') {
+        const users = await db.fetchUsers();
+        const teamIds = users.filter(u => u.manager_id === currentUser.id).map(u => u.id);
+        teamIds.push(currentUser.id);
+        docs = docs.filter(d => teamIds.includes(d.employee_id));
+        uploadedDocs = uploadedDocs.filter(d => teamIds.includes(d.employee_id));
+    }
 
     return `
         <div class="page-header fade-in-up">
@@ -1746,7 +1789,7 @@ window.sendChatMessage = async function () {
     if (!content) return;
 
     input.value = '';
-    const { success, error } = await db.sendMessage(currentChatUser.id, content);
+    const { success, error } = await db.sendMessage(currentUser.id, currentChatUser.id, content);
     if (success) {
         await window.refreshMessages();
     } else {
@@ -1880,20 +1923,31 @@ window.handleUpdateProfileDetails = async function (e) {
 
 async function renderTasks() {
     let tasks = [];
+    let allUsers = await db.fetchUsers();
+    
     if (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
-        tasks = await db.fetchTasks(); // The manager fetchTasks will rely on RLS policies to restrict, or we filter here
+        tasks = await db.fetchTasks(); 
     } else {
         tasks = await db.fetchTasks(currentUser.id);
     }
 
-    // In db.js, fetchTasks uses 'or(assignee_id.eq,created_by.eq)' if userId is passed. If null, it gets all visible.
-    // Let's filter to just the manager's created tasks + assigned to them just to be safe if RLS doesn't restrict.
     if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
-        let users = await db.fetchUsers();
-        let teamIds = users.filter(u => u.manager_id === currentUser.id).map(u => u.id);
+        let teamIds = allUsers.filter(u => u.manager_id === currentUser.id).map(u => u.id);
         teamIds.push(currentUser.id);
         tasks = tasks.filter(t => teamIds.includes(t.assignee_id) || t.created_by === currentUser.id);
     }
+
+    // Normalize status and add relationships manually
+    tasks = tasks.map(t => {
+        const assignee = allUsers.find(u => u.id === t.assignee_id);
+        const creator = allUsers.find(u => u.id === t.created_by);
+        return {
+            ...t, 
+            status: t.status || 'TODO',
+            assignee: assignee ? { full_name: assignee.full_name } : null,
+            creator: creator ? { full_name: creator.full_name } : null
+        };
+    });
 
     const todo = tasks.filter(t => t.status === 'TODO');
     const inProgress = tasks.filter(t => t.status === 'IN_PROGRESS');
@@ -1901,52 +1955,54 @@ async function renderTasks() {
 
     let adminForm = '';
     if (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
-        let users = await db.fetchUsers();
+        let users = allUsers;
         if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
             users = users.filter(u => u.manager_id === currentUser.id || u.id === currentUser.id);
         }
         const userOptions = users.map(u => {
-            const label = u.job_title || u.id.substring(0, 8);
+            const label = u.full_name || u.id.substring(0, 8);
             return `<option value="${u.id}">${label} (${u.role})</option>`;
         }).join('');
 
         adminForm = `
             <div class="card col-span-12" style="margin-bottom: 1rem;">
                 <div class="card-title">${t('task_assign_new')}</div>
-                <form autocomplete="off" onsubmit="handleCreateTask(event)" style="display: flex; gap: 1rem; align-items: flex-end;">
-                    <div class="form-group" style="flex: 2;">
+                <form autocomplete="off" onsubmit="handleCreateTask(event)" class="task-assign-form">
+                    <div class="form-group">
                         <label class="form-label">${t('task_title')}</label>
                         <input type="text" autocomplete="off" id="taskTitle" class="form-control" required>
                     </div>
-                    <div class="form-group" style="flex: 2;">
+                    <div class="form-group">
                         <label class="form-label">${t('task_assign_to')}</label>
                         <select id="taskAssignee" class="form-control" required>
                             <option value="">${t('task_sel_emp')}</option>
                             ${userOptions}
                         </select>
                     </div>
-                    <div class="form-group" style="flex: 1;">
+                    <div class="form-group">
                         <label class="form-label">${t('task_due')}</label>
                         <input type="date" id="taskDue" class="form-control" required>
                     </div>
-                    <button type="submit" class="btn-primary" style="margin-bottom: 1rem;">${t('task_assign_btn')}</button>
+                    <div class="form-group task-assign-btn-group">
+                        <button type="submit" class="btn-primary">${t('task_assign_btn')}</button>
+                    </div>
                 </form>
             </div>
         `;
     }
 
-    function renderTaskCard(t) {
+    function renderTaskCard(task) {
         return `
-            <div class="card" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--color-primary); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-                <h4 style="margin-bottom: 0.5rem; font-size: 1rem;">${t.title}</h4>
+            <div class="card" id="task-card-${task.id}" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--color-primary); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s;">
+                <h4 style="margin-bottom: 0.5rem; font-size: 1rem;">${task.title}</h4>
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 1rem;">
-                    <i data-lucide="calendar" style="width: 12px; height: 12px; display: inline-block;"></i> ${t('task_due_lbl')} ${t.due_date || t('task_no_date')}<br/>
-                    <i data-lucide="user" style="width: 12px; height: 12px; display: inline-block;"></i> ${t('task_assigned_lbl')} ${t.assignee?.full_name || t('task_unknown')}
+                    <i data-lucide="calendar" style="width: 12px; height: 12px; display: inline-block;"></i> ${t('task_due_lbl')} ${task.due_date || t('task_no_date')}<br/>
+                    <i data-lucide="user" style="width: 12px; height: 12px; display: inline-block;"></i> ${t('task_assigned_lbl')} ${task.assignee?.full_name || t('task_unknown')}
                 </div>
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                    ${t.status !== 'TODO' ? `<button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleUpdateTaskStatus('${t.id}', 'TODO')">${t('task_todo')}</button>` : ''}
-                    ${t.status !== 'IN_PROGRESS' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-warning);" onclick="handleUpdateTaskStatus('${t.id}', 'IN_PROGRESS')">${t('task_working')}</button>` : ''}
-                    ${t.status !== 'DONE' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-success);" onclick="handleUpdateTaskStatus('${t.id}', 'DONE')">${t('task_done')}</button>` : ''}
+                    ${task.status !== 'TODO' ? `<button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleUpdateTaskStatus('${task.id}', 'TODO')">${t('task_todo')}</button>` : ''}
+                    ${task.status !== 'IN_PROGRESS' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-warning);" onclick="handleUpdateTaskStatus('${task.id}', 'IN_PROGRESS')">${t('task_working')}</button>` : ''}
+                    ${task.status !== 'DONE' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-success);" onclick="handleUpdateTaskStatus('${task.id}', 'DONE')">${t('task_done')}</button>` : ''}
                 </div>
             </div>
         `;
@@ -2002,10 +2058,31 @@ window.handleCreateTask = async function (e) {
 }
 
 window.handleUpdateTaskStatus = async function (taskId, status) {
+    const card = document.getElementById(`task-card-${taskId}`);
+    if (card) card.style.opacity = '0.5';
+
     const { success } = await db.updateTaskStatus(taskId, status);
     if (success) {
-        showToast(`Task moved to ${status}`, "success");
-        renderView('tasks');
+        showToast(`Task moved to ${t('task_' + status.toLowerCase()) || status}`, "success");
+        
+        // Fetch fresh tasks HTML
+        const newHtml = await renderTasks();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(newHtml, 'text/html');
+        
+        const currentGrid = document.querySelector('.dashboard-grid');
+        const newGrid = doc.querySelector('.dashboard-grid');
+        
+        if (currentGrid && newGrid) {
+            // Swap innerHTML to update without triggering full page animations/reload
+            currentGrid.innerHTML = newGrid.innerHTML;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        } else {
+            renderView('tasks');
+        }
+    } else {
+        if (card) card.style.opacity = '1';
+        showToast("Failed to update task", "danger");
     }
 }
 
@@ -2167,8 +2244,17 @@ async function renderEmployeesDirectory() {
     // Only Admins or the Manager themselves can see team members' contracts
     // For now, let's allow ADMIN to see all, Manager to see their team
     let visibleUsers = users;
-    if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
+    if (currentUserRole === 'ADMIN') {
+        visibleUsers = users;
+    } else if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
         visibleUsers = users.filter(u => u.manager_id === currentUser.id || u.id === currentUser.id);
+    } else {
+        // Employees see themselves, their team members, and their manager
+        visibleUsers = users.filter(u => 
+            u.id === currentUser.id || 
+            (currentUser.manager_id && u.manager_id === currentUser.manager_id) || 
+            u.id === currentUser.manager_id
+        );
     }
 
     return `
@@ -2220,10 +2306,25 @@ async function renderEmployeesDirectory() {
     `;
 }
 
-async function renderView(viewId) {
+async function renderView(viewId, isBack = false) {
     if (!currentUser && viewId !== 'login') {
         viewId = 'login';
         currentView = 'login';
+    }
+
+    if (viewId !== 'login') {
+        localStorage.setItem('muqam_hr_last_view', viewId);
+    }
+
+    if (!isBack && viewId !== 'login') {
+        if (viewHistory[viewHistory.length - 1] !== viewId) {
+            viewHistory.push(viewId);
+        }
+    }
+
+    // Reset history if we hit root views
+    if (viewId === 'dashboard' || viewId === 'admin') {
+        viewHistory = [viewId];
     }
 
     let content = '';
@@ -2310,6 +2411,17 @@ async function renderView(viewId) {
     }
 
     viewContainer.innerHTML = content;
+    
+    // Toggle global back button
+    const backBtn = document.getElementById('globalBackButton');
+    if (backBtn) {
+        if (viewHistory.length > 1 && viewId !== 'login') {
+            backBtn.style.display = 'block';
+        } else {
+            backBtn.style.display = 'none';
+        }
+    }
+
     lucide.createIcons();
 
     if (viewId === 'analytics') {
@@ -2472,6 +2584,20 @@ async function initApp() {
     // Check for existing session
     const { data: { session } } = await db.getSession();
 
+    // Listen for session expiration or logout
+    db.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT' || !session) {
+            currentUser = null;
+            currentUserRole = null;
+            document.querySelector('.sidebar').style.display = 'none';
+            document.querySelector('.topbar').style.display = 'none';
+            if (currentView !== 'login') {
+                currentView = 'login';
+                renderView('login');
+            }
+        }
+    });
+
     if (session && session.user) {
         currentUser = session.user;
         const profile = await db.getUserProfile(currentUser.id);
@@ -2493,7 +2619,8 @@ async function initApp() {
         if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
         if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
 
-        currentView = currentUserRole === 'ADMIN' ? 'admin' : 'dashboard';
+        const lastView = localStorage.getItem('muqam_hr_last_view');
+        currentView = lastView || (currentUserRole === 'ADMIN' ? 'admin' : 'dashboard');
 
         pollNotifications();
         if (notificationsInterval) clearInterval(notificationsInterval);
@@ -2540,9 +2667,17 @@ async function renderRequests() {
     let profilesMap = {};
     if (isManagerOrAdmin) {
         const allProfiles = await db.fetchAllProfiles();
+        let teamIds = [currentUser.id];
         allProfiles.forEach(p => {
             profilesMap[p.id] = p.full_name || 'Unknown User';
+            if (p.manager_id === currentUser.id) teamIds.push(p.id);
         });
+        
+        if (currentUserRole !== 'ADMIN') {
+            leaves = leaves.filter(r => teamIds.includes(r.employee_id));
+            docs = docs.filter(r => teamIds.includes(r.employee_id));
+            expenses = expenses.filter(r => teamIds.includes(r.employee_id));
+        }
     }
 
     // Normalize requests

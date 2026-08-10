@@ -11,6 +11,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" type="image/png" href="/images/logo.png">
     <link rel="apple-touch-icon" href="/images/logo.png">
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,12 +30,7 @@
     <div class="app-container">
         <!-- Sidebar -->
         <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo">
-                    <i data-lucide="shield"></i>
-                    <span>MUQAM HR</span>
-                </div>
-            </div>
+
             <nav class="sidebar-nav">
                 <a href="#" class="nav-item" data-view="admin">
                     <i data-lucide="shield-check"></i>
@@ -49,7 +45,7 @@
                     <span data-i18n="nav_time">Time & Attendance</span>
                 </a>
                 <a href="#" class="nav-item" onclick="renderView('community')">
-                    <i data-lucide="users"></i>
+                    <i data-lucide="globe"></i>
                     <span data-i18n="nav_community">Community</span>
                 </a>
                 <a href="#" class="nav-item" onclick="renderView('leave')">
@@ -73,7 +69,7 @@
                     <span data-i18n="nav_payroll">Payroll</span>
                 </a>
                 <a href="#" class="nav-item" data-view="tasks">
-                    <i data-lucide="check-square"></i>
+                    <i data-lucide="list-todo"></i>
                     <span data-i18n="nav_tasks">Tasks</span>
                 </a>
                 <a href="#" class="nav-item" data-view="performance">
@@ -86,17 +82,14 @@
                 </a>
 
                 <a href="#" class="nav-item" data-view="users">
-                    <i data-lucide="users"></i>
+                    <i data-lucide="user-cog"></i>
                     <span data-i18n="nav_users">User Management</span>
                 </a>
                 <a href="#" class="nav-item" data-view="employees">
                     <i data-lucide="briefcase"></i>
                     <span>Employees & Contracts</span>
                 </a>
-                <a href="#" class="nav-item" data-view="profile">
-                    <i data-lucide="user"></i>
-                    <span data-i18n="nav_profile">My Profile</span>
-                </a>
+
             </nav>
         </aside>
 
@@ -104,20 +97,22 @@
         <main class="main-content">
             <!-- Top Bar -->
             <header class="topbar" style="position: relative; z-index: 9999;">
-                <div class="search-container">
-                    <i data-lucide="search" class="search-icon"></i>
-                    <input type="text" autocomplete="off" placeholder="Search (Cmd/Ctrl + K)" class="search-input" data-i18n-placeholder="search_placeholder">
+                <div class="header-logo" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <button id="globalBackButton" class="btn btn-icon" onclick="window.goBack()" style="display: none; background: transparent; border: none; cursor: pointer; color: var(--color-text); padding: 0.5rem; border-radius: 50%;">
+                        <i data-lucide="arrow-left" style="width: 20px; height: 20px;"></i>
+                    </button>
+                    <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo">
                 </div>
                 
                 <div class="topbar-actions">
+                    <div class="search-container">
+                        <i data-lucide="search" class="search-icon"></i>
+                        <input type="text" autocomplete="off" placeholder="Search (Cmd/Ctrl + K)" class="search-input" data-i18n-placeholder="search_placeholder">
+                    </div>
                     <div class="profile-dropdown-wrapper" style="position: relative;">
                         <div class="user-profile" onclick="window.toggleProfileDropdown()" style="cursor: pointer;">
                             <div style="position: relative;">
                                 <img src="" alt="Profile" class="avatar" id="topbarAvatar" style="object-fit: cover;">
-                                <div style="position: absolute; bottom: -2px; right: -2px; background: var(--color-surface); border-radius: 50%; padding: 2px;">
-                                    <i data-lucide="bell" style="width: 12px; height: 12px; color: var(--color-primary);"></i>
-                                    <span class="notification-badge" style="display: none; position: absolute; top: -5px; right: -5px; background: var(--color-danger); color: white; border-radius: 50%; width: 14px; height: 14px; font-size: 9px; align-items: center; justify-content: center; font-weight: bold;">0</span>
-                                </div>
                             </div>
                             <div class="user-info">
                                 <span class="user-name" id="topbarName">User</span>
@@ -127,14 +122,15 @@
                         </div>
                         
                         <div class="profile-dropdown-menu" id="profileDropdown" style="display: none;">
+                            <a href="#" class="dropdown-item" onclick="renderView('profile'); window.toggleProfileDropdown(); return false;" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
+                                <i data-lucide="user" style="width: 18px; height: 18px;"></i>
+                                <span data-i18n="nav_profile">My Profile</span>
+                            </a>
                             <a href="#" class="dropdown-item" onclick="renderView('messages'); window.toggleProfileDropdown(); return false;" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
                                 <i data-lucide="message-square" style="width: 18px; height: 18px;"></i>
                                 <span data-i18n="nav_messages">Messages</span>
                             </a>
-                            <a href="#" class="dropdown-item" onclick="renderView('notifications'); window.toggleProfileDropdown(); return false;" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
-                                <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
-                                <span data-i18n="notif_title">Notifications</span>
-                            </a>
+
                             <a href="#" class="dropdown-item" onclick="window.toggleLanguage(); return false;" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
                                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                                     <i data-lucide="globe" style="width: 18px; height: 18px;"></i>
