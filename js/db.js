@@ -15,33 +15,6 @@ if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE
 
 // Global DB helper functions for the prototype
 const db = {
-    async clockIn(userId) {
-        if (!supabaseClient) return true;
-        try {
-            const { error } = await supabaseClient
-                .from('time_punches')
-                .insert([{ punch_type: 'IN', employee_id: userId }]);
-            if (error) throw error;
-            return true;
-        } catch (error) {
-            console.error("Error clocking in:", error.message);
-            return false;
-        }
-    },
-    
-    async clockOut(userId) {
-        if (!supabaseClient) return true;
-        try {
-            const { error } = await supabaseClient
-                .from('time_punches')
-                .insert([{ punch_type: 'OUT', employee_id: userId }]);
-            if (error) throw error;
-            return true;
-        } catch (error) {
-            console.error("Error clocking out:", error.message);
-            return false;
-        }
-    },
 
     async fetchTimePunches(userId = null) {
         if (!supabaseClient) return [];
@@ -138,18 +111,25 @@ const db = {
             return { role: 'EMPLOYEE', job_title: '', base_salary: 3000, annual_leave_allowance: 30, sick_leave_allowance: 10, manager_id: null };
         }
 
-        try {
-            const { data, error } = await supabaseClient
-                .from('profiles')
-                .select('role, job_title, manager_id, base_salary, annual_leave_allowance, sick_leave_allowance')
-                .eq('id', userId)
-                .single();
-            
-            if (error) throw error;
-            return data;
-        } catch (error) {
-            console.error("Error fetching profile:", error.message);
-            return { role: 'EMPLOYEE', job_title: '', base_salary: 3000, annual_leave_allowance: 30, sick_leave_allowance: 10, manager_id: null };
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('profiles')
+                    .select('role, job_title, manager_id, base_salary, annual_leave_allowance, sick_leave_allowance')
+                    .eq('id', userId)
+                    .single();
+                
+                if (error) throw error;
+                return data;
+            } catch (error) {
+                if (error.message && error.message.includes("JWT issued at future") && attempt < 3) {
+                    console.warn(`JWT time drift, retrying in 1s (attempt ${attempt})...`);
+                    await new Promise(r => setTimeout(r, 1000));
+                    continue;
+                }
+                console.error("Error fetching profile:", error.message);
+                return { role: 'EMPLOYEE', job_title: '', base_salary: 3000, annual_leave_allowance: 30, sick_leave_allowance: 10, manager_id: null };
+            }
         }
     },
 
@@ -893,6 +873,235 @@ const db = {
         } catch (error) {
             console.error("postCommunityMessage Error:", error);
             return { success: false, error };
+        }
+    },
+
+    // ==========================================
+    // Departments API
+    // ==========================================
+    async fetchDepartments() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('departments').select('*').order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchDepartments Error:", error);
+            return [];
+        }
+    },
+    async createDepartment(deptData, employeeIds = []) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.from('departments').insert([deptData]).select().single();
+            if (error) throw error;
+            
+            if (data && employeeIds && employeeIds.length > 0) {
+                const { error: profileError } = await supabaseClient.from('profiles').update({ department_id: data.id }).in('id', employeeIds);
+                if (profileError) console.error("Error setting department for employees:", profileError);
+            }
+            
+            return { success: true, data };
+        } catch (error) {
+            console.error("createDepartment Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateDepartment(id, deptData, employeeIds = null) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('departments').update(deptData).eq('id', id);
+            if (error) throw error;
+            
+            if (employeeIds !== null) {
+                // Clear existing assignments for this department
+                await supabaseClient.from('profiles').update({ department_id: null }).eq('department_id', id);
+                // Assign new employees
+                if (employeeIds.length > 0) {
+                    const { error: profileError } = await supabaseClient.from('profiles').update({ department_id: id }).in('id', employeeIds);
+                    if (profileError) console.error("Error setting department for employees:", profileError);
+                }
+            }
+            
+            return { success: true };
+        } catch (error) {
+            console.error("updateDepartment Error:", error);
+            return { success: false, error };
+        }
+    },
+    async deleteDepartment(id) {
+        if (!supabaseClient) return { success: false };
+        try {
+            // Unassign employees from this department first to avoid foreign key constraints
+            const { error: profileError } = await supabaseClient.from('profiles').update({ department_id: null }).eq('department_id', id);
+            if (profileError) console.error("Error unassigning employees from department:", profileError);
+
+            const { error } = await supabaseClient.from('departments').delete().eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("deleteDepartment Error:", error);
+            return { success: false, error };
+        }
+    },
+
+    // ==========================================
+    // CRM API
+    // ==========================================
+    async fetchClients() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('crm_clients').select('*').order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchClients Error:", error);
+            return [];
+        }
+    },
+    async createClient(clientData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_clients').insert([clientData]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("createClient Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateClient(id, clientData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_clients').update(clientData).eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateClient Error:", error);
+            return { success: false, error };
+        }
+    },
+    async deleteClient(id) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_clients').delete().eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("deleteClient Error:", error);
+            return { success: false, error };
+        }
+    },
+    async fetchDeals() {
+        if (!supabaseClient) return [];
+        try {
+            // Join with clients
+            const { data, error } = await supabaseClient.from('crm_deals')
+                .select('*, crm_clients(name)')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchDeals Error:", error);
+            return [];
+        }
+    },
+    async createDeal(dealData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_deals').insert([dealData]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("createDeal Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateDeal(id, dealData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_deals').update(dealData).eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateDeal Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateDealStage(dealId, newStage) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_deals').update({ stage: newStage }).eq('id', dealId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateDealStage Error:", error);
+            return { success: false, error };
+        }
+    },
+
+    // ==========================================
+    // Integrations / Webhooks API
+    // ==========================================
+    async fetchWebhooks() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('webhooks').select('*').order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchWebhooks Error:", error);
+            return [];
+        }
+    },
+    async createWebhook(webhookData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('webhooks').insert([webhookData]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("createWebhook Error:", error);
+            return { success: false, error };
+        }
+    },
+    async deleteWebhook(id) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('webhooks').delete().eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("deleteWebhook Error:", error);
+            return { success: false, error };
+        }
+    },
+    // Trigger webhooks helper function
+    async triggerWebhooks(eventType, payload) {
+        if (!supabaseClient) return;
+        try {
+            const webhooks = await this.fetchWebhooks();
+            const activeWebhooks = webhooks.filter(w => w.is_active && (w.event_type === eventType || w.event_type === 'all'));
+            
+            for (const webhook of activeWebhooks) {
+                try {
+                    // Send POST request to external API
+                    fetch(webhook.url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            event: eventType,
+                            timestamp: new Date().toISOString(),
+                            data: payload
+                        }),
+                        mode: 'no-cors' // Prevent CORS errors when blindly firing webhooks
+                    }).catch(err => console.error("Webhook trigger failed for", webhook.url, err));
+                } catch (e) {
+                    console.error("Failed to fire webhook", e);
+                }
+            }
+        } catch(error) {
+            console.error("Error triggering webhooks", error);
         }
     }
 };

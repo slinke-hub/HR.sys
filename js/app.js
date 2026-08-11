@@ -6,6 +6,19 @@ let loginMode = 'login';
 let currentUser = null;
 let viewHistory = [];
 
+// XSS Protection Utility
+function escapeHTML(str) {
+    if (!str) return '';
+    if (typeof str !== 'string') return str;
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+window.escapeHTML = escapeHTML;
+
 window.goBack = function() {
     if (viewHistory.length > 1) {
         viewHistory.pop(); // remove current
@@ -13,7 +26,7 @@ window.goBack = function() {
         currentView = prevView;
         renderView(prevView, true);
     } else {
-        const root = currentUserRole === 'ADMIN' ? 'admin' : 'dashboard';
+        const root = 'dashboard';
         currentView = root;
         renderView(root, true);
     }
@@ -268,27 +281,7 @@ function showToast(message, type = 'info') {
 }
 
 // Global Handlers
-window.handleClockIn = async function () {
-    if (!currentUser) return;
-    const success = await db.clockIn(currentUser.id);
-    if (success) {
-        showToast(t('toast_clock_in') + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'success');
-        renderView(currentView);
-    } else {
-        showToast("Error clocking in. Check DB connection.", "danger");
-    }
-}
 
-window.handleClockOut = async function () {
-    if (!currentUser) return;
-    const success = await db.clockOut(currentUser.id);
-    if (success) {
-        showToast("Clocked out successfully.", 'success');
-        renderView(currentView);
-    } else {
-        showToast("Error clocking out.", "danger");
-    }
-}
 
 // Community View
 async function renderCommunity() {
@@ -446,13 +439,7 @@ window.handleLoginSubmit = async function (e) {
     if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
 
     // Route based on role
-    if (currentUserRole === 'ADMIN') {
-        currentView = 'admin';
-    } else if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR')) {
-        currentView = 'dashboard';
-    } else {
-        currentView = 'dashboard';
-    }
+    currentView = 'dashboard';
     renderView(currentView);
 }
 
@@ -606,8 +593,8 @@ async function renderDashboard() {
                 <i data-lucide="megaphone"></i>
             </div>
             <div class="announcement-content">
-                <h4>${a.title}</h4>
-                <p>${a.content}</p>
+                <h4>${escapeHTML(a.title)}</h4>
+                <p>${escapeHTML(a.content)}</p>
                 <small style="color:var(--color-text-secondary);">${new Date(a.created_at).toLocaleDateString()}</small>
             </div>
         </div>
@@ -764,34 +751,46 @@ window.handlePostAnnouncement = async (e) => {
 };
 
 let currentAttendanceId = null;
-window.handleClockIn = () => {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const loc = position.coords.latitude + ',' + position.coords.longitude;
+window.handleClockIn = async () => {
+    const fallbackClockIn = async (loc) => {
+        try {
             await db.clockIn(currentUser.id, loc);
             showToast("Clocked in successfully!", "success");
             renderView('dashboard');
+        } catch (err) {
+            console.error(err);
+            showToast("Error clocking in.", "danger");
+        }
+    };
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((position) => {
+            const loc = position.coords.latitude + ',' + position.coords.longitude;
+            fallbackClockIn(loc);
         }, (error) => {
-            showToast("Geolocation is required to clock in.", "danger");
+            console.warn("Geolocation failed or denied, using fallback location.");
+            fallbackClockIn("Location Unavailable");
         });
     } else {
-        showToast("Geolocation is not supported by this browser.", "danger");
+        fallbackClockIn("Location Unavailable");
     }
 };
 
 window.handleClockOutPrompt = (attendanceId) => {
     currentAttendanceId = attendanceId;
-    document.getElementById('clockOutModal').style.display = 'block';
+    document.getElementById('clockOutModal').classList.add('show');
 };
-window.closeClockOutModal = () => document.getElementById('clockOutModal').style.display = 'none';
+window.closeClockOutModal = () => document.getElementById('clockOutModal').classList.remove('show');
 
-window.executeClockOut = (type) => {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const loc = position.coords.latitude + ',' + position.coords.longitude;
-
-            // Calculate Overtime (stub: simple 8 hours check)
+window.executeClockOut = async (type) => {
+    const fallbackClockOut = async (loc) => {
+        try {
             const attendance = await db.fetchTodayAttendance(currentUser.id);
+            if (!attendance) {
+                showToast("No active clock-in found for today.", "danger");
+                closeClockOutModal();
+                return;
+            }
             const inTime = new Date(attendance.clock_in_time);
             const diffHours = (new Date() - inTime) / (1000 * 60 * 60);
             const overtime = Math.max(0, diffHours - 8).toFixed(2);
@@ -800,9 +799,22 @@ window.executeClockOut = (type) => {
             closeClockOutModal();
             showToast("Clocked out successfully!", "success");
             renderView('dashboard');
+        } catch (err) {
+            console.error(err);
+            showToast("Error clocking out.", "danger");
+        }
+    };
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((position) => {
+            const loc = position.coords.latitude + ',' + position.coords.longitude;
+            fallbackClockOut(loc);
         }, (error) => {
-            showToast("Geolocation is required to clock out.", "danger");
+            console.warn("Geolocation failed or denied, using fallback location.");
+            fallbackClockOut("Location Unavailable");
         });
+    } else {
+        fallbackClockOut("Location Unavailable");
     }
 };
 
@@ -1771,7 +1783,7 @@ window.refreshMessages = async function (isPolling = false) {
         const isMine = m.sender_id === currentUser.id;
         return `
             <div style="align-self: ${isMine ? 'flex-end' : 'flex-start'}; max-width: 70%; background: ${isMine ? 'var(--color-primary)' : 'var(--color-surface)'}; color: ${isMine ? 'white' : 'var(--color-text)'}; padding: 0.75rem 1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border: ${isMine ? 'none' : '1px solid var(--color-border)'};">
-                <div style="margin-bottom: 0.25rem;">${m.content}</div>
+                <div style="margin-bottom: 0.25rem;">${escapeHTML(m.content)}</div>
                 <div style="font-size: 0.7rem; opacity: 0.7; text-align: right;">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
             </div>
         `;
@@ -1993,16 +2005,16 @@ async function renderTasks() {
 
     function renderTaskCard(task) {
         return `
-            <div class="card" id="task-card-${task.id}" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--color-primary); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s;">
-                <h4 style="margin-bottom: 0.5rem; font-size: 1rem;">${task.title}</h4>
+            <div class="card task-item-card" id="task-card-${task.id}" data-status="${task.status}" draggable="true" ondragstart="handleTaskDragStart(event, '${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--color-primary); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: grab;">
+                <h4 style="margin-bottom: 0.5rem; font-size: 1rem;">${escapeHTML(task.title)}</h4>
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 1rem;">
                     <i data-lucide="calendar" style="width: 12px; height: 12px; display: inline-block;"></i> ${t('task_due_lbl')} ${task.due_date || t('task_no_date')}<br/>
                     <i data-lucide="user" style="width: 12px; height: 12px; display: inline-block;"></i> ${t('task_assigned_lbl')} ${task.assignee?.full_name || t('task_unknown')}
                 </div>
-                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                    ${task.status !== 'TODO' ? `<button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleUpdateTaskStatus('${task.id}', 'TODO')">${t('task_todo')}</button>` : ''}
-                    ${task.status !== 'IN_PROGRESS' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-warning);" onclick="handleUpdateTaskStatus('${task.id}', 'IN_PROGRESS')">${t('task_working')}</button>` : ''}
-                    ${task.status !== 'DONE' ? `<button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-success);" onclick="handleUpdateTaskStatus('${task.id}', 'DONE')">${t('task_done')}</button>` : ''}
+                <div class="task-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    ${task.status !== 'TODO' ? `<button class="btn-secondary btn-todo" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleUpdateTaskStatus('${task.id}', 'TODO')">${t('task_todo')}</button>` : ''}
+                    ${task.status !== 'IN_PROGRESS' ? `<button class="btn-primary btn-in-progress" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-warning);" onclick="handleUpdateTaskStatus('${task.id}', 'IN_PROGRESS')">${t('task_working')}</button>` : ''}
+                    ${task.status !== 'DONE' ? `<button class="btn-primary btn-done" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-success);" onclick="handleUpdateTaskStatus('${task.id}', 'DONE')">${t('task_done')}</button>` : ''}
                 </div>
             </div>
         `;
@@ -2019,23 +2031,26 @@ async function renderTasks() {
             ${adminForm}
             <div class="col-span-4">
                 <div class="card" style="background: rgba(0,0,0,0.02);">
-                    <div class="card-title">${t('task_todo')} <span class="badge" style="float: right;">${todo.length}</span></div>
-                    ${todo.map(renderTaskCard).join('')}
-                    ${todo.length === 0 ? `<p style="text-align: center; color: var(--color-text-secondary); font-size: 0.875rem;">${t('task_no_tasks')}</p>` : ''}
+                    <div class="card-title">${t('task_todo')} <span id="badge-TODO" class="badge" style="float: right;">${todo.length}</span></div>
+                    <div id="col-TODO" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'TODO')" style="min-height: 100px; padding-bottom: 2rem;">
+                        ${todo.map(renderTaskCard).join('')}
+                    </div>
                 </div>
             </div>
             <div class="col-span-4">
                 <div class="card" style="background: rgba(245, 158, 11, 0.05);">
-                    <div class="card-title">${t('task_working')} <span class="badge" style="float: right; background: var(--color-warning); color: #fff;">${inProgress.length}</span></div>
-                    ${inProgress.map(renderTaskCard).join('')}
-                    ${inProgress.length === 0 ? `<p style="text-align: center; color: var(--color-text-secondary); font-size: 0.875rem;">${t('task_no_tasks')}</p>` : ''}
+                    <div class="card-title">${t('task_working')} <span id="badge-IN_PROGRESS" class="badge" style="float: right; background: var(--color-warning); color: #fff;">${inProgress.length}</span></div>
+                    <div id="col-IN_PROGRESS" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'IN_PROGRESS')" style="min-height: 100px; padding-bottom: 2rem;">
+                        ${inProgress.map(renderTaskCard).join('')}
+                    </div>
                 </div>
             </div>
             <div class="col-span-4">
                 <div class="card" style="background: rgba(16, 185, 129, 0.05);">
-                    <div class="card-title">${t('task_done')} <span class="badge" style="float: right; background: var(--color-success); color: #fff;">${done.length}</span></div>
-                    ${done.map(renderTaskCard).join('')}
-                    ${done.length === 0 ? `<p style="text-align: center; color: var(--color-text-secondary); font-size: 0.875rem;">${t('task_no_tasks')}</p>` : ''}
+                    <div class="card-title">${t('task_done')} <span id="badge-DONE" class="badge" style="float: right; background: var(--color-success); color: #fff;">${done.length}</span></div>
+                    <div id="col-DONE" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'DONE')" style="min-height: 100px; padding-bottom: 2rem;">
+                        ${done.map(renderTaskCard).join('')}
+                    </div>
                 </div>
             </div>
         </div>
@@ -2056,35 +2071,75 @@ window.handleCreateTask = async function (e) {
         showToast("Failed to create task", "danger");
     }
 }
+window.handleUpdateTaskStatus = async function (id, status) {
+    const taskCard = document.getElementById(`task-card-${id}`);
+    if (taskCard) taskCard.style.opacity = '0.5';
 
-window.handleUpdateTaskStatus = async function (taskId, status) {
-    const card = document.getElementById(`task-card-${taskId}`);
-    if (card) card.style.opacity = '0.5';
-
-    const { success } = await db.updateTaskStatus(taskId, status);
-    if (success) {
+    const { error } = await db.updateTaskStatus(id, status);
+    if (error) {
+        if (taskCard) taskCard.style.opacity = '1';
+        showToast(t('error_update_task') || "Failed to update task", "danger");
+    } else {
         showToast(`Task moved to ${t('task_' + status.toLowerCase()) || status}`, "success");
         
-        // Fetch fresh tasks HTML
-        const newHtml = await renderTasks();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(newHtml, 'text/html');
-        
-        const currentGrid = document.querySelector('.dashboard-grid');
-        const newGrid = doc.querySelector('.dashboard-grid');
-        
-        if (currentGrid && newGrid) {
-            // Swap innerHTML to update without triggering full page animations/reload
-            currentGrid.innerHTML = newGrid.innerHTML;
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-        } else {
-            renderView('tasks');
+        if (taskCard) {
+            taskCard.style.opacity = '1';
+            const currentStatus = taskCard.getAttribute('data-status');
+            
+            // Move card to new column
+            const targetCol = document.getElementById(`col-${status}`);
+            if (targetCol) {
+                targetCol.appendChild(taskCard);
+                taskCard.setAttribute('data-status', status);
+                
+                // Update badges
+                const oldBadge = document.getElementById(`badge-${currentStatus}`);
+                const newBadge = document.getElementById(`badge-${status}`);
+                if (oldBadge) oldBadge.textContent = Math.max(0, parseInt(oldBadge.textContent) - 1);
+                if (newBadge) newBadge.textContent = parseInt(newBadge.textContent) + 1;
+
+                // Update buttons inside the card
+                const actionsDiv = taskCard.querySelector('.task-actions');
+                let newButtons = '';
+                if (status !== 'TODO') newButtons += `<button class="btn-secondary btn-todo" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleUpdateTaskStatus('${id}', 'TODO')">${t('task_todo')}</button> `;
+                if (status !== 'IN_PROGRESS') newButtons += `<button class="btn-primary btn-in-progress" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-warning);" onclick="handleUpdateTaskStatus('${id}', 'IN_PROGRESS')">${t('task_working')}</button> `;
+                if (status !== 'DONE') newButtons += `<button class="btn-primary btn-done" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-success);" onclick="handleUpdateTaskStatus('${id}', 'DONE')">${t('task_done')}</button>`;
+                
+                if (actionsDiv) actionsDiv.innerHTML = newButtons;
+            }
         }
-    } else {
-        if (card) card.style.opacity = '1';
-        showToast("Failed to update task", "danger");
     }
-}
+};
+
+window.handleTaskDragStart = function(e, id) {
+    e.dataTransfer.setData('text/plain', id);
+    e.currentTarget.style.opacity = '0.5';
+};
+
+window.handleTaskDragOver = function(e) {
+    e.preventDefault(); // Necessary to allow dropping
+    e.dataTransfer.dropEffect = 'move';
+};
+
+window.handleTaskDrop = async function(e, status) {
+    e.preventDefault();
+    const id = e.dataTransfer.getData('text/plain');
+    if (!id) return;
+    
+    const taskCard = document.getElementById(`task-card-${id}`);
+    if (taskCard) {
+        taskCard.style.opacity = '1';
+        if (taskCard.getAttribute('data-status') === status) return; // No change
+    }
+    
+    await window.handleUpdateTaskStatus(id, status);
+};
+
+document.addEventListener('dragend', function(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('task-item-card')) {
+        e.target.style.opacity = '1';
+    }
+});
 
 // Router
 // ==========================================
@@ -2271,6 +2326,7 @@ async function renderEmployeesDirectory() {
                     <table class="data-table">
                         <thead>
                             <tr>
+                                <th>${t('time_emp_id')}</th>
                                 <th>${t('emp_name')}</th>
                                 <th>${t('emp_contact')}</th>
                                 <th>${t('emp_role_title')}</th>
@@ -2279,8 +2335,8 @@ async function renderEmployeesDirectory() {
                         <tbody>
                             ${visibleUsers.map(u => `
                                 <tr>
+                                    <td style="font-weight: bold; color: var(--color-primary);">EMP-${u.emp_index || '-'}</td>
                                     <td>
-                                        <div style="font-weight: bold; color: var(--primary-color);">EMP-${u.emp_index || '-'}</div>
                                         <div style="font-weight: 600;">${u.full_name || t('emp_na')}</div>
                                     </td>
                                     <td>
@@ -2395,6 +2451,18 @@ async function renderView(viewId, isBack = false) {
             break;
         case 'tasks':
             content = await renderTasks();
+            break;
+        case 'departments':
+            content = await renderDepartments();
+            break;
+        case 'clients':
+            content = await renderClients();
+            break;
+        case 'crm':
+            content = await renderCRM();
+            break;
+        case 'integrations':
+            content = await renderIntegrations();
             break;
         default:
             content = `
@@ -2521,7 +2589,7 @@ async function pollNotifications() {
         } else {
             dropdown.innerHTML = notifs.map(n => `
                 <div class="notification-item ${!n.is_read ? 'unread' : ''}" style="padding: 10px; border-bottom: 1px solid var(--color-border); ${!n.is_read ? 'background: rgba(var(--color-primary-rgb), 0.05); font-weight: 500;' : ''}">
-                    <div style="font-size: 0.875rem;">${n.message}</div>
+                    <div style="font-size: 0.875rem;">${escapeHTML(n.message)}</div>
                     <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">${new Date(n.created_at).toLocaleDateString()}</div>
                 </div>
             `).join('');
@@ -2576,6 +2644,711 @@ window.addEventListener('click', function (e) {
         }
     }
 });
+
+// ==========================================
+// Departments Features
+// ==========================================
+async function renderDepartments() {
+    const departments = await db.fetchDepartments();
+    const profiles = await db.fetchAllProfiles();
+    
+    let tableRows = departments.length ? departments.map(d => `
+        <tr id="dept-row-${d.id}">
+            <td>${d.name}</td>
+            <td>${d.description || '-'}</td>
+            <td>${profiles.find(p => p.id === d.head_id)?.full_name || '-'}</td>
+            <td>
+                <button class="btn btn-icon" onclick="editDepartment('${d.id}')"><i data-lucide="edit-2"></i></button>
+                <button class="btn btn-icon" style="color:var(--color-danger);" onclick="deleteDepartment('${d.id}')"><i data-lucide="trash-2"></i></button>
+            </td>
+        </tr>
+    `).join('') : `<tr><td colspan="4" style="text-align:center;">No departments found</td></tr>`;
+
+    return `
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <h1 class="page-title">Departments Management</h1>
+                <p class="page-subtitle">Manage company departments.</p>
+            </div>
+            <button class="btn btn-primary" onclick="showDepartmentModal()">
+                <i data-lucide="plus"></i> New Department
+            </button>
+        </div>
+        
+        <div class="card">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Head</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// ==========================================
+// CRM Features
+// ==========================================
+async function renderClients() {
+    const clients = await db.fetchClients();
+    
+    let tableRows = clients.length ? clients.map(c => `
+        <tr id="client-row-${c.id}">
+            <td>${c.name}</td>
+            <td>${c.company || '-'}</td>
+            <td>${c.email || '-'}</td>
+            <td>${c.phone || '-'}</td>
+            <td>
+                <button class="btn btn-icon" onclick="editClient('${c.id}')"><i data-lucide="edit-2"></i></button>
+                <button class="btn btn-icon" style="color:var(--color-danger);" onclick="deleteClient('${c.id}')"><i data-lucide="trash-2"></i></button>
+            </td>
+        </tr>
+    `).join('') : `<tr><td colspan="5" style="text-align:center;">No clients found</td></tr>`;
+
+    return `
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <h1 class="page-title">Clients Management</h1>
+                <p class="page-subtitle">Manage your CRM clients here.</p>
+            </div>
+            <button class="btn btn-primary" onclick="showCRMClientModal()">
+                <i data-lucide="plus"></i> New Client
+            </button>
+        </div>
+        
+        <div class="card">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Company</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+async function renderCRM() {
+    const clients = await db.fetchClients();
+    const deals = await db.fetchDeals();
+    const users = await db.fetchUsers();
+
+    const stages = ['LEAD', 'PITCH', 'NEGOTIATION', 'WON', 'LOST'];
+    
+    let boardHtml = '';
+    stages.forEach(stage => {
+        const stageDeals = deals.filter(d => d.stage === stage);
+        boardHtml += `
+            <div class="kanban-col" id="crm-col-${stage}" ondrop="dropDeal(event, '${stage}')" ondragover="allowDrop(event)">
+                <h3 id="crm-header-${stage}">${stage} (${stageDeals.length})</h3>
+                ${stageDeals.map(d => `
+                    <div class="card kanban-card" id="deal-card-${d.id}" draggable="true" ondragstart="dragDeal(event, '${d.id}')" data-stage="${stage}" style="position: relative;">
+                        <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 4px;">
+                            <button class="btn btn-icon" style="padding: 2px;" onclick="showCRMDealModal('${d.id}', true)" title="View Deal">
+                                <i data-lucide="eye" style="width: 14px; height: 14px; color: var(--color-text-secondary);"></i>
+                            </button>
+                            <button class="btn btn-icon" style="padding: 2px;" onclick="showCRMDealModal('${d.id}')" title="Edit Deal">
+                                <i data-lucide="edit-2" style="width: 14px; height: 14px; color: var(--color-text-secondary);"></i>
+                            </button>
+                        </div>
+                        <div style="font-weight: 500; margin-bottom: 0.5rem; padding-right: 45px;">${d.title}</div>
+                        <div style="color: var(--color-text-secondary); font-size: 0.875rem; margin-bottom: 0.5rem;">
+                            <i data-lucide="building-2" style="width: 14px; height: 14px;"></i> 
+                            ${d.crm_clients ? d.crm_clients.name : 'Unknown Client'}
+                        </div>
+                        ${d.closing_date ? `<div style="font-size: 0.75rem; color: var(--color-danger); margin-bottom: 0.5rem;"><i data-lucide="calendar" style="width: 12px; height: 12px;"></i> Close: ${d.closing_date}</div>` : ''}
+                        ${d.assigned_to ? `<div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;"><i data-lucide="user" style="width: 12px; height: 12px;"></i> ${(users.find(u => u.id === d.assigned_to) || {}).full_name || 'User'}</div>` : ''}
+                        <div class="status-badge success" style="margin-top: auto;">SAR ${d.amount}</div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    });
+
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title">CRM Pipeline</h1>
+                <p class="page-subtitle">Manage clients and deals</p>
+            </div>
+        </div>
+        <div class="dashboard-grid fade-in-up">
+            <div class="card col-span-3" style="grid-column: span 12 / span 12;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                    <div class="card-title">Deal Pipeline</div>
+                    <button class="btn btn-primary" onclick="showCRMDealModal()">
+                        <i data-lucide="plus"></i> New Deal
+                    </button>
+                </div>
+                <div class="kanban-board" style="display:flex; gap: 1rem; overflow-x: auto; padding-bottom: 1rem;">
+                    ${boardHtml}
+                </div>
+            </div>
+
+            <div class="card col-span-3" style="grid-column: span 12 / span 12;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                    <div class="card-title">Client Directory</div>
+                    <button class="btn btn-primary" onclick="showCRMClientModal()">
+                        <i data-lucide="plus"></i> New Client
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Company</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${clients.map(c => `
+                                <tr>
+                                    <td>${c.name}</td>
+                                    <td>${c.company || '-'}</td>
+                                    <td>${c.email || '-'}</td>
+                                    <td>${c.phone || '-'}</td>
+                                    <td><span class="status-badge ${c.status === 'ACTIVE' ? 'success' : 'danger'}">${c.status}</span></td>
+                                </tr>
+                            `).join('')}
+                            ${clients.length === 0 ? '<tr><td colspan="5" class="text-center">No clients yet</td></tr>' : ''}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Drag & Drop Deal Logic
+window.allowDrop = function(ev) {
+    ev.preventDefault();
+}
+
+window.dragDeal = function(ev, dealId) {
+    ev.dataTransfer.setData("dealId", dealId);
+}
+
+window.moveDealCard = function(dealId, newStage) {
+    const card = document.getElementById(`deal-card-${dealId}`);
+    if (card) {
+        const oldStage = card.getAttribute('data-stage');
+        if (oldStage === newStage) return;
+        
+        const targetCol = document.getElementById(`crm-col-${newStage}`);
+        if (targetCol) {
+            targetCol.appendChild(card);
+            card.setAttribute('data-stage', newStage);
+            
+            const oldHeader = document.getElementById(`crm-header-${oldStage}`);
+            const newHeader = document.getElementById(`crm-header-${newStage}`);
+            
+            if (oldHeader) {
+                const oldText = oldHeader.innerText;
+                const match = oldText.match(/\((\d+)\)/);
+                if (match) oldHeader.innerText = oldText.replace(/\(\d+\)/, `(${parseInt(match[1]) - 1})`);
+            }
+            if (newHeader) {
+                const newText = newHeader.innerText;
+                const match = newText.match(/\((\d+)\)/);
+                if (match) newHeader.innerText = newText.replace(/\(\d+\)/, `(${parseInt(match[1]) + 1})`);
+            }
+        }
+    }
+};
+
+window.dropDeal = async (ev, newStage) => {
+    ev.preventDefault();
+    const dealId = ev.dataTransfer.getData("dealId");
+    if (!dealId) return;
+
+    const card = document.getElementById(`deal-card-${dealId}`);
+    const oldStage = card ? card.getAttribute('data-stage') : null;
+    if (oldStage === newStage) return;
+
+    if (newStage === 'LOST') {
+        document.getElementById('lostDealId').value = dealId;
+        document.getElementById('lostReasonText').value = '';
+        document.getElementById('lostReasonModal').classList.add('show');
+        return;
+    }
+
+    window.moveDealCard(dealId, newStage);
+    
+    const res = await db.updateDealStage(dealId, newStage);
+    if(res.success) {
+        showToast("Deal moved to " + newStage, "success");
+        if (newStage === 'WON') {
+            await db.triggerWebhooks('deal_won', { deal_id: dealId });
+        }
+    } else {
+        showToast("Failed to move deal", "danger");
+    }
+};
+
+window.closeLostReasonModal = () => {
+    document.getElementById('lostReasonModal').classList.remove('show');
+};
+
+window.handleLostReasonSubmit = async (e) => {
+    e.preventDefault();
+    const dealId = document.getElementById('lostDealId').value;
+    const reason = document.getElementById('lostReasonText').value;
+    
+    closeLostReasonModal();
+    window.moveDealCard(dealId, 'LOST');
+    
+    // Instead of updateDealStage, we update the full deal or updateDeal with reason
+    const res = await db.updateDeal(dealId, { stage: 'LOST', lost_reason: reason });
+    if(res.success) {
+        showToast("Deal marked as lost", "success");
+    } else {
+        showToast("Failed to update deal", "danger");
+    }
+};
+
+// Department Modals
+window.showDepartmentModal = async (dept = null) => {
+    // Populate head dropdown
+    try {
+        if(db.fetchAllProfiles) {
+            const profiles = await db.fetchAllProfiles();
+            const headSelect = document.getElementById('departmentHead');
+            headSelect.innerHTML = '<option value="">Select a head...</option>' + 
+                profiles.map(p => `<option value="${p.id}">${p.full_name}</option>`).join('');
+                
+            const empSelect = document.getElementById('departmentEmployees');
+            empSelect.innerHTML = profiles.map(p => {
+                const isSelected = dept && p.department_id === dept.id ? 'selected' : '';
+                return `<option value="${p.id}" ${isSelected}>${p.full_name}</option>`;
+            }).join('');
+        }
+    } catch (e) {
+        console.error("Error loading profiles for department head:", e);
+    }
+
+    if (dept) {
+        document.getElementById('departmentId').value = dept.id;
+        document.getElementById('departmentName').value = dept.name || '';
+        document.getElementById('departmentDescription').value = dept.description || '';
+        document.getElementById('departmentHead').value = dept.head_id || '';
+        document.getElementById('departmentModalTitle').innerText = 'Edit Department';
+        document.getElementById('departmentSubmitBtn').innerText = 'Save Changes';
+    } else {
+        document.getElementById('departmentId').value = '';
+        document.getElementById('departmentName').value = '';
+        document.getElementById('departmentDescription').value = '';
+        document.getElementById('departmentHead').value = '';
+        
+        // Clear multi-select manually
+        const empSelect = document.getElementById('departmentEmployees');
+        for (let i = 0; i < empSelect.options.length; i++) {
+            empSelect.options[i].selected = false;
+        }
+
+        document.getElementById('departmentModalTitle').innerText = 'New Department';
+        document.getElementById('departmentSubmitBtn').innerText = 'Create Department';
+    }
+    document.getElementById('departmentModal').classList.add('show');
+};
+window.closeDepartmentModal = () => {
+    document.getElementById('departmentModal').classList.remove('show');
+};
+
+window.showConfirmModal = (title, message, onConfirm) => {
+    const modal = document.getElementById('confirmModal');
+    if (!modal) return;
+    
+    document.getElementById('confirmModalTitle').innerText = title;
+    document.getElementById('confirmModalMessage').innerText = message;
+    
+    const confirmBtn = document.getElementById('confirmModalBtn');
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    
+    newConfirmBtn.onclick = async () => {
+        newConfirmBtn.disabled = true;
+        newConfirmBtn.innerHTML = 'Confirming...';
+        await onConfirm();
+        newConfirmBtn.disabled = false;
+        newConfirmBtn.innerHTML = 'Confirm';
+        closeConfirmModal();
+    };
+    
+    modal.classList.add('show');
+};
+
+window.closeConfirmModal = () => {
+    const modal = document.getElementById('confirmModal');
+    if (modal) modal.classList.remove('show');
+};
+
+window.editDepartment = async (id) => {
+    const depts = await db.fetchDepartments();
+    const dept = depts.find(d => d.id === id);
+    if (dept) {
+        showDepartmentModal(dept);
+    }
+};
+
+window.deleteDepartment = (id) => {
+    window.showConfirmModal(
+        "Delete Department",
+        "Are you sure you want to delete this department?",
+        async () => {
+            const res = await db.deleteDepartment(id);
+            if (res.success) {
+                showToast("Department deleted", "success");
+                const row = document.getElementById(`dept-row-${id}`);
+                if (row) row.remove();
+            } else {
+                showToast("Failed to delete department.", "danger");
+            }
+        }
+    );
+};
+
+window.handleCreateDepartment = async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('departmentId').value;
+    const data = {
+        name: document.getElementById('departmentName').value,
+        description: document.getElementById('departmentDescription').value,
+        head_id: document.getElementById('departmentHead').value || null
+    };
+    
+    const empSelect = document.getElementById('departmentEmployees');
+    const selectedEmployeeIds = Array.from(empSelect.selectedOptions).map(opt => opt.value);
+    
+    let res;
+    if (id) {
+        res = await db.updateDepartment(id, data, selectedEmployeeIds);
+    } else {
+        res = await db.createDepartment(data, selectedEmployeeIds);
+    }
+    
+    if (res.success) {
+        showToast(id ? "Department updated" : "Department created", "success");
+        closeDepartmentModal();
+        e.target.reset();
+        if(currentView === 'departments') renderView('departments');
+    } else {
+        showToast("Error saving department", "danger");
+    }
+};
+
+// CRM Modals
+window.showCRMClientModal = (client = null) => {
+    if (client) {
+        document.getElementById('crmClientId').value = client.id;
+        document.getElementById('crmClientName').value = client.name || '';
+        document.getElementById('crmClientCompany').value = client.company || '';
+        document.getElementById('crmClientEmail').value = client.email || '';
+        document.getElementById('crmClientPhone').value = client.phone || '';
+        document.getElementById('crmClientModalTitle').innerText = 'Edit Client';
+        document.getElementById('crmClientSubmitBtn').innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Save Changes';
+    } else {
+        document.getElementById('crmClientId').value = '';
+        document.getElementById('crmClientName').value = '';
+        document.getElementById('crmClientCompany').value = '';
+        document.getElementById('crmClientEmail').value = '';
+        document.getElementById('crmClientPhone').value = '';
+        document.getElementById('crmClientModalTitle').innerText = 'New Client';
+        document.getElementById('crmClientSubmitBtn').innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Create Client';
+    }
+    document.getElementById('crmClientModal').classList.add('show');
+    if (window.lucide) window.lucide.createIcons();
+};
+window.closeCRMClientModal = () => {
+    document.getElementById('crmClientModal').classList.remove('show');
+};
+
+window.editClient = async (id) => {
+    const clients = await db.fetchClients();
+    const client = clients.find(c => c.id === id);
+    if (client) {
+        showCRMClientModal(client);
+    }
+};
+
+window.deleteClient = (id) => {
+    window.showConfirmModal(
+        "Delete Client",
+        "Are you sure you want to delete this client?",
+        async () => {
+            const res = await db.deleteClient(id);
+            if (res.success) {
+                showToast("Client deleted", "success");
+                const row = document.getElementById(`client-row-${id}`);
+                if (row) row.remove();
+            } else {
+                showToast("Failed to delete client. It might be linked to existing deals.", "danger");
+            }
+        }
+    );
+};
+
+window.handleCreateClient = async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('crmClientId').value;
+    const data = {
+        name: document.getElementById('crmClientName').value,
+        company: document.getElementById('crmClientCompany').value,
+        email: document.getElementById('crmClientEmail').value,
+        phone: document.getElementById('crmClientPhone').value
+    };
+    
+    let res;
+    if (id) {
+        res = await db.updateClient(id, data);
+    } else {
+        res = await db.createClient(data);
+    }
+    
+    if (res.success) {
+        showToast(id ? "Client updated" : "Client added", "success");
+        closeCRMClientModal();
+        e.target.reset();
+        if (!id) {
+            await db.triggerWebhooks('new_client', data);
+        }
+        if(currentView === 'crm' || currentView === 'clients') renderView(currentView);
+    }
+};
+
+window.showCRMDealModal = async (id = null, isViewOnly = false) => {
+    const clients = await db.fetchClients();
+    const select = document.getElementById('crmDealClient');
+    select.innerHTML = '<option value="">Select a client...</option>' + 
+        clients.map(c => `<option value="${c.id}">${c.name} (${c.company})</option>`).join('');
+        
+    const users = await db.fetchUsers();
+    const assigneeSelect = document.getElementById('crmDealAssignee');
+    if (assigneeSelect) {
+        assigneeSelect.innerHTML = '<option value="">Unassigned</option>' + 
+            users.map(u => `<option value="${u.id}">${u.full_name} (${u.role})</option>`).join('');
+    }
+    
+    document.getElementById('crmDealId').value = id || '';
+    
+    const titleEl = document.getElementById('crmDealModalTitle');
+    const submitBtn = document.getElementById('crmDealSubmitBtn');
+    if (isViewOnly) {
+        titleEl.textContent = 'View Deal Details';
+        submitBtn.style.display = 'none';
+    } else if (id) {
+        titleEl.textContent = 'Edit Deal';
+        submitBtn.style.display = 'block';
+        submitBtn.innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Save Changes';
+    } else {
+        titleEl.textContent = 'New Deal';
+        submitBtn.style.display = 'block';
+        submitBtn.innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Create Deal';
+    }
+
+    // Toggle disabled state for all inputs
+    const inputs = ['crmDealTitle', 'crmDealClient', 'crmDealAmount', 'crmDealClosingDate', 'crmDealAssignee', 'crmDealLostReason'];
+    inputs.forEach(inputId => {
+        const el = document.getElementById(inputId);
+        if (el) el.disabled = isViewOnly;
+    });
+
+    if (id) {
+        const deals = await db.fetchDeals();
+        const deal = deals.find(d => d.id === id);
+        if (deal) {
+            document.getElementById('crmDealTitle').value = deal.title || '';
+            document.getElementById('crmDealClient').value = deal.client_id || '';
+            document.getElementById('crmDealAmount').value = deal.amount || 0;
+            document.getElementById('crmDealClosingDate').value = deal.closing_date || '';
+            if (assigneeSelect) assigneeSelect.value = deal.assigned_to || '';
+            
+            if (deal.stage === 'LOST') {
+                document.getElementById('crmDealLostReasonGroup').style.display = 'block';
+                document.getElementById('crmDealLostReason').value = deal.lost_reason || '';
+            } else {
+                document.getElementById('crmDealLostReasonGroup').style.display = 'none';
+            }
+        }
+    } else {
+        document.getElementById('crmDealTitle').value = '';
+        document.getElementById('crmDealClient').value = '';
+        document.getElementById('crmDealAmount').value = '';
+        document.getElementById('crmDealClosingDate').value = '';
+        if (assigneeSelect) assigneeSelect.value = '';
+        document.getElementById('crmDealLostReasonGroup').style.display = 'none';
+    }
+    
+    document.getElementById('crmDealModal').classList.add('show');
+    if (window.lucide) window.lucide.createIcons();
+};
+window.closeCRMDealModal = () => {
+    document.getElementById('crmDealModal').classList.remove('show');
+};
+window.handleCreateDeal = async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('crmDealId').value;
+    const assigneeEl = document.getElementById('crmDealAssignee');
+    const assigneeVal = assigneeEl ? assigneeEl.value : null;
+    const closingDateEl = document.getElementById('crmDealClosingDate');
+    
+    const data = {
+        title: document.getElementById('crmDealTitle').value,
+        amount: parseFloat(document.getElementById('crmDealAmount').value) || 0,
+        client_id: document.getElementById('crmDealClient').value,
+        closing_date: (closingDateEl && closingDateEl.value) ? closingDateEl.value : null,
+        assigned_to: assigneeVal ? assigneeVal : currentUser.id
+    };
+    if (!id) data.stage = 'LEAD'; // Only set stage on creation
+    
+    const lostReasonGroup = document.getElementById('crmDealLostReasonGroup');
+    if (lostReasonGroup && lostReasonGroup.style.display !== 'none') {
+        data.lost_reason = document.getElementById('crmDealLostReason').value;
+    }
+    
+    if (!data.client_id) return showToast("Please select a client", "danger");
+
+    let res;
+    if (id) {
+        res = await db.updateDeal(id, data);
+    } else {
+        res = await db.createDeal(data);
+    }
+    
+    if (res.success) {
+        showToast(id ? "Deal updated" : "Deal created", "success");
+        closeCRMDealModal();
+        e.target.reset();
+        if(currentView === 'crm') renderView('crm');
+    }
+};
+
+// ==========================================
+// Integrations / Webhooks Features
+// ==========================================
+async function renderIntegrations() {
+    if (currentUserRole !== 'ADMIN') {
+        return `<div class="page-header"><h1 class="page-title">Unauthorized</h1></div>`;
+    }
+
+    const webhooks = await db.fetchWebhooks();
+
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title">API Integrations (Webhooks)</h1>
+                <p class="page-subtitle">Send real-time data to external services (Slack, Make, Zapier, Custom API)</p>
+            </div>
+            <button class="btn btn-primary" onclick="showWebhookModal()">
+                <i data-lucide="plus"></i> New Webhook
+            </button>
+        </div>
+        <div class="dashboard-grid fade-in-up">
+            <div class="card" style="grid-column: span 12 / span 12;">
+                <div class="card-title">Configured Webhooks</div>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Event Type</th>
+                                <th>URL</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${webhooks.map(w => `
+                                <tr id="webhook-row-${w.id}">
+                                    <td style="font-weight:500;">${w.name}</td>
+                                    <td><span class="status-badge info">${w.event_type}</span></td>
+                                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${w.url}</td>
+                                    <td><span class="status-badge ${w.is_active ? 'success' : 'danger'}">${w.is_active ? 'Active' : 'Inactive'}</span></td>
+                                    <td>
+                                        <button class="btn btn-danger btn-sm" onclick="handleDeleteWebhook('${w.id}')">
+                                            <i data-lucide="trash-2"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                            ${webhooks.length === 0 ? '<tr><td colspan="5" class="text-center">No webhooks configured</td></tr>' : ''}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card" style="grid-column: span 12 / span 12; background: var(--color-surface-hover);">
+                <div class="card-title">How to use Integrations</div>
+                <p style="color: var(--color-text-secondary); margin-bottom: 1rem; line-height: 1.5;">
+                    Webhooks allow MUQAM HR to push data to other applications in real-time. Whenever an event occurs (like a new client added or a deal won), 
+                    we will send an HTTP POST request to your provided URL containing a JSON payload with the event details.
+                </p>
+                <p style="color: var(--color-text-secondary); margin-bottom: 1rem; line-height: 1.5;">
+                    <strong>Available Events:</strong><br/>
+                    • <code>deal_won</code>: Fires when a CRM deal is dragged to the WON stage.<br/>
+                    • <code>new_client</code>: Fires when a new CRM client is added.<br/>
+                    • <code>all</code>: Fires on all supported events.
+                </p>
+            </div>
+        </div>
+    `;
+}
+
+window.showWebhookModal = () => {
+    document.getElementById('webhookModal').classList.add('show');
+};
+window.closeWebhookModal = () => {
+    document.getElementById('webhookModal').classList.remove('show');
+};
+window.handleCreateWebhook = async (e) => {
+    e.preventDefault();
+    const data = {
+        name: document.getElementById('webhookName').value,
+        url: document.getElementById('webhookUrl').value,
+        event_type: document.getElementById('webhookEvent').value,
+        is_active: true
+    };
+    const res = await db.createWebhook(data);
+    if (res.success) {
+        showToast("Webhook created", "success");
+        closeWebhookModal();
+        e.target.reset();
+        if(currentView === 'integrations') renderView('integrations');
+    }
+};
+window.handleDeleteWebhook = (id) => {
+    window.showConfirmModal(
+        "Delete Webhook",
+        "Delete this webhook?",
+        async () => {
+            const res = await db.deleteWebhook(id);
+            if (res.success) {
+                showToast("Webhook deleted", "success");
+                const row = document.getElementById(`webhook-row-${id}`);
+                if (row) row.remove();
+            }
+        }
+    );
+};
 
 // Init
 async function initApp() {
@@ -2660,9 +3433,9 @@ async function renderRequests() {
     const isManagerOrAdmin = currentUserRole === 'ADMIN' || (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR');
 
     // Fetch data
-    const leaves = await db.fetchLeaveRequests(isManagerOrAdmin ? null : currentUser?.id);
-    const docs = await db.fetchDocuments(isManagerOrAdmin ? null : currentUser?.id);
-    const expenses = await db.fetchExpenses(isManagerOrAdmin ? null : currentUser?.id);
+    let leaves = await db.fetchLeaveRequests(isManagerOrAdmin ? null : currentUser?.id);
+    let docs = await db.fetchDocuments(isManagerOrAdmin ? null : currentUser?.id);
+    let expenses = await db.fetchExpenses(isManagerOrAdmin ? null : currentUser?.id);
 
     let profilesMap = {};
     if (isManagerOrAdmin) {

@@ -80,7 +80,19 @@
                     <i data-lucide="file-text"></i>
                     <span data-i18n="nav_documents">Documents</span>
                 </a>
-
+                <a href="#" class="nav-item" data-view="clients">
+                    <i data-lucide="users"></i>
+                    <span data-i18n="nav_clients">Clients</span>
+                </a>
+                
+                <a href="#" class="nav-item" data-view="crm">
+                    <i data-lucide="users-2"></i>
+                    <span>CRM (Deals)</span>
+                </a>
+                <a href="#" class="nav-item" data-view="integrations">
+                    <i data-lucide="webhook"></i>
+                    <span>API Integrations</span>
+                </a>
                 <a href="#" class="nav-item" data-view="users">
                     <i data-lucide="user-cog"></i>
                     <span data-i18n="nav_users">User Management</span>
@@ -88,6 +100,10 @@
                 <a href="#" class="nav-item" data-view="employees">
                     <i data-lucide="briefcase"></i>
                     <span>Employees & Contracts</span>
+                </a>
+                <a href="#" class="nav-item" data-view="departments">
+                    <i data-lucide="building-2"></i>
+                    <span data-i18n="nav_departments">Departments</span>
                 </a>
 
             </nav>
@@ -155,6 +171,179 @@
                 <!-- Views will be injected here by app.js -->
             </div>
         </main>
+    </div>
+
+    <!-- CRM Client Modal -->
+    <div class="modal" id="crmClientModal">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header">
+                <h2 id="crmClientModalTitle">New Client</h2>
+                <button class="btn btn-icon" onclick="closeCRMClientModal()"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleCreateClient(event)">
+                <input type="hidden" id="crmClientId">
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Client Name *</label>
+                        <input type="text" id="crmClientName" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="building-2" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Company</label>
+                        <input type="text" id="crmClientCompany" class="form-control">
+                    </div>
+                </div>
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="mail" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Email</label>
+                        <input type="email" id="crmClientEmail" class="form-control">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="phone" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Phone</label>
+                        <input type="text" id="crmClientPhone" class="form-control">
+                    </div>
+                </div>
+                <button type="submit" id="crmClientSubmitBtn" class="btn btn-primary" style="width:100%;"><i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Create Client</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- CRM Deal Modal -->
+    <div class="modal" id="crmDealModal">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header">
+                <h2 id="crmDealModalTitle">Deal Details</h2>
+                <button class="btn btn-icon" onclick="closeCRMDealModal()"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleCreateDeal(event)">
+                <input type="hidden" id="crmDealId">
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="file-text" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Deal Title *</label>
+                        <input type="text" id="crmDealTitle" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="building-2" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Client *</label>
+                        <select id="crmDealClient" class="form-control" required></select>
+                    </div>
+                </div>
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="dollar-sign" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Amount (SAR) *</label>
+                        <input type="number" id="crmDealAmount" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="calendar" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Closing Date</label>
+                        <input type="date" id="crmDealClosingDate" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Assigned To</label>
+                    <select id="crmDealAssignee" class="form-control"></select>
+                </div>
+                <div class="form-group" id="crmDealLostReasonGroup" style="display: none; margin-bottom: 1rem;">
+                    <label class="form-label" style="color: var(--color-danger);"><i data-lucide="alert-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Lost Reason</label>
+                    <textarea id="crmDealLostReason" class="form-control" rows="2"></textarea>
+                </div>
+                <button type="submit" id="crmDealSubmitBtn" class="btn btn-primary" style="width:100%; margin-top: 0.5rem;"><i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Save Deal</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lost Reason Modal -->
+    <div class="modal" id="lostReasonModal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Deal Lost Reason</h2>
+                <button class="btn btn-icon" onclick="closeLostReasonModal()"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleLostReasonSubmit(event)">
+                <input type="hidden" id="lostDealId">
+                <div class="form-group">
+                    <label class="form-label">Why was this deal lost? *</label>
+                    <textarea id="lostReasonText" class="form-control" rows="3" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; background-color: var(--color-danger); border-color: var(--color-danger);">Mark as Lost</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Webhook Modal -->
+    <div class="modal" id="webhookModal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>New Webhook</h2>
+                <button class="btn btn-icon" onclick="closeWebhookModal()"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleCreateWebhook(event)">
+                <div class="form-group">
+                    <label class="form-label">Integration Name *</label>
+                    <input type="text" id="webhookName" class="form-control" placeholder="e.g., Slack Deal Notification" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Target URL (POST) *</label>
+                    <input type="url" id="webhookUrl" class="form-control" placeholder="https://hooks.slack.com/services/..." required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Trigger Event *</label>
+                    <select id="webhookEvent" class="form-control" required>
+                        <option value="all">All Events</option>
+                        <option value="deal_won">Deal Won</option>
+                        <option value="new_client">New Client Added</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Save Webhook</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Department Modal -->
+    <div class="modal" id="departmentModal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 id="departmentModalTitle">New Department</h2>
+                <button class="btn btn-icon" onclick="closeDepartmentModal()"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleCreateDepartment(event)">
+                <input type="hidden" id="departmentId">
+                <div class="form-group">
+                    <label class="form-label">Department Name *</label>
+                    <input type="text" id="departmentName" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea id="departmentDescription" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Department Head</label>
+                    <select id="departmentHead" class="form-control">
+                        <!-- Loaded dynamically -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Department Employees</label>
+                    <select id="departmentEmployees" class="form-control" multiple style="min-height: 100px;">
+                        <!-- Loaded dynamically -->
+                    </select>
+                    <small style="color:var(--text-secondary); display:block; margin-top:0.25rem;">Hold Ctrl/Cmd to select multiple employees.</small>
+                </div>
+                <button type="submit" id="departmentSubmitBtn" class="btn btn-primary" style="width:100%;">Create Department</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal" id="confirmModal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <div style="margin-bottom: 1rem;">
+                <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: var(--color-warning);"></i>
+            </div>
+            <h2 id="confirmModalTitle" style="margin-bottom: 0.5rem;">Confirm Action</h2>
+            <p id="confirmModalMessage" style="color: var(--color-text-secondary); margin-bottom: 1.5rem;">Are you sure?</p>
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+                <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+                <button class="btn btn-primary" id="confirmModalBtn" style="background-color: var(--color-danger);">Confirm</button>
+            </div>
+        </div>
     </div>
 
     <!-- Supabase & JS & Chart.js -->
