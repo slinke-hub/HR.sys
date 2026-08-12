@@ -652,3 +652,24 @@ textarea.form-control {
     cursor: pointer;
     color: var(--color-text-secondary);
 }
+
+/* Global Icon Styling */
+[data-lucide] {
+    vertical-align: middle;
+    stroke-width: 2px;
+}
+
+.btn [data-lucide] {
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
+    transition: transform 0.2s ease, stroke 0.2s ease;
+}
+
+.btn-icon [data-lucide] {
+    margin-right: 0;
+}
+
+.btn:hover [data-lucide] {
+    transform: scale(1.1);
+}

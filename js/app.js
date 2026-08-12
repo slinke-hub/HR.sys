@@ -1529,13 +1529,30 @@ window.handleAssignManager = async function (id, managerId) {
 // Render Performance
 async function renderPerformance() {
     const goals = await db.fetchGoals(currentUserRole === 'ADMIN' ? null : currentUser.id);
+    const isManager = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
     return `
         <div class="page-header fade-in-up">
             <div>
                 <h1 class="page-title">${t('nav_performance')}</h1>
                 <p class="page-subtitle">${t('perf_sub')}</p>
             </div>
+            ${isManager ? `
+            <button class="btn btn-primary" id="generatePerfBtn" onclick="generatePerformanceReport()">
+                <i data-lucide="bar-chart-2"></i> Generate Performance Report
+            </button>` : ''}
         </div>
+
+        <!-- Performance Report Panel (hidden until generated) -->
+        <div id="perfReportSection" style="display:none; margin-bottom: 1.5rem;">
+            <div class="card fade-in-up">
+                <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span><i data-lucide="award" style="margin-right:8px; width:20px; height:20px; vertical-align:middle; color:var(--color-accent);"></i>Employee Performance Report</span>
+                    <span id="perfReportDate" style="font-size:0.8rem; font-weight:400; color:var(--color-text-secondary);"></span>
+                </div>
+                <div id="perfReportBody"></div>
+            </div>
+        </div>
+
         <div class="card fade-in-up">
             <div class="card-title">${t('perf_my_goals')}</div>
             <div class="table-responsive">
@@ -1555,6 +1572,130 @@ async function renderPerformance() {
             </div>
         </div>
     `;
+}
+
+window.generatePerformanceReport = async function() {
+    const btn = document.getElementById('generatePerfBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" style="animation:spin 1s linear infinite;"></i> Generating...'; }
+    if (window.lucide) window.lucide.createIcons();
+
+    const tasks = await db.fetchTasksWithProfiles();
+
+    // Group tasks by employee
+    const empMap = {};
+    tasks.forEach(task => {
+        if (!task.assignee_id) return;
+        const profile = task.profiles || {};
+        const id = task.assignee_id;
+        if (!empMap[id]) {
+            empMap[id] = {
+                id,
+                name: profile.full_name || 'Unknown',
+                job_title: profile.job_title || '',
+                total: 0,
+                done: 0,
+                inProgress: 0,
+                overdue: 0
+            };
+        }
+        empMap[id].total++;
+        if (task.status === 'DONE') empMap[id].done++;
+        else if (task.status === 'IN_PROGRESS') empMap[id].inProgress++;
+        // Check overdue: due_date in the past and not done
+        if (task.due_date && task.status !== 'DONE') {
+            const due = new Date(task.due_date);
+            if (due < new Date()) empMap[id].overdue++;
+        }
+    });
+
+    const employees = Object.values(empMap);
+    if (employees.length === 0) {
+        document.getElementById('perfReportBody').innerHTML = `<p style="color:var(--color-text-secondary); text-align:center; padding:2rem;">No task data available to generate a report.</p>`;
+        document.getElementById('perfReportSection').style.display = 'block';
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="bar-chart-2"></i> Generate Performance Report'; if (window.lucide) window.lucide.createIcons(); }
+        return;
+    }
+
+    // Compute score: (done / total * 100) - (overdue * 5 penalty), clamped 0–100
+    employees.forEach(e => {
+        const completionRate = e.total > 0 ? (e.done / e.total) * 100 : 0;
+        const penalty = e.overdue * 5;
+        e.score = Math.max(0, Math.round(completionRate - penalty));
+        e.completionRate = Math.round(completionRate);
+    });
+
+    // Sort best to worst
+    employees.sort((a, b) => b.score - a.score);
+
+    const getRatingLabel = (score) => {
+        if (score >= 85) return { label: 'Excellent', cls: 'success' };
+        if (score >= 65) return { label: 'Good', cls: 'info' };
+        if (score >= 40) return { label: 'Average', cls: 'warning' };
+        return { label: 'Needs Improvement', cls: 'danger' };
+    };
+
+    const rows = employees.map((e, i) => {
+        const { label, cls } = getRatingLabel(e.score);
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
+        return `
+        <tr>
+            <td style="font-weight:600;">${medal} ${escapeHTML(e.name)}</td>
+            <td style="color:var(--color-text-secondary); font-size:0.85rem;">${escapeHTML(e.job_title)}</td>
+            <td>${e.total}</td>
+            <td><span style="color:var(--color-success); font-weight:600;">${e.done}</span></td>
+            <td><span style="color:var(--color-danger);">${e.overdue}</span></td>
+            <td>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <div style="flex:1; background:var(--color-border); border-radius:999px; height:8px; overflow:hidden;">
+                        <div style="width:${e.completionRate}%; height:100%; background:${e.completionRate >= 70 ? 'var(--color-success)' : e.completionRate >= 40 ? 'var(--color-warning)' : 'var(--color-danger)'}; border-radius:999px; transition:width 0.8s ease;"></div>
+                    </div>
+                    <span style="font-size:0.8rem; min-width:38px;">${e.completionRate}%</span>
+                </div>
+            </td>
+            <td><span style="font-weight:700; font-size:1rem;">${e.score}</span><span style="color:var(--color-text-secondary); font-size:0.75rem;">/100</span></td>
+            <td><span class="status-badge ${cls}">${label}</span></td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('perfReportBody').innerHTML = `
+        <div style="overflow-x:auto;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Role</th>
+                        <th>Total Tasks</th>
+                        <th>Completed</th>
+                        <th>Overdue</th>
+                        <th style="min-width:160px;">Completion Rate</th>
+                        <th>Score</th>
+                        <th>Rating</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+        <p style="font-size:0.75rem; color:var(--color-text-secondary); margin-top:1rem; padding-top:0.5rem; border-top:1px solid var(--color-border);">
+            <i data-lucide="info" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
+            Score = Completion Rate − (Overdue Tasks × 5 penalty points). Clamped between 0 and 100.
+        </p>`;
+
+    document.getElementById('perfReportDate').textContent = `Generated: ${new Date().toLocaleString()}`;
+    document.getElementById('perfReportSection').style.display = 'block';
+
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="refresh-cw"></i> Regenerate Report'; }
+    if (window.lucide) window.lucide.createIcons();
+
+    // Smooth scroll to report
+    document.getElementById('perfReportSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+// Add spin keyframe if not already present
+if (!document.getElementById('perfSpinStyle')) {
+    const s = document.createElement('style');
+    s.id = 'perfSpinStyle';
+    s.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+    document.head.appendChild(s);
 }
 
 // Render Documents
@@ -2461,6 +2602,9 @@ async function renderView(viewId, isBack = false) {
         case 'crm':
             content = await renderCRM();
             break;
+        case 'orders':
+            content = await renderOrders();
+            break;
         case 'integrations':
             content = await renderIntegrations();
             break;
@@ -2746,6 +2890,73 @@ async function renderClients() {
     `;
 }
 
+async function renderOrders() {
+    const orders = await db.fetchOrders();
+    window.currentOrdersList = orders;
+    
+    const tableRows = orders.map(o => {
+        let badgeColor = 'gray';
+        if (o.project_status === 'In Progress') badgeColor = 'primary';
+        if (o.project_status === 'Completed') badgeColor = 'success';
+        
+        const dealTitle = (o.crm_deals && o.crm_deals.title) ? escapeHTML(o.crm_deals.title) : 'Unknown Deal';
+        const clientName = (o.crm_deals && o.crm_deals.crm_clients && o.crm_deals.crm_clients.name) ? escapeHTML(o.crm_deals.crm_clients.name) : 'Unknown Client';
+        
+        const locationStr = o.event_location || '-';
+        const locationHtml = locationStr.startsWith('http') 
+            ? `<a href="${escapeHTML(locationStr)}" target="_blank" style="color: var(--color-primary); text-decoration: underline;"><i data-lucide="map" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>View Map</a>` 
+            : escapeHTML(locationStr);
+
+        return `
+            <tr>
+                <td>${dealTitle}<br><small style="color: var(--color-text-light)">${clientName}</small></td>
+                <td>${escapeHTML(o.start_date || '-')}</td>
+                <td>${escapeHTML(o.end_date || '-')}</td>
+                <td>${locationHtml}</td>
+                <td>${escapeHTML(o.invoice_amount || '0')} SAR</td>
+                <td><span class="status-badge" style="background: var(--color-${badgeColor}); color: white;">${escapeHTML(o.project_status || 'Unknown')}</span></td>
+                <td>
+                    <button class="btn btn-icon" style="padding: 4px;" onclick="showEditOrderModal('${o.id}')" title="Edit Order">
+                        <i data-lucide="edit-2"></i>
+                    </button>
+                    <button class="btn btn-icon" style="padding: 4px;" onclick="printOrder('${o.id}')" title="Print Order">
+                        <i data-lucide="printer"></i>
+                    </button>
+                    <button class="btn btn-icon text-danger" style="padding: 4px;" onclick="deleteOrder('${o.id}')" title="Delete Order">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="page-header">
+            <h1 class="page-title">Orders</h1>
+        </div>
+        <div class="card">
+            <div style="overflow-x: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Deal / Client</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th>Location</th>
+                            <th>Invoice Amount</th>
+                            <th>Project Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows.length > 0 ? tableRows : '<tr><td colspan="7" style="text-align:center;">No orders found</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
 async function renderCRM() {
     const clients = await db.fetchClients();
     const deals = await db.fetchDeals();
@@ -2888,8 +3099,22 @@ window.dropDeal = async (ev, newStage) => {
 
     if (newStage === 'LOST') {
         document.getElementById('lostDealId').value = dealId;
+        document.getElementById('lostOldStage').value = oldStage || '';
         document.getElementById('lostReasonText').value = '';
         document.getElementById('lostReasonModal').classList.add('show');
+        return;
+    }
+    
+    if (newStage === 'WON') {
+        document.getElementById('orderDealId').value = dealId;
+        document.getElementById('orderStartDate').value = '';
+        document.getElementById('orderEndDate').value = '';
+        document.getElementById('orderLocation').value = '';
+        document.getElementById('orderInvoiceAmount').value = '';
+        document.getElementById('orderProjectStatus').value = 'Not Confirmed';
+        document.getElementById('orderNotes').value = '';
+        document.getElementById('crmOrderModal').classList.add('show');
+        if (window.lucide) window.lucide.createIcons();
         return;
     }
 
@@ -2897,10 +3122,10 @@ window.dropDeal = async (ev, newStage) => {
     
     const res = await db.updateDealStage(dealId, newStage);
     if(res.success) {
-        showToast("Deal moved to " + newStage, "success");
-        if (newStage === 'WON') {
-            await db.triggerWebhooks('deal_won', { deal_id: dealId });
+        if (oldStage === 'WON') {
+            await db.deleteOrderByDealId(dealId);
         }
+        showToast("Deal moved to " + newStage, "success");
     } else {
         showToast("Failed to move deal", "danger");
     }
@@ -2914,6 +3139,7 @@ window.handleLostReasonSubmit = async (e) => {
     e.preventDefault();
     const dealId = document.getElementById('lostDealId').value;
     const reason = document.getElementById('lostReasonText').value;
+    const oldStage = document.getElementById('lostOldStage').value;
     
     closeLostReasonModal();
     window.moveDealCard(dealId, 'LOST');
@@ -2921,10 +3147,165 @@ window.handleLostReasonSubmit = async (e) => {
     // Instead of updateDealStage, we update the full deal or updateDeal with reason
     const res = await db.updateDeal(dealId, { stage: 'LOST', lost_reason: reason });
     if(res.success) {
-        showToast("Deal marked as lost", "success");
+        if (oldStage === 'WON') {
+            await db.deleteOrderByDealId(dealId);
+            showToast("Deal marked as lost & order removed", "success");
+        } else {
+            showToast("Deal marked as lost", "success");
+        }
     } else {
         showToast("Failed to update deal", "danger");
     }
+};
+
+window.closeCRMOrderModal = () => {
+    document.getElementById('crmOrderModal').classList.remove('show');
+};
+
+window.handleOrderSubmit = async (e) => {
+    e.preventDefault();
+    const dealId = document.getElementById('orderDealId').value;
+    
+    const orderData = {
+        start_date: document.getElementById('orderStartDate').value || null,
+        end_date: document.getElementById('orderEndDate').value || null,
+        event_location: document.getElementById('orderLocation').value || null,
+        invoice_amount: parseFloat(document.getElementById('orderInvoiceAmount').value) || 0,
+        project_status: document.getElementById('orderProjectStatus').value || 'Not Confirmed',
+        notes: document.getElementById('orderNotes').value || null,
+    };
+    
+    closeCRMOrderModal();
+    window.moveDealCard(dealId, 'WON');
+    
+    const res = await db.createOrder(orderData, dealId);
+    if (res.success) {
+        showToast("Order saved and deal won!", "success");
+        await db.triggerWebhooks('deal_won', { deal_id: dealId });
+    } else {
+        showToast("Failed to save order", "danger");
+    }
+};
+
+window.showEditOrderModal = async (id) => {
+    const orders = await db.fetchOrders();
+    const order = orders.find(o => o.id === id);
+    if (!order) return showToast("Order not found", "danger");
+    
+    document.getElementById('editOrderId').value = id;
+    document.getElementById('editOrderStartDate').value = order.start_date || '';
+    document.getElementById('editOrderEndDate').value = order.end_date || '';
+    document.getElementById('editOrderLocation').value = order.event_location || '';
+    document.getElementById('editOrderInvoiceAmount').value = order.invoice_amount || '';
+    document.getElementById('editOrderProjectStatus').value = order.project_status || 'Not Confirmed';
+    document.getElementById('editOrderNotes').value = order.notes || '';
+    
+    document.getElementById('editOrderModal').classList.add('show');
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.closeEditOrderModal = () => {
+    document.getElementById('editOrderModal').classList.remove('show');
+};
+
+window.handleEditOrderSubmit = async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('editOrderId').value;
+    
+    const orderData = {
+        start_date: document.getElementById('editOrderStartDate').value || null,
+        end_date: document.getElementById('editOrderEndDate').value || null,
+        event_location: document.getElementById('editOrderLocation').value || null,
+        invoice_amount: parseFloat(document.getElementById('editOrderInvoiceAmount').value) || 0,
+        project_status: document.getElementById('editOrderProjectStatus').value || 'Not Confirmed',
+        notes: document.getElementById('editOrderNotes').value || null,
+    };
+    
+    const res = await db.updateOrder(id, orderData);
+    if (res.success) {
+        showToast("Order updated successfully", "success");
+        closeEditOrderModal();
+        if (currentView === 'orders') renderView('orders');
+    } else {
+        showToast("Failed to update order", "danger");
+    }
+};
+
+window.deleteOrder = (orderId) => {
+    document.getElementById('deleteOrderIdInput').value = orderId;
+    document.getElementById('confirmDeleteOrderModal').classList.add('show');
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.closeConfirmDeleteOrderModal = () => {
+    document.getElementById('confirmDeleteOrderModal').classList.remove('show');
+    document.getElementById('deleteOrderIdInput').value = '';
+};
+
+window.executeDeleteOrder = async () => {
+    const orderId = document.getElementById('deleteOrderIdInput').value;
+    if (!orderId) return;
+    
+    const res = await db.deleteOrder(orderId);
+    if (res.success) {
+        showToast("Order deleted successfully", "success");
+        closeConfirmDeleteOrderModal();
+        if (currentView === 'orders') renderView('orders');
+    } else {
+        showToast("Failed to delete order", "danger");
+    }
+};
+
+window.printOrder = (orderId) => {
+    if (!window.currentOrdersList) return;
+    const order = window.currentOrdersList.find(o => o.id === orderId);
+    if (!order) return;
+
+    const dealTitle = (order.crm_deals && order.crm_deals.title) ? escapeHTML(order.crm_deals.title) : 'Unknown Deal';
+    const clientName = (order.crm_deals && order.crm_deals.crm_clients && order.crm_deals.crm_clients.name) ? escapeHTML(order.crm_deals.crm_clients.name) : 'Unknown Client';
+    const locationStr = escapeHTML(order.event_location || '-');
+
+    const printContents = `
+        <div style="font-family: sans-serif; padding: 20px;">
+            <h2>Order Details</h2>
+            <hr>
+            <p><strong>Deal Title:</strong> ${dealTitle}</p>
+            <p><strong>Client Name:</strong> ${clientName}</p>
+            <p><strong>Start Date:</strong> ${escapeHTML(order.start_date || '-')}</p>
+            <p><strong>End Date:</strong> ${escapeHTML(order.end_date || '-')}</p>
+            <p><strong>Location:</strong> ${locationStr}</p>
+            <p><strong>Invoice Amount:</strong> ${escapeHTML(order.invoice_amount || '0')} SAR</p>
+            <p><strong>Project Status:</strong> ${escapeHTML(order.project_status || 'Unknown')}</p>
+            <p><strong>Notes:</strong><br>${escapeHTML(order.notes || '-').replace(/\\n/g, '<br>')}</p>
+            <hr>
+            <p><small>Printed on ${new Date().toLocaleString()}</small></p>
+        </div>
+    `;
+
+    let printFrame = document.getElementById('printFrame');
+    if (!printFrame) {
+        printFrame = document.createElement('iframe');
+        printFrame.id = 'printFrame';
+        printFrame.style.position = 'absolute';
+        printFrame.style.width = '0px';
+        printFrame.style.height = '0px';
+        printFrame.style.border = 'none';
+        document.body.appendChild(printFrame);
+    }
+
+    printFrame.contentDocument.open();
+    printFrame.contentDocument.write(`
+        <html>
+            <head><title>Print Order - ${dealTitle}</title></head>
+            <body>${printContents}</body>
+        </html>
+    `);
+    printFrame.contentDocument.close();
+
+    printFrame.contentWindow.focus();
+    setTimeout(() => {
+        printFrame.contentWindow.print();
+    }, 250);
 };
 
 // Department Modals
@@ -3167,7 +3548,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     }
 
     // Toggle disabled state for all inputs
-    const inputs = ['crmDealTitle', 'crmDealClient', 'crmDealAmount', 'crmDealClosingDate', 'crmDealAssignee', 'crmDealLostReason'];
+    const inputs = ['crmDealTitle', 'crmDealClient', 'crmDealAmount', 'crmDealClosingDate', 'crmDealAssignee', 'crmDealLostReason', 'crmDealEventType', 'crmDealFirstContactDate', 'crmDealContactMethod', 'crmDealLeadSource'];
     inputs.forEach(inputId => {
         const el = document.getElementById(inputId);
         if (el) el.disabled = isViewOnly;
@@ -3181,6 +3562,12 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
             document.getElementById('crmDealClient').value = deal.client_id || '';
             document.getElementById('crmDealAmount').value = deal.amount || 0;
             document.getElementById('crmDealClosingDate').value = deal.closing_date || '';
+            
+            if (document.getElementById('crmDealEventType')) document.getElementById('crmDealEventType').value = deal.event_type || '';
+            if (document.getElementById('crmDealFirstContactDate')) document.getElementById('crmDealFirstContactDate').value = deal.first_contact_date || '';
+            if (document.getElementById('crmDealContactMethod')) document.getElementById('crmDealContactMethod').value = deal.contact_method || '';
+            if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = deal.lead_source || '';
+            
             if (assigneeSelect) assigneeSelect.value = deal.assigned_to || '';
             
             if (deal.stage === 'LOST') {
@@ -3195,6 +3582,10 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
         document.getElementById('crmDealClient').value = '';
         document.getElementById('crmDealAmount').value = '';
         document.getElementById('crmDealClosingDate').value = '';
+        if (document.getElementById('crmDealEventType')) document.getElementById('crmDealEventType').value = '';
+        if (document.getElementById('crmDealFirstContactDate')) document.getElementById('crmDealFirstContactDate').value = '';
+        if (document.getElementById('crmDealContactMethod')) document.getElementById('crmDealContactMethod').value = '';
+        if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = '';
         if (assigneeSelect) assigneeSelect.value = '';
         document.getElementById('crmDealLostReasonGroup').style.display = 'none';
     }
@@ -3212,11 +3603,20 @@ window.handleCreateDeal = async (e) => {
     const assigneeVal = assigneeEl ? assigneeEl.value : null;
     const closingDateEl = document.getElementById('crmDealClosingDate');
     
+    const eventTypeEl = document.getElementById('crmDealEventType');
+    const firstContactDateEl = document.getElementById('crmDealFirstContactDate');
+    const contactMethodEl = document.getElementById('crmDealContactMethod');
+    const leadSourceEl = document.getElementById('crmDealLeadSource');
+    
     const data = {
         title: document.getElementById('crmDealTitle').value,
         amount: parseFloat(document.getElementById('crmDealAmount').value) || 0,
         client_id: document.getElementById('crmDealClient').value,
         closing_date: (closingDateEl && closingDateEl.value) ? closingDateEl.value : null,
+        event_type: (eventTypeEl && eventTypeEl.value) ? eventTypeEl.value : null,
+        first_contact_date: (firstContactDateEl && firstContactDateEl.value) ? firstContactDateEl.value : null,
+        contact_method: (contactMethodEl && contactMethodEl.value) ? contactMethodEl.value : null,
+        lead_source: (leadSourceEl && leadSourceEl.value) ? leadSourceEl.value : null,
         assigned_to: assigneeVal ? assigneeVal : currentUser.id
     };
     if (!id) data.stage = 'LEAD'; // Only set stage on creation

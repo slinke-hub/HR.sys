@@ -86,8 +86,12 @@
                 </a>
                 
                 <a href="#" class="nav-item" data-view="crm">
-                    <i data-lucide="users-2"></i>
-                    <span>CRM (Deals)</span>
+                    <i data-lucide="bar-chart-2"></i>
+                    <span>CRM</span>
+                </a>
+                <a href="#" class="nav-item" data-view="orders">
+                    <i data-lucide="shopping-cart"></i>
+                    <span>Orders</span>
                 </a>
                 <a href="#" class="nav-item" data-view="integrations">
                     <i data-lucide="webhook"></i>
@@ -236,6 +240,31 @@
                         <input type="date" id="crmDealClosingDate" class="form-control">
                     </div>
                 </div>
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="tag" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Event Type</label>
+                        <input type="text" id="crmDealEventType" class="form-control">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="calendar-clock" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> First Contact Date</label>
+                        <input type="date" id="crmDealFirstContactDate" class="form-control">
+                    </div>
+                </div>
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="message-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Contacted Via</label>
+                        <select id="crmDealContactMethod" class="form-control">
+                            <option value="">Select Method</option>
+                            <option value="Phone call">Phone call</option>
+                            <option value="WhatsApp">WhatsApp</option>
+                            <option value="Social media">Social media</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="rss" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Heard About Us From</label>
+                        <input type="text" id="crmDealLeadSource" class="form-control">
+                    </div>
+                </div>
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Assigned To</label>
                     <select id="crmDealAssignee" class="form-control"></select>
@@ -251,19 +280,132 @@
 
     <!-- Lost Reason Modal -->
     <div class="modal" id="lostReasonModal">
-        <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-content" style="max-width: 400px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
             <div class="modal-header">
                 <h2>Deal Lost Reason</h2>
                 <button class="btn btn-icon" onclick="closeLostReasonModal()"><i data-lucide="x"></i></button>
             </div>
             <form onsubmit="handleLostReasonSubmit(event)">
                 <input type="hidden" id="lostDealId">
-                <div class="form-group">
+                <input type="hidden" id="lostOldStage">
+                <div class="form-group" style="margin-bottom: 1rem;">
                     <label class="form-label">Why was this deal lost? *</label>
                     <textarea id="lostReasonText" class="form-control" rows="3" required></textarea>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width:100%; background-color: var(--color-danger); border-color: var(--color-danger);">Mark as Lost</button>
+                <button type="submit" class="btn btn-primary" style="width:100%;"><i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Save & Update</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Deal Won Order Details Modal -->
+    <div class="modal" id="crmOrderModal">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header">
+                <h2>Order Details</h2>
+                <button class="btn btn-icon" type="button" onclick="closeCRMOrderModal()"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleOrderSubmit(event)">
+                <input type="hidden" id="orderDealId">
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="calendar" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Starting Date *</label>
+                        <input type="date" id="orderStartDate" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="calendar-off" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> End Date</label>
+                        <input type="date" id="orderEndDate" class="form-control">
+                    </div>
+                </div>
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="map-pin" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Event's Location (Google Maps URL)</label>
+                        <input type="url" id="orderLocation" class="form-control" placeholder="https://maps.google.com/...">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="receipt" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Invoice Amount *</label>
+                        <input type="number" id="orderInvoiceAmount" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label"><i data-lucide="check-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Status *</label>
+                    <select id="orderProjectStatus" class="form-control" required>
+                        <option value="Not Confirmed">Not Confirmed</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label"><i data-lucide="sticky-note" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Note</label>
+                    <textarea id="orderNotes" class="form-control" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; margin-top: 0.5rem;"><i data-lucide="check" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Submit Order & Win Deal</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Order Modal -->
+    <div class="modal" id="editOrderModal">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header">
+                <h2>Edit Order</h2>
+                <button class="btn btn-icon" type="button" onclick="closeEditOrderModal()"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleEditOrderSubmit(event)">
+                <input type="hidden" id="editOrderId">
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="calendar" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Starting Date</label>
+                        <input type="date" id="editOrderStartDate" class="form-control">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="calendar-off" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> End Date</label>
+                        <input type="date" id="editOrderEndDate" class="form-control">
+                    </div>
+                </div>
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="map-pin" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Event's Location (Google Maps URL)</label>
+                        <input type="url" id="editOrderLocation" class="form-control" placeholder="https://maps.google.com/...">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="receipt" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Invoice Amount</label>
+                        <input type="number" id="editOrderInvoiceAmount" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label"><i data-lucide="check-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Status</label>
+                    <select id="editOrderProjectStatus" class="form-control" required>
+                        <option value="Not Confirmed">Not Confirmed</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label"><i data-lucide="sticky-note" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Note</label>
+                    <textarea id="editOrderNotes" class="form-control" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; margin-top: 0.5rem;"><i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Order Modal -->
+    <div class="modal" id="confirmDeleteOrderModal">
+        <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header" style="justify-content: center; border-bottom: none; padding-bottom: 0;">
+                <div style="background: rgba(239, 68, 68, 0.1); width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: var(--color-danger);">
+                    <i data-lucide="alert-triangle" style="width: 32px; height: 32px;"></i>
+                </div>
+            </div>
+            <div style="padding: 1.5rem;">
+                <h2 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Delete Order?</h2>
+                <p style="color: var(--color-text-light); margin-bottom: 1.5rem;">Are you sure you want to permanently delete this order? This action cannot be undone.</p>
+                <input type="hidden" id="deleteOrderIdInput">
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button class="btn" style="flex: 1; background: var(--color-surface-light); color: var(--color-text);" onclick="closeConfirmDeleteOrderModal()">Cancel</button>
+                    <button class="btn btn-primary" style="flex: 1; background: var(--color-danger);" onclick="executeDeleteOrder()">Delete</button>
+                </div>
+            </div>
         </div>
     </div>
 

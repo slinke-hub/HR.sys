@@ -459,6 +459,20 @@ const db = {
             return [];
         }
     },
+    async fetchTasksWithProfiles() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .select('*, profiles:assignee_id(id, full_name, job_title, role)')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("fetchTasksWithProfiles Error:", error);
+            return [];
+        }
+    },
     async createTask(title, description, assigneeId, dueDate, createdBy) {
         if (!supabaseClient) return { success: false };
         try {
@@ -1036,6 +1050,69 @@ const db = {
             return { success: true };
         } catch (error) {
             console.error("updateDealStage Error:", error);
+            return { success: false, error };
+        }
+    },
+    async createOrder(orderData, dealId) {
+        if (!supabaseClient) return { success: false };
+        try {
+            // First update deal stage to WON
+            const { error: dealError } = await supabaseClient.from('crm_deals').update({ stage: 'WON' }).eq('id', dealId);
+            if (dealError) throw dealError;
+            
+            // Then insert order details
+            const { error: orderError } = await supabaseClient.from('crm_orders').insert([{ ...orderData, deal_id: dealId }]);
+            if (orderError) throw orderError;
+            
+            return { success: true };
+        } catch (error) {
+            console.error("createOrder Error:", error);
+            return { success: false, error };
+        }
+    },
+    async fetchOrders() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('crm_orders')
+                .select('*, crm_deals(title, crm_clients(name))')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchOrders Error:", error);
+            return [];
+        }
+    },
+    async updateOrder(id, orderData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_orders').update(orderData).eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateOrder Error:", error);
+            return { success: false, error };
+        }
+    },
+    async deleteOrder(id) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_orders').delete().eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("deleteOrder Error:", error);
+            return { success: false, error };
+        }
+    },
+    async deleteOrderByDealId(dealId) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_orders').delete().eq('deal_id', dealId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("deleteOrderByDealId Error:", error);
             return { success: false, error };
         }
     },
