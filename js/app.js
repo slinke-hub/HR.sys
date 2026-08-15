@@ -577,7 +577,7 @@ window.handleLoginSubmit = async function (e) {
 
     const loginBtn = e.target.querySelector('button[type="submit"]');
     const originalBtnText = loginBtn.innerHTML;
-    loginBtn.innerHTML = `<i data-lucide="loader" class="spin" style="margin-right: 0.5rem; width: 16px; height: 16px;"></i> ${t('sign_in') || 'Signing in...'}`;
+    loginBtn.innerHTML = `<span class="spinner-sm" style="margin-right: 0.5rem;"></span> ${t('sign_in') || 'Signing in...'}`;
     loginBtn.disabled = true;
     lucide.createIcons();
 
@@ -1375,9 +1375,21 @@ async function renderExpenses() {
                         <label class="form-label">${t('exp_amount')}</label>
                         <input type="number" step="0.01" id="expAmount" class="form-control" required>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">${t('exp_desc')}</label>
-                        <textarea id="expDesc" class="form-control" required></textarea>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                    <label>${t('task_desc')}</label>
+                    <textarea id="editTaskDesc" class="form-control" rows="4">${task.description || ''}</textarea>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
+                <button type="button" class="btn btn-icon" style="color:var(--color-danger); display:flex; gap:0.5rem; align-items:center;" onclick="handleDeleteTask('${id}')">
+                    <i data-lucide="trash-2"></i> ${t('delete') || 'Delete'}
+                </button>
+                <div style="display: flex; gap: 1rem;">
+                    <button type="button" class="btn-secondary" onclick="document.getElementById('editTaskModal').classList.remove('active')">${t('cancel')}</button>
+                    <button type="button" class="btn-primary" onclick="handleSaveTask('${id}')">${t('save_task') || 'Save Task'}</button>
+                </div>
+            </div>
+        </form>
                     </div>
                     <div class="form-group">
                         <label class="form-label">${t('exp_receipt')}</label>
@@ -1852,7 +1864,7 @@ async function renderPerformance() {
 
 window.generatePerformanceReport = async function() {
     const btn = document.getElementById('generatePerfBtn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" style="animation:spin 1s linear infinite;"></i> Generating...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-sm" style="margin-right: 0.5rem;"></span> Generating...'; }
     if (window.lucide) window.lucide.createIcons();
 
     const tasks = await db.fetchTasksWithProfiles();
@@ -2400,6 +2412,7 @@ window.switchTaskView = function(view) {
 };
 
 async function renderTasks() {
+    console.log("renderTasks: Starting...");
     let tasksPromise;
     if (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) {
         tasksPromise = db.fetchTasks(); 
@@ -2407,11 +2420,13 @@ async function renderTasks() {
         tasksPromise = db.fetchTasks(currentUser.id);
     }
     
+    console.log("renderTasks: Fetching users and tasks...");
     // Fetch users and tasks in parallel
     const [allUsers, fetchedTasks] = await Promise.all([
         db.fetchUsers(),
         tasksPromise
     ]);
+    console.log("renderTasks: Fetched users and tasks.", { usersCount: allUsers.length, tasksCount: fetchedTasks.length });
     let tasks = fetchedTasks;
 
     if (((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) {
@@ -2465,7 +2480,9 @@ async function renderTasks() {
     const review = tasks.filter(t => t.status === 'review');
     const done = tasks.filter(t => t.status === 'completed');
 
+    console.log("renderTasks: Fetching projects...");
     const projects = await db.fetchProjects(currentUser.id);
+    console.log("renderTasks: Fetched projects.", { projectsCount: projects.length });
     const projectOptions = projects.map(p => `<option value="${p.id}">${p.project_name}</option>`).join('');
     window.projectOptionsCache = projectOptions;
     window.projectsCache = projects;
@@ -3018,6 +3035,21 @@ window.handleEditTaskSubmit = async function(e) {
         showToast("Failed to update task details", "danger");
     } else {
         showToast("Task updated successfully", "success");
+        await db.triggerWebhooks('task_updated', { task_id: id, updates: updates });
+        document.getElementById('editTaskModal').classList.remove('active');
+        renderView('tasks');
+    }
+};
+
+window.handleDeleteTask = async function(id) {
+    if (!confirm(t('confirm_delete') || "Are you sure you want to delete this task?")) return;
+    
+    const { error } = await db.deleteTask(id);
+    if (error) {
+        showToast("Failed to delete task", "danger");
+    } else {
+        showToast("Task deleted successfully", "success");
+        await db.triggerWebhooks('task_deleted', { task_id: id });
         document.getElementById('editTaskModal').classList.remove('active');
         renderView('tasks');
     }
@@ -3285,66 +3317,66 @@ window.renderView = async function(viewId, isBack = false) {
         lucide.createIcons();
         if (viewId === 'analytics') setTimeout(initCharts, 100);
     } else if (viewId !== 'login') {
-        viewContainer.innerHTML = `<div style="display:flex; justify-content:center; padding: 4rem; color: var(--color-primary);"><i data-lucide="loader" class="spin"></i></div>`;
+        viewContainer.innerHTML = `<div style="display:flex; justify-content:center; padding: 4rem;"><div class="spinner"></div></div>`;
         lucide.createIcons();
     }
 
     let content = '';
 
-    switch (viewId) {
-        case 'contract': content = await renderContractPage(); break;
-        case 'login': content = renderLogin(); break;
-        case 'dashboard': content = await renderDashboard(); break;
-        case 'community': content = await renderCommunity(); break;
-        case 'time': content = await renderTime(); break;
-        case 'leave': content = await renderLeave(); break;
-        case 'requests': content = await renderRequests(); break;
-        case 'archived': content = await renderArchivedRequests(); break;
-        case 'payroll': content = await renderPayroll(); break;
-        case 'expenses': content = await renderExpenses(); break;
-        case 'analytics': content = await renderAnalytics(); break;
-        case 'admin': content = await renderAdmin(); break;
-        case 'users': content = await renderUsers(); break;
-        case 'employees': content = await renderEmployeesDirectory(); break;
-        case 'messages': content = await renderMessages(); break;
-        case 'notifications': content = await renderNotifications(); break;
-        case 'performance': content = await renderPerformance(); break;
-        case 'documents': content = await renderDocuments(); break;
-        case 'profile': content = await renderProfile(); break;
-        case 'projects': content = await renderProjects(); break;
-        case 'approvals': content = await renderApprovals(); break;
-        case 'tasks': content = await renderTasks(); break;
-        case 'departments': content = await renderDepartments(); break;
-        case 'clients': content = await renderClients(); break;
-        case 'crm': content = await renderCRM(); break;
-        case 'orders': content = await renderOrders(); break;
-        case 'integrations': content = await renderIntegrations(); break;
-        default:
-            content = `
-                <div class="page-header">
-                    <h1 class="page-title">${t('nav_' + viewId) || t('nav_coming_soon')}</h1>
-                </div>
-                <div class="card" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
-                    <div style="text-align: center; color: var(--color-text-secondary);">
-                        <i data-lucide="hammer" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
-                        <h2>${t('nav_under_const')}</h2>
+    try {
+        switch (viewId) {
+            case 'contract': content = await renderContractPage(); break;
+            case 'login': content = renderLogin(); break;
+            case 'dashboard': content = await renderDashboard(); break;
+            case 'community': content = await renderCommunity(); break;
+            case 'time': content = await renderTime(); break;
+            case 'leave': content = await renderLeave(); break;
+            case 'requests': content = await renderRequests(); break;
+            case 'archived': content = await renderArchivedRequests(); break;
+            case 'payroll': content = await renderPayroll(); break;
+            case 'expenses': content = await renderExpenses(); break;
+            case 'analytics': content = await renderAnalytics(); break;
+            case 'admin': content = await renderAdmin(); break;
+            case 'users': content = await renderUsers(); break;
+            case 'employees': content = await renderEmployeesDirectory(); break;
+            case 'messages': content = await renderMessages(); break;
+            case 'notifications': content = await renderNotifications(); break;
+            case 'performance': content = await renderPerformance(); break;
+            case 'documents': content = await renderDocuments(); break;
+            case 'profile': content = await renderProfile(); break;
+            case 'projects': content = await renderProjects(); break;
+            case 'approvals': content = await renderApprovals(); break;
+            case 'tasks': content = await renderTasks(); break;
+            case 'departments': content = await renderDepartments(); break;
+            case 'clients': content = await renderClients(); break;
+            case 'crm': content = await renderCRM(); break;
+            case 'orders': content = await renderOrders(); break;
+            case 'integrations': content = await renderIntegrations(); break;
+            default:
+                content = `
+                    <div class="page-header">
+                        <h1 class="page-title">${t('nav_' + viewId) || t('nav_coming_soon')}</h1>
                     </div>
-                </div>
-            `;
+                    <div class="card" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
+                        <div style="text-align: center; color: var(--color-text-secondary);">
+                            <i data-lucide="hammer" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
+                            <h2>${t('nav_under_const')}</h2>
+                            <p>${t('check_back')}</p>
+                        </div>
+                    </div>
+                `;
+        }
+    } catch (err) {
+        console.error("renderView error:", err);
+        content = `<div class="card" style="color:red; padding: 2rem;"><h3>Error Loading Page</h3><p>${err.message}</p><pre>${err.stack}</pre></div>`;
     }
 
     if (currentView === viewId || viewId === 'login') {
-        if (window.viewHTMLCache[viewId] !== content) {
-            const focusedElement = document.activeElement;
-            const isInputFocused = focusedElement && viewContainer.contains(focusedElement) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(focusedElement.tagName);
-            
-            if (!isInputFocused) {
-                window.viewHTMLCache[viewId] = content;
-                viewContainer.innerHTML = content;
-                lucide.createIcons();
-                if (viewId === 'analytics') setTimeout(initCharts, 100);
-            }
-        }
+        window.viewHTMLCache[viewId] = content;
+        // Always update the view with the fresh content!
+        viewContainer.innerHTML = content;
+        lucide.createIcons();
+        if (viewId === 'analytics') setTimeout(initCharts, 100);
     } else {
         window.viewHTMLCache[viewId] = content;
     }
@@ -5082,9 +5114,12 @@ async function renderArchivedRequests() {
 // PROJECTS VIEW (V4 Upgrade)
 // ==========================================
 async function renderProjects() {
+    console.log("renderProjects: Starting...");
     if (!currentUser) return `<div class="page-header"><h1 class="page-title">Projects</h1></div><div class="card">Please login to view projects.</div>`;
 
+    console.log("renderProjects: Fetching projects from db...");
     const projects = await db.fetchProjects();
+    console.log("renderProjects: Fetched projects.", { count: projects ? projects.length : 0 });
     window.projectCache = {};
 
     let html = `
@@ -5358,5 +5393,12 @@ if (searchInput) {
         }
     });
 }
+
+// Close modals when clicking on the backdrop
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('modal')) {
+        e.target.classList.remove('active', 'show');
+    }
+});
 
 initApp();

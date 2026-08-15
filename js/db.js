@@ -694,6 +694,16 @@ const db = {
             return { success: false, error };
         }
     },
+    async deleteTask(taskId) {
+        if (!supabaseClient) return { success: false, error: { message: "Not connected" } };
+        try {
+            const { error } = await supabaseClient.from('tasks').delete().eq('id', taskId);
+            return { error };
+        } catch (error) {
+            console.error("deleteTask Error:", error);
+            return { success: false, error };
+        }
+    },
     async fetchTaskComments(taskId) {
         if (!supabaseClient) return [];
         try {
