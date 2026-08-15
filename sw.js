@@ -1,4 +1,4 @@
-const CACHE_NAME = 'muqam-hr-cache-v33';
+const CACHE_NAME = 'hr-sys-v41';
 const ASSETS = [
   '/',
   '/index.html',
@@ -46,18 +46,19 @@ self.addEventListener('fetch', (event) => {
   // Exclude Supabase API requests from caching
   if (event.request.url.includes('supabase.co')) return;
 
+  // Network First, falling back to cache
   event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        return response || fetch(event.request).then((fetchRes) => {
-          return caches.open(CACHE_NAME).then((cache) => {
-            // Only cache valid responses
-            if (fetchRes.status === 200 && fetchRes.type === 'basic') {
-              cache.put(event.request.url, fetchRes.clone());
-            }
-            return fetchRes;
-          });
+    fetch(event.request)
+      .then((networkResponse) => {
+        return caches.open(CACHE_NAME).then((cache) => {
+          if (networkResponse.status === 200 && networkResponse.type === 'basic') {
+            cache.put(event.request.url, networkResponse.clone());
+          }
+          return networkResponse;
         });
+      })
+      .catch(() => {
+        return caches.match(event.request);
       })
   );
 });

@@ -8,6 +8,7 @@ let supabaseClient = null;
 
 if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
     supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    window.supabaseClient = supabaseClient;
     console.log("Supabase client initialized successfully.");
 } else {
     console.warn("Supabase credentials not configured. Using mocked data/actions.");
@@ -15,6 +16,108 @@ if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE
 
 // Global DB helper functions for the prototype
 const db = {
+
+    // User Management API
+    async updateUserProfile(userId, updates) {
+        if (!supabaseClient) return null;
+        try {
+            const { data, error } = await supabaseClient
+                .from('profiles')
+                .update(updates)
+                .eq('id', userId)
+                .select();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("Error updating user profile:", error);
+            return null;
+        }
+    },
+    async deleteUser(userId) {
+        if (!supabaseClient) return null;
+        try {
+            const { data, error } = await supabaseClient.rpc('delete_user', { target_user_id: userId });
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error("Error deleting user:", error);
+            return false;
+        }
+    },
+    async resetUserPassword(userId, newPassword) {
+        if (!supabaseClient) return null;
+        try {
+            const { data, error } = await supabaseClient.rpc('reset_user_password', { target_user_id: userId, new_password: newPassword });
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error("Error resetting password:", error);
+            return false;
+        }
+    },
+
+    // Request API
+    async fetchRequests(userId = null) {
+        if (!supabaseClient) return [];
+        try {
+            let query = supabaseClient.from('requests').select('*, profiles(full_name)').order('created_at', { ascending: false });
+            if (userId) {
+                query = query.eq('employee_id', userId);
+            }
+            const { data, error } = await query;
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("Error fetching requests:", error);
+            return [];
+        }
+    },
+    async createRequest(employeeId, requestType, leaveType, notes) {
+        if (!supabaseClient) return null;
+        try {
+            const { data, error } = await supabaseClient.from('requests').insert([{
+                employee_id: employeeId,
+                request_type: requestType,
+                leave_type: leaveType
+                // notes could be added to schema if needed, skipping for now
+            }]).select();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("Error creating request:", error);
+            return null;
+        }
+    },
+
+    // Login Lockout API
+    async checkLoginLockout(email) {
+        if (!supabaseClient) return null;
+        try {
+            const { data, error } = await supabaseClient.from('login_attempts').select('*').eq('email', email).maybeSingle();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("Error checking login lockout:", error);
+            return null;
+        }
+    },
+    async recordFailedLogin(email) {
+        if (!supabaseClient) return null;
+        try {
+            await supabaseClient.rpc('record_failed_login', { user_email: email });
+        } catch (error) {
+            console.error("Error recording failed login:", error);
+        }
+    },
+    async resetLoginLockout(email) {
+        if (!supabaseClient) return null;
+        try {
+            await supabaseClient.rpc('reset_login_lockout', { user_email: email });
+        } catch (error) {
+            console.error("Error resetting login lockout:", error);
+        }
+    },
+
 
     async fetchTimePunches(userId = null) {
         if (!supabaseClient) return [];
@@ -237,7 +340,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('id, emp_index, full_name, iqama_number, phone_number, role, job_title, created_at, manager_id, base_salary')
+                .select('id, emp_index, full_name, iqama_number, phone_number, role, job_title, created_at, manager_id, base_salary, department_id')
                 .order('emp_index', { ascending: true });
             if (error) throw error;
             return data;
@@ -442,14 +545,70 @@ const db = {
         }
     },
     // ==========================================
-    // TASK MANAGER
+    // PROJECTS & TASK MANAGER
     // ==========================================
+    async fetchProjects(userId = null) {
+        if (!supabaseClient) return [];
+        try {
+            let query = supabaseClient.from('projects').select('*').order('created_at', { ascending: false });
+            // Let RLS handle user-specific project visibility, or we can explicitely filter:
+            // if (userId) { ... }
+            const { data, error } = await query;
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("fetchProjects Error:", error);
+            return [];
+        }
+    },
+    async createProject(projectName, projectType, description, assignedPeople, projectCategory, projectTags) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('projects')
+                .insert([{
+                    project_name: projectName,
+                    project_type: projectType,
+                    description: description,
+                    assigned_people: assignedPeople,
+                    project_category: projectCategory,
+                    project_tags: projectTags
+                }]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("createProject Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateProject(projectId, projectName, projectType, description, assignedPeople, projectCategory, projectTags) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('projects')
+                .update({
+                    project_name: projectName,
+                    project_type: projectType,
+                    description: description,
+                    assigned_people: assignedPeople,
+                    project_category: projectCategory,
+                    project_tags: projectTags
+                })
+                .eq('id', projectId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateProject Error:", error);
+            return { success: false, error };
+        }
+    },
     async fetchTasks(userId = null) {
         if (!supabaseClient) return [];
         try {
             let query = supabaseClient.from('tasks').select('*').order('created_at', { ascending: false });
             if (userId) {
-                query = query.or(`assignee_id.eq.${userId},created_by.eq.${userId}`);
+                // PostgREST syntax for arrays: visible_to.cs.{userId} checks if array contains userId
+                query = query.or(`assignee_id.eq.${userId},created_by.eq.${userId},visible_to.cs.{${userId}}`);
             }
             const { data, error } = await query;
             if (error) throw error;
@@ -464,7 +623,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('tasks')
-                .select('*, profiles:assignee_id(id, full_name, job_title, role)')
+                .select('*, profiles:assignee_id(id, full_name, job_title, role), projects(project_name)')
                 .order('created_at', { ascending: false });
             if (error) throw error;
             return data;
@@ -473,7 +632,7 @@ const db = {
             return [];
         }
     },
-    async createTask(title, description, assigneeId, dueDate, createdBy) {
+    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo') {
         if (!supabaseClient) return { success: false };
         try {
             const { data, error } = await supabaseClient
@@ -484,7 +643,21 @@ const db = {
                     assignee_id: assigneeId, 
                     due_date: dueDate,
                     created_by: createdBy,
-                    status: 'TODO'
+                    status: status,
+                    priority: priority,
+                    category: category,
+                    title_i18n: titleI18n,
+                    description_i18n: descI18n,
+                    start_date: startDate,
+                    end_date: endDate,
+                    estimated_time: estimatedTime,
+                    visibility: visibility,
+                    project_id: projectId,
+                    tags: tags,
+                    visible_to: visibleTo,
+                    content_type: contentType,
+                    source_link: sourceLink,
+                    upload_link: uploadLink
                 }]);
             if (error) throw error;
             return { success: true };
@@ -504,6 +677,52 @@ const db = {
             return { success: true };
         } catch (error) {
             console.error("updateTaskStatus Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateTask(taskId, updates) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .update(updates)
+                .eq('id', taskId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateTask Error:", error);
+            return { success: false, error };
+        }
+    },
+    async fetchTaskComments(taskId) {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('task_comments')
+                .select('*, profiles:user_id(id, full_name, role)')
+                .eq('task_id', taskId)
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("fetchTaskComments Error:", error);
+            return [];
+        }
+    },
+    async addTaskComment(taskId, userId, content) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('task_comments')
+                .insert([{ 
+                    task_id: taskId,
+                    user_id: userId,
+                    content: content
+                }]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("addTaskComment Error:", error);
             return { success: false, error };
         }
     },

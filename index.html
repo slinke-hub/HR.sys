@@ -60,6 +60,10 @@
                     <i data-lucide="archive"></i>
                     <span>Archived Requests</span>
                 </a>
+                <a href="#" class="nav-item" data-view="requests">
+                    <i data-lucide="file-signature"></i>
+                    <span>Employee Requests</span>
+                </a>
                 <a href="#" class="nav-item" data-view="expenses">
                     <i data-lucide="receipt"></i>
                     <span>Expenses</span>
@@ -68,10 +72,9 @@
                     <i data-lucide="banknote"></i>
                     <span data-i18n="nav_payroll">Payroll</span>
                 </a>
-                <a href="#" class="nav-item" data-view="tasks">
-                    <i data-lucide="list-todo"></i>
-                    <span data-i18n="nav_tasks">Tasks</span>
-                </a>
+                <a href="#" class="nav-item" onclick="renderView('projects')"><i data-lucide="folder"></i> <span data-i18n="nav_projects">Projects</span></a>
+                <a href="#" class="nav-item" onclick="renderView('tasks')"><i data-lucide="check-square"></i> <span data-i18n="nav_tasks">Tasks</span></a>
+                <a href="#" class="nav-item" id="navApprovals" style="display: none;" onclick="renderView('approvals')"><i data-lucide="check-circle"></i> <span data-i18n="nav_approvals">Approvals</span></a>
                 <a href="#" class="nav-item" data-view="performance">
                     <i data-lucide="target"></i>
                     <span data-i18n="nav_performance">Performance</span>
@@ -431,9 +434,158 @@
                         <option value="all">All Events</option>
                         <option value="deal_won">Deal Won</option>
                         <option value="new_client">New Client Added</option>
+                        <option value="task_created">New Task Created</option>
+                        <option value="task_status_updated">Task Status Updated</option>
                     </select>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%;">Save Webhook</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div class="modal" id="editUserModal">
+        <div class="modal-content fade-in-up" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header">
+                <h2><i data-lucide="user-cog"></i> Edit User</h2>
+                <button class="icon-btn" onclick="document.getElementById('editUserModal').classList.remove('active')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <form autocomplete="off" onsubmit="handleUpdateUser(event)">
+                <input type="hidden" id="editUserId">
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_fn">Full Name</label>
+                    <input type="text" autocomplete="off" id="editFullName" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_iqama">Iqama / ID Number</label>
+                    <input type="text" autocomplete="off" id="editIqama" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_phone">Phone Number</label>
+                    <input type="text" autocomplete="off" id="editPhone" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_job_title">Job Title</label>
+                    <input type="text" autocomplete="off" id="editJobTitle" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_role">Role</label>
+                    <select id="editRole" class="form-control">
+                        <option value="EMPLOYEE">Employee</option>
+                        <option value="MANAGER">Manager</option>
+                        <option value="SUPERVISOR">Supervisor</option>
+                        <option value="ADMIN">Admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_assign_mgr">Assign Manager</label>
+                    <select id="editManagerId" class="form-control">
+                        <option value="">No Manager</option>
+                    </select>
+                </div>
+                <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('editUserModal').classList.remove('active')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Request Modal -->
+    <div class="modal" id="requestModal">
+        <div class="modal-content fade-in-up" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header">
+                <h2><i data-lucide="file-signature"></i> New Request</h2>
+                <button class="icon-btn" onclick="document.getElementById('requestModal').classList.remove('active')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <form autocomplete="off" onsubmit="handleCreateRequest(event)">
+                <div class="form-group">
+                    <label class="form-label">Employee</label>
+                    <select id="requestEmployeeId" class="form-control" required>
+                        <!-- Filled by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Request Type</label>
+                    <select id="requestType" class="form-control" required onchange="document.getElementById('leaveTypeGroup').style.display = this.value === 'Leave Request' ? 'block' : 'none'">
+                        <option value="Leave Request">Leave Request</option>
+                        <option value="IT Support">IT Support</option>
+                        <option value="Loan">Loan</option>
+                        <option value="Early Leaving">Early Leaving</option>
+                        <option value="Payslip print">Payslip print</option>
+                    </select>
+                </div>
+                <div class="form-group" id="leaveTypeGroup">
+                    <label class="form-label">Leave Type</label>
+                    <select id="requestLeaveType" class="form-control">
+                        <option value="Annual/Vacation">Annual/Vacation</option>
+                        <option value="Sick Leave">Sick Leave</option>
+                        <option value="Unpaid Leave">Unpaid Leave</option>
+                        <option value="Bereavement">Bereavement</option>
+                        <option value="Maternity/Paternity">Maternity/Paternity</option>
+                    </select>
+                </div>
+                <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('requestModal').classList.remove('active')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- User Modal -->
+    <div class="modal" id="addUserModal">
+        <div class="modal-content fade-in-up">
+            <div class="modal-header">
+                <h2><i data-lucide="user-plus"></i> Add New User</h2>
+                <button class="icon-btn" onclick="closeAddUserModal()">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <form autocomplete="off" onsubmit="handleCreateUser(event)" id="addUserForm">
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_fn">Full Name</label>
+                    <input type="text" autocomplete="off" id="newFullName" class="form-control" placeholder="Enter full name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_iqama">Iqama / ID Number</label>
+                    <input type="text" autocomplete="off" id="newIqama" class="form-control" placeholder="Optional">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_phone">Phone Number</label>
+                    <input type="text" autocomplete="off" id="newPhone" class="form-control" placeholder="Optional">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_email">Email</label>
+                    <input type="email" autocomplete="off" id="newEmail" class="form-control" required>
+                </div>
+                <div class="form-group" style="position: relative;">
+                    <label class="form-label" data-i18n="users_temp_pass">Temporary Password</label>
+                    <input type="password" autocomplete="new-password" id="newPassword" class="form-control" required style="padding-right: 40px;">
+                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('newPassword')">
+                        <i data-lucide="eye" id="newPassword-eye-icon" style="width: 20px; height: 20px;"></i>
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_job_title">Job Title</label>
+                    <input type="text" autocomplete="off" id="newJobTitle" class="form-control" placeholder="e.g. Developer">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_role">Role</label>
+                    <select id="newRole" class="form-control">
+                        <option value="EMPLOYEE" data-i18n="users_role_emp">Employee</option>
+                        <option value="MANAGER" data-i18n="users_role_mgr">Manager</option>
+                        <option value="ADMIN" data-i18n="users_role_admin">Admin</option>
+                    </select>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
+                    <button type="button" class="btn-secondary" onclick="closeAddUserModal()">Cancel</button>
+                    <button type="submit" class="btn-primary" data-i18n="users_create_acc">Create Account</button>
+                </div>
             </form>
         </div>
     </div>
@@ -473,6 +625,135 @@
         </div>
     </div>
 
+    <!-- New Project Modal -->
+    <div class="modal" id="projectModal">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header">
+                <h2>New Project</h2>
+                <button class="btn btn-icon" type="button" onclick="document.getElementById('projectModal').classList.remove('active')"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleCreateProject(event)">
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="folder" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Name *</label>
+                        <input type="text" id="newProjectName" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="tag" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Type *</label>
+                        <select id="newProjectType" class="form-control" required>
+                            <option value="">Select Type...</option>
+                            <option value="Internal">Internal</option>
+                            <option value="Client">Client</option>
+                            <option value="Product">Product</option>
+                            <option value="Maintenance">Maintenance</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="layers" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Category</label>
+                        <select id="newProjectCategory" class="form-control">
+                            <option value="Startup">Startup</option>
+                            <option value="Enterprise">Enterprise</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="users" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Assign People *</label>
+                        <select id="newProjectAssignees" class="form-control" multiple style="min-height: 80px;" required>
+                            <!-- Loaded dynamically -->
+                        </select>
+                        <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple.</small>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label"><i data-lucide="tags" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Tags</label>
+                    <select id="newProjectTags" class="form-control" multiple style="min-height: 80px;">
+                        <option value="Urgent">Urgent</option>
+                        <option value="Frontend">Frontend</option>
+                        <option value="Backend">Backend</option>
+                        <option value="UI/UX">UI/UX</option>
+                        <option value="Bug">Bug</option>
+                        <option value="Feature">Feature</option>
+                    </select>
+                    <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple tags.</small>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label"><i data-lucide="align-left" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Description</label>
+                    <textarea id="newProjectDesc" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('projectModal').classList.remove('active')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Project Modal -->
+    <div class="modal" id="editProjectModal">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header">
+                <h2>Edit Project</h2>
+                <button class="btn btn-icon" type="button" onclick="document.getElementById('editProjectModal').classList.remove('active')"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleUpdateProject(event)">
+                <input type="hidden" id="editProjectId">
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="folder" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Name *</label>
+                        <input type="text" id="editProjectName" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="tag" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Type *</label>
+                        <select id="editProjectType" class="form-control" required>
+                            <option value="">Select Type...</option>
+                            <option value="Internal">Internal</option>
+                            <option value="Client">Client</option>
+                            <option value="Product">Product</option>
+                            <option value="Maintenance">Maintenance</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="layers" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Category</label>
+                        <select id="editProjectCategory" class="form-control">
+                            <option value="Startup">Startup</option>
+                            <option value="Enterprise">Enterprise</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="users" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Assign People *</label>
+                        <select id="editProjectAssignees" class="form-control" multiple style="min-height: 80px;" required>
+                            <!-- Loaded dynamically -->
+                        </select>
+                        <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple.</small>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label"><i data-lucide="tags" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Tags</label>
+                    <select id="editProjectTags" class="form-control" multiple style="min-height: 80px;">
+                        <option value="Urgent">Urgent</option>
+                        <option value="Frontend">Frontend</option>
+                        <option value="Backend">Backend</option>
+                        <option value="UI/UX">UI/UX</option>
+                        <option value="Bug">Bug</option>
+                        <option value="Feature">Feature</option>
+                    </select>
+                    <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple tags.</small>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label"><i data-lucide="align-left" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Description</label>
+                    <textarea id="editProjectDesc" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('editProjectModal').classList.remove('active')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Confirm Modal -->
     <div class="modal" id="confirmModal">
         <div class="modal-content" style="max-width: 400px; text-align: center;">
@@ -485,6 +766,129 @@
                 <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
                 <button class="btn btn-primary" id="confirmModalBtn" style="background-color: var(--color-danger);">Confirm</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Edit Task Modal -->
+    <div class="modal slide-panel" id="editTaskModal">
+        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+            <div class="modal-header">
+                <h2>Edit Task</h2>
+                <button class="close-modal" onclick="document.getElementById('editTaskModal').classList.remove('active')">&times;</button>
+            </div>
+            <form id="editTaskForm" onsubmit="handleEditTaskSubmit(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+                <input type="hidden" id="editTaskId">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Task Title</label>
+                    <input type="text" id="editTaskTitle" class="form-control" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Category</label>
+                    <input type="text" id="editTaskCategory" class="form-control">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Priority</label>
+                    <select id="editTaskPriority" class="form-control">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Project</label>
+                    <select id="editTaskProject" class="form-control">
+                        <!-- Options populated dynamically -->
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Assign To</label>
+                    <select id="editTaskAssignee" class="form-control" onchange="handleTaskAssigneeChange('edit')" required>
+                        <!-- Options populated dynamically -->
+                    </select>
+                </div>
+                <!-- Conditional Designer Fields -->
+                <div id="editDesignFields" style="display: none; width: 100%; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                        <label class="form-label">Content Type</label>
+                        <input type="text" id="editTaskContentType" class="form-control" placeholder="e.g. Graphic, Video">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                        <label class="form-label">Source Link</label>
+                        <input type="url" id="editTaskSourceLink" class="form-control" placeholder="https://...">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                        <label class="form-label">Upload Link</label>
+                        <input type="url" id="editTaskUploadLink" class="form-control" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Visibility</label>
+                    <select id="editTaskVisibility" class="form-control">
+                        <option value="public">Public (Everyone)</option>
+                        <option value="team">Team Only</option>
+                        <option value="private">Private</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" id="editTaskStart" class="form-control">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label class="form-label">Due Date</label>
+                        <input type="date" id="editTaskDue" class="form-control" required>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label class="form-label">End Date</label>
+                        <input type="date" id="editTaskEnd" class="form-control">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label class="form-label">Est. Time</label>
+                        <input type="text" id="editTaskEstimate" class="form-control" placeholder="e.g. 5 hours">
+                    </div>
+                </div>
+                <div class="form-group task-assign-btn-group" style="margin-bottom: 0; margin-top: 1rem;">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Task Details & Comments Side Panel -->
+    <div class="side-panel-overlay" id="taskSidePanelOverlay" onclick="document.getElementById('taskSidePanel').classList.remove('active'); document.getElementById('taskSidePanelOverlay').classList.remove('active');"></div>
+    <div class="side-panel" id="taskSidePanel">
+        <div class="side-panel-header">
+            <h2 id="detailsTaskTitle" style="margin:0; font-size: 1.25rem;">Task Details</h2>
+            <button class="close-modal" onclick="document.getElementById('taskSidePanel').classList.remove('active'); document.getElementById('taskSidePanelOverlay').classList.remove('active');" style="background:none; border:none; color:var(--color-text); font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+        <div class="side-panel-body">
+            <div class="task-details-grid">
+                <div><strong>Assignee:</strong> <span id="detailsTaskAssignee"></span></div>
+                <div><strong>Creator:</strong> <span id="detailsTaskCreator"></span></div>
+                <div><strong>Status:</strong> <span id="detailsTaskStatus" class="badge"></span></div>
+                <div><strong>Priority:</strong> <span id="detailsTaskPriority" class="badge"></span></div>
+                <div><strong>Visibility:</strong> <span id="detailsTaskVisibility"></span></div>
+                <div><strong>Category:</strong> <span id="detailsTaskCategory"></span></div>
+                <div><strong>Start Date:</strong> <span id="detailsTaskStart"></span></div>
+                <div><strong>Due Date:</strong> <span id="detailsTaskDue"></span></div>
+                <div><strong>End Date:</strong> <span id="detailsTaskEnd"></span></div>
+                <div><strong>Est. Time:</strong> <span id="detailsTaskEstimate"></span></div>
+            </div>
+            
+            <h3>Activity & Comments</h3>
+            <div id="taskCommentsList" style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem; min-height: 100px;">
+                <!-- Comments injected here -->
+            </div>
+        </div>
+        <div class="side-panel-footer">
+            <form onsubmit="handleTaskCommentSubmit(event)" style="display: flex; gap: 0.5rem;">
+                <input type="hidden" id="detailsTaskId">
+                <input type="text" id="taskCommentInput" class="form-control" placeholder="Add a comment..." required style="flex-grow: 1;">
+                <button type="submit" class="btn btn-primary">Send</button>
+            </form>
         </div>
     </div>
 
