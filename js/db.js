@@ -218,7 +218,7 @@ const db = {
             try {
                 const { data, error } = await supabaseClient
                     .from('profiles')
-                    .select('role, job_title, manager_id, base_salary, annual_leave_allowance, sick_leave_allowance')
+                    .select('id, role, job_title, manager_id, base_salary, annual_leave_allowance, sick_leave_allowance, full_name, iqama_number, phone_number')
                     .eq('id', userId)
                     .single();
                 
@@ -309,7 +309,8 @@ const db = {
             // so we will rely on profiles and fallback mock data for now.
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('*');
+                .select('*')
+                .eq('is_active', true);
             if (error) throw error;
             return data;
         } catch(e) {
@@ -341,6 +342,7 @@ const db = {
             const { data, error } = await supabaseClient
                 .from('profiles')
                 .select('id, emp_index, full_name, iqama_number, phone_number, role, job_title, created_at, manager_id, base_salary, department_id')
+                .eq('is_active', true)
                 .order('emp_index', { ascending: true });
             if (error) throw error;
             return data;
@@ -795,7 +797,7 @@ const db = {
         try {
             const { error } = await supabaseClient
                 .from('expenses')
-                .insert([{ employee_id: employeeId, amount, description, receipt_base64 }]);
+                .insert([{ employee_id: employeeId, amount, description, receipt_base64: receiptBase64 }]);
             if (error) throw error;
             return { success: true };
         } catch (error) {
@@ -929,7 +931,8 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('id, full_name, role, avatar_url');
+                .select('id, full_name, role, avatar_url')
+                .eq('is_active', true);
             if (error) throw error;
             return data || [];
         } catch (error) {
@@ -1061,20 +1064,7 @@ const db = {
             return { success: false, error };
         }
     },
-    async fetchAnnouncements() {
-        if (!supabaseClient) return [];
-        try {
-            const { data, error } = await supabaseClient
-                .from('announcements')
-                .select('*')
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            return data || [];
-        } catch (error) {
-            console.error("fetchAnnouncements Error:", error);
-            return [];
-        }
-    },
+
     async postAnnouncement(adminId, title, content) {
         if (!supabaseClient) return { success: false };
         try {

@@ -99,7 +99,40 @@ function showInstallBanner() {
 
         banner.innerHTML = contentHtml;
         document.body.appendChild(banner);
-        if (typeof lucide !== 'undefined') 
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        const installBtn = document.getElementById('pwaInstallBtn');
+        if (installBtn) {
+            installBtn.addEventListener('click', async () => {
+                banner.classList.remove('show');
+                setTimeout(() => banner.remove(), 400); // Wait for transition then remove
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`User response to the install prompt: ${outcome}`);
+                    deferredPrompt = null;
+                } else {
+                    alert("To install, open your browser's menu and select 'Add to Home Screen' or 'Install App'.");
+                }
+                localStorage.setItem('pwaPromptDismissed', 'true');
+            });
+        }
+
+        const closeBtn = document.getElementById('pwaCloseBtn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                banner.classList.remove('show');
+                setTimeout(() => banner.remove(), 400);
+                localStorage.setItem('pwaPromptDismissed', 'true');
+            });
+        }
+
+        // Slight delay to animate in
+        setTimeout(() => {
+            banner.classList.add('show');
+        }, 2000);
+    }
+}
+
 // User Management Actions
 window.showEditUserModal = async (userId) => {
     const user = await db.getUserProfile(userId);
@@ -157,20 +190,29 @@ window.handleResetUserPassword = async (userId) => {
     // Attempt password reset
     const success = await db.resetUserPassword(userId, newPassword);
     
-    if (success && user?.email) {
-        await db.resetLoginLockout(user.email);
-        alert(`Password for ${user.email} reset successfully!\nNew Temporary Password: ${newPassword}\n\nPlease share this securely with the user.`);
+    if (success) {
+        alert(`Password reset successfully!\nNew Temporary Password: ${newPassword}\n\nPlease share this securely with the user.`);
     } else {
         showToast("Failed to reset password", "danger");
     }
 };
 
-window.handleDeleteUser = async (userId) => {
-    if (!confirm("Are you sure you want to delete this user? This action cannot be undone.")) return;
-    
+window.handleDeleteUser = (userId) => {
+    document.getElementById('deleteUserIdInput').value = userId;
+    document.getElementById('deleteUserModal').classList.add('active');
+};
+
+window.closeDeleteUserModal = () => {
+    document.getElementById('deleteUserModal').classList.remove('active');
+    document.getElementById('deleteUserIdInput').value = '';
+};
+
+window.executeDeleteUser = async () => {
+    const userId = document.getElementById('deleteUserIdInput').value;
     const success = await db.deleteUser(userId);
     if (success) {
         showToast("User deleted successfully", "success");
+        closeDeleteUserModal();
         renderView('users');
     } else {
         showToast("Failed to delete user", "danger");
@@ -281,40 +323,6 @@ window.updateRequestStatus = async (reqId, status) => {
         showToast("Failed to update status", "danger");
     }
 };
-
-lucide.createIcons();
-        const installBtn = document.getElementById('pwaInstallBtn');
-        if (installBtn) {
-            installBtn.addEventListener('click', async () => {
-                banner.classList.remove('show');
-                setTimeout(() => banner.remove(), 400); // Wait for transition then remove
-                if (deferredPrompt) {
-                    deferredPrompt.prompt();
-                    const { outcome } = await deferredPrompt.userChoice;
-                    console.log(`User response to the install prompt: ${outcome}`);
-                    deferredPrompt = null;
-                } else {
-                    alert("To install, open your browser's menu and select 'Add to Home Screen' or 'Install App'.");
-                }
-                localStorage.setItem('pwaPromptDismissed', 'true');
-            });
-        }
-
-        const closeBtn = document.getElementById('pwaCloseBtn');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                banner.classList.remove('show');
-                setTimeout(() => banner.remove(), 400);
-                localStorage.setItem('pwaPromptDismissed', 'true');
-            });
-        }
-
-        // Slight delay to animate in
-        setTimeout(() => {
-            banner.classList.add('show');
-        }, 2000);
-    }
-}
 
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
@@ -1375,21 +1383,9 @@ async function renderExpenses() {
                         <label class="form-label">${t('exp_amount')}</label>
                         <input type="number" step="0.01" id="expAmount" class="form-control" required>
                     </div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
-                    <label>${t('task_desc')}</label>
-                    <textarea id="editTaskDesc" class="form-control" rows="4">${task.description || ''}</textarea>
-                </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
-                <button type="button" class="btn btn-icon" style="color:var(--color-danger); display:flex; gap:0.5rem; align-items:center;" onclick="handleDeleteTask('${id}')">
-                    <i data-lucide="trash-2"></i> ${t('delete') || 'Delete'}
-                </button>
-                <div style="display: flex; gap: 1rem;">
-                    <button type="button" class="btn-secondary" onclick="document.getElementById('editTaskModal').classList.remove('active')">${t('cancel')}</button>
-                    <button type="button" class="btn-primary" onclick="handleSaveTask('${id}')">${t('save_task') || 'Save Task'}</button>
-                </div>
-            </div>
-        </form>
+                    <div class="form-group">
+                        <label class="form-label">${t('exp_desc')}</label>
+                        <input type="text" id="expDesc" class="form-control" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label">${t('exp_receipt')}</label>
@@ -2782,6 +2778,7 @@ window.handleTaskAssigneeChange = async function (prefix = 'new') {
         return;
     }
 
+    const allUsers = await db.fetchUsers();
     const assignee = allUsers.find(u => u.id === assigneeId);
     if (!assignee) return;
     
@@ -2804,6 +2801,7 @@ window.handleCreateTask = async function (e) {
     const projectId = document.getElementById('taskProject').value || null;
     
     // Check if assignee is in Designing
+    const allUsers = await db.fetchUsers();
     const assigneeObj = allUsers.find(u => u.id === assignee);
     const depts = await db.fetchDepartments();
     const userDept = assigneeObj ? depts.find(d => d.id === assigneeObj.department_id) : null;
@@ -2985,6 +2983,7 @@ window.handleEditTaskSubmit = async function(e) {
     const projectId = document.getElementById('editTaskProject').value || null;
     
     // Check Designer status
+    const allUsers = await db.fetchUsers();
     const assigneeObj = allUsers.find(u => u.id === assigneeId);
     let isDesigner = false;
     if (assigneeObj) {
@@ -3370,14 +3369,23 @@ window.renderView = async function(viewId, isBack = false) {
         console.error("renderView error:", err);
         content = `<div class="card" style="color:red; padding: 2rem;"><h3>Error Loading Page</h3><p>${err.message}</p><pre>${err.stack}</pre></div>`;
     }
+    
+    console.log("renderView: finished switch for", viewId, "currentView:", currentView, "content length:", content.length);
 
     if (currentView === viewId || viewId === 'login') {
+        console.log("renderView: updating viewContainer.innerHTML for", viewId);
         window.viewHTMLCache[viewId] = content;
         // Always update the view with the fresh content!
         viewContainer.innerHTML = content;
-        lucide.createIcons();
+        try {
+            lucide.createIcons();
+        } catch (e) {
+            console.error("lucide error:", e);
+        }
         if (viewId === 'analytics') setTimeout(initCharts, 100);
+        console.log("renderView: done updating DOM.");
     } else {
+        console.log("renderView: skipped DOM update because currentView changed.");
         window.viewHTMLCache[viewId] = content;
     }
     
@@ -5154,6 +5162,7 @@ async function renderProjects() {
     }
 
     html += `</div>`;
+    console.log("renderProjects: Completed. Returning HTML of length", html.length);
     return html;
 }
 
@@ -5264,7 +5273,7 @@ window.handleUpdateProject = async function(event) {
 // ==========================================
 // APPROVALS DASHBOARD
 // ==========================================
-window.renderApprovals = async function() {
+async function renderApprovals() {
     const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
     if (currentUserRole !== 'ADMIN' && !isHussain) {
         return `<div class="page-header"><h1 class="page-title">Unauthorized</h1></div>`;

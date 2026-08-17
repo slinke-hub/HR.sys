@@ -123,8 +123,9 @@ BEGIN
         RAISE EXCEPTION 'Unauthorized';
     END IF;
 
-    -- Delete from auth.users (cascades to public.profiles because of FK)
-    DELETE FROM auth.users WHERE id = target_user_id;
+    -- Perform a soft delete by marking the user as inactive
+    -- This prevents 409 Conflict errors from other tables that reference this user
+    UPDATE public.profiles SET is_active = false WHERE id = target_user_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
