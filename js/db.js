@@ -652,7 +652,7 @@ const db = {
             return [];
         }
     },
-    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null) {
+    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = []) {
         if (!supabaseClient) return { success: false };
         try {
             const { data, error } = await supabaseClient
@@ -678,7 +678,10 @@ const db = {
                     visible_to: visibleTo,
                     content_type: contentType,
                     source_link: sourceLink,
-                    upload_link: uploadLink
+                    upload_link: uploadLink,
+                    department: department,
+                    sub_type: subType,
+                    watchers: watchers
                 }]);
             if (error) throw error;
             return { success: true };
@@ -751,6 +754,22 @@ const db = {
                     content: content
                 }]);
             if (error) throw error;
+            
+            // Notify assignee and watchers
+            const { data: taskData } = await supabaseClient.from('tasks').select('assignee_id, title, watchers').eq('id', taskId).single();
+            if (taskData) {
+                const notifyUserIds = new Set();
+                if (taskData.assignee_id && taskData.assignee_id !== userId) notifyUserIds.add(taskData.assignee_id);
+                if (taskData.watchers && Array.isArray(taskData.watchers)) {
+                    taskData.watchers.forEach(wId => {
+                        if (wId !== userId) notifyUserIds.add(wId);
+                    });
+                }
+                for (const uid of notifyUserIds) {
+                    await this.createNotification(uid, `New comment on task "${taskData.title}"`);
+                }
+            }
+
             return { success: true };
         } catch (error) {
             console.error("addTaskComment Error:", error);

@@ -844,6 +844,39 @@
                         <!-- Options populated dynamically -->
                     </select>
                 </div>
+                <!-- Department & Sub-Type -->
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" data-i18n="html_department">Department</label>
+                    <select id="editTaskDepartment" class="form-control" onchange="window.handleTaskDepartmentChange('edit', this.value)">
+                        <option value="">Select Department</option>
+                        <option value="Marketing">Marketing</option>
+                        <option value="HR">HR</option>
+                        <option value="IT">IT</option>
+                        <option value="Finance">Finance</option>
+                        <option value="Operations">Operations</option>
+                    </select>
+                </div>
+                <div class="form-group" id="editTaskSubTypeGroup" style="margin-bottom: 0; display: none;">
+                    <label class="form-label" data-i18n="html_task_sub_type">Task Sub-Type</label>
+                    <select id="editTaskSubType" class="form-control">
+                        <option value="">Select Sub-Type</option>
+                        <option value="Designing Task">Designing Task</option>
+                        <option value="Marketing Task">Marketing Task</option>
+                    </select>
+                </div>
+                <!-- Watchers -->
+                <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
+                    <label class="form-label">
+                        <input type="checkbox" id="editEnableWatchers" onchange="document.getElementById('editTaskWatchersGroup').style.display = this.checked ? 'block' : 'none'"> 
+                        Add followers/watchers
+                    </label>
+                    <div id="editTaskWatchersGroup" style="display: none; margin-top: 0.5rem;">
+                        <select id="editTaskWatchers" class="form-control" multiple size="4">
+                            <!-- Populated dynamically -->
+                        </select>
+                        <small class="text-muted" style="display:block; margin-top:0.25rem;">Hold Ctrl/Cmd to select multiple</small>
+                    </div>
+                </div>
                 <!-- Conditional Designer Fields -->
                 <div id="editDesignFields" style="display: none; width: 100%; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
                     <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">

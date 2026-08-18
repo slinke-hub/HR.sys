@@ -2981,6 +2981,39 @@ async function renderTasks() {
                         <label class="form-label">${t('task_due') || 'Due Date'}</label>
                         <input type="date" id="taskDue" class="form-control" required>
                     </div>
+                    <!-- Department & Sub-Type -->
+                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                        <label class="form-label">${t('ui_department') || 'Department'}</label>
+                        <select id="taskDepartment" class="form-control" onchange="window.handleTaskDepartmentChange('new', this.value)">
+                            <option value="">Select Department</option>
+                            <option value="Marketing">Marketing</option>
+                            <option value="HR">HR</option>
+                            <option value="IT">IT</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Operations">Operations</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="taskSubTypeGroup" style="flex: 1; min-width: 150px; margin-bottom: 0; display: none;">
+                        <label class="form-label">${t('ui_task_sub_type') || 'Task Sub-Type'}</label>
+                        <select id="taskSubType" class="form-control">
+                            <option value="">Select Sub-Type</option>
+                            <option value="Designing Task">Designing Task</option>
+                            <option value="Marketing Task">Marketing Task</option>
+                        </select>
+                    </div>
+                    <!-- Watchers -->
+                    <div class="form-group" style="width: 100%; margin-top: 0.5rem; margin-bottom: 0;">
+                        <label class="form-label">
+                            <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'"> 
+                            ${t('ui_add_watchers') || 'Add followers/watchers'}
+                        </label>
+                        <div id="taskWatchersGroup" style="display: none; margin-top: 0.5rem;">
+                            <select id="taskWatchers" class="form-control" multiple size="4">
+                                ${userOptions}
+                            </select>
+                            <small class="text-muted" style="display:block; margin-top:0.25rem;">Hold Ctrl/Cmd to select multiple</small>
+                        </div>
+                    </div>
                     <!-- Conditional Designer Fields -->
                     <div id="newDesignFields" style="display: none; width: 100%; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
                         <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
@@ -3156,6 +3189,19 @@ window.handleTaskProjectChange = function (prefix = 'new') {
     // We could filter tags based on the selected project, but for now we'll just log it.
 };
 
+window.handleTaskDepartmentChange = function (prefix = 'new', value = '') {
+    const subTypeGroup = document.getElementById(prefix === 'new' ? 'taskSubTypeGroup' : 'editTaskSubTypeGroup');
+    if (!subTypeGroup) return;
+    
+    if (value === 'Marketing') {
+        subTypeGroup.style.display = 'block';
+    } else {
+        subTypeGroup.style.display = 'none';
+        const select = document.getElementById(prefix === 'new' ? 'taskSubType' : 'editTaskSubType');
+        if (select) select.value = '';
+    }
+};
+
 window.handleTaskAssigneeChange = async function (prefix = 'new') {
     const assigneeId = document.getElementById('taskAssignee').value;
     const designFields = document.getElementById('newDesignFields');
@@ -3232,7 +3278,15 @@ window.handleCreateTask = async function (e) {
         'ar': title + ' (مترجم)' // mock arabic
     };
 
-    const { success, error } = await db.createTask(title, '', assignee, due, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, supervisorId);
+    // Get department, sub-type, and watchers
+    const department = document.getElementById('taskDepartment') ? document.getElementById('taskDepartment').value : null;
+    const subType = document.getElementById('taskSubType') && document.getElementById('taskSubTypeGroup').style.display !== 'none' ? document.getElementById('taskSubType').value : null;
+    let watchers = [];
+    if (document.getElementById('enableWatchers') && document.getElementById('enableWatchers').checked) {
+        watchers = Array.from(document.getElementById('taskWatchers').selectedOptions).map(opt => opt.value);
+    }
+
+    const { success, error } = await db.createTask(title, '', assignee, due, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, supervisorId, department, subType, watchers);
     if (success) {
         showToast(t('toast_task_created_successfully'), "success");
         await db.triggerWebhooks('task_created', { title, assignee_id: assignee, supervisor_id: supervisorId, due_date: due, priority, project_id: projectId });
@@ -3253,12 +3307,36 @@ window.handleCreateTask = async function (e) {
 };
 
 window.handleUpdateTaskStatus = async function (id, status) {
-    const { error } = await db.updateTaskStatus(id, status);
+    const task = window.taskCache ? window.taskCache[id] : null;
+    let actualStatus = status;
+    let needsManagerApproval = false;
+
+    if (status === 'completed' && task && task.department === 'Marketing' && task.sub_type === 'Designing Task') {
+        actualStatus = 'Pending Approval';
+        needsManagerApproval = true;
+    }
+
+    const { error } = await db.updateTaskStatus(id, actualStatus);
     if (error) {
         showToast(t('error_update_task') || "Failed to update task", "danger");
     } else {
         showToast(`Task updated`, "success");
-        await db.triggerWebhooks('task_status_updated', { task_id: id, status: status });
+        await db.triggerWebhooks('task_status_updated', { task_id: id, status: actualStatus });
+        
+        if (needsManagerApproval) {
+            showToast('Task requires manager approval', 'info');
+            if (task.supervisor_id) {
+                await db.createNotification(task.supervisor_id, `Designing task requires your approval: ${task.title}`);
+            } else {
+                // Find marketing manager
+                const users = await db.fetchUsers();
+                const depts = await db.fetchDepartments();
+                const marketingDept = depts.find(d => d.name === 'Marketing');
+                if (marketingDept && marketingDept.manager_id) {
+                    await db.createNotification(marketingDept.manager_id, `Designing task requires your approval: ${task.title}`);
+                }
+            }
+        }
     }
 };
 
@@ -3290,20 +3368,28 @@ window.handleTaskDrop = async function(e, status) {
             return;
         }
 
+        // Intercept Marketing / Designing Task going to 'completed'
+        const task = window.taskCache ? window.taskCache[id] : null;
+        let actualStatus = status;
+        if (status === 'completed' && task && task.department === 'Marketing' && task.sub_type === 'Designing Task') {
+            actualStatus = 'Pending Approval';
+        }
+
         // Optimistic UI update
-        const targetCol = document.getElementById(`col-${status}`);
+        const targetCol = document.getElementById(`col-${actualStatus}`);
         if (targetCol) {
             targetCol.appendChild(taskCard);
-            taskCard.setAttribute('data-status', status);
+            taskCard.setAttribute('data-status', actualStatus);
             
             const oldBadge = document.getElementById(`badge-${currentStatus}`);
-            const newBadge = document.getElementById(`badge-${status}`);
+            const newBadge = document.getElementById(`badge-${actualStatus}`);
             if (oldBadge) oldBadge.textContent = Math.max(0, parseInt(oldBadge.textContent) - 1);
             if (newBadge) newBadge.textContent = parseInt(newBadge.textContent) + 1;
         }
     }
     
-    await window.handleUpdateTaskStatus(id, status);
+    const finalStatus = taskCard ? taskCard.getAttribute('data-status') : status;
+    await window.handleUpdateTaskStatus(id, finalStatus);
 };
 
 window.openEditTaskModal = function(id) {
@@ -3347,6 +3433,37 @@ window.openEditTaskModal = function(id) {
         document.getElementById('editTaskContentType').value = task.content_type || '';
         document.getElementById('editTaskSourceLink').value = task.source_link || '';
         document.getElementById('editTaskUploadLink').value = task.upload_link || '';
+
+        // Department, Sub-Type, and Watchers
+        const deptSelect = document.getElementById('editTaskDepartment');
+        if (deptSelect) {
+            deptSelect.value = task.department || '';
+            window.handleTaskDepartmentChange('edit', task.department || '');
+        }
+        
+        const subTypeSelect = document.getElementById('editTaskSubType');
+        if (subTypeSelect) {
+            subTypeSelect.value = task.sub_type || '';
+        }
+
+        const watchersCheckbox = document.getElementById('editEnableWatchers');
+        const watchersSelect = document.getElementById('editTaskWatchers');
+        const watchersGroup = document.getElementById('editTaskWatchersGroup');
+        if (watchersSelect) {
+            watchersSelect.innerHTML = window.taskAssigneeOptionsCache || '';
+            if (task.watchers && task.watchers.length > 0) {
+                if (watchersCheckbox) watchersCheckbox.checked = true;
+                if (watchersGroup) watchersGroup.style.display = 'block';
+                Array.from(watchersSelect.options).forEach(opt => {
+                    if (task.watchers.includes(opt.value)) {
+                        opt.selected = true;
+                    }
+                });
+            } else {
+                if (watchersCheckbox) watchersCheckbox.checked = false;
+                if (watchersGroup) watchersGroup.style.display = 'none';
+            }
+        }
 
         // Trigger change to handle design fields display
         handleTaskAssigneeChange('edit');
@@ -3415,6 +3532,24 @@ window.handleEditTaskSubmit = async function(e) {
         if (proj && proj.visible_to) {
             updates.visible_to = proj.visible_to;
         }
+    }
+    
+    // Get department, sub-type, and watchers
+    const departmentEl = document.getElementById('editTaskDepartment');
+    if (departmentEl) updates.department = departmentEl.value || null;
+    
+    const subTypeEl = document.getElementById('editTaskSubType');
+    if (subTypeEl && document.getElementById('editTaskSubTypeGroup').style.display !== 'none') {
+        updates.sub_type = subTypeEl.value || null;
+    } else {
+        updates.sub_type = null;
+    }
+
+    const watchersCheckbox = document.getElementById('editEnableWatchers');
+    if (watchersCheckbox && watchersCheckbox.checked) {
+        updates.watchers = Array.from(document.getElementById('editTaskWatchers').selectedOptions).map(opt => opt.value);
+    } else {
+        updates.watchers = [];
     }
     
     const task = window.taskCache[id];
@@ -5887,28 +6022,59 @@ async function renderApprovals() {
 };
 
 window.handleApprovalAction = async function(taskId, newStatus) {
-    window.showConfirmModal(t('modal_title_task_approval'), t('modal_body_are_you_sure_you_want_to') + (newStatus === 'todo' ? 'approve' : 'reject') + ' this task?', async () => {
-        const { data: taskData } = await window.supabaseClient.from('tasks').select('title, assignee_id').eq('id', taskId).single();
-        
-        let error;
-        if (newStatus === 'Rejected') {
-            const res = await window.supabaseClient.from('tasks').delete().eq('id', taskId);
-            error = res.error;
-        } else {
-            const res = await db.updateTaskStatus(taskId, newStatus);
-            error = res.error;
-        }
+    const { data: taskData } = await window.supabaseClient.from('tasks').select('*').eq('id', taskId).single();
+    if (!taskData) {
+        showToast('Task not found', 'danger');
+        return;
+    }
 
-        if (error) {
-            showToast(t('toast_failed_to_update_task'), 'danger');
-        } else {
-            if (taskData && taskData.assignee_id) {
-                await db.createNotification(taskData.assignee_id, `Your task "${taskData.title}" was ${newStatus === 'todo' ? 'approved' : 'rejected and deleted'}.`);
+    const isDesigningTask = taskData.department === 'Marketing' && taskData.sub_type === 'Designing Task';
+
+    if (newStatus === 'Rejected') {
+        if (isDesigningTask) {
+            const reason = prompt("Please enter the rejection reason:");
+            if (reason === null) return; // User cancelled
+            
+            const res = await db.updateTaskStatus(taskId, 'in_progress');
+            if (res.error) {
+                showToast(t('toast_failed_to_update_task'), 'danger');
+            } else {
+                if (taskData.assignee_id) {
+                    await db.createNotification(taskData.assignee_id, `Your Designing task "${taskData.title}" was rejected by the manager. Reason: ${reason}`);
+                }
+                await db.addTaskComment(taskId, currentUser.id, `Manager Rejection Reason: ${reason}`);
+                showToast('Task rejected and sent back to In Progress', 'success');
+                renderView('approvals');
             }
-            showToast(t('toast_task') + ' ' + (newStatus === 'todo' ? 'approved' : 'rejected and deleted'), 'success');
-            renderView('approvals');
+        } else {
+            window.showConfirmModal(t('modal_title_task_approval'), t('modal_body_are_you_sure_you_want_to') + 'reject and delete this task?', async () => {
+                const res = await window.supabaseClient.from('tasks').delete().eq('id', taskId);
+                if (res.error) {
+                    showToast(t('toast_failed_to_update_task'), 'danger');
+                } else {
+                    if (taskData.assignee_id) {
+                        await db.createNotification(taskData.assignee_id, `Your task "${taskData.title}" was rejected and deleted.`);
+                    }
+                    showToast(t('toast_task') + ' rejected and deleted', 'success');
+                    renderView('approvals');
+                }
+            });
         }
-    });
+    } else { // Approve
+        const targetStatus = isDesigningTask ? 'completed' : newStatus;
+        window.showConfirmModal(t('modal_title_task_approval'), t('modal_body_are_you_sure_you_want_to') + 'approve this task?', async () => {
+            const res = await db.updateTaskStatus(taskId, targetStatus);
+            if (res.error) {
+                showToast(t('toast_failed_to_update_task'), 'danger');
+            } else {
+                if (taskData.assignee_id) {
+                    await db.createNotification(taskData.assignee_id, `Your task "${taskData.title}" was approved.`);
+                }
+                showToast(t('toast_task') + ' approved', 'success');
+                renderView('approvals');
+            }
+        });
+    }
 };
 
 // Global Esc Key Handler for Modals and Popups
