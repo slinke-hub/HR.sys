@@ -1,0 +1,42 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "ecmaVersion": 12,
+    "sourceType": "script"
+  },
+  "globals": {
+    "supabase": "readonly",
+    "supabaseClient": "readonly",
+    "db": "readonly",
+    "i18n": "readonly",
+    "t": "readonly",
+    "renderView": "readonly",
+    "lucide": "readonly",
+    "Chart": "readonly",
+    "setLoginMode": "readonly",
+    "closeAnnouncementModal": "readonly",
+    "closeClockOutModal": "readonly",
+    "openTaskDetailsModal": "readonly",
+    "closeAddUserModal": "readonly",
+    "handleTaskAssigneeChange": "readonly",
+    "closeLostReasonModal": "readonly",
+    "closeCRMOrderModal": "readonly",
+    "closeEditOrderModal": "readonly",
+    "closeConfirmDeleteOrderModal": "readonly",
+    "closeConfirmModal": "readonly",
+    "showDepartmentModal": "readonly",
+    "closeDepartmentModal": "readonly",
+    "showCRMClientModal": "readonly",
+    "closeCRMClientModal": "readonly",
+    "closeCRMDealModal": "readonly",
+    "closeWebhookModal": "readonly"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "vars": "all", "args": "none", "ignoreRestSiblings": false }],
+    "no-undef": "error"
+  }
+}

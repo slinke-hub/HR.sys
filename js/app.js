@@ -80,17 +80,17 @@ function showInstallBanner() {
         
         let contentHtml = `
             <div class="install-banner-content">
-                <h4>Install MUQAM HR</h4>
+                <h4>${t('ui_install_muqam_hr')}</h4>
                 <p>Add to your home screen for quick access</p>
             </div>
-            <button class="install-banner-btn" id="pwaInstallBtn">Install</button>
+            <button class="install-banner-btn" id="pwaInstallBtn">${t('ui_install')}</button>
             <button class="install-banner-close" id="pwaCloseBtn"><i data-lucide="x"></i></button>
         `;
 
         if (isIOS) {
             contentHtml = `
                 <div class="install-banner-content">
-                    <h4>Install MUQAM HR</h4>
+                    <h4>${t('ui_install_muqam_hr')}</h4>
                     <p>Tap <i data-lucide="share" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"></i> and then "Add to Home Screen"</p>
                 </div>
                 <button class="install-banner-close" id="pwaCloseBtn"><i data-lucide="x"></i></button>
@@ -137,7 +137,7 @@ function showInstallBanner() {
 window.showEditUserModal = async (userId) => {
     const user = await db.getUserProfile(userId);
     if (!user) {
-        showToast("User not found.", "danger");
+        showToast(t('toast_user_not_found'), "danger");
         return;
     }
     document.getElementById('editUserId').value = user.id;
@@ -171,53 +171,49 @@ window.handleUpdateUser = async (e) => {
 
     const res = await db.updateUserProfile(userId, updates);
     if (res) {
-        showToast("User updated successfully", "success");
+        showToast(t('toast_user_updated_successfully'), "success");
         document.getElementById('editUserModal').classList.remove('active');
         renderView('users');
     } else {
-        showToast("Failed to update user", "danger");
+        showToast(t('toast_failed_to_update_user'), "danger");
     }
 };
 
 window.handleResetUserPassword = async (userId) => {
-    if (!confirm("Are you sure you want to reset this user's password and unlock their account?")) return;
-    
-    // Generate 8 char random alphanumeric password
-    const newPassword = Math.random().toString(36).slice(-8);
-    
-    const user = await db.getUserProfile(userId);
-    
-    // Attempt password reset
-    const success = await db.resetUserPassword(userId, newPassword);
-    
-    if (success) {
-        alert(`Password reset successfully!\nNew Temporary Password: ${newPassword}\n\nPlease share this securely with the user.`);
-    } else {
-        showToast("Failed to reset password", "danger");
-    }
+    window.showConfirmModal(t('modal_title_reset_password'), t('modal_body_are_you_sure_you_want_to_reset_this_user_s_password_and_unlock_their_account_'), async () => {
+        // Generate 8 char random alphanumeric password
+        const newPassword = Math.random().toString(36).slice(-8);
+        const user = await db.getUserProfile(userId);
+        
+        // Attempt password reset
+        const success = await db.resetUserPassword(userId, newPassword);
+        
+        if (success) {
+            window.showConfirmModal("Password Reset", `Password reset successfully!\nNew Temporary Password: ${newPassword}\n\nPlease share this securely with the user.`, () => {});
+        } else {
+            showToast(t('toast_failed_to_reset_password'), "danger");
+        }
+    });
 };
 
 window.handleDeleteUser = (userId) => {
-    document.getElementById('deleteUserIdInput').value = userId;
-    document.getElementById('deleteUserModal').classList.add('active');
+    window.showConfirmModal(t('modal_title_delete_user'), t('modal_body_are_you_sure_you_want_to_delete_this_user_this_action_cannot_be_undone'), async () => {
+        const success = await db.deleteUser(userId);
+        if (success) {
+            showToast(t('toast_user_deleted_successfully'), "success");
+            renderView('users');
+        } else {
+            showToast(t('toast_failed_to_delete_user'), "danger");
+        }
+    });
 };
 
+// Kept for backward compatibility if called directly
 window.closeDeleteUserModal = () => {
-    document.getElementById('deleteUserModal').classList.remove('active');
-    document.getElementById('deleteUserIdInput').value = '';
+    const modal = document.getElementById('deleteUserModal');
+    if (modal) modal.classList.remove('active');
 };
-
-window.executeDeleteUser = async () => {
-    const userId = document.getElementById('deleteUserIdInput').value;
-    const success = await db.deleteUser(userId);
-    if (success) {
-        showToast("User deleted successfully", "success");
-        closeDeleteUserModal();
-        renderView('users');
-    } else {
-        showToast("Failed to delete user", "danger");
-    }
-};
+window.executeDeleteUser = async () => {};
 
 // Requests Page Handlers
 window.renderRequests = async () => {
@@ -233,8 +229,8 @@ window.renderRequests = async () => {
             <td><span class="status-badge ${r.status === 'Approved' ? 'success' : (r.status === 'Rejected' ? 'danger' : 'info')}">${r.status}</span></td>
             <td>
                 ${!isEmployee && r.status === 'Pending' ? `
-                    <button class="btn-primary" style="padding: 0.2rem 0.5rem; font-size:0.8rem" onclick="updateRequestStatus('${r.id}', 'Approved')">Approve</button>
-                    <button class="btn-primary" style="background:var(--color-danger); padding: 0.2rem 0.5rem; font-size:0.8rem" onclick="updateRequestStatus('${r.id}', 'Rejected')">Reject</button>
+                    <button class="btn-primary" style="padding: 0.2rem 0.5rem; font-size:0.8rem" onclick="updateRequestStatus('${r.id}', 'Approved')">${t('ui_approve')}</button>
+                    <button class="btn-primary" style="background:var(--color-danger); padding: 0.2rem 0.5rem; font-size:0.8rem" onclick="updateRequestStatus('${r.id}', 'Rejected')">${t('ui_reject')}</button>
                 ` : ''}
             </td>
         </tr>
@@ -247,7 +243,7 @@ window.renderRequests = async () => {
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">Employee Requests</h1>
+                <h1 class="page-title">${t('ui_employee_requests')}</h1>
                 <p class="page-subtitle">Manage leave, loan, IT support, and other requests.</p>
             </div>
             <button class="btn-primary" onclick="showNewRequestModal()">
@@ -261,11 +257,11 @@ window.renderRequests = async () => {
                         <thead>
                             <tr>
                                 <th>Date</th>
-                                <th>Employee Name</th>
-                                <th>Request Type</th>
-                                <th>Leave Type</th>
-                                <th>Status</th>
-                                <th>Actions</th>
+                                <th>${t('ui_employee_name')}</th>
+                                <th>${t('ui_request_type')}</th>
+                                <th>${t('ui_leave_type')}</th>
+                                <th>${t('ui_status')}</th>
+                                <th>${t('ui_actions')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -304,11 +300,11 @@ window.handleCreateRequest = async (e) => {
 
     const res = await db.createRequest(empId, reqType, leaveType);
     if (res) {
-        showToast("Request submitted successfully", "success");
+        showToast(t('toast_request_submitted_successfully'), "success");
         document.getElementById('requestModal').classList.remove('active');
         renderView('requests');
     } else {
-        showToast("Failed to submit request", "danger");
+        showToast(t('toast_failed_to_submit_request'), "danger");
     }
 };
 
@@ -320,7 +316,7 @@ window.updateRequestStatus = async (reqId, status) => {
         showToast(`Request ${status}`, "success");
         renderView('requests');
     } catch (e) {
-        showToast("Failed to update status", "danger");
+        showToast(t('toast_failed_to_update_status'), "danger");
     }
 };
 
@@ -506,7 +502,7 @@ async function renderCommunity() {
                 </div>
                 <form onsubmit="handlePostCommunityMessage(event)" style="margin-top:1.5rem; display:flex; gap:1rem;">
                     <input type="text" id="communityMessageInput" class="form-control" placeholder="Type a message..." required style="flex:1;">
-                    <button type="submit" class="btn-primary">Post</button>
+                    <button type="submit" class="btn-primary">${t('ui_post')}</button>
                 </form>
             </div>
         </div>
@@ -556,7 +552,7 @@ window.handleLeaveSubmit = async function (e) {
         showToast(t('toast_leave_applied'), 'success');
         renderView('leave');
     } else {
-        showToast("Failed to submit leave", 'danger');
+        showToast(t('toast_failed_to_submit_leave'), 'danger');
     }
 }
 
@@ -696,7 +692,7 @@ window.handleResetPasswordSubmit = async function(e) {
     if (error) {
         showToast(error.message, 'danger');
     } else {
-        showToast("Password updated successfully!", 'success');
+        showToast(t('toast_password_updated_successfully'), 'success');
         window.location.hash = ''; // Clear hash
         setLoginMode('login');
     }
@@ -939,15 +935,15 @@ async function renderDashboard() {
                 </div>
                 <form onsubmit="handlePostAnnouncement(event)">
                     <div class="form-group">
-                        <label class="form-label">Title</label>
+                        <label class="form-label">${t('ui_title')}</label>
                         <input type="text" id="announceTitle" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Content</label>
+                        <label class="form-label">${t('ui_content')}</label>
                         <textarea id="announceContent" class="form-control" rows="4" required></textarea>
                     </div>
                     <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                        <button type="submit" class="btn-primary" style="flex: 1;">Post</button>
+                        <button type="submit" class="btn-primary" style="flex: 1;">${t('ui_post')}</button>
                     </div>
                 </form>
             </div>
@@ -986,11 +982,11 @@ window.handleClockIn = async () => {
     const fallbackClockIn = async (loc) => {
         try {
             await db.clockIn(currentUser.id, loc);
-            showToast("Clocked in successfully!", "success");
+            showToast(t('toast_clocked_in_successfully'), "success");
             renderView('dashboard');
         } catch (err) {
             console.error(err);
-            showToast("Error clocking in.", "danger");
+            showToast(t('toast_error_clocking_in'), "danger");
         }
     };
 
@@ -1018,7 +1014,7 @@ window.executeClockOut = async (type) => {
         try {
             const attendance = await db.fetchTodayAttendance(currentUser.id);
             if (!attendance) {
-                showToast("No active clock-in found for today.", "danger");
+                showToast(t('toast_no_active_clock_in_found_for_today'), "danger");
                 closeClockOutModal();
                 return;
             }
@@ -1028,11 +1024,11 @@ window.executeClockOut = async (type) => {
 
             await db.clockOut(currentAttendanceId, loc, type, overtime);
             closeClockOutModal();
-            showToast("Clocked out successfully!", "success");
+            showToast(t('toast_clocked_out_successfully'), "success");
             renderView('dashboard');
         } catch (err) {
             console.error(err);
-            showToast("Error clocking out.", "danger");
+            showToast(t('toast_error_clocking_out'), "danger");
         }
     };
 
@@ -1151,7 +1147,7 @@ window.handleTaskCommentSubmit = async function(e) {
         // Reload comments
         openTaskDetailsModal(id);
     } else {
-        showToast("Failed to post comment", "danger");
+        showToast(t('toast_failed_to_post_comment'), "danger");
     }
 };
 
@@ -1321,7 +1317,7 @@ window.handleExpenseSubmit = async function (e) {
     const fileInput = document.getElementById('expReceipt');
 
     if (!fileInput.files || fileInput.files.length === 0) {
-        showToast("Please upload a receipt.", "warning");
+        showToast(t('toast_please_upload_a_receipt'), "warning");
         return;
     }
 
@@ -1331,10 +1327,10 @@ window.handleExpenseSubmit = async function (e) {
         const base64Url = event.target.result;
         const { success } = await db.submitExpense(currentUser.id, amount, description, base64Url);
         if (success) {
-            showToast("Expense submitted for approval.", "success");
+            showToast(t('toast_expense_submitted_for_approval'), "success");
             renderView('expenses');
         } else {
-            showToast("Error submitting expense.", "danger");
+            showToast(t('toast_error_submitting_expense'), "danger");
         }
     };
     reader.readAsDataURL(file);
@@ -1673,7 +1669,7 @@ window.handleCreateUser = async function (e) {
 
     const { error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone);
     if (!error) {
-        showToast("User created successfully!", 'success');
+        showToast(t('toast_user_created_successfully'), 'success');
         if (typeof closeAddUserModal === 'function') closeAddUserModal();
         renderView('users');
     } else {
@@ -1684,7 +1680,7 @@ window.handleCreateUser = async function (e) {
 window.handleChangeRole = async function (id, role) {
     const { success } = await db.updateUserRole(id, role);
     if (success) {
-        showToast("Role updated", "success");
+        showToast(t('toast_role_updated'), "success");
         renderView('users');
     }
 }
@@ -1692,9 +1688,9 @@ window.handleChangeRole = async function (id, role) {
 window.handleChangeJobTitle = async function (id, jobTitle) {
     const { success } = await db.updateUserJobTitle(id, jobTitle);
     if (success) {
-        showToast("Job title updated", "success");
+        showToast(t('toast_job_title_updated'), "success");
     } else {
-        showToast("Failed to update job title", "danger");
+        showToast(t('toast_failed_to_update_job_title'), "danger");
     }
 }
 
@@ -1726,7 +1722,7 @@ async function renderUsers() {
                                 <th>${t('users_assign_role')}</th>
                                 <th>${t('users_assign_mgr')}</th>
                                 <th>${t('users_contract')}</th>
-                                <th>Actions</th>
+                                <th>${t('ui_actions')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1800,7 +1796,7 @@ window.closeAddUserModal = () => {
 window.handleAssignManager = async function (id, managerId) {
     const { success } = await db.assignManager(id, managerId);
     if (success) {
-        showToast("Manager assigned", "success");
+        showToast(t('toast_manager_assigned'), "success");
         renderView('users');
     }
 }
@@ -1947,13 +1943,13 @@ window.generatePerformanceReport = async function() {
                 <thead>
                     <tr>
                         <th>Employee</th>
-                        <th>Role</th>
-                        <th>Total Tasks</th>
-                        <th>Completed</th>
-                        <th>Overdue</th>
-                        <th style="min-width:160px;">Completion Rate</th>
-                        <th>Score</th>
-                        <th>Rating</th>
+                        <th>${t('ui_role')}</th>
+                        <th>${t('ui_total_tasks')}</th>
+                        <th>${t('ui_completed')}</th>
+                        <th>${t('ui_overdue')}</th>
+                        <th style="min-width:160px;">${t('ui_completion_rate')}</th>
+                        <th>${t('ui_score')}</th>
+                        <th>${t('ui_rating')}</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -1983,7 +1979,7 @@ window.printPerformanceReport = () => {
     
     // Remove lucide icons for cleaner print, or we can just rely on the print CSS to handle it
     const printContents = `
-        <h2 style="color: #0000FF; margin-top: 0; text-align: center;">Employee Performance Report</h2>
+        <h2 style="color: #0000FF; margin-top: 0; text-align: center;">${t('ui_employee_performance_report')}</h2>
         <p style="text-align: center; color: #666; margin-bottom: 30px;">
             <small>Generated: ${new Date().toLocaleString()}</small>
         </p>
@@ -2010,7 +2006,7 @@ window.handleDocSubmit = async function (e) {
     const purpose = document.getElementById('docPurpose').value;
     const { success } = await db.requestDocument(currentUser.id, type, purpose);
     if (success) {
-        showToast("Document requested", "success");
+        showToast(t('toast_document_requested'), "success");
         renderView('documents');
     }
 }
@@ -2028,10 +2024,10 @@ window.handleEmployeeDocUpload = async function (e) {
         const base64Url = event.target.result;
         const { success } = await db.uploadEmployeeDocument(currentUser.id, docName, docType, base64Url);
         if (success) {
-            showToast("Document uploaded successfully!", "success");
+            showToast(t('toast_document_uploaded_successfully'), "success");
             renderView('documents');
         } else {
-            showToast("Error uploading document.", "danger");
+            showToast(t('toast_error_uploading_document'), "danger");
         }
     };
     reader.readAsDataURL(file);
@@ -2251,7 +2247,7 @@ window.sendChatMessage = async function () {
     if (success) {
         await window.refreshMessages();
     } else {
-        showToast("Failed to send message.", "danger");
+        showToast(t('toast_failed_to_send_message'), "danger");
     }
 }
 
@@ -2338,11 +2334,11 @@ window.handleUpdateProfilePhoto = async function (e) {
         const base64Url = event.target.result;
         const { success, error } = await db.updateProfilePhoto(currentUser.id, base64Url);
         if (success) {
-            showToast("Profile photo updated!", "success");
+            showToast(t('toast_profile_photo_updated'), "success");
             document.getElementById('topbarAvatar').src = base64Url;
             renderView('profile');
         } else {
-            showToast("Error updating photo.", "danger");
+            showToast(t('toast_error_updating_photo'), "danger");
         }
     };
     reader.readAsDataURL(file);
@@ -2353,7 +2349,7 @@ window.handleUpdatePassword = async function (e) {
     const newPwd = document.getElementById('newPassword').value;
     const { success, error } = await db.updateUserPassword(newPwd);
     if (success) {
-        showToast("Password updated successfully!", "success");
+        showToast(t('toast_password_updated_successfully'), "success");
         document.getElementById('newPassword').value = '';
     } else {
         showToast(error?.message || "Error updating password.", "danger");
@@ -2368,7 +2364,7 @@ window.handleUpdateProfileDetails = async function (e) {
 
     const { success, error } = await db.updateUserProfileDetails(currentUser.id, fullName, iqama, phone);
     if (success) {
-        showToast("Profile details updated successfully!", "success");
+        showToast(t('toast_profile_details_updated_successfully'), "success");
         renderView('profile');
 
         // Update topbar silently
@@ -2511,11 +2507,11 @@ async function renderTasks() {
                         <input type="text" autocomplete="off" id="taskTitle" class="form-control" required placeholder="Task title">
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label">Category</label>
+                        <label class="form-label">${t('ui_category')}</label>
                         <input type="text" id="taskCategory" class="form-control" placeholder="e.g. Design">
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 0;">
-                        <label class="form-label">Priority</label>
+                        <label class="form-label">${t('ui_priority')}</label>
                         <select id="taskPriority" class="form-control">
                             <option value="low">Low</option>
                             <option value="medium" selected>Medium</option>
@@ -2524,7 +2520,7 @@ async function renderTasks() {
                         </select>
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label">Project</label>
+                        <label class="form-label">${t('ui_project')}</label>
                         <select id="taskProject" class="form-control" onchange="handleTaskProjectChange('new')">
                             <option value="">No Project</option>
                             ${projectOptions}
@@ -2544,15 +2540,15 @@ async function renderTasks() {
                     <!-- Conditional Designer Fields -->
                     <div id="newDesignFields" style="display: none; width: 100%; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
                         <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                            <label class="form-label">Content Type</label>
+                            <label class="form-label">${t('ui_content_type')}</label>
                             <input type="text" id="taskContentType" class="form-control" placeholder="e.g. Graphic, Video">
                         </div>
                         <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                            <label class="form-label">Source Link</label>
+                            <label class="form-label">${t('ui_source_link')}</label>
                             <input type="url" id="taskSourceLink" class="form-control" placeholder="https://...">
                         </div>
                         <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                            <label class="form-label">Upload Link</label>
+                            <label class="form-label">${t('ui_upload_link')}</label>
                             <input type="url" id="taskUploadLink" class="form-control" placeholder="https://...">
                         </div>
                     </div>
@@ -2758,11 +2754,11 @@ window.handleAICreateTask = async function(e) {
     
     const { success } = await db.createTask(input, '', assigneeId, dueStr, currentUser.id, priority, 'Auto-parsed', {'en': input, 'ar': input + ' (مترجم)'}, {});
     if (success) {
-        showToast("AI parsed and created task!", "success");
+        showToast(t('toast_ai_parsed_and_created_task'), "success");
         await db.triggerWebhooks('task_created', { title: input, assignee_id: assigneeId, due_date: dueStr, priority: priority, is_ai_parsed: true });
         renderView('tasks');
     } else {
-        showToast("Failed to create task", "danger");
+        showToast(t('toast_failed_to_create_task'), "danger");
     }
 };
 
@@ -2837,7 +2833,7 @@ window.handleCreateTask = async function (e) {
 
     const { success, error } = await db.createTask(title, '', assignee, due, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status);
     if (success) {
-        showToast("Task created successfully!", "success");
+        showToast(t('toast_task_created_successfully'), "success");
         await db.triggerWebhooks('task_created', { title, assignee_id: assignee, due_date: due, priority, project_id: projectId });
         if (assignee && assignee !== currentUser.id) {
             await db.createNotification(assignee, `You have been assigned a new task: ${title}`);
@@ -2847,11 +2843,11 @@ window.handleCreateTask = async function (e) {
             if (hussain) {
                 await db.createNotification(hussain.id, `A new task requires your approval: ${title}`);
             }
-            showToast("Task sent to Hussain for approval", "info");
+            showToast(t('toast_task_sent_to_hussain_for_approval'), "info");
         }
         renderView('tasks');
     } else {
-        showToast("Failed to create task: " + (error?.message || ''), "danger");
+        showToast(t('toast_failed_to_create_task') + (error?.message || ''), "danger");
     }
 };
 
@@ -2889,7 +2885,7 @@ window.handleTaskDrop = async function(e, status) {
         // Prevent unauthorized dragging from or to Pending Approval
         const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
         if ((currentStatus === 'Pending Approval' || status === 'Pending Approval') && currentUserRole !== 'ADMIN' && !isHussain) {
-            showToast('You do not have permission to modify pending approval tasks', 'danger');
+            showToast(t('toast_you_do_not_have_permission_to_modify_pending_approval_tasks'), 'danger');
             return;
         }
 
@@ -3031,9 +3027,9 @@ window.handleEditTaskSubmit = async function(e) {
     const { error } = await db.updateTask(id, updates);
     
     if (error) {
-        showToast("Failed to update task details", "danger");
+        showToast(t('toast_failed_to_update_task_details'), "danger");
     } else {
-        showToast("Task updated successfully", "success");
+        showToast(t('toast_task_updated_successfully'), "success");
         await db.triggerWebhooks('task_updated', { task_id: id, updates: updates });
         document.getElementById('editTaskModal').classList.remove('active');
         renderView('tasks');
@@ -3041,17 +3037,17 @@ window.handleEditTaskSubmit = async function(e) {
 };
 
 window.handleDeleteTask = async function(id) {
-    if (!confirm(t('confirm_delete') || "Are you sure you want to delete this task?")) return;
-    
-    const { error } = await db.deleteTask(id);
-    if (error) {
-        showToast("Failed to delete task", "danger");
-    } else {
-        showToast("Task deleted successfully", "success");
-        await db.triggerWebhooks('task_deleted', { task_id: id });
-        document.getElementById('editTaskModal').classList.remove('active');
-        renderView('tasks');
-    }
+    window.showConfirmModal("Delete Task", t('confirm_delete') || "Are you sure you want to delete this task?", async () => {
+        const { error } = await db.deleteTask(id);
+        if (error) {
+            showToast(t('toast_failed_to_delete_task'), "danger");
+        } else {
+            showToast(t('toast_task_deleted_successfully'), "success");
+            await db.triggerWebhooks('task_deleted', { task_id: id });
+            document.getElementById('editTaskModal').classList.remove('active');
+            renderView('tasks');
+        }
+    });
 };
 
 document.addEventListener('dragend', function(e) {
@@ -3068,7 +3064,7 @@ window.navigateToContract = function (employeeId, empName) {
     currentContractEmployeeId = employeeId;
     currentContractEmployeeName = empName;
     currentView = 'contract';
-    render();
+    renderView('contract');
 }
 
 window.handleSaveContract = async function (e) {
@@ -3091,9 +3087,9 @@ window.handleSaveContract = async function (e) {
 
     const { success, error } = await db.upsertContract(contractData);
     if (success) {
-        showToast("Contract saved successfully", "success");
+        showToast(t('toast_contract_saved_successfully'), "success");
         currentView = 'users';
-        render();
+        renderView('users');
     } else {
         showToast(error?.message || "Failed to save contract", "danger");
     }
@@ -3237,12 +3233,21 @@ async function renderEmployeesDirectory() {
                 <h1 class="page-title">${t('nav_emp_dir')}</h1>
                 <p class="page-subtitle">${t('emp_dir_sub')}</p>
             </div>
+            <button class="btn-secondary" onclick="window.print()">
+                <i data-lucide="printer"></i> ${t('print') || 'Print Directory'}
+            </button>
         </div>
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-12">
-                <div class="card-title">${t('emp_dir_company')}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                    <div class="card-title" style="margin-bottom: 0;">${t('emp_dir_company')}</div>
+                    <div style="position: relative;">
+                        <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-light);"></i>
+                        <input type="text" id="employeeSearchInput" class="form-control" placeholder="${t('search') || 'Search employees...'}" style="padding-left: 2.25rem; width: 250px;" onkeyup="filterEmployees()">
+                    </div>
+                </div>
                 <div class="table-responsive">
-                    <table class="data-table">
+                    <table class="data-table" id="employeeDirectoryTable">
                         <thead>
                             <tr>
                                 <th>${t('time_emp_id')}</th>
@@ -3278,6 +3283,24 @@ async function renderEmployeesDirectory() {
         </div>
     `;
 }
+
+window.filterEmployees = () => {
+    const input = document.getElementById('employeeSearchInput');
+    if (!input) return;
+    const filter = input.value.toLowerCase();
+    const table = document.getElementById('employeeDirectoryTable');
+    if (!table) return;
+    const tr = table.getElementsByTagName('tr');
+    
+    for (let i = 1; i < tr.length; i++) {
+        const textContent = tr[i].textContent || tr[i].innerText;
+        if (textContent.toLowerCase().indexOf(filter) > -1) {
+            tr[i].style.display = "";
+        } else {
+            tr[i].style.display = "none";
+        }
+    }
+};
 
 window.viewHTMLCache = window.viewHTMLCache || {};
 
@@ -3367,7 +3390,7 @@ window.renderView = async function(viewId, isBack = false) {
         }
     } catch (err) {
         console.error("renderView error:", err);
-        content = `<div class="card" style="color:red; padding: 2rem;"><h3>Error Loading Page</h3><p>${err.message}</p><pre>${err.stack}</pre></div>`;
+        content = `<div class="card" style="color:red; padding: 2rem;"><h3>${t('ui_error_loading_page')}</h3><p>${err.message}</p><pre>${err.stack}</pre></div>`;
     }
     
     console.log("renderView: finished switch for", viewId, "currentView:", currentView, "content length:", content.length);
@@ -3579,7 +3602,7 @@ async function renderDepartments() {
     return `
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
-                <h1 class="page-title">Departments Management</h1>
+                <h1 class="page-title">${t('ui_departments_management')}</h1>
                 <p class="page-subtitle">Manage company departments.</p>
             </div>
             <button class="btn btn-primary" onclick="showDepartmentModal()">
@@ -3593,9 +3616,9 @@ async function renderDepartments() {
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Description</th>
-                            <th>Head</th>
-                            <th>Actions</th>
+                            <th>${t('ui_description')}</th>
+                            <th>${t('ui_head')}</th>
+                            <th>${t('ui_actions')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3629,7 +3652,7 @@ async function renderClients() {
     return `
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
-                <h1 class="page-title">Clients Management</h1>
+                <h1 class="page-title">${t('ui_clients_management')}</h1>
                 <p class="page-subtitle">Manage your CRM clients here.</p>
             </div>
             <button class="btn btn-primary" onclick="showCRMClientModal()">
@@ -3643,10 +3666,10 @@ async function renderClients() {
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Company</th>
-                            <th>Email</th>
-                            <th>Phone</th>
-                            <th>Actions</th>
+                            <th>${t('ui_company')}</th>
+                            <th>${t('ui_email')}</th>
+                            <th>${t('ui_phone')}</th>
+                            <th>${t('ui_actions')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3700,7 +3723,7 @@ async function renderOrders() {
 
     return `
         <div class="page-header">
-            <h1 class="page-title">Orders</h1>
+            <h1 class="page-title">${t('ui_orders')}</h1>
         </div>
         <div class="card">
             <div style="overflow-x: auto;">
@@ -3708,12 +3731,12 @@ async function renderOrders() {
                     <thead>
                         <tr>
                             <th>Deal / Client</th>
-                            <th>Start Date</th>
-                            <th>End Date</th>
-                            <th>Location</th>
-                            <th>Invoice Amount</th>
-                            <th>Project Status</th>
-                            <th>Actions</th>
+                            <th>${t('ui_start_date')}</th>
+                            <th>${t('ui_end_date')}</th>
+                            <th>${t('ui_location')}</th>
+                            <th>${t('ui_invoice_amount')}</th>
+                            <th>${t('ui_project_status')}</th>
+                            <th>${t('ui_actions')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3765,7 +3788,7 @@ async function renderCRM() {
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">CRM Pipeline</h1>
+                <h1 class="page-title">${t('ui_crm_pipeline')}</h1>
                 <p class="page-subtitle">Manage clients and deals</p>
             </div>
         </div>
@@ -3794,10 +3817,10 @@ async function renderCRM() {
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Company</th>
-                                <th>Email</th>
-                                <th>Phone</th>
-                                <th>Status</th>
+                                <th>${t('ui_company')}</th>
+                                <th>${t('ui_email')}</th>
+                                <th>${t('ui_phone')}</th>
+                                <th>${t('ui_status')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -3893,9 +3916,9 @@ window.dropDeal = async (ev, newStage) => {
         if (oldStage === 'WON') {
             await db.deleteOrderByDealId(dealId);
         }
-        showToast("Deal moved to " + newStage, "success");
+        showToast(t('toast_deal_moved_to') + newStage, "success");
     } else {
-        showToast("Failed to move deal", "danger");
+        showToast(t('toast_failed_to_move_deal'), "danger");
     }
 };
 
@@ -3917,12 +3940,12 @@ window.handleLostReasonSubmit = async (e) => {
     if(res.success) {
         if (oldStage === 'WON') {
             await db.deleteOrderByDealId(dealId);
-            showToast("Deal marked as lost & order removed", "success");
+            showToast(t('toast_deal_marked_as_lost_order_removed'), "success");
         } else {
-            showToast("Deal marked as lost", "success");
+            showToast(t('toast_deal_marked_as_lost'), "success");
         }
     } else {
-        showToast("Failed to update deal", "danger");
+        showToast(t('toast_failed_to_update_deal'), "danger");
     }
 };
 
@@ -3948,17 +3971,17 @@ window.handleOrderSubmit = async (e) => {
     
     const res = await db.createOrder(orderData, dealId);
     if (res.success) {
-        showToast("Order saved and deal won!", "success");
+        showToast(t('toast_order_saved_and_deal_won'), "success");
         await db.triggerWebhooks('deal_won', { deal_id: dealId });
     } else {
-        showToast("Failed to save order", "danger");
+        showToast(t('toast_failed_to_save_order'), "danger");
     }
 };
 
 window.showEditOrderModal = async (id) => {
     const orders = await db.fetchOrders();
     const order = orders.find(o => o.id === id);
-    if (!order) return showToast("Order not found", "danger");
+    if (!order) return showToast(t('toast_order_not_found'), "danger");
     
     document.getElementById('editOrderId').value = id;
     document.getElementById('editOrderStartDate').value = order.start_date || '';
@@ -3991,11 +4014,11 @@ window.handleEditOrderSubmit = async (e) => {
     
     const res = await db.updateOrder(id, orderData);
     if (res.success) {
-        showToast("Order updated successfully", "success");
+        showToast(t('toast_order_updated_successfully'), "success");
         closeEditOrderModal();
         if (currentView === 'orders') renderView('orders');
     } else {
-        showToast("Failed to update order", "danger");
+        showToast(t('toast_failed_to_update_order'), "danger");
     }
 };
 
@@ -4016,11 +4039,11 @@ window.executeDeleteOrder = async () => {
     
     const res = await db.deleteOrder(orderId);
     if (res.success) {
-        showToast("Order deleted successfully", "success");
+        showToast(t('toast_order_deleted_successfully'), "success");
         closeConfirmDeleteOrderModal();
         if (currentView === 'orders') renderView('orders');
     } else {
-        showToast("Failed to delete order", "danger");
+        showToast(t('toast_failed_to_delete_order'), "danger");
     }
 };
 
@@ -4212,7 +4235,7 @@ window.printOrder = async (orderId) => {
     const printContents = `
         <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 16px;">
             <div style="height: 12px; background: #0000FF; width: 100%; margin-bottom: 20px;"></div>
-            <h1 style="text-align: center; font-size: 36px; font-weight: bold; margin-bottom: 40px; margin-top: 0;">تأكيد اوردر</h1>
+            <h1 style="text-align: center; font-size: 36px; font-weight: bold; margin-bottom: 40px; margin-top: 0;">${t('ui_')}</h1>
             
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; border: 1px solid #000;">
                 <tr>
@@ -4239,7 +4262,7 @@ window.printOrder = async (orderId) => {
 
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; border: 1px solid #000;">
                 <tr>
-                    <th colspan="2" style="border: 1px solid #000; padding: 10px; text-align: center; background-color: #f9f9f9 !important; font-weight: bold;">بيانات الاوردر</th>
+                    <th colspan="2" style="border: 1px solid #000; padding: 10px; text-align: center; background-color: #f9f9f9 !important; font-weight: bold;">${t('ui_')}</th>
                 </tr>
                 <tr>
                     <td style="border: 1px solid #000; padding: 10px; width: 50%; text-align: right;">اسم العميل : ${clientName}</td>
@@ -4266,15 +4289,15 @@ window.printOrder = async (orderId) => {
         </div>
 
         <div style="page-break-before: always; padding-top: 50px;" dir="rtl">
-            <h1 style="text-align: center; font-size: 36px; font-weight: bold; margin-bottom: 40px;">تفاصيل اوردر</h1>
+            <h1 style="text-align: center; font-size: 36px; font-weight: bold; margin-bottom: 40px;">${t('ui_')}</h1>
             
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; text-align: center; border: 1px solid #000;">
                 <tr>
                     <th style="border: 1px solid #000; padding: 10px; width: 5%; background-color: #f9f9f9 !important; text-align: center; font-weight: bold;">#</th>
-                    <th style="border: 1px solid #000; padding: 10px; width: 30%; background-color: #f9f9f9 !important; text-align: center; font-weight: bold;">البند</th>
-                    <th style="border: 1px solid #000; padding: 10px; width: 25%; background-color: #f9f9f9 !important; text-align: center; font-weight: bold;">الصورة</th>
-                    <th style="border: 1px solid #000; padding: 10px; width: 10%; background-color: #f9f9f9 !important; text-align: center; font-weight: bold;">العدد</th>
-                    <th style="border: 1px solid #000; padding: 10px; width: 30%; background-color: #f9f9f9 !important; text-align: center; font-weight: bold;">ملاحظات</th>
+                    <th style="border: 1px solid #000; padding: 10px; width: 30%; background-color: #f9f9f9 !important; text-align: center; font-weight: bold;">${t('ui_')}</th>
+                    <th style="border: 1px solid #000; padding: 10px; width: 25%; background-color: #f9f9f9 !important; text-align: center; font-weight: bold;">${t('ui_')}</th>
+                    <th style="border: 1px solid #000; padding: 10px; width: 10%; background-color: #f9f9f9 !important; text-align: center; font-weight: bold;">${t('ui_')}</th>
+                    <th style="border: 1px solid #000; padding: 10px; width: 30%; background-color: #f9f9f9 !important; text-align: center; font-weight: bold;">${t('ui_')}</th>
                 </tr>
                 <tr><td style="border: 1px solid #000; height: 50px;">١</td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td></tr>
                 <tr><td style="border: 1px solid #000; height: 50px;">٢</td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td></tr>
@@ -4395,11 +4418,11 @@ window.deleteDepartment = (id) => {
         async () => {
             const res = await db.deleteDepartment(id);
             if (res.success) {
-                showToast("Department deleted", "success");
+                showToast(t('toast_department_deleted'), "success");
                 const row = document.getElementById(`dept-row-${id}`);
                 if (row) row.remove();
             } else {
-                showToast("Failed to delete department.", "danger");
+                showToast(t('toast_failed_to_delete_department'), "danger");
             }
         }
     );
@@ -4430,7 +4453,7 @@ window.handleCreateDepartment = async (e) => {
         e.target.reset();
         if(currentView === 'departments') renderView('departments');
     } else {
-        showToast("Error saving department", "danger");
+        showToast(t('toast_error_saving_department'), "danger");
     }
 };
 
@@ -4475,11 +4498,11 @@ window.deleteClient = (id) => {
         async () => {
             const res = await db.deleteClient(id);
             if (res.success) {
-                showToast("Client deleted", "success");
+                showToast(t('toast_client_deleted'), "success");
                 const row = document.getElementById(`client-row-${id}`);
                 if (row) row.remove();
             } else {
-                showToast("Failed to delete client. It might be linked to existing deals.", "danger");
+                showToast(t('toast_failed_to_delete_client_it_might_be_linked_to_existing_deals'), "danger");
             }
         }
     );
@@ -4622,7 +4645,7 @@ window.handleCreateDeal = async (e) => {
         data.lost_reason = document.getElementById('crmDealLostReason').value;
     }
     
-    if (!data.client_id) return showToast("Please select a client", "danger");
+    if (!data.client_id) return showToast(t('toast_please_select_a_client'), "danger");
 
     let res;
     if (id) {
@@ -4644,7 +4667,7 @@ window.handleCreateDeal = async (e) => {
 // ==========================================
 async function renderIntegrations() {
     if (currentUserRole !== 'ADMIN') {
-        return `<div class="page-header"><h1 class="page-title">Unauthorized</h1></div>`;
+        return `<div class="page-header"><h1 class="page-title">${t('ui_unauthorized')}</h1></div>`;
     }
 
     const webhooks = await db.fetchWebhooks();
@@ -4652,7 +4675,7 @@ async function renderIntegrations() {
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">API Integrations (Webhooks)</h1>
+                <h1 class="page-title">${t('ui_api_integrations_webhooks')}</h1>
                 <p class="page-subtitle">Send real-time data to external services (Slack, Make, Zapier, Custom API)</p>
             </div>
             <button class="btn btn-primary" onclick="showWebhookModal()">
@@ -4667,10 +4690,10 @@ async function renderIntegrations() {
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Event Type</th>
-                                <th>URL</th>
-                                <th>Status</th>
-                                <th>Actions</th>
+                                <th>${t('ui_event_type')}</th>
+                                <th>${t('ui_url')}</th>
+                                <th>${t('ui_status')}</th>
+                                <th>${t('ui_actions')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -4725,7 +4748,7 @@ window.handleCreateWebhook = async (e) => {
     };
     const res = await db.createWebhook(data);
     if (res.success) {
-        showToast("Webhook created", "success");
+        showToast(t('toast_webhook_created'), "success");
         closeWebhookModal();
         e.target.reset();
         if(currentView === 'integrations') renderView('integrations');
@@ -4738,7 +4761,7 @@ window.handleDeleteWebhook = (id) => {
         async () => {
             const res = await db.deleteWebhook(id);
             if (res.success) {
-                showToast("Webhook deleted", "success");
+                showToast(t('toast_webhook_deleted'), "success");
                 const row = document.getElementById(`webhook-row-${id}`);
                 if (row) row.remove();
             }
@@ -5123,7 +5146,7 @@ async function renderArchivedRequests() {
 // ==========================================
 async function renderProjects() {
     console.log("renderProjects: Starting...");
-    if (!currentUser) return `<div class="page-header"><h1 class="page-title">Projects</h1></div><div class="card">Please login to view projects.</div>`;
+    if (!currentUser) return `<div class="page-header"><h1 class="page-title">${t('ui_projects')}</h1></div><div class="card">Please login to view projects.</div>`;
 
     console.log("renderProjects: Fetching projects from db...");
     const projects = await db.fetchProjects();
@@ -5132,7 +5155,7 @@ async function renderProjects() {
 
     let html = `
         <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h1 class="page-title">Projects</h1>
+            <h1 class="page-title">${t('ui_projects')}</h1>
             <button class="btn btn-primary" onclick="openProjectModal()"><i data-lucide="plus"></i> New Project</button>
         </div>
         <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
@@ -5199,17 +5222,17 @@ window.handleCreateProject = async function(event) {
     const assignedPeople = Array.from(assigneesSelect.selectedOptions).map(opt => opt.value);
 
     document.getElementById('projectModal').classList.remove('active');
-    showToast("Creating project...", "info");
+    showToast(t('toast_creating_project'), "info");
 
     const { success } = await db.createProject(name, type, desc, assignedPeople, category, tags);
 
     if (success) {
         // Webhook simulation via notification
         await db.createNotification(currentUser.id, `Project created: ${name}`);
-        showToast("Project created successfully!", "success");
+        showToast(t('toast_project_created_successfully'), "success");
         if (currentView === 'projects') renderView('projects');
     } else {
-        showToast("Failed to create project", "error");
+        showToast(t('toast_failed_to_create_project'), "error");
     }
 }
 
@@ -5258,15 +5281,15 @@ window.handleUpdateProject = async function(event) {
     const assignedPeople = Array.from(assigneesSelect.selectedOptions).map(opt => opt.value);
 
     document.getElementById('editProjectModal').classList.remove('active');
-    showToast("Updating project...", "info");
+    showToast(t('toast_updating_project'), "info");
 
     const { success } = await db.updateProject(id, name, type, desc, assignedPeople, category, tags);
 
     if (success) {
-        showToast("Project updated successfully!", "success");
+        showToast(t('toast_project_updated_successfully'), "success");
         if (currentView === 'projects') renderView('projects');
     } else {
-        showToast("Failed to update project", "error");
+        showToast(t('toast_failed_to_update_project'), "error");
     }
 }
 
@@ -5276,24 +5299,27 @@ window.handleUpdateProject = async function(event) {
 async function renderApprovals() {
     const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
     if (currentUserRole !== 'ADMIN' && !isHussain) {
-        return `<div class="page-header"><h1 class="page-title">Unauthorized</h1></div>`;
+        return `<div class="page-header"><h1 class="page-title">${t('ui_unauthorized')}</h1></div>`;
     }
 
-    const { data: tasks, error } = await window.supabaseClient
-        .from('tasks')
-        .select('*, user:assignee_id(full_name, role), project:project_id(name)')
-        .eq('status', 'Pending Approval')
-        .order('created_at', { ascending: false });
-
-    if (error) {
+    let allTasks, allUsers, allProjects;
+    try {
+        [allTasks, allUsers, allProjects] = await Promise.all([
+            db.fetchTasks(),
+            db.fetchUsers(),
+            db.fetchProjects()
+        ]);
+    } catch (error) {
         console.error('Error fetching approvals:', error);
-        return `<div class="page-header"><h1 class="page-title">Error loading approvals</h1></div>`;
+        return `<div class="page-header"><h1 class="page-title">${t('ui_error_loading_approvals')}</h1></div>`;
     }
+
+    const tasks = allTasks.filter(t => t.status === 'Pending Approval');
 
     if (!tasks || tasks.length === 0) {
         return `
             <div class="page-header">
-                <h1 class="page-title">Approvals Dashboard</h1>
+                <h1 class="page-title">${t('ui_approvals_dashboard')}</h1>
             </div>
             <div class="card" style="padding: 2rem; text-align: center; color: var(--color-text-secondary);">
                 No tasks pending approval.
@@ -5301,21 +5327,23 @@ async function renderApprovals() {
         `;
     }
 
-    let rows = tasks.map(t => {
-        const title = t.title_i18n ? (t.title_i18n[currentLang] || t.title_i18n['en'] || t.title) : t.title;
+    let rows = tasks.map(task => {
+        const title = task.title_i18n ? (task.title_i18n[currentLang] || task.title_i18n['en'] || task.title) : task.title;
+        const project = allProjects.find(p => p.id === task.project_id);
+        const user = allUsers.find(u => u.id === task.assignee_id);
         return `
             <tr>
                 <td>${title}</td>
-                <td>${t.project ? t.project.name : 'No Project'}</td>
-                <td>${t.user ? t.user.full_name : 'Unassigned'}</td>
-                <td>${t.content_type || '-'}</td>
+                <td>${project ? project.project_name : 'No Project'}</td>
+                <td>${user ? user.full_name : 'Unassigned'}</td>
+                <td>${task.content_type || '-'}</td>
                 <td>
-                    ${t.source_link ? `<a href="${t.source_link}" target="_blank">Source</a>` : '-'}
-                    ${t.upload_link ? ` | <a href="${t.upload_link}" target="_blank">Upload</a>` : ''}
+                    ${task.source_link ? `<a href="${task.source_link}" target="_blank">Source</a>` : '-'}
+                    ${task.upload_link ? ` | <a href="${task.upload_link}" target="_blank">Upload</a>` : ''}
                 </td>
                 <td style="text-align: right; white-space: nowrap;">
-                    <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApprovalAction('${t.id}', 'todo')">Approve</button>
-                    <button class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApprovalAction('${t.id}', 'Rejected')">Reject</button>
+                    <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApprovalAction('${task.id}', 'todo')">${t('ui_approve')}</button>
+                    <button class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApprovalAction('${task.id}', 'Rejected')">${t('ui_reject')}</button>
                 </td>
             </tr>
         `;
@@ -5323,18 +5351,18 @@ async function renderApprovals() {
 
     return `
         <div class="page-header">
-            <h1 class="page-title">Approvals Dashboard</h1>
+            <h1 class="page-title">${t('ui_approvals_dashboard')}</h1>
         </div>
         <div class="card">
             <table class="table">
                 <thead>
                     <tr>
                         <th>Task</th>
-                        <th>Project</th>
-                        <th>Assignee</th>
-                        <th>Content Type</th>
-                        <th>Links</th>
-                        <th style="text-align: right;">Actions</th>
+                        <th>${t('ui_project')}</th>
+                        <th>${t('ui_assignee')}</th>
+                        <th>${t('ui_content_type')}</th>
+                        <th>${t('ui_links')}</th>
+                        <th style="text-align: right;">${t('ui_actions')}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -5346,18 +5374,28 @@ async function renderApprovals() {
 };
 
 window.handleApprovalAction = async function(taskId, newStatus) {
-    if (!confirm('Are you sure you want to ' + (newStatus === 'todo' ? 'approve' : 'reject') + ' this task?')) return;
-    const { error } = await db.updateTaskStatus(taskId, newStatus);
-    if (error) {
-        showToast('Failed to update task', 'danger');
-    } else {
+    window.showConfirmModal(t('modal_title_task_approval'), t('modal_body_are_you_sure_you_want_to') + (newStatus === 'todo' ? 'approve' : 'reject') + ' this task?', async () => {
         const { data: taskData } = await window.supabaseClient.from('tasks').select('title, assignee_id').eq('id', taskId).single();
-        if (taskData && taskData.assignee_id) {
-            await db.createNotification(taskData.assignee_id, `Your task "${taskData.title}" was ${newStatus === 'todo' ? 'approved' : 'rejected'}.`);
+        
+        let error;
+        if (newStatus === 'Rejected') {
+            const res = await window.supabaseClient.from('tasks').delete().eq('id', taskId);
+            error = res.error;
+        } else {
+            const res = await db.updateTaskStatus(taskId, newStatus);
+            error = res.error;
         }
-        showToast('Task ' + (newStatus === 'todo' ? 'approved' : 'rejected'), 'success');
-        renderView('approvals');
-    }
+
+        if (error) {
+            showToast(t('toast_failed_to_update_task'), 'danger');
+        } else {
+            if (taskData && taskData.assignee_id) {
+                await db.createNotification(taskData.assignee_id, `Your task "${taskData.title}" was ${newStatus === 'todo' ? 'approved' : 'rejected and deleted'}.`);
+            }
+            showToast(t('toast_task') + ' ' + (newStatus === 'todo' ? 'approved' : 'rejected and deleted'), 'success');
+            renderView('approvals');
+        }
+    });
 };
 
 // Global Esc Key Handler for Modals and Popups
