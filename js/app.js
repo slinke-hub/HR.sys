@@ -2970,9 +2970,9 @@ async function renderTasks() {
                             ${userOptions}
                         </select>
                     </div>
-                    <div class="form-group" style="flex: 1; min-width: 180px; margin-bottom: 0;">
+                    <div class="form-group" style="flex: 1; min-width: 180px; margin-bottom: 0; ${(currentUserRole === 'MANAGER' || currentUserRole === 'ADMIN') ? 'display: none;' : ''}">
                         <label class="form-label">${t('task_supervisor')}</label>
-                        <select id="taskSupervisor" class="form-control" ${hasDepartmentSupervisor ? 'required' : 'disabled'}>
+                        <select id="taskSupervisor" class="form-control" ${hasDepartmentSupervisor && currentUserRole !== 'MANAGER' && currentUserRole !== 'ADMIN' ? 'required' : ''}>
                             <option value="">${hasDepartmentSupervisor ? t('task_select_supervisor') : t('task_no_department_manager')}</option>
                             ${supervisorOptions}
                         </select>
@@ -2984,7 +2984,7 @@ async function renderTasks() {
                     </div>
                     <!-- Department & Sub-Type -->
                     <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label">${t('ui_department') || 'Department'}</label>
+                        <label class="form-label">${t('ui_department') || "Task's Department"}</label>
                         <select id="taskDepartment" class="form-control" onchange="window.handleTaskDepartmentChange('new', this.value)">
                             <option value="">Select Department</option>
                             <option value="Marketing">Marketing</option>
@@ -3003,10 +3003,10 @@ async function renderTasks() {
                         </select>
                     </div>
                     <!-- Watchers -->
-                    <div class="form-group" style="width: 100%; margin-top: 0.5rem; margin-bottom: 0;">
-                        <label class="form-label">
+                    <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; height: 38px; margin: 0;">
                             <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'"> 
-                            ${t('ui_add_watchers') || 'Add followers/watchers'}
+                            ${t('ui_add_watcher') || 'Add Watcher'}
                         </label>
                         <div id="taskWatchersGroup" style="display: none; margin-top: 0.5rem;">
                             <select id="taskWatchers" class="form-control" multiple size="4">
