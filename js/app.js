@@ -1133,10 +1133,11 @@ async function renderTime() {
         tableRows = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
     }
 
+    const empName = currentUser ? (currentUser.full_name || currentUser.email || 'Employee') : 'Employee';
     return `
         <div class="page-header">
             <div>
-                <h1 class="page-title">${t('nav_time')}</h1>
+                <h1 class="page-title">${t('nav_time')} - ${empName}</h1>
                 <p class="page-subtitle">${t('timesheet_sub')}</p>
             </div>
         </div>
