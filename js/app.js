@@ -179,22 +179,78 @@ window.handleUpdateUser = async (e) => {
     }
 };
 
-window.handleResetUserPassword = async (userId) => {
-    window.showConfirmModal(t('modal_title_reset_password'), t('modal_body_are_you_sure_you_want_to_reset_this_user_s_password_and_unlock_their_account_'), async () => {
-        // Generate 8 char random alphanumeric password
-        const newPassword = Math.random().toString(36).slice(-8);
-        const user = await db.getUserProfile(userId);
-        
-        // Attempt password reset
-        const success = await db.resetUserPassword(userId, newPassword);
-        
-        if (success) {
-            window.showConfirmModal("Password Reset", `Password reset successfully!\nNew Temporary Password: ${newPassword}\n\nPlease share this securely with the user.`, () => {});
-        } else {
-            showToast(t('toast_failed_to_reset_password'), "danger");
-        }
-    });
+window.showAdminPasswordResetModal = (userId) => {
+    if (currentUserRole !== 'ADMIN') {
+        showToast(t('password_reset_admin_only'), 'danger');
+        return;
+    }
+
+    const user = (window.currentAdminUsers || []).find(item => item.id === userId);
+    if (!user) {
+        showToast(t('toast_user_not_found'), 'danger');
+        return;
+    }
+
+    const form = document.getElementById('adminPasswordResetForm');
+    form.reset();
+    document.getElementById('adminPasswordResetUserId').value = user.id;
+    document.getElementById('adminPasswordResetUserName').textContent = user.full_name || `EMP-${user.emp_index || ''}`;
+    document.getElementById('adminNewPassword').type = 'password';
+    document.getElementById('adminConfirmPassword').type = 'password';
+    document.getElementById('adminPasswordResetModal').classList.add('show');
+    setTimeout(() => document.getElementById('adminNewPassword').focus(), 0);
+    if (window.lucide) window.lucide.createIcons();
 };
+
+window.closeAdminPasswordResetModal = () => {
+    const modal = document.getElementById('adminPasswordResetModal');
+    const form = document.getElementById('adminPasswordResetForm');
+    if (form) form.reset();
+    if (modal) modal.classList.remove('show');
+};
+
+window.toggleAdminPasswordVisibility = (showPasswords) => {
+    const inputType = showPasswords ? 'text' : 'password';
+    document.getElementById('adminNewPassword').type = inputType;
+    document.getElementById('adminConfirmPassword').type = inputType;
+};
+
+window.handleAdminPasswordReset = async (event) => {
+    event.preventDefault();
+    if (currentUserRole !== 'ADMIN') {
+        showToast(t('password_reset_admin_only'), 'danger');
+        return;
+    }
+
+    const userId = document.getElementById('adminPasswordResetUserId').value;
+    const newPassword = document.getElementById('adminNewPassword').value;
+    const confirmPassword = document.getElementById('adminConfirmPassword').value;
+
+    if (newPassword.length < 8) {
+        showToast(t('password_reset_minimum'), 'warning');
+        return;
+    }
+    if (newPassword !== confirmPassword) {
+        showToast(t('password_reset_mismatch'), 'warning');
+        return;
+    }
+
+    const submitButton = document.getElementById('adminPasswordResetSubmit');
+    submitButton.disabled = true;
+    try {
+        const result = await db.resetUserPassword(userId, newPassword);
+        if (!result.success) throw result.error || new Error(t('toast_failed_to_reset_password'));
+        window.closeAdminPasswordResetModal();
+        showToast(t('password_reset_success'), 'success');
+    } catch (error) {
+        showToast(error?.message || t('toast_failed_to_reset_password'), 'danger');
+    } finally {
+        submitButton.disabled = false;
+    }
+};
+
+// Backward-compatible entry point used by older cached markup.
+window.handleResetUserPassword = window.showAdminPasswordResetModal;
 
 window.handleDeleteUser = (userId) => {
     window.showConfirmModal(t('modal_title_delete_user'), t('modal_body_are_you_sure_you_want_to_delete_this_user_this_action_cannot_be_undone'), async () => {
@@ -1667,11 +1723,12 @@ window.handleCreateUser = async function (e) {
     const iqama = document.getElementById('newIqama').value;
     const phone = document.getElementById('newPhone').value;
 
-    const { error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone);
+    const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone);
     if (!error) {
         showToast(t('toast_user_created_successfully'), 'success');
         if (typeof closeAddUserModal === 'function') closeAddUserModal();
-        renderView('users');
+        window.currentContractEmployeeId = data?.id || data;
+        renderView('contract_form');
     } else {
         showToast(error.message || "Failed to create user", 'danger');
     }
@@ -1698,6 +1755,7 @@ async function renderUsers() {
     if (currentUserRole !== 'ADMIN') return '<div style="padding: 2rem;">Unauthorized</div>';
 
     const users = await db.fetchUsers();
+    window.currentAdminUsers = users;
 
     return `
         <div class="page-header fade-in-up">
@@ -1764,7 +1822,7 @@ async function renderUsers() {
                                             <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem;" onclick="showEditUserModal('${u.id}')" title="Edit User">
                                                 <i data-lucide="edit" style="width:14px;height:14px;"></i>
                                             </button>
-                                            <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem; color: var(--color-warning);" onclick="handleResetUserPassword('${u.id}')" title="Unlock & Reset Password">
+                                            <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem; color: var(--color-warning);" onclick="showAdminPasswordResetModal('${u.id}')" title="${t('password_reset_button')}">
                                                 <i data-lucide="key" style="width:14px;height:14px;"></i>
                                             </button>
                                             <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem; color: var(--color-danger);" onclick="handleDeleteUser('${u.id}')" title="Remove User">
@@ -2007,30 +2065,391 @@ window.handleDocSubmit = async function (e) {
     const { success } = await db.requestDocument(currentUser.id, type, purpose);
     if (success) {
         showToast(t('toast_document_requested'), "success");
-        renderView('documents');
+        renderView('requests');
     }
 }
 
-window.handleEmployeeDocUpload = async function (e) {
-    e.preventDefault();
-    const docType = document.getElementById('empDocType').value;
-    const fileInput = document.getElementById('empDocFile');
-    if (!fileInput.files || fileInput.files.length === 0) return;
+const EMPLOYEE_DOCUMENT_MAX_FILE_SIZE = 5 * 1024 * 1024;
+const EMPLOYEE_DOCUMENT_ALLOWED_FILE_TYPES = new Set([
+    'application/pdf',
+    'image/jpeg',
+    'image/png'
+]);
 
-    const file = fileInput.files[0];
-    const docName = file.name;
-    const reader = new FileReader();
-    reader.onload = async function (event) {
-        const base64Url = event.target.result;
-        const { success } = await db.uploadEmployeeDocument(currentUser.id, docName, docType, base64Url);
-        if (success) {
-            showToast(t('toast_document_uploaded_successfully'), "success");
+function getEmployeeDocumentFileValidationError(file) {
+    if (!file) return 'toast_document_file_required';
+    if (file.size > EMPLOYEE_DOCUMENT_MAX_FILE_SIZE) return 'toast_document_file_too_large';
+
+    const hasAllowedType = EMPLOYEE_DOCUMENT_ALLOWED_FILE_TYPES.has(file.type);
+    const hasAllowedExtension = /\.(pdf|png|jpe?g)$/i.test(file.name || '');
+    const hasConflictingType = file.type && file.type !== 'application/octet-stream' && !hasAllowedType;
+    if (!hasAllowedExtension || hasConflictingType) return 'toast_document_file_type_invalid';
+    return null;
+}
+
+function getEmployeeDocumentFileType(file) {
+    if (EMPLOYEE_DOCUMENT_ALLOWED_FILE_TYPES.has(file.type)) return file.type;
+    if (/\.pdf$/i.test(file.name || '')) return 'application/pdf';
+    if (/\.png$/i.test(file.name || '')) return 'image/png';
+    return 'image/jpeg';
+}
+
+function readEmployeeDocumentFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = event => resolve(event.target.result);
+        reader.onerror = () => reject(reader.error || new Error('Unable to read the selected file'));
+        reader.readAsDataURL(file);
+    });
+}
+
+window.openEmployeeDocumentFilePicker = function () {
+    document.getElementById('empDocFile')?.click();
+};
+
+window.updateEmployeeDocumentFileName = function (event) {
+    const fileInput = event.target;
+    const fileNameElement = document.getElementById('empDocFileName');
+    const file = fileInput.files?.[0] || null;
+    const validationError = getEmployeeDocumentFileValidationError(file);
+
+    if (validationError && file) {
+        fileInput.value = '';
+        if (fileNameElement) fileNameElement.textContent = t('doc_no_file_selected');
+        showToast(t(validationError), 'warning');
+        return;
+    }
+
+    if (fileNameElement) {
+        fileNameElement.textContent = file ? file.name : t('doc_no_file_selected');
+    }
+};
+
+window.handleEmployeeDocSave = async function (e) {
+    e.preventDefault();
+    const fileInput = document.getElementById('empDocFile');
+    const file = fileInput?.files?.[0] || null;
+    const validationError = getEmployeeDocumentFileValidationError(file);
+    if (validationError) {
+        showToast(t(validationError), 'warning');
+        return;
+    }
+
+    const saveButton = document.getElementById('empDocSaveButton');
+    const uploadButton = document.getElementById('empDocUploadButton');
+    if (saveButton) saveButton.disabled = true;
+    if (uploadButton) uploadButton.disabled = true;
+
+    try {
+        const fileType = getEmployeeDocumentFileType(file);
+        const rawFileBase64 = await readEmployeeDocumentFile(file);
+        const fileBase64 = String(rawFileBase64).replace(/^data:[^;]*;/, `data:${fileType};`);
+        const documentRecord = {
+            documentName: document.getElementById('empDocName').value.trim(),
+            ownerName: document.getElementById('empOwnerName').value.trim(),
+            ownerEmail: document.getElementById('empOwnerEmail').value.trim(),
+            responsibleName: document.getElementById('empResponsibleName').value.trim(),
+            responsibleEmail: document.getElementById('empResponsibleEmail').value.trim(),
+            expirationDate: document.getElementById('empExpiryDate').value,
+            ownerPhone: document.getElementById('empOwnerPhone').value.trim(),
+            fileType,
+            fileBase64,
+            notified30Days: true
+        };
+
+        const uploadResult = await db.uploadEmployeeDocument(currentUser.id, documentRecord);
+        if (!uploadResult.success) {
+            throw uploadResult.error || new Error(t('toast_error_saving_document'));
+        }
+
+        showToast(t('toast_document_saved_successfully'), "success");
+
+        const expiryInfo = getDocumentExpiryInfo(documentRecord.expirationDate);
+        if (expiryInfo.daysLeft !== null && expiryInfo.daysLeft <= 30) {
+            const notificationResult = await db.notifyEmployeeDocumentExpiry(uploadResult.data.id);
+            if (notificationResult.success && (notificationResult.data?.failures || 0) === 0) {
+                showToast(t('toast_document_expiry_notification_sent'), "success");
+            } else {
+                showToast(t('toast_document_expiry_notification_failed'), "warning");
+            }
+        }
+
+        renderView('documents');
+    } catch (error) {
+        console.error('handleEmployeeDocSave Error:', error);
+        showToast(error?.message || t('toast_error_saving_document'), 'danger');
+    } finally {
+        if (saveButton?.isConnected) saveButton.disabled = false;
+        if (uploadButton?.isConnected) uploadButton.disabled = false;
+    }
+}
+
+// Backward-compatible entry point for older cached markup.
+window.handleEmployeeDocUpload = window.handleEmployeeDocSave;
+
+function getDocumentExpiryInfo(expirationDate) {
+    if (!expirationDate) return { daysLeft: null, status: '', statusClass: 'info' };
+
+    const [year, month, day] = expirationDate.split('-').map(Number);
+    const now = new Date();
+    const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const expiryUtc = Date.UTC(year, month - 1, day);
+    const daysLeft = Math.ceil((expiryUtc - todayUtc) / 86400000);
+
+    if (daysLeft <= 0) {
+        return { daysLeft, status: t('doc_status_expired'), statusClass: 'danger' };
+    }
+    if (daysLeft <= 30) {
+        return { daysLeft, status: t('doc_status_expiring_soon'), statusClass: 'warning' };
+    }
+    return { daysLeft, status: t('doc_status_active'), statusClass: 'success' };
+}
+
+window.updateDocumentExpiryPreview = function () {
+    const expiryInput = document.getElementById('empExpiryDate');
+    const daysLeftInput = document.getElementById('empDaysLeft');
+    const statusInput = document.getElementById('empStatus');
+    if (!expiryInput || !daysLeftInput || !statusInput) return;
+
+    const expiryInfo = getDocumentExpiryInfo(expiryInput.value);
+    daysLeftInput.value = expiryInfo.daysLeft === null ? '' : expiryInfo.daysLeft;
+    statusInput.value = expiryInfo.status;
+};
+
+function getEmployeeDocumentRecord(documentId) {
+    return (window.currentEmployeeDocuments || []).find(documentRecord => documentRecord.id === documentId) || null;
+}
+
+function canManageEmployeeDocument(documentRecord) {
+    if (!documentRecord || !currentUser) return false;
+    if (currentUserRole === 'ADMIN') return true;
+    if (documentRecord.employee_id === currentUser.id) return true;
+    return currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+}
+
+window.updateEmployeeDocumentModalExpiryPreview = () => {
+    const expiryDate = document.getElementById('employeeDocumentExpiryDate')?.value;
+    const expiryInfo = getDocumentExpiryInfo(expiryDate);
+    document.getElementById('employeeDocumentDaysLeft').value = expiryInfo.daysLeft === null ? '' : expiryInfo.daysLeft;
+    document.getElementById('employeeDocumentStatus').value = expiryInfo.status;
+};
+
+function openEmployeeDocumentModal(documentId, editMode) {
+    const documentRecord = getEmployeeDocumentRecord(documentId);
+    if (!documentRecord) {
+        showToast(t('doc_not_found'), 'danger');
+        return;
+    }
+    if (editMode && !canManageEmployeeDocument(documentRecord)) {
+        showToast(t('doc_action_not_allowed'), 'danger');
+        return;
+    }
+
+    const modal = document.getElementById('employeeDocumentModal');
+    const editableInputIds = [
+        'employeeDocumentName',
+        'employeeDocumentOwnerName',
+        'employeeDocumentOwnerEmail',
+        'employeeDocumentResponsibleName',
+        'employeeDocumentResponsibleEmail',
+        'employeeDocumentExpiryDate',
+        'employeeDocumentOwnerPhone'
+    ];
+
+    document.getElementById('employeeDocumentRecordId').value = documentRecord.id;
+    document.getElementById('employeeDocumentDisplayId').value = documentRecord.document_id || '';
+    document.getElementById('employeeDocumentName').value = documentRecord.doc_name || '';
+    document.getElementById('employeeDocumentOwnerName').value = documentRecord.owner_name || '';
+    document.getElementById('employeeDocumentOwnerEmail').value = documentRecord.owner_email || '';
+    document.getElementById('employeeDocumentResponsibleName').value = documentRecord.responsible_name || '';
+    document.getElementById('employeeDocumentResponsibleEmail').value = documentRecord.responsible_email || '';
+    document.getElementById('employeeDocumentExpiryDate').value = documentRecord.expiration_date || '';
+    document.getElementById('employeeDocumentNotified').value = t('doc_yes');
+    document.getElementById('employeeDocumentOwnerPhone').value = documentRecord.owner_phone || '';
+    window.updateEmployeeDocumentModalExpiryPreview();
+
+    editableInputIds.forEach(inputId => {
+        document.getElementById(inputId).readOnly = !editMode;
+    });
+    document.getElementById('employeeDocumentModalTitle').textContent = editMode ? t('doc_edit_title') : t('doc_view_title');
+    document.getElementById('employeeDocumentSaveButton').style.display = editMode ? '' : 'none';
+    const legacyFileButton = document.getElementById('employeeDocumentLegacyFileButton');
+    legacyFileButton.style.display = '';
+    modal.classList.add('show');
+    if (window.lucide) window.lucide.createIcons();
+}
+
+window.viewEmployeeDocument = documentId => openEmployeeDocumentModal(documentId, false);
+window.editEmployeeDocument = documentId => openEmployeeDocumentModal(documentId, true);
+
+window.closeEmployeeDocumentModal = () => {
+    const modal = document.getElementById('employeeDocumentModal');
+    if (modal) modal.classList.remove('show');
+};
+
+window.openLegacyEmployeeDocumentFile = async () => {
+    const documentId = document.getElementById('employeeDocumentRecordId').value;
+    const documentRecord = getEmployeeDocumentRecord(documentId);
+    if (!documentRecord) {
+        showToast(t('doc_not_found'), 'danger');
+        return;
+    }
+
+    const fileWindow = window.open('', '_blank');
+    if (!fileWindow) {
+        showToast(t('doc_popup_blocked'), 'warning');
+        return;
+    }
+    fileWindow.opener = null;
+
+    const result = await db.fetchEmployeeDocumentFile(documentId);
+    const dataUrl = result.data?.doc_base64;
+    if (!result.success || !dataUrl) {
+        fileWindow.close();
+        showToast(t('doc_no_stored_file'), 'warning');
+        return;
+    }
+
+    try {
+        const match = String(dataUrl).match(/^data:([^;,]+);base64,([a-z0-9+/=]+)$/i);
+        const allowedStoredTypes = new Set([
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp'
+        ]);
+        if (!match || !allowedStoredTypes.has(match[1].toLowerCase())) {
+            throw new Error('Unsupported stored file type');
+        }
+
+        const binary = atob(match[2]);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+        const fileUrl = URL.createObjectURL(new Blob([bytes], { type: match[1] }));
+        fileWindow.location.replace(fileUrl);
+        setTimeout(() => URL.revokeObjectURL(fileUrl), 60000);
+    } catch (error) {
+        fileWindow.close();
+        console.error('openLegacyEmployeeDocumentFile Error:', error);
+        showToast(t('doc_no_stored_file'), 'warning');
+    }
+};
+
+window.handleEmployeeDocumentEdit = async event => {
+    event.preventDefault();
+    const documentId = document.getElementById('employeeDocumentRecordId').value;
+    const currentRecord = getEmployeeDocumentRecord(documentId);
+    if (!canManageEmployeeDocument(currentRecord)) {
+        showToast(t('doc_action_not_allowed'), 'danger');
+        return;
+    }
+
+    const documentRecord = {
+        documentName: document.getElementById('employeeDocumentName').value.trim(),
+        ownerName: document.getElementById('employeeDocumentOwnerName').value.trim(),
+        ownerEmail: document.getElementById('employeeDocumentOwnerEmail').value.trim(),
+        responsibleName: document.getElementById('employeeDocumentResponsibleName').value.trim(),
+        responsibleEmail: document.getElementById('employeeDocumentResponsibleEmail').value.trim(),
+        expirationDate: document.getElementById('employeeDocumentExpiryDate').value,
+        ownerPhone: document.getElementById('employeeDocumentOwnerPhone').value.trim()
+    };
+
+    const saveButton = document.getElementById('employeeDocumentSaveButton');
+    saveButton.disabled = true;
+    try {
+        const result = await db.updateEmployeeDocument(documentId, documentRecord);
+        if (!result.success) throw result.error || new Error(t('doc_update_failed'));
+        window.closeEmployeeDocumentModal();
+        showToast(t('doc_update_success'), 'success');
+        renderView('documents');
+    } catch (error) {
+        showToast(error?.message || t('doc_update_failed'), 'danger');
+    } finally {
+        saveButton.disabled = false;
+    }
+};
+
+window.deleteEmployeeDocument = documentId => {
+    const documentRecord = getEmployeeDocumentRecord(documentId);
+    if (!canManageEmployeeDocument(documentRecord)) {
+        showToast(t('doc_action_not_allowed'), 'danger');
+        return;
+    }
+
+    window.showConfirmModal(t('doc_delete_title'), t('doc_delete_confirm'), async () => {
+        const result = await db.deleteEmployeeDocument(documentId);
+        if (result.success) {
+            showToast(t('doc_delete_success'), 'success');
             renderView('documents');
         } else {
-            showToast(t('toast_error_uploading_document'), "danger");
+            showToast(result.error?.message || t('doc_delete_failed'), 'danger');
         }
-    };
-    reader.readAsDataURL(file);
+    });
+};
+
+window.printEmployeeDocument = documentId => {
+    const documentRecord = getEmployeeDocumentRecord(documentId);
+    if (!documentRecord) {
+        showToast(t('doc_not_found'), 'danger');
+        return;
+    }
+
+    const expiryInfo = getDocumentExpiryInfo(documentRecord.expiration_date);
+    const expirationDate = documentRecord.expiration_date
+        ? new Date(`${documentRecord.expiration_date}T00:00:00`).toLocaleDateString()
+        : '-';
+    const rows = [
+        [t('doc_document_id'), documentRecord.document_id || '-'],
+        [t('doc_document_name'), documentRecord.doc_name || '-'],
+        [t('doc_owner_name'), documentRecord.owner_name || '-'],
+        [t('doc_owner_email'), documentRecord.owner_email || '-'],
+        [t('doc_responsible_name'), documentRecord.responsible_name || '-'],
+        [t('doc_responsible_email'), documentRecord.responsible_email || '-'],
+        [t('doc_expiry_date'), expirationDate],
+        [t('doc_days_left'), expiryInfo.daysLeft === null ? '-' : expiryInfo.daysLeft],
+        [t('status'), expiryInfo.status || '-'],
+        [t('doc_notified_30_days'), t('doc_yes')],
+        [t('doc_owner_phone'), documentRecord.owner_phone || '-']
+    ];
+    const printContent = `
+        <h2 style="margin:0 0 24px;">${escapeHTML(t('doc_print_title'))}</h2>
+        <table><tbody>${rows.map(([label, value]) => `<tr><th style="width:35%;">${escapeHTML(String(label))}</th><td>${escapeHTML(String(value))}</td></tr>`).join('')}</tbody></table>
+    `;
+    window.printWithLetterhead(escapeHTML(documentRecord.doc_name || t('doc_print_title')), printContent);
+};
+
+function renderEmployeeDocumentRow(documentRecord) {
+    const expiryInfo = getDocumentExpiryInfo(documentRecord.expiration_date);
+    const expirationDate = documentRecord.expiration_date
+        ? new Date(`${documentRecord.expiration_date}T00:00:00`).toLocaleDateString()
+        : '-';
+
+    return `
+        <tr>
+            <td>${escapeHTML(String(documentRecord.document_id || '-'))}</td>
+            <td>${escapeHTML(documentRecord.doc_name || '-')}</td>
+            <td>${escapeHTML(documentRecord.owner_name || '-')}</td>
+            <td>${escapeHTML(documentRecord.owner_email || '-')}</td>
+            <td>${escapeHTML(documentRecord.responsible_name || '-')}</td>
+            <td>${escapeHTML(documentRecord.responsible_email || '-')}</td>
+            <td>${expirationDate}</td>
+            <td>${expiryInfo.daysLeft === null ? '-' : expiryInfo.daysLeft}</td>
+            <td><span class="status-badge ${expiryInfo.statusClass}">${escapeHTML(expiryInfo.status || '-')}</span></td>
+            <td>${t('doc_yes')}</td>
+            <td>${escapeHTML(documentRecord.owner_phone || '-')}</td>
+            <td>
+                <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                    <button type="button" class="btn-secondary" style="padding:0.4rem;" onclick="viewEmployeeDocument('${escapeHTML(documentRecord.id)}')" title="${t('doc_action_view')}" aria-label="${t('doc_action_view')}"><i data-lucide="eye" style="width:14px;height:14px;"></i></button>
+                    <button type="button" class="btn-secondary" style="padding:0.4rem;" onclick="editEmployeeDocument('${escapeHTML(documentRecord.id)}')" title="${t('doc_action_edit')}" aria-label="${t('doc_action_edit')}"><i data-lucide="edit-2" style="width:14px;height:14px;"></i></button>
+                    <button type="button" class="btn-secondary" style="padding:0.4rem;" onclick="printEmployeeDocument('${escapeHTML(documentRecord.id)}')" title="${t('doc_action_print')}" aria-label="${t('doc_action_print')}"><i data-lucide="printer" style="width:14px;height:14px;"></i></button>
+                    <button type="button" class="btn-secondary" style="padding:0.4rem; color:var(--color-danger);" onclick="deleteEmployeeDocument('${escapeHTML(documentRecord.id)}')" title="${t('doc_action_delete')}" aria-label="${t('doc_action_delete')}"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
+                </div>
+            </td>
+        </tr>
+    `;
 }
 
 async function renderDocuments() {
@@ -2046,6 +2465,8 @@ async function renderDocuments() {
         uploadedDocs = uploadedDocs.filter(d => teamIds.includes(d.employee_id));
     }
 
+    window.currentEmployeeDocuments = uploadedDocs;
+
     return `
         <div class="page-header fade-in-up">
             <div>
@@ -2055,82 +2476,86 @@ async function renderDocuments() {
         </div>
         <div class="dashboard-grid fade-in-up">
             <!-- Upload Official Document -->
-            <div class="card col-span-4">
+            <div class="card col-span-12">
                 <div class="card-title">${t('doc_upload_title')}</div>
-                <form autocomplete="off" onsubmit="handleEmployeeDocUpload(event)">
-                    <div class="form-group">
-                        <label class="form-label">${t('doc_type')}</label>
-                        <select id="empDocType" class="form-control">
-                            <option value="Passport">${t('doc_type_passport')}</option>
-                            <option value="Iqama">${t('doc_type_iqama')}</option>
-                            <option value="Contract">${t('doc_type_contract')}</option>
-                            <option value="Certificate">${t('doc_type_cert')}</option>
-                        </select>
+                <form autocomplete="off" onsubmit="handleEmployeeDocSave(event)">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_document_id')}</label>
+                            <input type="text" class="form-control" value="${t('doc_auto_generated')}" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_document_name')}</label>
+                            <input type="text" id="empDocName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_owner_name')}</label>
+                            <input type="text" id="empOwnerName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_owner_email')}</label>
+                            <input type="email" id="empOwnerEmail" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_responsible_name')}</label>
+                            <input type="text" id="empResponsibleName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_responsible_email')}</label>
+                            <input type="email" id="empResponsibleEmail" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_expiry_date')}</label>
+                            <input type="date" id="empExpiryDate" class="form-control" oninput="updateDocumentExpiryPreview()" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_days_left')}</label>
+                            <input type="number" id="empDaysLeft" class="form-control" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('status')}</label>
+                            <input type="text" id="empStatus" class="form-control" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_notified_30_days')}</label>
+                            <input type="text" class="form-control" value="${t('doc_yes')}" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">${t('doc_owner_phone')}</label>
+                            <input type="tel" id="empOwnerPhone" class="form-control" required>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label class="form-label">${t('doc_file')}</label>
+                            <input type="file" id="empDocFile" accept="application/pdf,image/png,image/jpeg" onchange="updateEmployeeDocumentFileName(event)" style="display: none;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                                <button type="button" id="empDocUploadButton" class="btn-secondary" onclick="openEmployeeDocumentFilePicker()">
+                                    <i data-lucide="upload"></i> ${t('doc_upload_btn')}
+                                </button>
+                                <span id="empDocFileName" aria-live="polite" style="color: var(--color-text-secondary);">${t('doc_no_file_selected')}</span>
+                            </div>
+                            <small style="display: block; margin-top: 0.5rem; color: var(--color-text-secondary);">${t('doc_file_help')}</small>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">${t('doc_file')}</label>
-                        <input type="file" id="empDocFile" accept="image/*,application/pdf" class="form-control" required>
-                    </div>
-                    <button type="submit" class="btn-primary" style="width: 100%;">${t('doc_upload_btn')}</button>
+                    <button type="submit" id="empDocSaveButton" class="btn-primary" style="margin-top: 0.5rem;">
+                        <i data-lucide="save"></i> ${t('doc_save_btn')}
+                    </button>
                 </form>
             </div>
             
-            <div class="card col-span-8">
+
+            <div class="card col-span-12">
                 <div class="card-title">${currentUserRole === 'ADMIN' ? t('doc_all_uploaded') : t('doc_my_uploaded')}</div>
                 <div class="table-responsive">
                     <table class="data-table">
-                        <thead><tr><th>${t('req_type')}</th><th>${t('doc_file_name')}</th><th>${t('date')}</th><th>${t('pay_actions')}</th></tr></thead>
+                        <thead><tr><th>${t('doc_document_id')}</th><th>${t('doc_document_name')}</th><th>${t('doc_owner_name')}</th><th>${t('doc_owner_email')}</th><th>${t('doc_responsible_name')}</th><th>${t('doc_responsible_email')}</th><th>${t('doc_expiry_date')}</th><th>${t('doc_days_left')}</th><th>${t('status')}</th><th>${t('doc_notified_30_days')}</th><th>${t('doc_owner_phone')}</th><th>${t('ui_actions')}</th></tr></thead>
                         <tbody>
-                            ${uploadedDocs.length === 0 ? `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_uploaded')}</td></tr>` : uploadedDocs.map(d => `
-                                <tr>
-                                    <td><span class="status-badge info">${d.doc_type}</span></td>
-                                    <td>${d.doc_name}</td>
-                                    <td>${new Date(d.created_at).toLocaleDateString()}</td>
-                                    <td><a href="${d.doc_base64}" download="${d.doc_name}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">${t('exp_download')}</a></td>
-                                </tr>
-                            `).join('')}
+                            ${uploadedDocs.length === 0 ? `<tr><td colspan="12" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_uploaded')}</td></tr>` : uploadedDocs.map(renderEmployeeDocumentRow).join('')}
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- HR Letter Requests -->
-            <div class="card col-span-4">
-                <div class="card-title">${t('doc_req_letter')}</div>
-                <form autocomplete="off" onsubmit="handleDocSubmit(event)">
-                    <div class="form-group">
-                        <label class="form-label">${t('doc_type')}</label>
-                        <select id="docType" class="form-control">
-                            <option value="Salary Certificate">${t('doc_type_salary')}</option>
-                            <option value="NOC">${t('doc_type_noc')}</option>
-                            <option value="Employment Letter">${t('doc_type_emp')}</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${t('doc_purpose')}</label>
-                        <textarea id="docPurpose" class="form-control" required></textarea>
-                    </div>
-                    <button type="submit" class="btn-secondary" style="width: 100%;">${t('doc_submit_req')}</button>
-                </form>
-            </div>
-            <div class="card col-span-8">
-                <div class="card-title">${currentUserRole === 'ADMIN' ? t('doc_all_reqs') : t('doc_my_reqs')}</div>
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead><tr><th>${t('req_type')}</th><th>${t('doc_purpose')}</th><th>${t('req_status')}</th><th>${t('date')}</th></tr></thead>
-                        <tbody>
-                            ${docs.length === 0 ? `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_reqs')}</td></tr>` : docs.map(d => `
-                                <tr>
-                                    <td>${d.doc_type}</td>
-                                    <td>${d.purpose.substring(0, 30)}...</td>
-                                    <td><span class="status-badge ${d.status === 'PENDING' ? 'warning' : (d.status.startsWith('REJECTED') ? 'danger' : 'success')}">${d.status.replace('_ARCHIVED', '')}</span></td>
-                                    <td>${new Date(d.created_at).toLocaleDateString()}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <!-- Removed HR Letter Requests (moved to Employee Requests page) -->
         </div>
     `;
 }
@@ -2375,33 +2800,7 @@ window.handleUpdateProfileDetails = async function (e) {
     }
 }
 
-window.currentTaskView = window.currentTaskView || 'list';
-window.switchTaskView = function(view) {
-    window.currentTaskView = view;
-    
-    // Client-side toggle without re-rendering the whole page
-    const listBtn = document.getElementById('btn-view-list');
-    const boardBtn = document.getElementById('btn-view-board');
-    const listView = document.getElementById('tasks-view-list');
-    const boardView = document.getElementById('tasks-view-board');
-    
-    if (listBtn && boardBtn && listView && boardView) {
-        if (view === 'list') {
-            listBtn.classList.add('active');
-            boardBtn.classList.remove('active');
-            listView.style.display = 'block';
-            boardView.style.display = 'none';
-        } else {
-            boardBtn.classList.add('active');
-            listBtn.classList.remove('active');
-            boardView.style.display = 'block';
-            listView.style.display = 'none';
-        }
-    } else {
-        // Fallback just in case
-        renderView('tasks');
-    }
-};
+
 
 async function renderTasks() {
     console.log("renderTasks: Starting...");
@@ -2591,15 +2990,8 @@ async function renderTasks() {
         `;
     }
 
-    const viewToggler = `
-        <div class="task-view-toggler">
-            <button id="btn-view-list" class="${window.currentTaskView === 'list' ? 'active' : ''}" onclick="switchTaskView('list')"><i data-lucide="list"></i> List View</button>
-            <button id="btn-view-board" class="${window.currentTaskView === 'board' ? 'active' : ''}" onclick="switchTaskView('board')"><i data-lucide="kanban"></i> Board View</button>
-        </div>
-    `;
-
     let boardHTML = `
-        <div id="tasks-view-board" class="col-span-12" style="display: ${window.currentTaskView === 'board' ? 'block' : 'none'};">
+        <div id="tasks-view-board" class="col-span-12" style="display: block;">
             <div class="task-board-wrapper" style="width: 100%; overflow-x: auto; padding-bottom: 1rem;">
                 <div style="display: flex; gap: 1.5rem; min-width: 1400px;">
                     <div style="flex: 1; min-width: 280px;">
@@ -2647,52 +3039,6 @@ async function renderTasks() {
         </div>
     `;
 
-    // List View Grouped by Category
-    const categories = [...new Set(tasks.map(t => t.category || 'General'))].sort();
-    
-    let listHTML = `<div id="tasks-view-list" class="col-span-12" style="background: transparent; display: ${window.currentTaskView === 'list' ? 'block' : 'none'};">`;
-    categories.forEach(cat => {
-        const catTasks = tasks.filter(t => (t.category || 'General') === cat);
-        listHTML += `<div class="task-list-group-header">${escapeHTML(cat)} <span class="badge" style="font-size: 0.75rem;">${catTasks.length}</span></div>`;
-        
-        if (catTasks.length === 0) {
-            listHTML += `<div style="padding: 1rem; color: var(--color-text-secondary); font-style: italic;">No tasks</div>`;
-        }
-        
-        catTasks.forEach(task => {
-            let prioColor = 'var(--color-text-secondary)';
-            if (task.priority === 'high') prioColor = 'var(--color-warning)';
-            if (task.priority === 'urgent') prioColor = 'var(--color-danger)';
-            
-            let statusBadge = '';
-            if(task.status === 'in_progress') statusBadge = '<span class="badge" style="background: var(--color-primary); color: white;">In Progress</span>';
-            else if(task.status === 'review') statusBadge = '<span class="badge" style="background: var(--color-warning); color: white;">Review</span>';
-            else if(task.status === 'completed') statusBadge = '<span class="badge" style="background: var(--color-success); color: white;">Done</span>';
-            else if(task.status === 'Pending Approval') statusBadge = '<span class="badge" style="background: #8b5cf6; color: white;">Pending</span>';
-            else if(task.status === 'Approved') statusBadge = '<span class="badge" style="background: #10b981; color: white;">Approved</span>';
-            else if(task.status === 'Rejected') statusBadge = '<span class="badge" style="background: #ef4444; color: white;">Rejected</span>';
-            else statusBadge = '<span class="badge">To Do</span>';
-            
-            listHTML += `
-                <div class="task-list-row" onclick="openTaskDetailsModal('${task.id}')">
-                    <div style="color: ${prioColor};" title="Priority: ${task.priority}">
-                        <i data-lucide="alert-circle"></i>
-                    </div>
-                    <div class="task-title">
-                        ${escapeHTML(task.displayTitle)}
-                    </div>
-                    <div class="task-meta">
-                        <span style="width: 100px;">${statusBadge}</span>
-                        <span style="width: 150px; display:flex; align-items:center; gap:4px;"><i data-lucide="user" style="width:14px;height:14px;"></i> ${task.assignee?.full_name || 'Unassigned'}</span>
-                        <span style="width: 120px; display:flex; align-items:center; gap:4px;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date || 'No Date'}</span>
-                        <button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="background:none; border:none; cursor:pointer; color:var(--color-text-secondary);" title="Edit"><i data-lucide="edit-2" style="width:14px;height:14px;"></i></button>
-                    </div>
-                </div>
-            `;
-        });
-    });
-    listHTML += `</div>`;
-
     return `
         <div class="page-header">
             <div>
@@ -2700,11 +3046,9 @@ async function renderTasks() {
                 <p class="page-subtitle">${t('task_sub') || 'Manage team tasks with AI assistance'}</p>
             </div>
         </div>
-        ${viewToggler}
         <div class="dashboard-grid fade-in-up" style="grid-template-columns: repeat(12, 1fr);">
             ${adminForm}
             ${boardHTML}
-            ${listHTML}
         </div>
     `;
 }
@@ -3233,9 +3577,6 @@ async function renderEmployeesDirectory() {
                 <h1 class="page-title">${t('nav_emp_dir')}</h1>
                 <p class="page-subtitle">${t('emp_dir_sub')}</p>
             </div>
-            <button class="btn-secondary" onclick="window.print()">
-                <i data-lucide="printer"></i> ${t('print') || 'Print Directory'}
-            </button>
         </div>
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-12">
@@ -3254,6 +3595,7 @@ async function renderEmployeesDirectory() {
                                 <th>${t('emp_name')}</th>
                                 <th>${t('emp_contact')}</th>
                                 <th>${t('emp_role_title')}</th>
+                                <th>${t('actions') || 'Actions'}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -3273,6 +3615,11 @@ async function renderEmployeesDirectory() {
                                     <td>
                                         <span class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${u.role}</span><br/>
                                         <span style="font-size: 0.85rem; color: var(--text-light); margin-top: 4px; display: inline-block;">${u.job_title || t('emp_no_title')}</span>
+                                    </td>
+                                    <td>
+                                        <button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')" title="Print Contract">
+                                            <i data-lucide="printer"></i> Print Contract
+                                        </button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -3298,6 +3645,83 @@ window.filterEmployees = () => {
             tr[i].style.display = "";
         } else {
             tr[i].style.display = "none";
+        }
+    }
+};
+
+window.handlePrintContract = async (employeeId) => {
+    // 0. Permission check
+    const employee = await db.getUserProfile(employeeId);
+    if (!employee) return;
+    
+    const isSelf = employee.id === currentUser?.id;
+    const isManager = currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    const isUnderManagement = employee.manager_id === currentUser?.id;
+    const isAdmin = currentUserRole === 'ADMIN';
+    window.canViewFullContractIdentity = isAdmin;
+    
+    if (!isAdmin && !isSelf && !(isManager && isUnderManagement)) {
+        showToast("Unauthorized: You do not have permission to view this contract.", "error");
+        return;
+    }
+
+    // 1. Fetch contracts for employee
+    const contracts = await db.fetchContracts(employeeId);
+    if (!contracts || contracts.length === 0) {
+        showToast("No contract is available for this employee.", "error");
+        return;
+    }
+
+    const activeContract = contracts.find(c => c.status === 'Active' || c.status === 'active');
+    
+    if (contracts.length === 1) {
+        if (activeContract) {
+            // One active contract, print directly
+            window.currentContractIdToPrint = contracts[0].id;
+            window.currentEmployeeIdToPrint = employeeId;
+            renderView('contract_preview');
+        } else {
+            // One draft/historical, ask to confirm
+            if (confirm(`Employee has one ${contracts[0].status} contract. Do you want to print it?`)) {
+                window.currentContractIdToPrint = contracts[0].id;
+                window.currentEmployeeIdToPrint = employeeId;
+                renderView('contract_preview');
+            }
+        }
+    } else {
+        // Multiple contracts
+        if (activeContract) {
+            // Use current active contract by default
+            window.currentContractIdToPrint = activeContract.id;
+            window.currentEmployeeIdToPrint = employeeId;
+            renderView('contract_preview');
+        } else {
+            // Show selection dialog
+            let optionsHTML = contracts.map(c => `
+                <div style="padding: 10px; border: 1px solid var(--border-color); margin-bottom: 5px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>ID:</strong> ${c.id.substring(0,8)}... | <strong>Status:</strong> ${c.status}<br/>
+                        <strong>Dates:</strong> ${c.start_date || 'N/A'} to ${c.end_date || 'N/A'}<br/>
+                        <strong>Title:</strong> ${c.job_title || 'N/A'}
+                    </div>
+                    <button class="btn-primary btn-sm" onclick="window.currentContractIdToPrint='${c.id}'; window.currentEmployeeIdToPrint='${employeeId}'; document.getElementById('contractSelectModal').style.display='none'; renderView('contract_preview');">Select</button>
+                </div>
+            `).join('');
+
+            const modalHTML = `
+                <div id="contractSelectModal" class="modal" style="display: flex;">
+                    <div class="modal-content" style="max-width: 600px;">
+                        <span class="close" onclick="document.getElementById('contractSelectModal').remove()">&times;</span>
+                        <h2>Select Contract to Print</h2>
+                        <div style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
+                            ${optionsHTML}
+                        </div>
+                    </div>
+                </div>
+            `;
+            const existingModal = document.getElementById('contractSelectModal');
+            if (existingModal) existingModal.remove();
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
         }
     }
 };
@@ -3360,6 +3784,8 @@ window.renderView = async function(viewId, isBack = false) {
             case 'analytics': content = await renderAnalytics(); break;
             case 'admin': content = await renderAdmin(); break;
             case 'users': content = await renderUsers(); break;
+            case 'contract_form': content = await window.renderContractForm(); break;
+            case 'contract_preview': content = await window.renderContractPrintPreview(); break;
             case 'employees': content = await renderEmployeesDirectory(); break;
             case 'messages': content = await renderMessages(); break;
             case 'notifications': content = await renderNotifications(); break;
@@ -4889,18 +5315,6 @@ async function renderRequests() {
         });
     });
 
-    docs.forEach(r => {
-        allRequests.push({
-            id: r.id,
-            type: 'Document',
-            employee_id: r.employee_id,
-            details: `${r.doc_type} - ${r.purpose}`,
-            status: r.status,
-            created_at: r.created_at,
-            raw: r
-        });
-    });
-
     expenses.forEach(r => {
         allRequests.push({
             id: r.id,
@@ -4974,6 +5388,48 @@ async function renderRequests() {
             </div>
         </div>
         
+        <div class="dashboard-grid fade-in-up" style="margin-bottom: 2rem;">
+            <!-- HR Letter Requests -->
+            <div class="card col-span-4">
+                <div class="card-title">${t('doc_req_letter')}</div>
+                <form autocomplete="off" onsubmit="handleDocSubmit(event)">
+                    <div class="form-group">
+                        <label class="form-label">${t('doc_type')}</label>
+                        <select id="docType" class="form-control">
+                            <option value="Salary Certificate">${t('doc_type_salary')}</option>
+                            <option value="NOC">${t('doc_type_noc')}</option>
+                            <option value="Employment Letter">${t('doc_type_emp')}</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">${t('doc_purpose')}</label>
+                        <textarea id="docPurpose" class="form-control" required></textarea>
+                    </div>
+                    <button type="submit" class="btn-secondary" style="width: 100%;">${t('doc_submit_req')}</button>
+                </form>
+            </div>
+            
+            <div class="card col-span-8">
+                <div class="card-title">${currentUserRole === 'ADMIN' ? t('doc_all_reqs') : t('doc_my_reqs')}</div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead><tr><th>${t('req_type')}</th><th>${t('doc_purpose')}</th><th>${t('req_status')}</th><th>${t('date')}</th></tr></thead>
+                        <tbody>
+                            ${docs.length === 0 ? `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_reqs')}</td></tr>` : docs.map(d => `
+                                <tr>
+                                    <td>${d.doc_type}</td>
+                                    <td>${d.purpose.substring(0, 30)}...</td>
+                                    <td><span class="status-badge ${d.status === 'PENDING' ? 'warning' : (d.status.startsWith('REJECTED') ? 'danger' : 'success')}">${d.status.replace('_ARCHIVED', '')}</span></td>
+                                    <td>${new Date(d.created_at).toLocaleDateString()}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <h2 style="margin-bottom: 1rem; font-size: 1.25rem;">Other Requests</h2>
         <div class="card fade-in-up" style="margin-bottom: 2rem;">
             <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 200px;">
@@ -4985,7 +5441,6 @@ async function renderRequests() {
                     <select id="reqType" class="form-control" onchange="filterRequests()">
                         <option value="ALL">${t('req_type_all')}</option>
                         <option value="Leave">${t('req_type_leave')}</option>
-                        <option value="Document">${t('req_type_doc')}</option>
                         <option value="Expense">${t('req_type_exp')}</option>
                     </select>
                 </div>
@@ -5401,9 +5856,10 @@ window.handleApprovalAction = async function(taskId, newStatus) {
 // Global Esc Key Handler for Modals and Popups
 document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
-        const activeModals = document.querySelectorAll('.modal.active, .popup.active, .slide-panel.active');
+        const activeModals = document.querySelectorAll('.modal.active, .modal.show, .popup.active, .slide-panel.active');
         activeModals.forEach(modal => {
             modal.classList.remove('active');
+            modal.classList.remove('show');
         });
     }
 });

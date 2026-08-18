@@ -45,14 +45,26 @@ const db = {
         }
     },
     async resetUserPassword(userId, newPassword) {
-        if (!supabaseClient) return null;
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {
-            const { data, error } = await supabaseClient.rpc('reset_user_password', { target_user_id: userId, new_password: newPassword });
+            const { data, error } = await supabaseClient.functions.invoke('admin-set-user-password', {
+                body: { targetUserId: userId, newPassword }
+            });
             if (error) throw error;
-            return true;
+            if (!data?.success) throw new Error(data?.error || 'Password reset failed');
+            return { success: true };
         } catch (error) {
             console.error("Error resetting password:", error);
-            return false;
+            let message = error?.message || 'Password reset failed';
+            if (error?.context && typeof error.context.json === 'function') {
+                try {
+                    const errorBody = await error.context.json();
+                    message = errorBody?.error || message;
+                } catch (_) {
+                    // Keep the original Functions error when no JSON body is available.
+                }
+            }
+            return { success: false, error: new Error(message) };
         }
     },
 
@@ -352,7 +364,10 @@ const db = {
         }
     },
     async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '') {
-        if (!supabaseClient) return { data: null, error: new Error('No DB') };
+        if (!supabaseClient) {
+            console.warn("Mock createUser");
+            return { data: 'mock-user-id-1234', error: null };
+        }
         try {
             const { data, error } = await supabaseClient.rpc('create_user_by_admin', {
                 new_email: email,
@@ -744,7 +759,10 @@ const db = {
     async fetchEmployeeDocuments(employeeId = null) {
         if (!supabaseClient) return [];
         try {
-            let query = supabaseClient.from('employee_documents').select('*').order('created_at', { ascending: false });
+            let query = supabaseClient
+                .from('employee_documents')
+                .select('id, document_id, employee_id, doc_name, doc_type, owner_name, owner_email, responsible_name, responsible_email, expiration_date, notified_30_days, owner_phone, status, last_notification_status, last_notified_at, last_notification_error, created_at')
+                .order('created_at', { ascending: false });
             if (employeeId) {
                 query = query.eq('employee_id', employeeId);
             }
@@ -756,21 +774,98 @@ const db = {
             return [];
         }
     },
-    async uploadEmployeeDocument(employeeId, docName, docType, docBase64) {
+    async fetchEmployeeDocumentFile(documentId) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient
+                .from('employee_documents')
+                .select('doc_base64, doc_type, doc_name')
+                .eq('id', documentId)
+                .single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('fetchEmployeeDocumentFile Error:', error);
+            return { success: false, error };
+        }
+    },
+    async uploadEmployeeDocument(employeeId, documentRecord) {
         if (!supabaseClient) return { success: false };
         try {
             const { data, error } = await supabaseClient
                 .from('employee_documents')
                 .insert([{ 
-                    employee_id: employeeId, 
-                    doc_name: docName, 
-                    doc_type: docType,
-                    doc_base64: docBase64
-                }]);
+                    employee_id: employeeId,
+                    doc_name: documentRecord.documentName,
+                    owner_name: documentRecord.ownerName,
+                    owner_email: documentRecord.ownerEmail,
+                    responsible_name: documentRecord.responsibleName,
+                    responsible_email: documentRecord.responsibleEmail,
+                    expiration_date: documentRecord.expirationDate,
+                    notified_30_days: true,
+                    owner_phone: documentRecord.ownerPhone,
+                    doc_type: documentRecord.fileType,
+                    doc_base64: documentRecord.fileBase64
+                }])
+                .select('id')
+                .single();
             if (error) throw error;
-            return { success: true };
+            return { success: true, data };
         } catch (error) {
             console.error("uploadEmployeeDocument Error:", error);
+            return { success: false, error };
+        }
+    },
+    async notifyEmployeeDocumentExpiry(documentId) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.functions.invoke('document-expiry-notifier', {
+                body: { documentId }
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error("notifyEmployeeDocumentExpiry Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateEmployeeDocument(documentId, documentRecord) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient
+                .from('employee_documents')
+                .update({
+                    doc_name: documentRecord.documentName,
+                    owner_name: documentRecord.ownerName,
+                    owner_email: documentRecord.ownerEmail,
+                    responsible_name: documentRecord.responsibleName,
+                    responsible_email: documentRecord.responsibleEmail,
+                    expiration_date: documentRecord.expirationDate,
+                    owner_phone: documentRecord.ownerPhone
+                })
+                .eq('id', documentId)
+                .select('id')
+                .single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error("updateEmployeeDocument Error:", error);
+            return { success: false, error };
+        }
+    },
+    async deleteEmployeeDocument(documentId) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient
+                .from('employee_documents')
+                .delete()
+                .eq('id', documentId)
+                .select('id')
+                .single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error("deleteEmployeeDocument Error:", error);
             return { success: false, error };
         }
     },
@@ -1398,6 +1493,90 @@ const db = {
             }
         } catch(error) {
             console.error("Error triggering webhooks", error);
+        }
+    },
+
+    // ==========================================
+    // SAUDI LABOR LAW CONTRACTS
+    // ==========================================
+    async fetchEstablishmentSettings() {
+        if (!supabaseClient) return null;
+        try {
+            const { data, error } = await supabaseClient.from('establishment_settings').select('*').limit(1).maybeSingle();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("fetchEstablishmentSettings Error:", error);
+            return null;
+        }
+    },
+    async fetchContractSettings() {
+        if (!supabaseClient) return null;
+        try {
+            const { data, error } = await supabaseClient.from('contract_settings').select('*').limit(1).maybeSingle();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("fetchContractSettings Error:", error);
+            return null;
+        }
+    },
+    async fetchContracts(employeeId = null) {
+        if (!supabaseClient) return [];
+        try {
+            let query = supabaseClient.from('contracts').select('*').order('created_at', { ascending: false });
+            if (employeeId) {
+                query = query.eq('employee_id', employeeId);
+            }
+            const { data, error } = await query;
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchContracts Error:", error);
+            return [];
+        }
+    },
+    async createContract(contractData) {
+        if (!supabaseClient) {
+            console.warn("Mock createContract");
+            return { success: true, data: { id: 'mock-contract-id', ...contractData } };
+        }
+        try {
+            const { data, error } = await supabaseClient.from('contracts').insert([contractData]).select().single();
+            if (error) throw error;
+            await this.logAudit('contract', data.id, 'created', { status: data.status });
+            return { success: true, data };
+        } catch (error) {
+            console.error("createContract Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateContract(contractId, updates) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.from('contracts').update(updates).eq('id', contractId).select().single();
+            if (error) throw error;
+            await this.logAudit('contract', contractId, 'updated', updates);
+            return { success: true, data };
+        } catch (error) {
+            console.error("updateContract Error:", error);
+            return { success: false, error };
+        }
+    },
+    async logAudit(entityType, entityId, action, details) {
+        if (!supabaseClient) return;
+        try {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            const userId = session?.user?.id;
+            await supabaseClient.from('audit_logs').insert([{
+                user_id: userId,
+                entity_type: entityType,
+                entity_id: entityId,
+                action: action,
+                details: details
+            }]);
+        } catch (error) {
+            console.error("logAudit Error:", error);
         }
     }
 };

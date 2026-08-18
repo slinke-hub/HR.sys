@@ -1,0 +1,5 @@
+project_id = "hr-sys"
+
+[functions.document-expiry-notifier]
+verify_jwt = false
+entrypoint = "./functions/document-expiry-notifier/index.js"

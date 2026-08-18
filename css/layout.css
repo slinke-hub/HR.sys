@@ -74,19 +74,20 @@
   overflow-y: auto;
 }
 
-/* Custom Scrollbar for Sidebar */
-.sidebar-nav::-webkit-scrollbar {
-  width: 5px;
+/* Custom Scrollbar Globally */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-.sidebar-nav::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent;
 }
-.sidebar-nav::-webkit-scrollbar-thumb {
-  background-color: var(--sidebar-border);
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
   border-radius: 10px;
 }
-.sidebar-nav::-webkit-scrollbar-thumb:hover {
-  background-color: var(--sidebar-text-muted);
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-muted);
 }
 
 .nav-item {
@@ -317,7 +318,10 @@
 
 .user-info {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
 }
 
 .user-name {
@@ -471,8 +475,9 @@
   }
   
   .page-header {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
     gap: 1rem;
   }
 
@@ -610,13 +615,22 @@
 
 @media print {
   .sidebar { display: none !important; }
+  .topbar { display: none !important; }
   .header { display: none !important; }
   .page-header button { display: none !important; }
   .search-box { display: none !important; }
-  .main-content { margin-left: 0 !important; padding: 0 !important; }
+  .main-content { margin-left: 0 !important; padding: 0 !important; width: 100% !important; }
   .card { box-shadow: none !important; border: 1px solid #ccc !important; background: transparent !important; }
-  body { background: white !important; color: black !important; }
+  body { background: white !important; color: black !important; margin: 0 !important; }
   .data-table th, .data-table td { color: black !important; border-bottom: 1px solid #ccc !important; }
   .install-banner { display: none !important; }
   .modal { display: none !important; }
+  
+  .no-print { display: none !important; }
+  .avoid-page-break { page-break-inside: avoid !important; }
+  
+  @page {
+    size: A4;
+    margin: 20mm;
+  }
 }

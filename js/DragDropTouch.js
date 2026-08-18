@@ -187,9 +187,10 @@ var DragDropTouch;
                         this._dragSource = src;
                         this._ptDown = this._getPoint(e);
                         this._lastTouch = e;
-                        if (e.cancelable) {
-                            e.preventDefault();
-                        }
+                        // DO NOT call preventDefault here, otherwise click events are suppressed
+                        // if (e.cancelable) {
+                        //     e.preventDefault();
+                        // }
                         // show context menu if the user hasn't started dragging after a while
                         setTimeout(function () {
                             if (_this._dragSource == src && _this._img == null) {
@@ -257,7 +258,8 @@ var DragDropTouch;
                 // user clicked the element but didn't drag, so clear the source and simulate a click
                 if (!this._img) {
                     this._dragSource = null;
-                    this._dispatchEvent(this._lastTouch, 'click', e.target);
+                    // Native click will fire because we no longer prevent default on touchstart
+                    // this._dispatchEvent(this._lastTouch, 'click', e.target);
                     this._lastClick = Date.now();
                 }
                 // finish dragging

@@ -28,6 +28,16 @@
     <link rel="stylesheet" href="css/variables.css">
     <link rel="stylesheet" href="css/layout.css">
     <link rel="stylesheet" href="css/components.css">
+    <style>
+        @media (hover: none) and (pointer: coarse) {
+            [draggable="true"] {
+                -webkit-user-drag: none;
+                -khtml-user-drag: none;
+                -moz-user-drag: none;
+                -o-user-drag: none;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -920,11 +930,119 @@
         </div>
     </div>
 
+    <!-- Document View / Edit Modal -->
+    <div class="modal" id="employeeDocumentModal" role="dialog" aria-modal="true" aria-labelledby="employeeDocumentModalTitle">
+        <div class="modal-content fade-in-up" style="max-width: 860px;">
+            <div class="modal-header">
+                <h2 id="employeeDocumentModalTitle">Document Details</h2>
+                <button type="button" class="icon-btn" onclick="closeEmployeeDocumentModal()" aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <form id="employeeDocumentForm" autocomplete="off" onsubmit="handleEmployeeDocumentEdit(event)">
+                <input type="hidden" id="employeeDocumentRecordId">
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem;">
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_document_id">Document ID</label>
+                        <input type="text" id="employeeDocumentDisplayId" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_document_name">Document Name</label>
+                        <input type="text" id="employeeDocumentName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_owner_name">Owner Name</label>
+                        <input type="text" id="employeeDocumentOwnerName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_owner_email">Owner Email</label>
+                        <input type="email" id="employeeDocumentOwnerEmail" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_responsible_name">Responsible Name</label>
+                        <input type="text" id="employeeDocumentResponsibleName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_responsible_email">Responsible Email</label>
+                        <input type="email" id="employeeDocumentResponsibleEmail" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_expiry_date">Expiry Date</label>
+                        <input type="date" id="employeeDocumentExpiryDate" class="form-control" oninput="updateEmployeeDocumentModalExpiryPreview()" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_days_left">Days Left</label>
+                        <input type="number" id="employeeDocumentDaysLeft" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="status">Status</label>
+                        <input type="text" id="employeeDocumentStatus" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_notified_30_days">Notified 30 Days</label>
+                        <input type="text" id="employeeDocumentNotified" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_owner_phone">Owner Phone</label>
+                        <input type="tel" id="employeeDocumentOwnerPhone" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-actions" style="margin-top:1.5rem; display:flex; justify-content:flex-end; gap:0.75rem; flex-wrap:wrap;">
+                    <button type="button" id="employeeDocumentLegacyFileButton" class="btn btn-secondary" onclick="openLegacyEmployeeDocumentFile()" style="display:none;">
+                        <i data-lucide="external-link"></i> <span data-i18n="doc_open_stored_file">Open Stored File</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="printEmployeeDocument(document.getElementById('employeeDocumentRecordId').value)">
+                        <i data-lucide="printer"></i> <span data-i18n="doc_action_print">Print</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEmployeeDocumentModal()" data-i18n="html_cancel">Close</button>
+                    <button type="submit" id="employeeDocumentSaveButton" class="btn btn-primary" data-i18n="html_save_changes">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Secure Admin Password Reset Modal -->
+    <div class="modal" id="adminPasswordResetModal" role="dialog" aria-modal="true" aria-labelledby="adminPasswordResetTitle">
+        <div class="modal-content fade-in-up" style="max-width: 520px;">
+            <div class="modal-header">
+                <h2 id="adminPasswordResetTitle"><i data-lucide="key-round"></i> <span data-i18n="password_reset_title">Set New Password</span></h2>
+                <button type="button" class="icon-btn" onclick="closeAdminPasswordResetModal()" aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <form id="adminPasswordResetForm" autocomplete="off" onsubmit="handleAdminPasswordReset(event)">
+                <input type="hidden" id="adminPasswordResetUserId">
+                <p style="color:var(--color-text-secondary); margin-bottom:1.25rem;">
+                    <span data-i18n="password_reset_for">Set a new password for</span>
+                    <strong id="adminPasswordResetUserName" style="color:var(--color-text);"></strong>.
+                </p>
+                <div class="form-group">
+                    <label class="form-label" for="adminNewPassword" data-i18n="password_reset_new">New Password</label>
+                    <input type="password" id="adminNewPassword" class="form-control" autocomplete="new-password" minlength="8" maxlength="128" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="adminConfirmPassword" data-i18n="password_reset_confirm">Confirm New Password</label>
+                    <input type="password" id="adminConfirmPassword" class="form-control" autocomplete="new-password" minlength="8" maxlength="128" required>
+                </div>
+                <label style="display:flex; align-items:center; gap:0.5rem; color:var(--color-text-secondary); cursor:pointer;">
+                    <input type="checkbox" onchange="toggleAdminPasswordVisibility(this.checked)">
+                    <span data-i18n="password_reset_show">Show passwords</span>
+                </label>
+                <p style="font-size:0.8rem; color:var(--color-text-secondary); margin-top:0.75rem;" data-i18n="password_reset_hint">Use at least 8 characters. The password is not displayed or stored after submission.</p>
+                <div class="form-actions" style="margin-top:1.5rem; display:flex; justify-content:flex-end; gap:0.75rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeAdminPasswordResetModal()" data-i18n="html_cancel">Cancel</button>
+                    <button type="submit" id="adminPasswordResetSubmit" class="btn btn-primary" data-i18n="password_reset_submit">Set Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Supabase & JS & Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="js/db.js?v=3"></script>
-    <script src="js/data.js"></script>
-    <script src="js/app.js?v=3"></script>
+    <script src="js/db.js?v=8"></script>
+    <script src="js/data.js?v=8"></script>
+    <script src="js/contract.js?v=1"></script>
+    <script src="js/app.js?v=8"></script>
 </body>
 </html>
