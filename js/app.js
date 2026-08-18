@@ -19,6 +19,17 @@ function escapeHTML(str) {
 }
 window.escapeHTML = escapeHTML;
 
+function getProfileDisplayName(profile) {
+    const candidates = [
+        profile?.display_name,
+        profile?.full_name,
+        currentUser?.email?.split('@')[0],
+        t('role_employee')
+    ];
+    const selectedName = candidates.find(value => typeof value === 'string' && value.trim());
+    return selectedName ? selectedName.trim() : '';
+}
+
 window.goBack = function() {
     if (viewHistory.length > 1) {
         viewHistory.pop(); // remove current
@@ -851,14 +862,17 @@ function renderLogin() {
 
 async function renderDashboard() {
     // Run independent fetches in parallel
-    const [todayAttendance, announcements, newsRes] = await Promise.all([
+    const [todayAttendance, announcements, newsRes, profile] = await Promise.all([
         db.fetchTodayAttendance(currentUser?.id),
         db.fetchAnnouncements(),
-        fetch('https://api.rss2json.com/v1/api.json?rss_url=https://feeds.bbci.co.uk/news/world/rss.xml').catch(() => null)
+        fetch('https://api.rss2json.com/v1/api.json?rss_url=https://feeds.bbci.co.uk/news/world/rss.xml').catch(() => null),
+        db.getUserProfile(currentUser?.id)
     ]);
 
     const isClockedIn = todayAttendance != null && !todayAttendance.clock_out_time;
     const announcementsList = announcements || [];
+    const dashboardName = getProfileDisplayName(profile);
+    const welcomeMessage = t('welcome').replace('{name}', escapeHTML(dashboardName));
 
     let announcementsHTML = announcementsList.map(a => `
         <div class="announcement-item">
@@ -951,7 +965,7 @@ async function renderDashboard() {
     return `
         <div class="page-header">
             <div>
-                <h1 class="page-title">${t('welcome')}</h1>
+                <h1 class="page-title">${welcomeMessage}</h1>
                 <p class="page-subtitle">${t('welcome_sub')}</p>
             </div>
             ${isClockedIn
@@ -2678,7 +2692,8 @@ window.sendChatMessage = async function () {
 
 async function renderProfile() {
     const profile = await db.getUserProfile(currentUser.id);
-    const avatar = profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.email.split('@')[0])}&background=007AFF&color=fff`;
+    const displayName = getProfileDisplayName(profile);
+    const avatar = profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=007AFF&color=fff`;
     return `
         <div class="page-header">
             <div>
@@ -2692,7 +2707,7 @@ async function renderProfile() {
                 <div style="position: relative; display: inline-block;">
                     <img src="${avatar}" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem; border: 4px solid var(--color-background); box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
                 </div>
-                <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem;">${profile.full_name || currentUser.email.split('@')[0]}</h3>
+                <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem;">${escapeHTML(displayName)}</h3>
                 <p style="color: var(--color-primary); font-weight: 500; margin-bottom: 1.5rem;">${currentUserRole}</p>
                 <form autocomplete="off" onsubmit="handleUpdateProfilePhoto(event)" style="margin-bottom: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
                     <div class="form-group" style="text-align: left;">
@@ -2710,8 +2725,13 @@ async function renderProfile() {
                     <form autocomplete="off" onsubmit="handleUpdateProfileDetails(event)">
                         <div class="dashboard-grid" style="gap: 1rem; margin-bottom: 1rem;">
                             <div class="form-group col-span-6">
+                                <label class="form-label">${t('prof_display_name')}</label>
+                                <input type="text" id="profileDisplayName" class="form-control" value="${escapeHTML(displayName)}" placeholder="${t('prof_display_name_ph')}" autocomplete="nickname" required maxlength="100">
+                                <small style="display: block; margin-top: 0.35rem; color: var(--color-text-secondary);">${t('prof_display_name_help')}</small>
+                            </div>
+                            <div class="form-group col-span-6">
                                 <label class="form-label">${t('prof_fn')}</label>
-                                <input type="text" id="profileFullName" class="form-control" value="${profile.full_name || ''}" placeholder="${t('users_fn_ph')}">
+                                <input type="text" id="profileFullName" class="form-control" value="${escapeHTML(profile.full_name || '')}" placeholder="${t('users_fn_ph')}">
                             </div>
                             <div class="form-group col-span-6">
                                 <label class="form-label">${t('prof_email')}</label>
@@ -2783,18 +2803,27 @@ window.handleUpdatePassword = async function (e) {
 
 window.handleUpdateProfileDetails = async function (e) {
     e.preventDefault();
-    const fullName = document.getElementById('profileFullName').value;
-    const iqama = document.getElementById('profileIqama').value;
-    const phone = document.getElementById('profilePhone').value;
+    const displayName = document.getElementById('profileDisplayName').value.trim();
+    const fullName = document.getElementById('profileFullName').value.trim();
+    const iqama = document.getElementById('profileIqama').value.trim();
+    const phone = document.getElementById('profilePhone').value.trim();
 
-    const { success, error } = await db.updateUserProfileDetails(currentUser.id, fullName, iqama, phone);
+    if (!displayName) {
+        showToast(t('toast_display_name_required'), "warning");
+        return;
+    }
+    if (displayName.length > 100) {
+        showToast(t('toast_display_name_too_long'), "warning");
+        return;
+    }
+
+    const { success, data, error } = await db.updateUserProfileDetails(currentUser.id, displayName, fullName, iqama, phone);
     if (success) {
         showToast(t('toast_profile_details_updated_successfully'), "success");
-        renderView('profile');
-
-        // Update topbar silently
-        const profile = await db.getUserProfile(currentUser.id);
+        const profile = data || await db.getUserProfile(currentUser.id);
         updateTopbarProfile(profile);
+        delete window.viewHTMLCache.dashboard;
+        await renderView('profile');
     } else {
         showToast(error?.message || "Error updating profile details.", "danger");
     }
@@ -2812,10 +2841,11 @@ async function renderTasks() {
     }
     
     console.log("renderTasks: Fetching users and tasks...");
-    // Fetch users and tasks in parallel
-    const [allUsers, fetchedTasks] = await Promise.all([
+    // Fetch users, tasks, and the signed-in user's department manager in parallel
+    const [allUsers, fetchedTasks, departmentSupervisors] = await Promise.all([
         db.fetchUsers(),
-        tasksPromise
+        tasksPromise,
+        db.fetchMyDepartmentSupervisors()
     ]);
     console.log("renderTasks: Fetched users and tasks.", { usersCount: allUsers.length, tasksCount: fetchedTasks.length });
     let tasks = fetchedTasks;
@@ -2823,7 +2853,7 @@ async function renderTasks() {
     if (((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) {
         let teamIds = allUsers.filter(u => u.manager_id === currentUser.id).map(u => u.id);
         teamIds.push(currentUser.id);
-        tasks = tasks.filter(t => teamIds.includes(t.assignee_id) || t.created_by === currentUser.id);
+        tasks = tasks.filter(t => teamIds.includes(t.assignee_id) || t.created_by === currentUser.id || t.supervisor_id === currentUser.id);
     }
 
     window.taskCache = {};
@@ -2855,7 +2885,7 @@ async function renderTasks() {
     // Filter by visibility
     tasks = tasks.filter(t => {
         if (currentUserRole === 'ADMIN') return true;
-        if (t.created_by === currentUser.id || t.assignee_id === currentUser.id) return true;
+        if (t.created_by === currentUser.id || t.assignee_id === currentUser.id || t.supervisor_id === currentUser.id) return true;
         if (t.visibility === 'private') return false;
         if (t.visibility === 'team') {
             let teamIds = allUsers.filter(u => u.manager_id === currentUser.id).map(u => u.id);
@@ -2887,9 +2917,14 @@ async function renderTasks() {
     }
     const userOptions = users.map(u => {
         const label = u.full_name || u.id.substring(0, 8);
-        return `<option value="${u.id}">${label} (${u.role})</option>`;
+        return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
     }).join('');
     window.taskAssigneeOptionsCache = userOptions;
+    window.taskDepartmentSupervisors = Array.isArray(departmentSupervisors) ? departmentSupervisors : [];
+    const hasDepartmentSupervisor = window.taskDepartmentSupervisors.length > 0;
+    const supervisorOptions = window.taskDepartmentSupervisors.map(supervisor => `
+        <option value="${escapeHTML(supervisor.id)}">${escapeHTML(supervisor.full_name)}</option>
+    `).join('');
 
     if (canCreateTask) {
         adminForm = `
@@ -2931,6 +2966,14 @@ async function renderTasks() {
                             <option value="">${t('task_sel_emp') || 'Select Employee'}</option>
                             ${userOptions}
                         </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 180px; margin-bottom: 0;">
+                        <label class="form-label">${t('task_supervisor')}</label>
+                        <select id="taskSupervisor" class="form-control" ${hasDepartmentSupervisor ? 'required' : 'disabled'}>
+                            <option value="">${hasDepartmentSupervisor ? t('task_select_supervisor') : t('task_no_department_manager')}</option>
+                            ${supervisorOptions}
+                        </select>
+                        <small style="display: block; margin-top: 0.35rem; color: var(--color-text-secondary);">${t('task_supervisor_help')}</small>
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
                         <label class="form-label">${t('task_due') || 'Due Date'}</label>
@@ -3096,7 +3139,8 @@ window.handleAICreateTask = async function(e) {
         }
     }
     
-    const { success } = await db.createTask(input, '', assigneeId, dueStr, currentUser.id, priority, 'Auto-parsed', {'en': input, 'ar': input + ' (مترجم)'}, {});
+    const supervisorId = window.taskDepartmentSupervisors?.[0]?.id || null;
+    const { success } = await db.createTask(input, '', assigneeId, dueStr, currentUser.id, priority, 'Auto-parsed', {'en': input, 'ar': input + ' (مترجم)'}, {}, null, null, null, 'public', null, [], [], null, null, null, 'todo', supervisorId);
     if (success) {
         showToast(t('toast_ai_parsed_and_created_task'), "success");
         await db.triggerWebhooks('task_created', { title: input, assignee_id: assigneeId, due_date: dueStr, priority: priority, is_ai_parsed: true });
@@ -3139,6 +3183,17 @@ window.handleCreateTask = async function (e) {
     const due = document.getElementById('taskDue').value;
     const priority = document.getElementById('taskPriority').value;
     const projectId = document.getElementById('taskProject').value || null;
+    const supervisorSelect = document.getElementById('taskSupervisor');
+    const supervisorId = supervisorSelect && !supervisorSelect.disabled ? supervisorSelect.value : null;
+
+    if (supervisorSelect && !supervisorSelect.disabled && !supervisorId) {
+        showToast(t('toast_task_supervisor_required'), "warning");
+        return;
+    }
+    if (supervisorId && !(window.taskDepartmentSupervisors || []).some(supervisor => supervisor.id === supervisorId)) {
+        showToast(t('toast_task_supervisor_required'), "warning");
+        return;
+    }
     
     // Check if assignee is in Designing
     const allUsers = await db.fetchUsers();
@@ -3175,10 +3230,10 @@ window.handleCreateTask = async function (e) {
         'ar': title + ' (مترجم)' // mock arabic
     };
 
-    const { success, error } = await db.createTask(title, '', assignee, due, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status);
+    const { success, error } = await db.createTask(title, '', assignee, due, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, supervisorId);
     if (success) {
         showToast(t('toast_task_created_successfully'), "success");
-        await db.triggerWebhooks('task_created', { title, assignee_id: assignee, due_date: due, priority, project_id: projectId });
+        await db.triggerWebhooks('task_created', { title, assignee_id: assignee, supervisor_id: supervisorId, due_date: due, priority, project_id: projectId });
         if (assignee && assignee !== currentUser.id) {
             await db.createNotification(assignee, `You have been assigned a new task: ${title}`);
         }
@@ -3853,11 +3908,12 @@ function updateTopbarProfile(profile) {
     const avatarImg = document.getElementById('topbarAvatar');
     const nameSpan = document.getElementById('topbarName');
     const roleSpan = document.querySelector('.user-role');
+    const displayName = getProfileDisplayName(profile);
     if (avatarImg) {
-        avatarImg.src = profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.email.split('@')[0])}&background=007AFF&color=fff`;
+        avatarImg.src = profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=007AFF&color=fff`;
     }
     if (nameSpan) {
-        nameSpan.textContent = currentUser.email.split('@')[0];
+        nameSpan.textContent = displayName;
     }
     if (roleSpan) {
         roleSpan.textContent = profile.job_title || profile.role;

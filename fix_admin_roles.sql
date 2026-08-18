@@ -22,9 +22,9 @@ BEGIN
     SELECT role INTO caller_role FROM public.profiles WHERE id = auth.uid();
     IF caller_role = 'ADMIN' THEN RETURN NEW; END IF;
 
-    IF (to_jsonb(NEW) - ARRAY['full_name', 'iqama_number', 'phone_number', 'avatar_url', 'last_login', 'birth_date']::TEXT[])
+    IF (to_jsonb(NEW) - ARRAY['full_name', 'display_name', 'iqama_number', 'phone_number', 'avatar_url', 'last_login', 'birth_date']::TEXT[])
        IS DISTINCT FROM
-       (to_jsonb(OLD) - ARRAY['full_name', 'iqama_number', 'phone_number', 'avatar_url', 'last_login', 'birth_date']::TEXT[]) THEN
+       (to_jsonb(OLD) - ARRAY['full_name', 'display_name', 'iqama_number', 'phone_number', 'avatar_url', 'last_login', 'birth_date']::TEXT[]) THEN
         RAISE EXCEPTION 'Only an administrator can change protected profile fields'
             USING ERRCODE = '42501';
     END IF;

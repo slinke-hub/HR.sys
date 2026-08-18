@@ -230,7 +230,7 @@ const db = {
             try {
                 const { data, error } = await supabaseClient
                     .from('profiles')
-                    .select('id, role, job_title, manager_id, base_salary, annual_leave_allowance, sick_leave_allowance, full_name, iqama_number, phone_number')
+                    .select('id, role, job_title, manager_id, base_salary, annual_leave_allowance, sick_leave_allowance, full_name, display_name, iqama_number, phone_number')
                     .eq('id', userId)
                     .single();
                 
@@ -543,19 +543,22 @@ const db = {
         }
     },
 
-    async updateUserProfileDetails(userId, fullName, iqama, phone) {
+    async updateUserProfileDetails(userId, displayName, fullName, iqama, phone) {
         if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {
-            const { error } = await supabaseClient
+            const { data, error } = await supabaseClient
                 .from('profiles')
                 .update({ 
+                    display_name: displayName,
                     full_name: fullName,
                     iqama_number: iqama,
                     phone_number: phone
                 })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('id, display_name, full_name, iqama_number, phone_number, role, job_title')
+                .single();
             if (error) throw error;
-            return { success: true };
+            return { success: true, data };
         } catch (error) {
             console.error("updateUserProfileDetails Error:", error);
             return { success: false, error };
@@ -625,7 +628,7 @@ const db = {
             let query = supabaseClient.from('tasks').select('*').order('created_at', { ascending: false });
             if (userId) {
                 // PostgREST syntax for arrays: visible_to.cs.{userId} checks if array contains userId
-                query = query.or(`assignee_id.eq.${userId},created_by.eq.${userId},visible_to.cs.{${userId}}`);
+                query = query.or(`assignee_id.eq.${userId},created_by.eq.${userId},supervisor_id.eq.${userId},visible_to.cs.{${userId}}`);
             }
             const { data, error } = await query;
             if (error) throw error;
@@ -649,7 +652,7 @@ const db = {
             return [];
         }
     },
-    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo') {
+    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null) {
         if (!supabaseClient) return { success: false };
         try {
             const { data, error } = await supabaseClient
@@ -658,6 +661,7 @@ const db = {
                     title, 
                     description, 
                     assignee_id: assigneeId, 
+                    supervisor_id: supervisorId,
                     due_date: dueDate,
                     created_by: createdBy,
                     status: status,
@@ -1207,6 +1211,17 @@ const db = {
     // ==========================================
     // Departments API
     // ==========================================
+    async fetchMyDepartmentSupervisors() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('get_my_department_supervisors');
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchMyDepartmentSupervisors Error:", error);
+            return [];
+        }
+    },
     async fetchDepartments() {
         if (!supabaseClient) return [];
         try {

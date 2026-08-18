@@ -3,6 +3,7 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS manager_id UUID REFERENCES auth.us
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS base_salary DECIMAL(10, 2) DEFAULT 3000.00;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS annual_leave_allowance INTEGER DEFAULT 30;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sick_leave_allowance INTEGER DEFAULT 10;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
 
 CREATE OR REPLACE FUNCTION public.protect_profile_privileged_fields()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -11,9 +12,9 @@ BEGIN
     IF auth.uid() IS NULL THEN RETURN NEW; END IF;
     SELECT role INTO caller_role FROM public.profiles WHERE id = auth.uid();
     IF caller_role = 'ADMIN' THEN RETURN NEW; END IF;
-    IF (to_jsonb(NEW) - ARRAY['full_name', 'iqama_number', 'phone_number', 'avatar_url', 'last_login', 'birth_date']::TEXT[])
+    IF (to_jsonb(NEW) - ARRAY['full_name', 'display_name', 'iqama_number', 'phone_number', 'avatar_url', 'last_login', 'birth_date']::TEXT[])
        IS DISTINCT FROM
-       (to_jsonb(OLD) - ARRAY['full_name', 'iqama_number', 'phone_number', 'avatar_url', 'last_login', 'birth_date']::TEXT[]) THEN
+       (to_jsonb(OLD) - ARRAY['full_name', 'display_name', 'iqama_number', 'phone_number', 'avatar_url', 'last_login', 'birth_date']::TEXT[]) THEN
         RAISE EXCEPTION 'Only an administrator can change protected profile fields' USING ERRCODE = '42501';
     END IF;
     RETURN NEW;
@@ -64,16 +65,18 @@ CREATE TABLE IF NOT EXISTS tasks (
     title VARCHAR(255) NOT NULL,
     description TEXT,
     assignee_id UUID REFERENCES auth.users(id),
+    supervisor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
     created_by UUID NOT NULL REFERENCES auth.users(id),
     due_date DATE,
     status VARCHAR(20) DEFAULT 'TODO' CHECK (status IN ('TODO', 'IN_PROGRESS', 'DONE')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS supervisor_id UUID;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can view tasks assigned to them" ON tasks;
-CREATE POLICY "Users can view tasks assigned to them" ON tasks FOR SELECT USING (auth.uid() = assignee_id OR auth.uid() = created_by);
+CREATE POLICY "Users can view tasks assigned to them" ON tasks FOR SELECT USING (auth.uid() = assignee_id OR auth.uid() = created_by OR auth.uid() = supervisor_id);
 DROP POLICY IF EXISTS "Users can update their tasks" ON tasks;
-CREATE POLICY "Users can update their tasks" ON tasks FOR UPDATE USING (auth.uid() = assignee_id OR auth.uid() = created_by);
+CREATE POLICY "Users can update their tasks" ON tasks FOR UPDATE USING (auth.uid() = assignee_id OR auth.uid() = created_by OR auth.uid() = supervisor_id);
 DROP POLICY IF EXISTS "Admins have full access to tasks" ON tasks;
 CREATE POLICY "Admins have full access to tasks" ON tasks USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN'));
 
