@@ -2912,8 +2912,10 @@ async function renderTasks() {
     let canCreateTask = true; // Allow all users to create tasks now
     
     let users = allUsers;
-    if (((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) {
+    if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
         users = users.filter(u => u.manager_id === currentUser.id || u.id === currentUser.id);
+    } else if (currentUserRole === 'EMPLOYEE') {
+        users = users.filter(u => u.id === currentUser.id);
     }
     const userOptions = users.map(u => {
         const label = u.full_name || u.id.substring(0, 8);
