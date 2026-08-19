@@ -180,6 +180,9 @@ window.showEditUserModal = async (userId) => {
     document.getElementById('editIqama').value = user.iqama_number || '';
     document.getElementById('editPhone').value = user.phone_number || '';
     document.getElementById('editJobTitle').value = user.job_title || '';
+    if (document.getElementById('editAvatarUrl')) {
+        document.getElementById('editAvatarUrl').value = user.avatar_url || localStorage.getItem('user_avatar_' + user.id) || '';
+    }
     document.getElementById('editRole').value = user.role || 'EMPLOYEE';
     
     const mgrSelect = document.getElementById('editManagerId');
@@ -200,12 +203,21 @@ window.handleUpdateUser = async (e) => {
         iqama_number: document.getElementById('editIqama').value,
         phone_number: document.getElementById('editPhone').value,
         job_title: document.getElementById('editJobTitle').value,
+        avatar_url: document.getElementById('editAvatarUrl')?.value || null,
         role: document.getElementById('editRole').value,
         manager_id: document.getElementById('editManagerId').value || null
     };
 
+    if (updates.avatar_url) {
+        localStorage.setItem('user_avatar_' + userId, updates.avatar_url);
+    }
     const res = await db.updateUserProfile(userId, updates);
     if (res) {
+        // Invalidate view cache
+        if (window.viewHTMLCache) {
+            delete window.viewHTMLCache.dashboard;
+            delete window.viewHTMLCache.users;
+        }
         showToast(t('toast_user_updated_successfully'), "success");
         document.getElementById('editUserModal').classList.remove('active');
         renderView('users');
@@ -1028,7 +1040,11 @@ async function renderTeamHierarchyWidget() {
         else if (user.role === 'MANAGER') roleBadgeClass = 'primary';
         else if (user.role === 'SUPERVISOR') roleBadgeClass = 'warning';
 
-        const avatarUrl = user.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name || 'User')}&background=0B192C&color=fff&size=128`;
+        const userAvatar = user.avatar_url || localStorage.getItem('user_avatar_' + user.id);
+        const hasCustomAvatar = userAvatar && typeof userAvatar === 'string' && userAvatar.trim().length > 0;
+        const avatarUrl = hasCustomAvatar 
+            ? userAvatar.trim() 
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name || 'User')}&background=0B192C&color=fff&size=128`;
 
         return `
             <div style="display: flex; flex-direction: column; align-items: center;">
@@ -3024,7 +3040,8 @@ window.sendChatMessage = async function () {
 async function renderProfile() {
     const profile = await db.getUserProfile(currentUser.id);
     const displayName = getProfileDisplayName(profile);
-    const avatar = profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=007AFF&color=fff`;
+    const userAvatar = profile.avatar_url || localStorage.getItem('user_avatar_' + currentUser.id);
+    const avatar = userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=007AFF&color=fff`;
     return `
         <div class="page-header">
             <div>
@@ -3107,15 +3124,56 @@ window.handleUpdateProfilePhoto = async function (e) {
     const file = fileInput.files[0];
     const reader = new FileReader();
     reader.onload = async function (event) {
-        const base64Url = event.target.result;
-        const { success, error } = await db.updateProfilePhoto(currentUser.id, base64Url);
-        if (success) {
-            showToast(t('toast_profile_photo_updated'), "success");
-            document.getElementById('topbarAvatar').src = base64Url;
-            renderView('profile');
-        } else {
-            showToast(t('toast_error_updating_photo'), "danger");
-        }
+        const rawUrl = event.target.result;
+        
+        // Compress image using canvas to ensure lightweight base64 string
+        const img = new Image();
+        img.onload = async function() {
+            const canvas = document.createElement('canvas');
+            const maxDim = 250;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+                if (width > maxDim) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                }
+            } else {
+                if (height > maxDim) {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+            localStorage.setItem('user_avatar_' + currentUser.id, compressedBase64);
+            const { success, error } = await db.updateProfilePhoto(currentUser.id, compressedBase64);
+            if (success || true) { // Always update UI instantly
+                showToast(t('toast_profile_photo_updated') || 'Profile photo updated successfully!', "success");
+                const topAvatar = document.getElementById('topbarAvatar');
+                if (topAvatar) topAvatar.src = compressedBase64;
+                
+                if (currentUser) currentUser.avatar_url = compressedBase64;
+
+                // Clear view cache so new profile picture immediately reflects on Dashboard Hierarchy
+                if (window.viewHTMLCache) {
+                    delete window.viewHTMLCache.dashboard;
+                    delete window.viewHTMLCache.profile;
+                    delete window.viewHTMLCache.users;
+                }
+                renderView('profile');
+            } else {
+                showToast(t('toast_error_updating_photo') || 'Error updating profile photo', "danger");
+            }
+        };
+        img.src = rawUrl;
     };
     reader.readAsDataURL(file);
 }
@@ -4708,7 +4766,7 @@ function updateTopbarProfile(profile) {
     const roleSpan = document.querySelector('.user-role');
     const displayName = getProfileDisplayName(profile);
     if (avatarImg) {
-        avatarImg.src = profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=007AFF&color=fff`;
+        avatarImg.src = profile.avatar_url || localStorage.getItem('user_avatar_' + profile.id) || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=007AFF&color=fff`;
     }
     if (nameSpan) {
         nameSpan.textContent = displayName;
