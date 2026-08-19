@@ -309,7 +309,7 @@ window.executeDeleteUser = async () => {};
 // Requests Page Handlers
 window.renderRequests = async () => {
     const isEmployee = currentUserRole === 'EMPLOYEE';
-    const requests = await db.fetchRequests(isEmployee ? currentUser?.id : null);
+    const requests = await db.fetchRequests(currentUser);
     
     let tableRows = requests.map(r => `
         <tr>
@@ -319,7 +319,7 @@ window.renderRequests = async () => {
             <td>${r.leave_type || '-'}</td>
             <td><span class="status-badge ${r.status === 'Approved' ? 'success' : (r.status === 'Rejected' ? 'danger' : 'info')}">${r.status}</span></td>
             <td>
-                ${!isEmployee && r.status === 'Pending' ? `
+                ${!isEmployee && r.status === 'Pending' && r.employee_id !== currentUser?.id ? `
                     <button class="btn-primary" style="padding: 0.2rem 0.5rem; font-size:0.8rem" onclick="updateRequestStatus('${r.id}', 'Approved')">${t('ui_approve')}</button>
                     <button class="btn-primary" style="background:var(--color-danger); padding: 0.2rem 0.5rem; font-size:0.8rem" onclick="updateRequestStatus('${r.id}', 'Rejected')">${t('ui_reject')}</button>
                 ` : ''}
@@ -328,17 +328,17 @@ window.renderRequests = async () => {
     `).join('');
 
     if (requests.length === 0) {
-        tableRows = `<tr><td colspan="6" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No requests found.</td></tr>`;
+        tableRows = `<tr><td colspan="6" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('req_no_found') || 'No requests found.'}</td></tr>`;
     }
 
     return `
         <div class="page-header fade-in-up">
             <div>
                 <h1 class="page-title">${t('ui_employee_requests')}</h1>
-                <p class="page-subtitle">Manage leave, loan, IT support, and other requests.</p>
+                <p class="page-subtitle">${t('ui_manage_requests_subtitle') || 'Manage leave, loan, IT support, and other requests.'}</p>
             </div>
             <button class="btn-primary" onclick="showNewRequestModal()">
-                <i data-lucide="file-signature"></i> New Request
+                <i data-lucide="file-signature"></i> ${t('ui_new_request') || 'New Request'}
             </button>
         </div>
         <div class="dashboard-grid fade-in-up">
@@ -347,7 +347,7 @@ window.renderRequests = async () => {
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Date</th>
+                                <th>${t('ui_date') || 'Date'}</th>
                                 <th>${t('ui_employee_name')}</th>
                                 <th>${t('ui_request_type')}</th>
                                 <th>${t('ui_leave_type')}</th>
@@ -463,6 +463,16 @@ window.toggleLanguage = function () {
 }
 
 function updateTranslations() {
+    
+    const roleSpan = document.getElementById('currentUserRole');
+    if (roleSpan && typeof currentUserRole !== 'undefined') {
+        let displayRole = currentUserRole.charAt(0).toUpperCase() + currentUserRole.slice(1);
+        if (currentUserRole === 'admin') displayRole = t('role_system_admin') || 'System Admin';
+        else if (currentUserRole === 'manager') displayRole = t('role_manager') || 'Manager';
+        else if (currentUserRole === 'employee') displayRole = t('role_employee') || 'Employee';
+        roleSpan.textContent = displayRole;
+    }
+
     const texts = document.querySelectorAll('[data-i18n]');
     texts.forEach(el => {
         const key = el.getAttribute('data-i18n');
@@ -520,7 +530,7 @@ function getRingSVG(percentage, color, labelKey) {
 }
 
 // --- TOAST NOTIFICATIONS ---
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', detail = '') {
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -534,28 +544,107 @@ function showToast(message, type = 'info') {
 
     let icon = 'info';
     let color = 'var(--color-accent)';
+    let duration = 4000;
 
     if (type === 'success') {
         icon = 'check-circle';
         color = 'var(--color-success)';
+        duration = 3500;
     } else if (type === 'warning') {
         icon = 'alert-triangle';
         color = 'var(--color-warning)';
+        duration = 5000;
     } else if (type === 'danger') {
         icon = 'x-circle';
         color = '#ef4444';
+        duration = 6000;
+    }
+
+    // Parse Supabase/PostgREST error detail if message looks technical
+    let displayMessage = message;
+    let displayDetail = detail;
+    if (type === 'danger' && !detail) {
+        if (message && message.includes('column')) {
+            const colMatch = message.match(/column "([^"]+)"/);
+            if (colMatch) displayDetail = `Unknown column: "${colMatch[1]}". The database may need a migration to be run.`;
+        } else if (message && message.includes('violates')) {
+            displayDetail = 'A database constraint was violated. Please check your input values.';
+        } else if (message && message.includes('duplicate')) {
+            displayDetail = 'This record already exists. Please use a unique value.';
+        } else if (message && message.includes('not-null')) {
+            displayDetail = 'A required field is missing. Please fill in all required fields.';
+        } else if (message && (message.includes('Failed to fetch') || message.includes('NetworkError') || message.includes('ERR_INTERNET'))) {
+            displayMessage = 'Connection Error';
+            displayDetail = 'Cannot reach the server. Please check your internet connection and try again.';
+        } else if (message && message.includes('JWT')) {
+            displayMessage = 'Session Expired';
+            displayDetail = 'Your session has expired. Please log in again.';
+        } else if (message && message.includes('permission denied')) {
+            displayMessage = 'Permission Denied';
+            displayDetail = 'You do not have permission to perform this action. Please contact your administrator.';
+        }
     }
 
     toast.style.borderInlineStartColor = color;
-    toast.innerHTML = `<i data-lucide="${icon}" style="color: ${color}"></i> <span>${message}</span>`;
+    toast.innerHTML = `
+        <div style="display:flex; align-items:flex-start; gap:0.75rem;">
+            <i data-lucide="${icon}" style="color: ${color}; flex-shrink:0; margin-top:2px;"></i>
+            <div>
+                <div style="font-weight:600; font-size:0.9rem;">${displayMessage}</div>
+                ${displayDetail ? `<div style="font-size:0.8rem; margin-top:0.25rem; opacity:0.85;">${displayDetail}</div>` : ''}
+            </div>
+        </div>
+    `;
 
     container.appendChild(toast);
     lucide.createIcons();
 
     setTimeout(() => {
-        toast.remove();
-    }, 3500);
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(110%)';
+        setTimeout(() => toast.remove(), 400);
+    }, duration);
 }
+
+/**
+ * Highlight a form field with an error and show an inline message beneath it.
+ * @param {string} fieldId - The ID of the input/select element
+ * @param {string} message - The error message to display
+ */
+window.showFieldError = function(fieldId, message) {
+    const el = document.getElementById(fieldId);
+    if (!el) return;
+
+    // Clear previous error on the field
+    clearFieldError(fieldId);
+
+    el.style.borderColor = '#ef4444';
+    el.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.2)';
+    el.style.transition = 'border-color 0.2s, box-shadow 0.2s';
+
+    const err = document.createElement('div');
+    err.className = '__field-error';
+    err.dataset.for = fieldId;
+    err.style.cssText = 'color:#ef4444; font-size:0.78rem; margin-top:0.3rem; display:flex; align-items:center; gap:0.3rem; animation: fadeIn 0.2s ease;';
+    err.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${message}`;
+
+    el.parentNode.insertBefore(err, el.nextSibling);
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.focus();
+
+    el.addEventListener('input', () => clearFieldError(fieldId), { once: true });
+    el.addEventListener('change', () => clearFieldError(fieldId), { once: true });
+};
+
+window.clearFieldError = function(fieldId) {
+    const el = document.getElementById(fieldId);
+    if (el) {
+        el.style.borderColor = '';
+        el.style.boxShadow = '';
+    }
+    document.querySelectorAll(`.__field-error[data-for="${fieldId}"]`).forEach(e => e.remove());
+};
+
 
 // Global Handlers
 
@@ -583,7 +672,7 @@ async function renderCommunity() {
         <div class="page-header">
             <div>
                 <h1 class="page-title">${t('community_chat')}</h1>
-                <p class="page-subtitle">Connect with your colleagues!</p>
+                <p class="page-subtitle">${t('ui_connect_colleagues') || 'Connect with your colleagues!'}</p>
             </div>
         </div>
         <div class="dashboard-grid">
@@ -592,7 +681,7 @@ async function renderCommunity() {
                     ${chatHTML}
                 </div>
                 <form onsubmit="handlePostCommunityMessage(event)" style="margin-top:1.5rem; display:flex; gap:1rem;">
-                    <input type="text" id="communityMessageInput" class="form-control" placeholder="Type a message..." required style="flex:1;">
+                    <input type="text" id="communityMessageInput" class="form-control" placeholder="${t('ph_type_message') || 'Type a message...'}" required style="flex:1;">
                     <button type="submit" class="btn-primary">${t('ui_post')}</button>
                 </form>
             </div>
@@ -655,6 +744,30 @@ window.handleLeaveAction = async function (id, status, employeeId) {
         renderView(currentView);
     }
 }
+
+
+window.updateSidebarVisibility = function() {
+    const adminNav = document.querySelector('.nav-item[data-view=\'admin\']');
+    const usersNav = document.querySelector('.nav-item[data-view=\'users\']');
+    const analyticsNav = document.querySelector('.nav-item[data-view=\'analytics\']');
+    const employeesNav = document.querySelector('.nav-item[data-view=\'employees\']');
+    const departmentsNav = document.querySelector('.nav-item[data-view=\'departments\']');
+    const translationsNav = document.querySelector('.nav-item[data-view=\'translations\']');
+    const approvalsNav = document.getElementById('navApprovals');
+
+    if (adminNav) adminNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
+    if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
+    if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') ? 'flex' : 'none';
+    if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') ? 'flex' : 'none';
+    if (departmentsNav) departmentsNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
+    if (translationsNav) translationsNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
+    
+    let isHussain = false;
+    if (typeof currentUser !== 'undefined' && currentUser) {
+        isHussain = (currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain')) || (currentUser.email && currentUser.email.toLowerCase().includes('hussain'));
+    }
+    if (approvalsNav) approvalsNav.style.display = (currentUserRole === 'ADMIN' || isHussain) ? 'flex' : 'none';
+};
 
 window.handleLoginSubmit = async function (e) {
     e.preventDefault();
@@ -726,19 +839,7 @@ window.handleLoginSubmit = async function (e) {
     document.querySelector('.topbar').style.display = 'flex';
 
     // Hide/Show Role-Specific Nav Items
-    const adminNav = document.querySelector('.nav-item[data-view="admin"]');
-    const usersNav = document.querySelector('.nav-item[data-view="users"]');
-    const analyticsNav = document.querySelector('.nav-item[data-view="analytics"]');
-    const employeesNav = document.querySelector('.nav-item[data-view="employees"]');
-    const approvalsNav = document.getElementById('navApprovals');
-
-    if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
-    if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
-    if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
-    if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
-    
-    const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
-    if (approvalsNav) approvalsNav.style.display = (currentUserRole === 'ADMIN' || isHussain) ? 'flex' : 'none';
+    window.updateSidebarVisibility();
 
     // Route based on role
     currentView = 'dashboard';
@@ -884,12 +985,108 @@ function renderLogin() {
     `;
 }
 
+async function renderTeamHierarchyWidget() {
+    const allUsers = await db.fetchUsers();
+    if (!allUsers || allUsers.length === 0) {
+        return `
+            <div class="card col-span-12">
+                <div class="card-title" style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                    <i data-lucide="git-fork" style="width: 20px; height: 20px; color: var(--color-accent);"></i>
+                    <span>${t('team_hierarchy') || 'Team Hierarchy'}</span>
+                </div>
+                <p style="color:var(--color-text-secondary); font-size:0.85rem; padding: 1rem 0;">No team members found.</p>
+            </div>
+        `;
+    }
+
+    let rootUsers = [];
+    if (currentUserRole === 'ADMIN') {
+        rootUsers = allUsers.filter(u => u.role === 'ADMIN' || u.role === 'MANAGER' || !u.manager_id);
+    } else if (currentUserRole === 'MANAGER') {
+        rootUsers = allUsers.filter(u => u.id === currentUser.id);
+    } else {
+        let myMgr = allUsers.find(u => u.id === currentUser.manager_id);
+        if (myMgr) {
+            let parentMgr = allUsers.find(u => u.id === myMgr.manager_id);
+            rootUsers = parentMgr ? [parentMgr] : [myMgr];
+        } else {
+            rootUsers = [currentUser];
+        }
+    }
+
+    rootUsers = Array.from(new Set(rootUsers.map(u => u.id))).map(id => allUsers.find(u => u.id === id)).filter(Boolean);
+
+    function renderNodeSquare(user, visited = new Set()) {
+        if (visited.has(user.id)) return '';
+        visited.add(user.id);
+
+        const isSelf = user.id === currentUser.id;
+        const reports = allUsers.filter(u => u.manager_id === user.id);
+
+        let roleBadgeClass = 'info';
+        if (user.role === 'ADMIN') roleBadgeClass = 'danger';
+        else if (user.role === 'MANAGER') roleBadgeClass = 'primary';
+        else if (user.role === 'SUPERVISOR') roleBadgeClass = 'warning';
+
+        const avatarUrl = user.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name || 'User')}&background=0B192C&color=fff&size=128`;
+
+        return `
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <div class="hierarchy-square-card ${isSelf ? 'is-self-card' : ''}">
+                    <img src="${avatarUrl}" class="hierarchy-square-avatar" alt="${escapeHTML(user.full_name || 'Employee')}" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name || 'User')}&background=007AFF&color=fff';">
+                    <div style="width: 100%;">
+                        <div class="hierarchy-square-name" title="${escapeHTML(user.full_name || 'Employee')}">${escapeHTML(user.full_name || 'Employee')}</div>
+                        <div class="hierarchy-square-title" title="${escapeHTML(user.job_title || 'Team Member')}">${escapeHTML(user.job_title || 'Team Member')}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.3rem; margin-top: auto;">
+                        <span class="status-badge ${roleBadgeClass}" style="font-size:0.65rem; text-transform: uppercase;">${user.role}</span>
+                        ${isSelf ? '<span class="status-badge success" style="font-size:0.65rem; padding:1px 5px;">You</span>' : ''}
+                    </div>
+                </div>
+
+                ${reports.length > 0 ? `
+                    <div style="width: 2px; height: 16px; background: var(--color-border); margin: 0.2rem 0;"></div>
+                    <div class="hierarchy-level-group">
+                        ${reports.map(r => renderNodeSquare(r, new Set(visited))).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    const treeHTML = rootUsers.map(u => renderNodeSquare(u)).join('');
+
+    return `
+        <div class="card col-span-12">
+            <div class="card-title" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i data-lucide="git-fork" style="width: 20px; height: 20px; color: var(--color-accent);"></i>
+                    <span>${t('team_hierarchy') || 'Team Hierarchy'}</span>
+                </div>
+                <span class="status-badge info" style="font-size: 0.75rem;">${allUsers.length} Members</span>
+            </div>
+            <div class="hierarchy-square-tree" style="max-height: 480px; overflow-x: auto; overflow-y: auto;">
+                <div style="display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; width: 100%;">
+                    ${treeHTML}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 async function renderDashboard() {
+    const newsQuery = currentLang === 'ar' ? '"السعودية" (أعمال OR "نظام العمل")' : '"Saudi Arabia" (business OR "labor law" OR "labour law")';
+    const newsHl = currentLang === 'ar' ? 'ar' : 'en-US';
+    const newsGl = currentLang === 'ar' ? 'SA' : 'US';
+    const newsCeid = currentLang === 'ar' ? 'SA:ar' : 'US:en';
+    const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(newsQuery)}&hl=${newsHl}&gl=${newsGl}&ceid=${newsCeid}`;
+    const newsApiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
+
     // Run independent fetches in parallel
     const [todayAttendance, announcements, newsRes, profile] = await Promise.all([
         db.fetchTodayAttendance(currentUser?.id),
         db.fetchAnnouncements(),
-        fetch('https://api.rss2json.com/v1/api.json?rss_url=https://feeds.bbci.co.uk/news/world/rss.xml').catch(() => null),
+        fetch(newsApiUrl).catch(() => null),
         db.getUserProfile(currentUser?.id)
     ]);
 
@@ -976,7 +1173,7 @@ async function renderDashboard() {
                 <span>${p.full_name}</span>
                 <span style="color:var(--color-text-secondary); font-size:0.85rem;">${new Date(p.last_login).toLocaleString()}</span>
             </div>
-        `).join('') || '<p>No recent logins.</p>';
+        `).join('') || `<p>${t('ui_no_recent_logins') || 'No recent logins.'}</p>`;
 
         adminWidgets += `
             <div class="card col-span-12 md:col-span-6">
@@ -1017,6 +1214,7 @@ async function renderDashboard() {
                     ${newsHTML}
                 </div>
             </div>
+            ${await renderTeamHierarchyWidget()}
             ${adminWidgets}
         </div>
 
@@ -1197,11 +1395,6 @@ window.openTaskDetailsModal = async function(id) {
     document.getElementById('detailsTaskCreator').textContent = task.creator?.full_name || 'System';
     document.getElementById('detailsTaskStatus').textContent = task.status;
     document.getElementById('detailsTaskPriority').textContent = task.priority;
-    document.getElementById('detailsTaskVisibility').textContent = task.visibility || 'public';
-    document.getElementById('detailsTaskCategory').textContent = task.category || 'General';
-    document.getElementById('detailsTaskStart').textContent = task.start_date || 'Not set';
-    document.getElementById('detailsTaskDue').textContent = task.due_date || 'Not set';
-    document.getElementById('detailsTaskEnd').textContent = task.end_date || 'Not set';
     document.getElementById('detailsTaskEstimate').textContent = task.estimated_time || 'Not set';
     
     const list = document.getElementById('taskCommentsList');
@@ -1209,6 +1402,27 @@ window.openTaskDetailsModal = async function(id) {
     
     document.getElementById('taskSidePanel').classList.add('active');
     document.getElementById('taskSidePanelOverlay').classList.add('active');
+    
+    // Load Subtasks
+    const subTasksList = document.getElementById('taskSubTasksList');
+    if (subTasksList) {
+        subTasksList.innerHTML = '<div style="text-align: center; color: var(--color-text-secondary);">Loading sub-tasks...</div>';
+        const allTasks = Object.values(window.taskCache || {});
+        const subTasks = allTasks.filter(t => t.parent_task_id === task.id);
+        
+        if (subTasks.length === 0) {
+            subTasksList.innerHTML = '<div style="color: var(--color-text-secondary); font-style: italic;">No sub-tasks yet.</div>';
+        } else {
+            subTasksList.innerHTML = subTasks.map(st => `
+                <div style="background: var(--color-surface); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--color-border); cursor: pointer;" onclick="openTaskDetailsModal('${st.id}')">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <strong>${escapeHTML(st.title)}</strong>
+                        <span class="badge" style="font-size: 0.7rem;">${st.status}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
     
     const comments = await db.fetchTaskComments(task.id);
     if (comments.length === 0) {
@@ -1239,10 +1453,49 @@ window.handleTaskCommentSubmit = async function(e) {
     
     if (success) {
         input.value = '';
+        
+        // Fetch task details to notify assignee
+        const task = window.taskCache ? window.taskCache[id] : null;
+        if (task && task.assignee_id && task.assignee_id !== currentUser.id) {
+            await db.createNotification(task.assignee_id, `New comment on your task "${task.title}": ${content}`);
+            await db.triggerWebhooks('task_activity_email', {
+                type: 'comment',
+                task_id: id,
+                task_title: task.title,
+                assignee_id: task.assignee_id,
+                comment_content: content
+            });
+        }
+
         // Reload comments
         openTaskDetailsModal(id);
     } else {
         showToast(t('toast_failed_to_post_comment'), "danger");
+    }
+};
+
+window.handleCreateSubTaskClick = function() {
+    const parentId = document.getElementById('detailsTaskId').value;
+    if (!parentId) return;
+    
+    document.getElementById('taskSidePanel').classList.remove('active');
+    document.getElementById('taskSidePanelOverlay').classList.remove('active');
+    
+    if (document.getElementById('taskParentId')) {
+        document.getElementById('taskParentId').value = parentId;
+    }
+    
+    const form = document.getElementById('standardTaskForm');
+    if (form) {
+        form.scrollIntoView({ behavior: 'smooth' });
+        form.style.transition = 'box-shadow 0.3s ease';
+        form.style.boxShadow = '0 0 10px 2px var(--color-primary)';
+        setTimeout(() => {
+            form.style.boxShadow = 'none';
+        }, 1500);
+        
+        const titleInput = document.getElementById('taskTitle');
+        if (titleInput) titleInput.focus();
     }
 };
 
@@ -1669,8 +1922,45 @@ async function renderPayroll() {
 }
 
 // Render Admin Hub
+window.previewRole = function(role) {
+    if (!window.originalUserRole) window.originalUserRole = currentUserRole;
+    currentUserRole = role;
+    window.updateSidebarVisibility();
+    renderView('dashboard');
+    showToast(t('toast_viewing_as') ? t('toast_viewing_as') + ' ' + role : 'Viewing as ' + role, 'info');
+    
+    if (!document.getElementById('revertRoleBtn')) {
+        const btn = document.createElement('button');
+        btn.id = 'revertRoleBtn';
+        btn.innerHTML = '<i data-lucide="arrow-left" style="width:16px;height:16px;margin-right:8px;vertical-align:middle;"></i>' + (t('ui_return_to_admin') || 'Return to Admin');
+        btn.style.position = 'fixed';
+        btn.style.bottom = '20px';
+        btn.style.right = '20px';
+        btn.style.zIndex = '9999';
+        btn.style.backgroundColor = 'var(--color-danger)';
+        btn.style.color = '#fff';
+        btn.style.padding = '10px 20px';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '5px';
+        btn.style.cursor = 'pointer';
+        btn.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        
+        btn.onclick = function() {
+            currentUserRole = window.originalUserRole;
+            window.originalUserRole = null;
+            document.body.removeChild(btn);
+            window.updateSidebarVisibility();
+            renderView('admin');
+        };
+        document.body.appendChild(btn);
+        lucide.createIcons({root: btn});
+    }
+};
+
 async function renderAdmin() {
-    if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MANAGER') {
+    if (currentUserRole !== 'ADMIN') {
         return `<div class="page-header"><h1 class="page-title">${t('analy_unauth')}</h1></div>`;
     }
 
@@ -1727,6 +2017,21 @@ async function renderAdmin() {
             </div>
         </div>
 
+        <div class="dashboard-grid" style="margin-bottom: 2rem;">
+            <div class="card col-span-4" style="text-align: center; cursor: pointer; border: 1px dashed var(--color-primary);" onclick="previewRole('EMPLOYEE')">
+                <i data-lucide="eye" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
+                <h4>${t('ui_employee_view') || 'Employee View'}</h4>
+            </div>
+            <div class="card col-span-4" style="text-align: center; cursor: pointer; border: 1px dashed var(--color-primary);" onclick="previewRole('SUPERVISOR')">
+                <i data-lucide="eye" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
+                <h4>${t('ui_supervisor_view') || 'Supervisor View'}</h4>
+            </div>
+            <div class="card col-span-4" style="text-align: center; cursor: pointer; border: 1px dashed var(--color-primary);" onclick="previewRole('MANAGER')">
+                <i data-lucide="eye" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
+                <h4>${t('ui_manager_view') || 'Manager View'}</h4>
+            </div>
+        </div>
+
         <div class="dashboard-grid">
             <div class="card col-span-4">
                 <div class="card-title">${t('headcount')} <i data-lucide="users"></i></div>
@@ -1766,8 +2071,8 @@ window.handleCreateUser = async function (e) {
     if (!error) {
         showToast(t('toast_user_created_successfully'), 'success');
         if (typeof closeAddUserModal === 'function') closeAddUserModal();
-        window.currentContractEmployeeId = data?.id || data;
-        renderView('contract_form');
+        const createdUserId = data?.id || (typeof data === 'string' ? data : null);
+        window.navigateToContract(createdUserId, fullName);
     } else {
         showToast(error.message || "Failed to create user", 'danger');
     }
@@ -1841,6 +2146,7 @@ async function renderUsers() {
                                     <td>
                                         <select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
                                             <option value="EMPLOYEE" ${u.role === 'EMPLOYEE' ? 'selected' : ''}>${t('users_role_emp')}</option>
+                                            <option value="SUPERVISOR" ${u.role === 'SUPERVISOR' ? 'selected' : ''}>Supervisor</option>
                                             <option value="MANAGER" ${u.role === 'MANAGER' ? 'selected' : ''}>${t('users_role_mgr')}</option>
                                             <option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>${t('users_role_admin')}</option>
                                         </select>
@@ -1848,7 +2154,7 @@ async function renderUsers() {
                                     <td>
                                         <select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleAssignManager('${u.id}', this.value)">
                                             <option value="">${t('users_no_mgr')}</option>
-                                            ${users.filter(m => m.role === 'MANAGER' || m.role === 'ADMIN').map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${m.full_name || 'Mgr'}</option>`).join('')}
+                                            ${users.filter(m => (m.role === 'MANAGER' || m.role === 'ADMIN' || m.role === 'SUPERVISOR') && m.id !== u.id).map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${escapeHTML(m.full_name || 'User')} (${m.role})</option>`).join('')}
                                         </select>
                                     </td>
                                     <td>
@@ -1918,7 +2224,7 @@ async function renderPerformance() {
         <div id="perfReportSection" style="display:none; margin-bottom: 1.5rem;">
             <div class="card fade-in-up">
                 <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-                    <span><i data-lucide="award" style="margin-right:8px; width:20px; height:20px; vertical-align:middle; color:var(--color-accent);"></i>Employee Performance Report</span>
+                    <span><i data-lucide="award" style="margin-right:8px; width:20px; height:20px; vertical-align:middle; color:var(--color-accent);"></i>${t('ui_employee_performance_report')}</span>
                     <div style="display:flex; align-items:center; gap: 1rem;">
                         <span id="perfReportDate" style="font-size:0.8rem; font-weight:400; color:var(--color-text-secondary);"></span>
                         <button class="btn btn-icon" onclick="printPerformanceReport()" title="Print Report" style="padding: 0.25rem;">
@@ -2085,7 +2391,7 @@ window.printPerformanceReport = () => {
         <p style="text-align: right; margin-top: 40px;"><small style="color: #666;">Printed on ${new Date().toLocaleString()}</small></p>
     `;
 
-    window.printWithLetterhead('Employee Performance Report', printContents);
+    window.printWithLetterhead(t('ui_employee_performance_report') || 'Employee Performance Report', printContents);
 };
 
 // Add spin keyframe if not already present
@@ -2867,10 +3173,11 @@ async function renderTasks() {
     
     console.log("renderTasks: Fetching users and tasks...");
     // Fetch users, tasks, and the signed-in user's department manager in parallel
-    const [allUsers, fetchedTasks, departmentSupervisors] = await Promise.all([
+    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments] = await Promise.all([
         db.fetchUsers(),
         tasksPromise,
-        db.fetchMyDepartmentSupervisors()
+        db.fetchMyDepartmentSupervisors(),
+        db.fetchDepartments()
     ]);
     console.log("renderTasks: Fetched users and tasks.", { usersCount: allUsers.length, tasksCount: fetchedTasks.length });
     let tasks = fetchedTasks;
@@ -2933,12 +3240,22 @@ async function renderTasks() {
     window.projectOptionsCache = projectOptions;
     window.projectsCache = projects;
 
+    // Build department options dynamically from DB
+    const departmentOptions = allDepartments.map(d => `<option value="${escapeHTML(d.name)}">${escapeHTML(d.name)}</option>`).join('');
+
     let adminForm = '';
     let canCreateTask = true; // Allow all users to create tasks now
     
+    let teamIds = [currentUser.id];
+    if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
+        const directReports = allUsers.filter(u => u.manager_id === currentUser.id).map(u => u.id);
+        const indirectReports = allUsers.filter(u => directReports.includes(u.manager_id)).map(u => u.id);
+        teamIds = [currentUser.id, ...directReports, ...indirectReports];
+    }
+
     let users = allUsers;
     if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
-        users = users.filter(u => u.manager_id === currentUser.id || u.id === currentUser.id);
+        users = users.filter(u => teamIds.includes(u.id));
     } else if (currentUserRole === 'EMPLOYEE') {
         users = users.filter(u => u.id === currentUser.id);
     }
@@ -2958,123 +3275,126 @@ async function renderTasks() {
             <div class="card col-span-12" style="margin-bottom: 1rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <div class="card-title" style="margin-bottom: 0;">${t('task_assign_new') || 'Create New Task'}</div>
-                    <button class="btn btn-secondary btn-sm" onclick="toggleAITaskMode()"><i data-lucide="bot" style="width:16px; height:16px; margin-right:4px; vertical-align:text-bottom;"></i> AI Assist</button>
                 </div>
                 
                 <!-- Standard Form -->
-                <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm" class="task-assign-form" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-                    <div class="form-group" style="flex: 2; min-width: 200px; margin-bottom: 0;">
-                        <label class="form-label">${t('task_title') || 'Task Title'}</label>
-                        <input type="text" autocomplete="off" id="taskTitle" class="form-control" required placeholder="Task title">
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label">${t('ui_category')}</label>
-                        <input type="text" id="taskCategory" class="form-control" placeholder="e.g. Design">
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 0;">
-                        <label class="form-label">${t('ui_priority')}</label>
-                        <select id="taskPriority" class="form-control">
-                            <option value="low">Low</option>
-                            <option value="medium" selected>Medium</option>
-                            <option value="high">High</option>
-                            <option value="urgent">Urgent</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label">${t('ui_project')}</label>
-                        <select id="taskProject" class="form-control" onchange="handleTaskProjectChange('new')">
-                            <option value="">No Project</option>
-                            ${projectOptions}
-                        </select>
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
-                        <select id="taskAssignee" class="form-control" onchange="handleTaskAssigneeChange('new')" required>
-                            <option value="">${t('task_sel_emp') || 'Select Employee'}</option>
-                            ${userOptions}
-                        </select>
-                    </div>
-                    <div class="form-group" style="position: relative; flex: 1; min-width: 180px; margin-bottom: 0; ${(currentUserRole === 'MANAGER' || currentUserRole === 'ADMIN') ? 'display: none;' : ''}">
-                        <label class="form-label">${t('task_supervisor')}</label>
-                        <select id="taskSupervisor" class="form-control" ${hasDepartmentSupervisor && currentUserRole !== 'MANAGER' && currentUserRole !== 'ADMIN' ? 'required' : ''} onmouseenter="window.showSupervisorTooltip()" onmouseleave="window.hideSupervisorTooltip()">
-                            <option value="">${hasDepartmentSupervisor ? t('task_select_supervisor') : t('task_no_department_manager')}</option>
-                            ${supervisorOptions}
-                        </select>
-                        <div id="supervisorTooltip" style="display: none; position: absolute; bottom: 100%; left: 0; background: var(--bg-card); color: var(--color-text); padding: 8px 12px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); z-index: 10; font-size: 0.85rem; width: max-content; max-width: 250px; pointer-events: none; margin-bottom: 4px;">${t('task_supervisor_help')}</div>
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label">${t('task_due') || 'Due Date'}</label>
-                        <input type="date" id="taskDue" class="form-control">
-                    </div>
-                    <!-- Department & Sub-Type -->
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label">${t('ui_department') || "Task's Department"}</label>
-                        <select id="taskDepartment" class="form-control" onchange="window.handleTaskDepartmentChange('new', this.value)">
-                            <option value="">Select Department</option>
-                            <option value="Marketing">Marketing</option>
-                            <option value="HR">HR</option>
-                            <option value="IT">IT</option>
-                            <option value="Finance">Finance</option>
-                            <option value="Operations">Operations</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="taskSubTypeGroup" style="flex: 1; min-width: 150px; margin-bottom: 0; display: none;">
-                        <label class="form-label">${t('ui_task_sub_type') || 'Task Sub-Type'}</label>
-                        <select id="taskSubType" class="form-control">
-                            <option value="">Select Sub-Type</option>
-                            <option value="Designing Task">Designing Task</option>
-                            <option value="Marketing Task">Marketing Task</option>
-                        </select>
-                    </div>
-                    <!-- Watchers -->
-                    <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
-                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; height: 38px; margin: 0;">
-                            <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'"> 
-                            ${t('ui_add_watcher') || 'Add Watcher'}
-                        </label>
-                        <div id="taskWatchersGroup" style="display: none; margin-top: 0.5rem;">
-                            <select id="taskWatchers" class="form-control" multiple size="4">
-                                ${userOptions}
+                <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm" class="task-assign-form">
+                    <input type="hidden" id="taskParentId" value="">
+
+                    <!-- Row 1: Task Title, Category, Priority -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                        <div class="form-group" style="margin-bottom: 0; grid-column: span 2;">
+                            <label class="form-label">${t('task_title') || 'Task Title'}</label>
+                            <input type="text" autocomplete="off" id="taskTitle" class="form-control" required placeholder="">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label class="form-label">${t('ui_category')}</label>
+                            <input type="text" id="taskCategory" class="form-control" placeholder="">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label class="form-label">${t('ui_priority')}</label>
+                            <select id="taskPriority" class="form-control">
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="low">Low</option>
                             </select>
-                            <small class="text-muted" style="display:block; margin-top:0.25rem;">Hold Ctrl/Cmd to select multiple</small>
                         </div>
                     </div>
+
+                    <!-- Row 2: Project, Assign To, Due Date / Supervisor -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label class="form-label">${t('ui_project')}</label>
+                            <select id="taskProject" class="form-control" onchange="handleTaskProjectChange('new')">
+                                <option value=""></option>
+                                ${projectOptions}
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
+                            <select id="taskAssignee" class="form-control" onchange="handleTaskAssigneeChange('new')" required>
+                                <option value="">${t('task_sel_emp') || 'Select Employee'}</option>
+                                ${userOptions}
+                            </select>
+                        </div>
+                        <div class="form-group" style="position: relative; margin-bottom: 0; ${(currentUserRole === 'MANAGER' || currentUserRole === 'ADMIN') ? 'display: none;' : ''}">
+                            <label class="form-label">${t('task_supervisor')}</label>
+                            <select id="taskSupervisor" class="form-control" ${hasDepartmentSupervisor && currentUserRole !== 'MANAGER' && currentUserRole !== 'ADMIN' ? 'required' : ''} onmouseenter="window.showSupervisorTooltip()" onmouseleave="window.hideSupervisorTooltip()">
+                                <option value="">${hasDepartmentSupervisor ? t('task_select_supervisor') : t('task_no_department_manager')}</option>
+                                ${supervisorOptions}
+                            </select>
+                            <div id="supervisorTooltip" style="display: none; position: absolute; bottom: 100%; left: 0; background: var(--bg-card); color: var(--color-text); padding: 8px 12px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); z-index: 10; font-size: 0.85rem; width: max-content; max-width: 250px; pointer-events: none; margin-bottom: 4px;">${t('task_supervisor_help')}</div>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label class="form-label">${t('task_due') || 'Due Date'}</label>
+                            <input type="date" id="taskDue" class="form-control">
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Sub-Type, Department (under Assign To), Watchers -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                        <div class="form-group" id="taskSubTypeGroup" style="margin-bottom: 0; display: none; grid-column: 1;">
+                            <label class="form-label">${t('ui_task_sub_type') || 'Task Sub-Type'}</label>
+                            <select id="taskSubType" class="form-control">
+                                <option value=""></option>
+                                <option value="Designing Task">Designing Task</option>
+                                <option value="Marketing Task">Marketing Task</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0; grid-column: 2;">
+                            <label class="form-label">${t('ui_department') || "Task's Department"}</label>
+                            <select id="taskDepartment" class="form-control" onchange="window.handleTaskDepartmentChange('new', this.value)">
+                                <option value="">— Select —</option>
+                                ${departmentOptions}
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0; grid-column: 3;">
+                            <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'">
+                                ${t('ui_add_watcher') || 'Add Watcher'}
+                            </label>
+                            <div id="taskWatchersGroup" style="display: none; margin-top: 0.5rem;">
+                                <select id="taskWatchers" class="form-control" multiple size="4">
+                                    ${userOptions}
+                                </select>
+                                <small class="text-muted" style="display:block; margin-top:0.25rem;">Hold Ctrl/Cmd to select multiple</small>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Conditional Designer Fields -->
-                    <div id="newDesignFields" style="display: none; width: 100%; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
-                        <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                    <div id="newDesignFields" style="display: none; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
                             <label class="form-label">${t('ui_content_type')}</label>
                             <input type="text" id="taskContentType" class="form-control" placeholder="e.g. Graphic, Video">
                         </div>
-                        <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                        <div class="form-group" style="margin-bottom: 0;">
                             <label class="form-label">${t('ui_source_link')}</label>
                             <input type="url" id="taskSourceLink" class="form-control" placeholder="https://...">
                         </div>
-                        <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                        <div class="form-group" style="margin-bottom: 0;">
                             <label class="form-label">${t('ui_upload_link')}</label>
                             <input type="url" id="taskUploadLink" class="form-control" placeholder="https://...">
                         </div>
                     </div>
-                    <div class="form-group task-assign-btn-group" style="margin-bottom: 0; width: 100%; text-align: right; margin-top: 0.5rem;">
+
+                    <div style="text-align: right; margin-top: 0.5rem;">
                         <button type="submit" class="btn btn-primary">${t('task_assign_btn') || 'Create Task'}</button>
                     </div>
                 </form>
 
-                <!-- AI Form -->
-                <form autocomplete="off" onsubmit="handleAICreateTask(event)" id="aiTaskForm" style="display: none; flex-direction: column; gap: 1rem;">
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="sparkles" style="color: var(--color-primary); width: 14px; height: 14px; margin-right:4px;"></i> Describe task naturally</label>
-                        <input type="text" autocomplete="off" id="aiTaskInput" class="form-control" placeholder="e.g. 'Translate the homepage to French by Friday high priority for John'">
-                    </div>
-                    <button type="submit" class="btn btn-primary" style="align-self: flex-start;"><i data-lucide="zap" style="width:16px; height:16px; margin-right:4px; vertical-align:text-bottom;"></i> Generate & Assign</button>
-                </form>
+
             </div>
         `;
     }
 
     function renderTaskCard(task) {
         let prioColor = 'var(--color-border)';
+        if (task.priority === 'medium') prioColor = 'var(--color-primary)';
         if (task.priority === 'high') prioColor = 'var(--color-warning)';
-        if (task.priority === 'urgent') prioColor = 'var(--color-danger)';
+        if (task.priority === 'critical') prioColor = 'var(--color-danger)';
+        if (task.priority === 'urgent') prioColor = 'var(--color-danger)'; // legacy fallback
         
         return `
             <div class="card task-item-card" id="task-card-${task.id}" data-status="${task.status}" draggable="true" ondragstart="handleTaskDragStart(event, '${task.id}')" onclick="openTaskDetailsModal('${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${prioColor}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: pointer; background: var(--color-surface); position: relative;">
@@ -3099,7 +3419,7 @@ async function renderTasks() {
                 <div style="display: flex; gap: 1.5rem; min-width: 1400px;">
                     <div style="flex: 1; min-width: 280px;">
                         <div class="card" style="background: rgba(139, 92, 246, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid #8b5cf6;">
-                            <div class="card-title" style="padding: 1rem 1rem 0;">Pending Approval <span id="badge-pending" class="badge" style="background: #8b5cf6; color: #fff;">${pending.length}</span></div>
+                            <div class="card-title" style="padding: 1rem 1rem 0;">${t('task_pending_approval') || 'Pending Approval'} <span id="badge-pending" class="badge" style="background: #8b5cf6; color: #fff;">${pending.length}</span></div>
                             <div id="col-pending" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'Pending Approval')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
                                 ${pending.map(renderTaskCard).join('')}
                             </div>
@@ -3115,7 +3435,7 @@ async function renderTasks() {
                     </div>
                     <div style="flex: 1; min-width: 280px;">
                         <div class="card" style="background: rgba(59, 130, 246, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-primary);">
-                            <div class="card-title" style="padding: 1rem 1rem 0;">In Progress <span id="badge-in_progress" class="badge" style="background: var(--color-primary); color: #fff;">${inProgress.length}</span></div>
+                            <div class="card-title" style="padding: 1rem 1rem 0;">${t('status_in_progress') || 'In Progress'} <span id="badge-in_progress" class="badge" style="background: var(--color-primary); color: #fff;">${inProgress.length}</span></div>
                             <div id="col-in_progress" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'in_progress')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
                                 ${inProgress.map(renderTaskCard).join('')}
                             </div>
@@ -3123,7 +3443,7 @@ async function renderTasks() {
                     </div>
                     <div style="flex: 1; min-width: 280px;">
                         <div class="card" style="background: rgba(245, 158, 11, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-warning);">
-                            <div class="card-title" style="padding: 1rem 1rem 0;">Review <span id="badge-review" class="badge" style="background: var(--color-warning); color: #fff;">${review.length}</span></div>
+                            <div class="card-title" style="padding: 1rem 1rem 0;">${t('status_review') || 'Review'} <span id="badge-review" class="badge" style="background: var(--color-warning); color: #fff;">${review.length}</span></div>
                             <div id="col-review" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'review')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
                                 ${review.map(renderTaskCard).join('')}
                             </div>
@@ -3146,7 +3466,7 @@ async function renderTasks() {
         <div class="page-header">
             <div>
                 <h1 class="page-title">${t('nav_tasks') || 'Tasks'}</h1>
-                <p class="page-subtitle">${t('task_sub') || 'Manage team tasks with AI assistance'}</p>
+                <p class="page-subtitle">${t('task_sub') || 'Manage team tasks'}</p>
             </div>
         </div>
         <div class="dashboard-grid fade-in-up" style="grid-template-columns: repeat(12, 1fr);">
@@ -3175,7 +3495,8 @@ window.handleAICreateTask = async function(e) {
     
     // Very basic heuristic parser (mock AI)
     let priority = 'medium';
-    if (input.toLowerCase().includes('high priority') || input.toLowerCase().includes('urgent')) priority = 'high';
+    if (input.toLowerCase().includes('critical') || input.toLowerCase().includes('urgent')) priority = 'critical';
+    if (input.toLowerCase().includes('high priority')) priority = 'high';
     if (input.toLowerCase().includes('low priority')) priority = 'low';
     
     let due = new Date();
@@ -3259,15 +3580,6 @@ window.handleCreateTask = async function (e) {
     const supervisorSelect = document.getElementById('taskSupervisor');
     const supervisorId = supervisorSelect && !supervisorSelect.disabled ? supervisorSelect.value : null;
 
-    if (supervisorSelect && !supervisorSelect.disabled && !supervisorId) {
-        showToast(t('toast_task_supervisor_required'), "warning");
-        return;
-    }
-    if (supervisorId && !(window.taskDepartmentSupervisors || []).some(supervisor => supervisor.id === supervisorId)) {
-        showToast(t('toast_task_supervisor_required'), "warning");
-        return;
-    }
-    
     // Check if assignee is in Designing
     const allUsers = await db.fetchUsers();
     const assigneeObj = allUsers.find(u => u.id === assignee);
@@ -3310,13 +3622,20 @@ window.handleCreateTask = async function (e) {
     if (document.getElementById('enableWatchers') && document.getElementById('enableWatchers').checked) {
         watchers = Array.from(document.getElementById('taskWatchers').selectedOptions).map(opt => opt.value);
     }
+    const parentTaskId = document.getElementById('taskParentId') ? document.getElementById('taskParentId').value || null : null;
 
-    const { success, error } = await db.createTask(title, '', assignee, due, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, supervisorId, department, subType, watchers);
+    const { success, error } = await db.createTask(title, '', assignee, due, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, supervisorId, department, subType, watchers, parentTaskId);
     if (success) {
         showToast(t('toast_task_created_successfully'), "success");
         await db.triggerWebhooks('task_created', { title, assignee_id: assignee, supervisor_id: supervisorId, due_date: due, priority, project_id: projectId });
         if (assignee && assignee !== currentUser.id) {
             await db.createNotification(assignee, `You have been assigned a new task: ${title}`);
+        }
+        if (currentUser.department_id) {
+            const currentDept = depts.find(d => d.id === currentUser.department_id);
+            if (currentDept && currentDept.head_id && currentDept.head_id !== currentUser.id) {
+                await db.createNotification(currentDept.head_id, `A new task was created by your department member: ${title}`);
+            }
         }
         if (status === 'Pending Approval') {
             const hussain = allUsers.find(u => u.full_name && u.full_name.toLowerCase().includes('hussain') || u.email && u.email.toLowerCase().includes('hussain'));
@@ -3401,13 +3720,15 @@ window.handleTaskDrop = async function(e, status) {
         }
 
         // Optimistic UI update
-        const targetCol = document.getElementById(`col-${actualStatus}`);
+        const statusId = actualStatus === 'Pending Approval' ? 'pending' : actualStatus;
+        const targetCol = document.getElementById(`col-${statusId}`);
         if (targetCol) {
             targetCol.appendChild(taskCard);
             taskCard.setAttribute('data-status', actualStatus);
             
-            const oldBadge = document.getElementById(`badge-${currentStatus}`);
-            const newBadge = document.getElementById(`badge-${actualStatus}`);
+            const currentStatusId = currentStatus === 'Pending Approval' ? 'pending' : currentStatus;
+            const oldBadge = document.getElementById(`badge-${currentStatusId}`);
+            const newBadge = document.getElementById(`badge-${statusId}`);
             if (oldBadge) oldBadge.textContent = Math.max(0, parseInt(oldBadge.textContent) - 1);
             if (newBadge) newBadge.textContent = parseInt(newBadge.textContent) + 1;
         }
@@ -3417,7 +3738,7 @@ window.handleTaskDrop = async function(e, status) {
     await window.handleUpdateTaskStatus(id, finalStatus);
 };
 
-window.openEditTaskModal = function(id) {
+window.openEditTaskModal = async function(id) {
     try {
         const task = window.taskCache[id];
         if (!task) {
@@ -3451,7 +3772,7 @@ window.openEditTaskModal = function(id) {
 
         const projectSelect = document.getElementById('editTaskProject');
         if (projectSelect) {
-            projectSelect.innerHTML = '<option value="">No Project</option>' + (window.projectOptionsCache || '');
+            projectSelect.innerHTML = '<option value=""></option>' + (window.projectOptionsCache || '');
             projectSelect.value = task.project_id || '';
         }
 
@@ -3462,6 +3783,12 @@ window.openEditTaskModal = function(id) {
         // Department, Sub-Type, and Watchers
         const deptSelect = document.getElementById('editTaskDepartment');
         if (deptSelect) {
+            // Populate from DB if not already cached
+            if (!window.deptOptionsCache) {
+                const depts = await db.fetchDepartments();
+                window.deptOptionsCache = depts.map(d => `<option value="${escapeHTML(d.name)}">${escapeHTML(d.name)}</option>`).join('');
+            }
+            deptSelect.innerHTML = `<option value="">— Select Department —</option>${window.deptOptionsCache}`;
             deptSelect.value = task.department || '';
             window.handleTaskDepartmentChange('edit', task.department || '');
         }
@@ -3630,9 +3957,13 @@ window.navigateToContract = function (employeeId, empName) {
 
 window.handleSaveContract = async function (e) {
     e.preventDefault();
+    const jobTitle = document.getElementById('contractJobTitle')?.value || '';
     const contractData = {
         employee_id: currentContractEmployeeId,
         contract_type: document.getElementById('contractType').value,
+        nationality: document.getElementById('contractNationality')?.value || 'Saudi',
+        job_title: jobTitle,
+        job_title_en: jobTitle,
         start_date: document.getElementById('contractStartDate').value,
         end_date: document.getElementById('contractEndDate').value || null,
         salary: document.getElementById('contractSalary').value || null,
@@ -3646,8 +3977,16 @@ window.handleSaveContract = async function (e) {
         status: document.getElementById('contractStatus').value
     };
 
+    const existingContract = await db.fetchContractByEmployeeId(currentContractEmployeeId);
+    if (existingContract && existingContract.id) {
+        contractData.id = existingContract.id;
+    }
+
     const { success, error } = await db.upsertContract(contractData);
     if (success) {
+        if (jobTitle) {
+            await db.updateUserJobTitle(currentContractEmployeeId, jobTitle);
+        }
         showToast(t('toast_contract_saved_successfully'), "success");
         currentView = 'users';
         renderView('users');
@@ -3661,11 +4000,15 @@ async function renderContractPage() {
         return `<div class="card">${t('notif_no_found')}</div>`;
     }
 
-    // Fetch existing contract
+    // Fetch existing contract and user profile
     const contract = await db.fetchContractByEmployeeId(currentContractEmployeeId);
+    const users = await db.fetchUsers();
+    const userProfile = users.find(u => u.id === currentContractEmployeeId);
 
     // Default values if no contract exists
     const contractType = contract?.contract_type || 'Full-time';
+    const nationality = contract?.nationality || 'Saudi';
+    const jobTitle = contract?.job_title || contract?.job_title_en || userProfile?.job_title || '';
     const startDate = contract?.start_date || '';
     const endDate = contract?.end_date || '';
     const salary = contract?.salary || '';
@@ -3681,36 +4024,52 @@ async function renderContractPage() {
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title">${t('users_contract')}</h1>
+                <h1 class="page-title">${t('users_contract') || 'Contract'}</h1>
                 <p class="page-subtitle">${currentContractEmployeeName}</p>
             </div>
-            <button class="btn-secondary" onclick="currentView='users'; render();">
+            <button class="btn-secondary" onclick="currentView='users'; renderView('users');">
                 <i data-lucide="arrow-left" style="width:16px;height:16px;margin-right:4px;"></i> Back to Users
             </button>
         </div>
 
-        <div class="dashboard-grid fade-in-up">
-            <div class="card col-span-12 md:col-span-8 md:col-start-3">
-                <form autocomplete="off" onsubmit="handleSaveContract(event)">
+        <div class="fade-in-up" style="max-width: 900px; margin: 0 auto; padding-bottom: 2rem;">
+            <form autocomplete="off" onsubmit="handleSaveContract(event)" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                
+                <!-- Basic Information -->
+                <div class="card">
+                    <h3 style="margin-top: 0; margin-bottom: 1.5rem; color: var(--color-primary); font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem;">
+                        <i data-lucide="file-text" style="width: 18px; height: 18px;"></i>
+                        ${t('contract_basic_info') || 'Basic Information'}
+                    </h3>
                     <div class="dashboard-grid">
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('users_job_title') || 'Job Title'}</label>
+                            <input type="text" id="contractJobTitle" class="form-control" value="${jobTitle}" placeholder="${t('users_job_title') || 'Job Title'}">
+                        </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_type')}</label>
                             <select id="contractType" class="form-control" required>
-                                <option value="Full-time" ${contractType === 'Full-time' ? 'selected' : ''}>${t('contract_ft')}</option>
-                                <option value="Part-time" ${contractType === 'Part-time' ? 'selected' : ''}>${t('contract_pt')}</option>
-                                <option value="Contractor" ${contractType === 'Contractor' ? 'selected' : ''}>${t('contract_c')}</option>
-                                <option value="Freelance" ${contractType === 'Freelance' ? 'selected' : ''}>${t('contract_fl')}</option>
+                                <option value="Full-time" ${contractType === 'Full-time' ? 'selected' : ''}>${t('contract_ft') || 'Full-time'}</option>
+                                <option value="Part-time" ${contractType === 'Part-time' ? 'selected' : ''}>${t('contract_pt') || 'Part-time'}</option>
+                                <option value="Contractor" ${contractType === 'Contractor' ? 'selected' : ''}>${t('contract_c') || 'Contractor'}</option>
+                                <option value="Freelance" ${contractType === 'Freelance' ? 'selected' : ''}>${t('contract_fl') || 'Freelance'}</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('contract_nationality') || 'Nationality'}</label>
+                            <select id="contractNationality" class="form-control">
+                                <option value="Saudi" ${nationality === 'Saudi' ? 'selected' : ''}>Saudi</option>
+                                <option value="Non-Saudi" ${nationality === 'Non-Saudi' ? 'selected' : ''}>Non-Saudi</option>
                             </select>
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_status')}</label>
                             <select id="contractStatus" class="form-control" required>
-                                <option value="Active" ${status === 'Active' ? 'selected' : ''}>${t('contract_active')}</option>
-                                <option value="Terminated" ${status === 'Terminated' ? 'selected' : ''}>${t('contract_term')}</option>
-                                <option value="Expired" ${status === 'Expired' ? 'selected' : ''}>${t('contract_exp')}</option>
+                                <option value="Active" ${status === 'Active' ? 'selected' : ''}>${t('contract_active') || 'Active'}</option>
+                                <option value="Terminated" ${status === 'Terminated' ? 'selected' : ''}>${t('contract_term') || 'Terminated'}</option>
+                                <option value="Expired" ${status === 'Expired' ? 'selected' : ''}>${t('contract_exp') || 'Expired'}</option>
                             </select>
                         </div>
-
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_start')}</label>
                             <input type="date" id="contractStartDate" class="form-control" required value="${startDate}">
@@ -3719,25 +4078,42 @@ async function renderContractPage() {
                             <label class="form-label">${t('contract_end')}</label>
                             <input type="date" id="contractEndDate" class="form-control" value="${endDate}">
                         </div>
+                    </div>
+                </div>
 
+                <!-- Compensation -->
+                <div class="card">
+                    <h3 style="margin-top: 0; margin-bottom: 1.5rem; color: var(--color-primary); font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem;">
+                        <i data-lucide="banknote" style="width: 18px; height: 18px;"></i>
+                        ${t('contract_compensation') || 'Compensation & Allowances'}
+                    </h3>
+                    <div class="dashboard-grid">
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_salary')}</label>
-                            <input type="number" id="contractSalary" class="form-control" step="0.01" value="${salary}">
+                            <input type="number" id="contractSalary" class="form-control" step="0.01" value="${salary}" placeholder="0.00">
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_housing')}</label>
-                            <input type="number" id="contractHousing" class="form-control" step="0.01" value="${housing}">
+                            <input type="number" id="contractHousing" class="form-control" step="0.01" value="${housing}" placeholder="0.00">
                         </div>
-
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_transport')}</label>
-                            <input type="number" id="contractTransport" class="form-control" step="0.01" value="${transport}">
+                            <input type="number" id="contractTransport" class="form-control" step="0.01" value="${transport}" placeholder="0.00">
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_other')}</label>
-                            <input type="number" id="contractOther" class="form-control" step="0.01" value="${other}">
+                            <input type="number" id="contractOther" class="form-control" step="0.01" value="${other}" placeholder="0.00">
                         </div>
+                    </div>
+                </div>
 
+                <!-- Terms & Conditions -->
+                <div class="card">
+                    <h3 style="margin-top: 0; margin-bottom: 1.5rem; color: var(--color-primary); font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem;">
+                        <i data-lucide="scale" style="width: 18px; height: 18px;"></i>
+                        ${t('contract_terms') || 'Terms & Conditions'}
+                    </h3>
+                    <div class="dashboard-grid">
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_hours')}</label>
                             <input type="text" id="contractHours" class="form-control" placeholder="e.g. 8 hours/day" value="${hours}">
@@ -3746,7 +4122,6 @@ async function renderContractPage() {
                             <label class="form-label">${t('contract_probation')}</label>
                             <input type="number" id="contractProbation" class="form-control" value="${probation}">
                         </div>
-
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_notice')}</label>
                             <input type="number" id="contractNotice" class="form-control" value="${notice}">
@@ -3756,13 +4131,16 @@ async function renderContractPage() {
                             <input type="number" id="contractLeave" class="form-control" value="${leave}">
                         </div>
                     </div>
+                </div>
 
-                    <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; border-top: 1px solid var(--color-border); padding-top: 1.5rem;">
-                        <button type="button" class="btn-secondary" onclick="currentView='users'; render();">${t('contract_cancel')}</button>
-                        <button type="submit" class="btn-primary">${t('contract_save')}</button>
-                    </div>
-                </form>
-            </div>
+                <!-- Action Buttons -->
+                <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 0.5rem;">
+                    <button type="button" class="btn-secondary" onclick="currentView='users'; render();">${t('contract_cancel') || 'Cancel'}</button>
+                    <button type="submit" class="btn-primary" style="min-width: 150px;">
+                        <i data-lucide="save" style="width:16px;height:16px;margin-right:8px;"></i> ${t('contract_save') || 'Save Contract'}
+                    </button>
+                </div>
+            </form>
         </div>
     `;
 }
@@ -3834,8 +4212,8 @@ async function renderEmployeesDirectory() {
                                         <span style="font-size: 0.85rem; color: var(--text-light); margin-top: 4px; display: inline-block;">${u.job_title || t('emp_no_title')}</span>
                                     </td>
                                     <td>
-                                        <button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')" title="Print Contract">
-                                            <i data-lucide="printer"></i> Print Contract
+                                        <button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')" title="${t('ui_print_contract') || 'Print Contract'}">
+                                            <i data-lucide="printer"></i> ${t('ui_print_contract') || 'Print Contract'}
                                         </button>
                                     </td>
                                 </tr>
@@ -3943,6 +4321,264 @@ window.handlePrintContract = async (employeeId) => {
     }
 };
 
+// ==========================================
+// TRANSLATION MANAGEMENT (ADMIN ONLY)
+// ==========================================
+window.initCustomTranslations = function() {
+    try {
+        const saved = localStorage.getItem('custom_i18n');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.en && typeof i18n !== 'undefined' && i18n.en) Object.assign(i18n.en, parsed.en);
+            if (parsed.ar && typeof i18n !== 'undefined' && i18n.ar) Object.assign(i18n.ar, parsed.ar);
+        }
+    } catch(e) {
+        console.error("Error loading custom translations:", e);
+    }
+};
+window.initCustomTranslations();
+
+window.filterTranslations = function(query) {
+    const q = (query || '').toLowerCase().trim();
+    const rows = document.querySelectorAll('.trans-row');
+    rows.forEach(row => {
+        const key = row.dataset.key || '';
+        const en = row.dataset.en || '';
+        const ar = row.dataset.ar || '';
+        if (!q || key.includes(q) || en.includes(q) || ar.includes(q)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+};
+
+window.saveSingleTranslation = function(key) {
+    const enVal = document.getElementById(`trans_en_${key}`)?.value || '';
+    const arVal = document.getElementById(`trans_ar_${key}`)?.value || '';
+
+    if (typeof i18n !== 'undefined') {
+        i18n.en[key] = enVal;
+        i18n.ar[key] = arVal;
+    }
+
+    window.persistCustomTranslations();
+    showToast(t('trans_saved') || 'Translation updated successfully', 'success');
+};
+
+window.deleteTranslationKey = function(key) {
+    window.showConfirmModal("Delete Translation Key", `Are you sure you want to delete "${key}"?`, () => {
+        if (typeof i18n !== 'undefined') {
+            delete i18n.en[key];
+            delete i18n.ar[key];
+        }
+        window.persistCustomTranslations();
+        showToast("Translation key removed", "warning");
+        renderView('translations');
+    });
+};
+
+window.handleAddTranslationSubmit = function(e) {
+    e.preventDefault();
+    const key = document.getElementById('newTransKey').value.trim().toLowerCase().replace(/\s+/g, '_');
+    const enVal = document.getElementById('newTransEn').value.trim();
+    const arVal = document.getElementById('newTransAr').value.trim();
+
+    if (!key) {
+        showToast("Translation key is required", "danger");
+        return;
+    }
+
+    if (typeof i18n !== 'undefined') {
+        i18n.en[key] = enVal || key;
+        i18n.ar[key] = arVal || key;
+    }
+
+    window.persistCustomTranslations();
+    showToast("Translation key added successfully!", "success");
+    closeAddTranslationModal();
+    renderView('translations');
+};
+
+window.persistCustomTranslations = function() {
+    try {
+        if (typeof i18n !== 'undefined') {
+            localStorage.setItem('custom_i18n', JSON.stringify({ en: i18n.en, ar: i18n.ar }));
+        }
+    } catch(e) {
+        console.error("Failed to save translations to localStorage", e);
+    }
+};
+
+window.resetTranslationsToDefault = function() {
+    window.showConfirmModal("Reset Translations", "Are you sure you want to reset all custom translations to defaults?", () => {
+        localStorage.removeItem('custom_i18n');
+        location.reload();
+    });
+};
+
+window.exportTranslationsJSON = function() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ en: i18n.en, ar: i18n.ar }, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "system_translations.json");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+};
+
+window.importTranslationsJSON = function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const parsed = JSON.parse(e.target.result);
+            if (parsed.en && typeof i18n !== 'undefined') Object.assign(i18n.en, parsed.en);
+            if (parsed.ar && typeof i18n !== 'undefined') Object.assign(i18n.ar, parsed.ar);
+            window.persistCustomTranslations();
+            showToast("Translations imported successfully!", "success");
+            renderView('translations');
+        } catch(err) {
+            showToast("Failed to parse JSON file", "danger");
+        }
+    };
+    reader.readAsText(file);
+};
+
+window.showAddTranslationModal = function() {
+    document.getElementById('addTranslationForm').reset();
+    document.getElementById('addTranslationModal').classList.add('show');
+};
+
+window.closeAddTranslationModal = function() {
+    document.getElementById('addTranslationModal').classList.remove('show');
+};
+
+async function renderTranslationsPage() {
+    if (currentUserRole !== 'ADMIN') {
+        return `<div class="card" style="padding: 2rem; color: var(--color-danger); font-weight: bold;">Unauthorized. System Admin access required.</div>`;
+    }
+
+    const allKeys = Array.from(new Set([...Object.keys(i18n.en || {}), ...Object.keys(i18n.ar || {})])).sort();
+
+    const rowsHTML = allKeys.map(key => {
+        const enVal = escapeHTML(i18n.en[key] || '');
+        const arVal = escapeHTML(i18n.ar[key] || '');
+        const keyEscaped = escapeHTML(key);
+        const keyAttr = escapeHTML(key.toLowerCase());
+        const enAttr = enVal.toLowerCase();
+        const arAttr = arVal.toLowerCase();
+
+        return `
+            <tr class="trans-row" data-key="${keyAttr}" data-en="${enAttr}" data-ar="${arAttr}">
+                <td style="font-family: monospace; font-weight: 600; font-size: 0.85rem; color: var(--color-accent); word-break: break-all;">
+                    ${keyEscaped}
+                </td>
+                <td>
+                    <input type="text" id="trans_en_${keyEscaped}" class="form-control" style="font-size:0.85rem;" value="${enVal}">
+                </td>
+                <td>
+                    <input type="text" id="trans_ar_${keyEscaped}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}">
+                </td>
+                <td>
+                    <div style="display: flex; gap: 0.4rem;">
+                        <button class="btn-primary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem;" onclick="saveSingleTranslation('${keyEscaped}')" title="Save">
+                            <i data-lucide="save" style="width:14px; height:14px;"></i>
+                        </button>
+                        <button class="btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; color: var(--color-danger);" onclick="deleteTranslationKey('${keyEscaped}')" title="Delete">
+                            <i data-lucide="trash-2" style="width:14px; height:14px;"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title">${t('trans_title') || 'System Translations'}</h1>
+                <p class="page-subtitle">${t('trans_sub') || 'Customize English and Arabic display text for all system views.'}</p>
+            </div>
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button class="btn-primary" onclick="showAddTranslationModal()">
+                    <i data-lucide="plus" style="width:16px;height:16px;margin-right:4px;"></i> ${t('trans_add_key') || 'Add Translation Key'}
+                </button>
+                <button class="btn-secondary" onclick="exportTranslationsJSON()">
+                    <i data-lucide="download" style="width:16px;height:16px;margin-right:4px;"></i> Export JSON
+                </button>
+                <label class="btn-secondary" style="cursor:pointer; margin:0; display:inline-flex; align-items:center;">
+                    <i data-lucide="upload" style="width:16px;height:16px;margin-right:4px;"></i> Import JSON
+                    <input type="file" accept=".json" onchange="importTranslationsJSON(event)" style="display:none;">
+                </label>
+                <button class="btn-secondary" style="color:var(--color-danger);" onclick="resetTranslationsToDefault()">
+                    <i data-lucide="rotate-ccw" style="width:16px;height:16px;margin-right:4px;"></i> Reset
+                </button>
+            </div>
+        </div>
+
+        <div class="dashboard-grid fade-in-up">
+            <div class="card col-span-12">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                    <div style="position: relative; flex: 1; min-width: 250px;">
+                        <input type="text" class="form-control" placeholder="Search by key, English, or Arabic text..." oninput="filterTranslations(this.value)" style="padding-left: 2.2rem;">
+                        <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
+                        Total Keys: <strong>${allKeys.length}</strong>
+                    </div>
+                </div>
+
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;">${t('trans_key_name') || 'Key'}</th>
+                                <th style="width: 35%;">${t('trans_en') || 'English'}</th>
+                                <th style="width: 35%;">${t('trans_ar') || 'Arabic'}</th>
+                                <th style="width: 5%;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHTML}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Translation Key Modal -->
+        <div class="modal" id="addTranslationModal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3>${t('trans_add_key') || 'Add Translation Key'}</h3>
+                    <button class="close-modal" onclick="closeAddTranslationModal()">&times;</button>
+                </div>
+                <form id="addTranslationForm" onsubmit="handleAddTranslationSubmit(event)">
+                    <div class="form-group">
+                        <label class="form-label">${t('trans_key_name') || 'Key Name'} (e.g. custom_button_text)</label>
+                        <input type="text" id="newTransKey" class="form-control" required placeholder="e.g. nav_dashboard">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">${t('trans_en') || 'English Translation'}</label>
+                        <input type="text" id="newTransEn" class="form-control" required placeholder="English text">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">${t('trans_ar') || 'Arabic Translation'}</label>
+                        <input type="text" id="newTransAr" class="form-control" required placeholder="النص بالعربية" style="direction: rtl;">
+                    </div>
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button type="submit" class="btn-primary" style="flex: 1;">${t('ui_save') || 'Save Key'}</button>
+                        <button type="button" class="btn-secondary" onclick="closeAddTranslationModal()">${t('ui_cancel') || 'Cancel'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+}
+
 window.viewHTMLCache = window.viewHTMLCache || {};
 
 window.renderView = async function(viewId, isBack = false) {
@@ -3967,9 +4603,8 @@ window.renderView = async function(viewId, isBack = false) {
         }
     }
 
-    // Reset history if we hit root views
-    if (viewId === 'dashboard' || viewId === 'admin') {
-        viewHistory = [viewId];
+    if (viewId === 'dashboard' || viewId === 'users' || viewId === 'tasks' || viewId === 'admin') {
+        delete window.viewHTMLCache[viewId];
     }
 
     const hasCache = !!window.viewHTMLCache[viewId];
@@ -4013,6 +4648,7 @@ window.renderView = async function(viewId, isBack = false) {
             case 'approvals': content = await renderApprovals(); break;
             case 'tasks': content = await renderTasks(); break;
             case 'departments': content = await renderDepartments(); break;
+            case 'translations': content = await renderTranslationsPage(); break;
             case 'clients': content = await renderClients(); break;
             case 'crm': content = await renderCRM(); break;
             case 'orders': content = await renderOrders(); break;
@@ -4078,7 +4714,8 @@ function updateTopbarProfile(profile) {
         nameSpan.textContent = displayName;
     }
     if (roleSpan) {
-        roleSpan.textContent = profile.job_title || profile.role;
+        let rawRole = profile.job_title || profile.role;
+        roleSpan.textContent = t('role_' + rawRole.toLowerCase().replace(/\s+/g, '_')) || rawRole;
         roleSpan.removeAttribute('data-i18n'); // prevent i18n from overwriting the job title
     }
 }
@@ -4259,7 +4896,7 @@ async function renderDepartments() {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Name</th>
+                            <th>${t('ui_name') || 'Name'}</th>
                             <th>${t('ui_description')}</th>
                             <th>${t('ui_head')}</th>
                             <th>${t('ui_actions')}</th>
@@ -4291,17 +4928,15 @@ async function renderClients() {
                 <button class="btn btn-icon" style="color:var(--color-danger);" onclick="deleteClient('${c.id}')"><i data-lucide="trash-2"></i></button>
             </td>
         </tr>
-    `).join('') : `<tr><td colspan="5" style="text-align:center;">No clients found</td></tr>`;
+    `).join('') : `<tr><td colspan="5" style="text-align:center;">${t('ui_no_clients') || 'No clients found'}</td></tr>`;
 
     return `
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
                 <h1 class="page-title">${t('ui_clients_management')}</h1>
-                <p class="page-subtitle">Manage your CRM clients here.</p>
+                <p class="page-subtitle"></p>
             </div>
-            <button class="btn btn-primary" onclick="showCRMClientModal()">
-                <i data-lucide="plus"></i> New Client
-            </button>
+            <button class="btn btn-primary" onclick="showCRMClientModal()"><i data-lucide="plus"></i> ${t('ui_new_client') || 'New Client'}</button>
         </div>
         
         <div class="card">
@@ -4309,7 +4944,7 @@ async function renderClients() {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Name</th>
+                            <th>${t('ui_name') || 'Name'}</th>
                             <th>${t('ui_company')}</th>
                             <th>${t('ui_email')}</th>
                             <th>${t('ui_phone')}</th>
@@ -4374,7 +5009,7 @@ async function renderOrders() {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Deal / Client</th>
+                            <th>${t('ui_deal_client') || 'Deal / Client'}</th>
                             <th>${t('ui_start_date')}</th>
                             <th>${t('ui_end_date')}</th>
                             <th>${t('ui_location')}</th>
@@ -4384,7 +5019,7 @@ async function renderOrders() {
                         </tr>
                     </thead>
                     <tbody>
-                        ${tableRows.length > 0 ? tableRows : '<tr><td colspan="7" style="text-align:center;">No orders found</td></tr>'}
+                        ${tableRows.length > 0 ? tableRows : `<tr><td colspan="7" style="text-align:center;">${t('ui_no_orders_found') || 'No orders found'}</td></tr>`}
                     </tbody>
                 </table>
             </div>
@@ -4404,7 +5039,7 @@ async function renderCRM() {
         const stageDeals = deals.filter(d => d.stage === stage);
         boardHtml += `
             <div class="kanban-col" id="crm-col-${stage}" ondrop="dropDeal(event, '${stage}')" ondragover="allowDrop(event)">
-                <h3 id="crm-header-${stage}">${stage} (${stageDeals.length})</h3>
+                <h3 id="crm-header-${stage}">${t('crm_' + stage.toLowerCase()) || stage} (${stageDeals.length})</h3>
                 ${stageDeals.map(d => `
                     <div class="card kanban-card" id="deal-card-${d.id}" draggable="true" ondragstart="dragDeal(event, '${d.id}')" data-stage="${stage}" style="position: relative;">
                         <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 4px;">
@@ -4439,10 +5074,8 @@ async function renderCRM() {
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-3" style="grid-column: span 12 / span 12;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
-                    <div class="card-title">Deal Pipeline</div>
-                    <button class="btn btn-primary" onclick="showCRMDealModal()">
-                        <i data-lucide="plus"></i> New Deal
-                    </button>
+                    <div class="card-title">${t('ui_deal_pipeline') || 'Deal Pipeline'}</div>
+                    <button class="btn btn-primary" onclick="showCRMDealModal()"><i data-lucide="plus"></i> ${t('ui_new_deal') || 'New Deal'}</button>
                 </div>
                 <div class="kanban-board" style="display:flex; gap: 1rem; overflow-x: auto; padding-bottom: 1rem;">
                     ${boardHtml}
@@ -4451,16 +5084,14 @@ async function renderCRM() {
 
             <div class="card col-span-3" style="grid-column: span 12 / span 12;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
-                    <div class="card-title">Client Directory</div>
-                    <button class="btn btn-primary" onclick="showCRMClientModal()">
-                        <i data-lucide="plus"></i> New Client
-                    </button>
+                    <div class="card-title">${t('ui_client_directory') || 'Client Directory'}</div>
+                    <button class="btn btn-primary" onclick="showCRMClientModal()"><i data-lucide="plus"></i> ${t('ui_new_client') || 'New Client'}</button>
                 </div>
                 <div class="table-responsive">
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>Name</th>
+                                <th>${t('ui_name') || 'Name'}</th>
                                 <th>${t('ui_company')}</th>
                                 <th>${t('ui_email')}</th>
                                 <th>${t('ui_phone')}</th>
@@ -4477,7 +5108,7 @@ async function renderCRM() {
                                     <td><span class="status-badge ${c.status === 'ACTIVE' ? 'success' : 'danger'}">${c.status}</span></td>
                                 </tr>
                             `).join('')}
-                            ${clients.length === 0 ? '<tr><td colspan="5" class="text-center">No clients yet</td></tr>' : ''}
+                            ${clients.length === 0 ? `<tr><td colspan="5" class="text-center">${t('ui_no_clients_yet') || 'No clients yet'}</td></tr>` : ''}
                         </tbody>
                     </table>
                 </div>
@@ -5117,7 +5748,7 @@ window.showCRMClientModal = (client = null) => {
         document.getElementById('crmClientCompany').value = '';
         document.getElementById('crmClientEmail').value = '';
         document.getElementById('crmClientPhone').value = '';
-        document.getElementById('crmClientModalTitle').innerText = 'New Client';
+        document.getElementById('crmClientModalTitle').innerText = t('ui_new_client') || 'New Client';
         document.getElementById('crmClientSubmitBtn').innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Create Client';
     }
     document.getElementById('crmClientModal').classList.add('show');
@@ -5205,7 +5836,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
         submitBtn.style.display = 'block';
         submitBtn.innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Save Changes';
     } else {
-        titleEl.textContent = 'New Deal';
+        titleEl.textContent = t('ui_new_deal') || 'New Deal';
         submitBtn.style.display = 'block';
         submitBtn.innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Create Deal';
     }
@@ -5333,7 +5964,7 @@ async function renderIntegrations() {
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>Name</th>
+                                <th>${t('ui_name') || 'Name'}</th>
                                 <th>${t('ui_event_type')}</th>
                                 <th>${t('ui_url')}</th>
                                 <th>${t('ui_status')}</th>
@@ -5519,11 +6150,7 @@ async function renderRequests() {
             if (p.manager_id === currentUser.id) teamIds.push(p.id);
         });
         
-        if (currentUserRole !== 'ADMIN') {
-            leaves = leaves.filter(r => teamIds.includes(r.employee_id));
-            docs = docs.filter(r => teamIds.includes(r.employee_id));
-            expenses = expenses.filter(r => teamIds.includes(r.employee_id));
-        }
+        
     }
 
     // Normalize requests
@@ -5836,7 +6463,7 @@ async function renderProjects() {
     let html = `
         <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
             <h1 class="page-title">${t('ui_projects')}</h1>
-            <button class="btn btn-primary" onclick="openProjectModal()"><i data-lucide="plus"></i> New Project</button>
+            <button class="btn btn-primary" onclick="openProjectModal()"><i data-lucide="plus"></i> ${t('ui_new_project_btn') || 'New Project'}</button>
         </div>
         <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
     `;
@@ -5846,7 +6473,7 @@ async function renderProjects() {
     } else {
         projects.forEach(p => {
             window.projectCache[p.id] = p;
-            const tagsHtml = (p.project_tags || []).map(t => `<span class="badge" style="background: var(--color-primary);">${t}</span>`).join(' ');
+            const tagsHtml = (p.project_tags || []).map(t => `<span class="badge" style="background: var(--color-primary); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-weight: 500;">${t}</span>`).join(' ');
             html += `
                 <div class="card" style="display: flex; flex-direction: column; gap: 0.5rem; position: relative;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -5854,6 +6481,7 @@ async function renderProjects() {
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
                             <span class="badge" style="background: var(--color-success);">${p.project_category || 'General'}</span>
                             <button onclick="event.stopPropagation(); openEditProjectModal('${p.id}')" class="btn btn-icon" style="background:none; border:none; color:var(--color-text-secondary); cursor:pointer; padding:0;" title="Edit Project"><i data-lucide="edit-2" style="width:16px;height:16px;"></i></button>
+                            <button onclick="event.stopPropagation(); handleDeleteProject('${p.id}')" class="btn btn-icon" style="background:none; border:none; color:var(--color-danger); cursor:pointer; padding:0;" title="Delete Project"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
                         </div>
                     </div>
                     <p style="color: var(--color-text-secondary); margin: 0; font-size: 0.9rem;">${p.project_type}</p>
@@ -5915,6 +6543,30 @@ window.handleCreateProject = async function(event) {
         showToast(t('toast_failed_to_create_project'), "error");
     }
 }
+
+window.handleDeleteProject = function(id) {
+    document.getElementById('deleteProjectIdInput').value = id;
+    document.getElementById('deleteProjectModal').classList.add('active');
+};
+
+window.closeDeleteProjectModal = function() {
+    document.getElementById('deleteProjectModal').classList.remove('active');
+    document.getElementById('deleteProjectIdInput').value = '';
+};
+
+window.executeDeleteProject = async function() {
+    const id = document.getElementById('deleteProjectIdInput').value;
+    if (!id) return;
+    
+    closeDeleteProjectModal();
+    const { success } = await db.deleteProject(id);
+    if (success) {
+        showToast('Project deleted successfully', 'success');
+        if (currentView === 'projects') renderView('projects');
+    } else {
+        showToast('Failed to delete project', 'error');
+    }
+};
 
 window.openEditProjectModal = async function(id) {
     const project = window.projectCache[id];
@@ -6002,7 +6654,7 @@ async function renderApprovals() {
                 <h1 class="page-title">${t('ui_approvals_dashboard')}</h1>
             </div>
             <div class="card" style="padding: 2rem; text-align: center; color: var(--color-text-secondary);">
-                No tasks pending approval.
+                ${t('task_no_pending_approval') || 'No tasks pending approval.'}
             </div>
         `;
     }

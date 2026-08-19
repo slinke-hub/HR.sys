@@ -74,7 +74,7 @@ window.renderContractForm = async function() {
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Identity (Iqama/National ID)</label>
+                        <label>Iqama Number/Saudi ID</label>
                         <input type="text" id="emp_identity" value="${escapeContractHTML(employee.iqama_number)}" required>
                     </div>
                 </div>
@@ -221,9 +221,6 @@ window.getContractFormData = function(status = 'Draft') {
         : 0;
     return {
         employee_id: document.getElementById('contract_employee_id').value,
-        employer_name_en: document.getElementById('employer_name_en').value,
-        employer_name_ar: document.getElementById('employer_name_ar').value,
-        commercial_registration: document.getElementById('cr_number').value,
         
         employee_name_en: document.getElementById('emp_name').value,
         nationality: nationality === 'SA' ? 'Saudi' : 'Non-Saudi',
@@ -245,9 +242,7 @@ window.getContractFormData = function(status = 'Draft') {
         
         basic_monthly_wage: basicWage,
         salary: basicWage,
-        housing_benefit: String(housingAllowance),
         housing_allowance: housingAllowance,
-        transportation_benefit: String(transportationAllowance),
         transportation_allowance: transportationAllowance,
         contract_language: 'bilingual',
         
