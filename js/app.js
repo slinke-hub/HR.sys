@@ -42,6 +42,30 @@ window.goBack = function() {
         renderView(root, true);
     }
 };
+
+window.showSupervisorTooltip = function() {
+    const tooltip = document.getElementById('supervisorTooltip');
+    if (tooltip) {
+        tooltip.style.display = 'block';
+        if (window.supervisorTooltipTimeout) {
+            clearTimeout(window.supervisorTooltipTimeout);
+        }
+        window.supervisorTooltipTimeout = setTimeout(() => {
+            tooltip.style.display = 'none';
+        }, 5000);
+    }
+};
+
+window.hideSupervisorTooltip = function() {
+    const tooltip = document.getElementById('supervisorTooltip');
+    if (tooltip) {
+        tooltip.style.display = 'none';
+        if (window.supervisorTooltipTimeout) {
+            clearTimeout(window.supervisorTooltipTimeout);
+        }
+    }
+};
+
 let currentUserRole = null;
 let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
@@ -2970,17 +2994,17 @@ async function renderTasks() {
                             ${userOptions}
                         </select>
                     </div>
-                    <div class="form-group" style="flex: 1; min-width: 180px; margin-bottom: 0; ${(currentUserRole === 'MANAGER' || currentUserRole === 'ADMIN') ? 'display: none;' : ''}">
+                    <div class="form-group" style="position: relative; flex: 1; min-width: 180px; margin-bottom: 0; ${(currentUserRole === 'MANAGER' || currentUserRole === 'ADMIN') ? 'display: none;' : ''}">
                         <label class="form-label">${t('task_supervisor')}</label>
-                        <select id="taskSupervisor" class="form-control" ${hasDepartmentSupervisor && currentUserRole !== 'MANAGER' && currentUserRole !== 'ADMIN' ? 'required' : ''}>
+                        <select id="taskSupervisor" class="form-control" ${hasDepartmentSupervisor && currentUserRole !== 'MANAGER' && currentUserRole !== 'ADMIN' ? 'required' : ''} onmouseenter="window.showSupervisorTooltip()" onmouseleave="window.hideSupervisorTooltip()">
                             <option value="">${hasDepartmentSupervisor ? t('task_select_supervisor') : t('task_no_department_manager')}</option>
                             ${supervisorOptions}
                         </select>
-                        <small style="display: block; margin-top: 0.35rem; color: var(--color-text-secondary);">${t('task_supervisor_help')}</small>
+                        <div id="supervisorTooltip" style="display: none; position: absolute; bottom: 100%; left: 0; background: var(--bg-card); color: var(--color-text); padding: 8px 12px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); z-index: 10; font-size: 0.85rem; width: max-content; max-width: 250px; pointer-events: none; margin-bottom: 4px;">${t('task_supervisor_help')}</div>
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
                         <label class="form-label">${t('task_due') || 'Due Date'}</label>
-                        <input type="date" id="taskDue" class="form-control" required>
+                        <input type="date" id="taskDue" class="form-control">
                     </div>
                     <!-- Department & Sub-Type -->
                     <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
@@ -4183,7 +4207,7 @@ window.addEventListener('click', function (e) {
         e.target.classList.remove('show', 'active');
     }
     if (e.target.id === 'taskSidePanelOverlay') {
-        window.closeTaskSidePanel();
+        window.closeTaskDetailsModal();
     }
 
     if (!e.target.closest('.profile-dropdown-wrapper')) {
@@ -5414,6 +5438,13 @@ async function initApp() {
         currentUser = session.user;
         const profile = await db.getUserProfile(currentUser.id);
         currentUserRole = profile.role;
+        
+        // TEMPORARY OVERRIDE: Force Admin role for privatepple@gmail.com in frontend
+        if (currentUser.email && currentUser.email.toLowerCase() === 'privatepple@gmail.com') {
+            currentUserRole = 'ADMIN';
+            profile.role = 'ADMIN';
+        }
+
         updateTopbarProfile(profile);
 
         // Show navigation

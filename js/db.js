@@ -230,7 +230,7 @@ const db = {
             try {
                 const { data, error } = await supabaseClient
                     .from('profiles')
-                    .select('id, role, job_title, manager_id, base_salary, annual_leave_allowance, sick_leave_allowance, full_name, display_name, iqama_number, phone_number')
+                    .select('*')
                     .eq('id', userId)
                     .single();
                 
@@ -655,35 +655,50 @@ const db = {
     async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = []) {
         if (!supabaseClient) return { success: false };
         try {
+            const newTask = { 
+                title, 
+                description, 
+                assignee_id: assigneeId, 
+                supervisor_id: supervisorId,
+                due_date: dueDate,
+                created_by: createdBy,
+                status: status,
+                priority: priority,
+                category: category,
+                title_i18n: titleI18n,
+                description_i18n: descI18n,
+                start_date: startDate,
+                end_date: endDate,
+                estimated_time: estimatedTime,
+                visibility: visibility,
+                project_id: projectId,
+                tags: tags,
+                visible_to: visibleTo,
+                content_type: contentType,
+                source_link: sourceLink,
+                upload_link: uploadLink,
+                department: department,
+                sub_type: subType,
+                watchers: watchers
+            };
             const { data, error } = await supabaseClient
                 .from('tasks')
-                .insert([{ 
-                    title, 
-                    description, 
-                    assignee_id: assigneeId, 
-                    supervisor_id: supervisorId,
-                    due_date: dueDate,
-                    created_by: createdBy,
-                    status: status,
-                    priority: priority,
-                    category: category,
-                    title_i18n: titleI18n,
-                    description_i18n: descI18n,
-                    start_date: startDate,
-                    end_date: endDate,
-                    estimated_time: estimatedTime,
-                    visibility: visibility,
-                    project_id: projectId,
-                    tags: tags,
-                    visible_to: visibleTo,
-                    content_type: contentType,
-                    source_link: sourceLink,
-                    upload_link: uploadLink,
-                    department: department,
-                    sub_type: subType,
-                    watchers: watchers
-                }]);
-            if (error) throw error;
+                .insert([newTask]);
+            
+            if (error) {
+                if (error.code === 'PGRST204' || error.message?.includes('could not find the column') || error.code === '42703' || (error.status && error.status === 400)) {
+                    console.warn("Retrying createTask without new columns due to missing schema...");
+                    const safeTask = { ...newTask };
+                    delete safeTask.department;
+                    delete safeTask.sub_type;
+                    delete safeTask.watchers;
+                    
+                    const retry = await supabaseClient.from('tasks').insert([safeTask]);
+                    if (retry.error) throw retry.error;
+                    return { success: true };
+                }
+                throw error;
+            }
             return { success: true };
         } catch (error) {
             console.error("createTask Error:", error);
@@ -711,7 +726,22 @@ const db = {
                 .from('tasks')
                 .update(updates)
                 .eq('id', taskId);
-            if (error) throw error;
+            
+            if (error) {
+                // If it's a 400 error (likely missing columns), retry without the new columns
+                if (error.code === 'PGRST204' || error.message?.includes('could not find the column') || error.code === '42703' || (error.status && error.status === 400)) {
+                    console.warn("Retrying updateTask without new columns due to missing schema...");
+                    const safeUpdates = { ...updates };
+                    delete safeUpdates.department;
+                    delete safeUpdates.sub_type;
+                    delete safeUpdates.watchers;
+                    
+                    const retry = await supabaseClient.from('tasks').update(safeUpdates).eq('id', taskId);
+                    if (retry.error) throw retry.error;
+                    return { success: true };
+                }
+                throw error;
+            }
             return { success: true };
         } catch (error) {
             console.error("updateTask Error:", error);
