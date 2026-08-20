@@ -1432,6 +1432,18 @@ window.openTaskDetailsModal = async function(id) {
     document.getElementById('taskSidePanel').classList.add('active');
     document.getElementById('taskSidePanelOverlay').classList.add('active');
     
+    // Check permission to create tasks
+    const canCreateTask = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    const btnCreateSubTask = document.getElementById('btnCreateSubTask');
+    if (btnCreateSubTask) {
+        btnCreateSubTask.style.display = canCreateTask ? 'inline-block' : 'none';
+    }
+    const subTaskButtons = document.querySelectorAll('[onclick="handleCreateSubTaskClick()"]');
+    subTaskButtons.forEach(btn => {
+        btn.style.display = canCreateTask ? 'inline-block' : 'none';
+    });
+
+    
     // Load Subtasks
     const subTasksList = document.getElementById('taskSubTasksList');
     if (subTasksList) {
@@ -3325,7 +3337,7 @@ async function renderTasks() {
     const departmentOptions = allDepartments.map(d => `<option value="${escapeHTML(d.name)}">${escapeHTML(d.name)}</option>`).join('');
 
     let adminForm = '';
-    let canCreateTask = true; // Allow all users to create tasks now
+    let canCreateTask = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
     
     let teamIds = [currentUser.id];
     if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
@@ -3470,7 +3482,7 @@ async function renderTasks() {
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 2.5rem; gap: 0.5rem;">
                     <h4 style="margin: 0; font-size: 0.95rem; line-height: 1.4; color: var(--color-text); font-weight: 500; word-break: break-word;">${escapeHTML(task.displayTitle)}</h4>
                 </div>
-                <button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1.25rem; right: 1rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 0;" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>
+                ${canCreateTask ? `<button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1.25rem; right: 1rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 0;" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>` : ''}
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0; display: flex; flex-direction: column; gap: 0.35rem;">
                     <div style="display: flex; align-items: center;"><i data-lucide="calendar" style="width: 12px; height: 12px; margin-right: 4px;"></i> Due: ${task.due_date || t('task_no_date') || 'No Date'}</div>
                     ${task.start_date ? `<div style="display: flex; align-items: center;"><i data-lucide="play" style="width: 12px; height: 12px; margin-right: 4px;"></i> Start: ${escapeHTML(task.start_date)}</div>` : ''}
@@ -3558,6 +3570,11 @@ window.toggleAITaskMode = function() {
 
 window.handleAICreateTask = async function(e) {
     e.preventDefault();
+    const canCreateTask = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    if (!canCreateTask) {
+        showToast("You do not have permission to create tasks.", "danger");
+        return;
+    }
     const input = document.getElementById('aiTaskInput').value;
     if (!input) return;
     
@@ -3640,8 +3657,15 @@ window.handleTaskAssigneeChange = async function (prefix = 'new') {
     }
 };
 
-window.handleCreateTask = async function (e) {
+window.handleCreateTask = async function(e) {
     e.preventDefault();
+    
+    const canCreateTask = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    if (!canCreateTask) {
+        showToast("You do not have permission to create tasks.", "danger");
+        return;
+    }
+
     const title = document.getElementById('taskTitle').value;
     const assignee = document.getElementById('taskAssignee').value;
     const due = document.getElementById('taskDue').value;
