@@ -488,16 +488,22 @@ function updateTranslations() {
     const texts = document.querySelectorAll('[data-i18n]');
     texts.forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if (i18n[currentLang][key]) {
+        if (i18n[currentLang] && i18n[currentLang][key]) {
             el.textContent = i18n[currentLang][key];
+        } else if (key && (key.startsWith('ui_') || key.startsWith('html_ui_'))) {
+            let text = key.replace(/^(html_)?ui_/, '').replace(/_/g, ' ');
+            el.textContent = text.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
         }
     });
 
     const placeholders = document.querySelectorAll('[data-i18n-placeholder]');
     placeholders.forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
-        if (i18n[currentLang][key]) {
+        if (i18n[currentLang] && i18n[currentLang][key]) {
             el.setAttribute('placeholder', i18n[currentLang][key]);
+        } else if (key && (key.startsWith('ui_') || key.startsWith('html_ui_'))) {
+            let text = key.replace(/^(html_)?ui_/, '').replace(/_/g, ' ');
+            el.setAttribute('placeholder', text.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
         }
     });
 }
@@ -515,7 +521,14 @@ navItems.forEach(item => {
 });
 
 function t(key) {
-    return i18n[currentLang][key] || key;
+    if (i18n[currentLang] && i18n[currentLang][key]) {
+        return i18n[currentLang][key];
+    }
+    if (key && (key.startsWith('ui_') || key.startsWith('html_ui_'))) {
+        let text = key.replace(/^(html_)?ui_/, '').replace(/_/g, ' ');
+        return text.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+    return key;
 }
 
 // Generate Ring SVG
@@ -2082,8 +2095,9 @@ window.handleCreateUser = async function (e) {
     const fullName = document.getElementById('newFullName').value;
     const iqama = document.getElementById('newIqama').value;
     const phone = document.getElementById('newPhone').value;
+    const departmentId = document.getElementById('newDepartment')?.value || '';
 
-    const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone);
+    const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone, departmentId);
     if (!error) {
         showToast(t('toast_user_created_successfully'), 'success');
         if (typeof closeAddUserModal === 'function') closeAddUserModal();
@@ -2201,9 +2215,18 @@ async function renderUsers() {
     `;
 }
 
-window.showAddUserModal = () => {
+window.showAddUserModal = async () => {
     document.getElementById('addUserForm').reset();
     document.getElementById('addUserModal').classList.add('show');
+    
+    // Populate departments
+    const depts = await db.fetchDepartments();
+    const deptSelect = document.getElementById('newDepartment');
+    if (deptSelect) {
+        deptSelect.innerHTML = '<option value="" data-i18n="ph_select_department">Select Department</option>' +
+            depts.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    }
+
     if (window.lucide) window.lucide.createIcons();
 };
 
@@ -3312,21 +3335,46 @@ async function renderTasks() {
     }
 
     let users = allUsers;
+    const isRegularEmployee = currentUserRole === 'EMPLOYEE';
     if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
         users = users.filter(u => teamIds.includes(u.id));
-    } else if (currentUserRole === 'EMPLOYEE') {
+    } else if (isRegularEmployee) {
         users = users.filter(u => u.id === currentUser.id);
     }
     const userOptions = users.map(u => {
         const label = u.full_name || u.id.substring(0, 8);
-        return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
+        const selected = (isRegularEmployee && u.id === currentUser.id) ? 'selected' : '';
+        return `<option value="${escapeHTML(u.id)}" ${selected}>${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
     }).join('');
     window.taskAssigneeOptionsCache = userOptions;
-    window.taskDepartmentSupervisors = Array.isArray(departmentSupervisors) ? departmentSupervisors : [];
-    const hasDepartmentSupervisor = window.taskDepartmentSupervisors.length > 0;
-    const supervisorOptions = window.taskDepartmentSupervisors.map(supervisor => `
-        <option value="${escapeHTML(supervisor.id)}">${escapeHTML(supervisor.full_name)}</option>
-    `).join('');
+
+    let departmentSelectHTML = '';
+    let isMarketing = false;
+    
+    if (isRegularEmployee) {
+        const currentDeptObj = allDepartments.find(d => d.id === currentUser.department_id);
+        const deptName = currentDeptObj ? escapeHTML(currentDeptObj.name) : '';
+        isMarketing = (currentDeptObj && currentDeptObj.name === 'Marketing');
+
+        departmentSelectHTML = `
+            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                <label class="form-label">${t('ui_department') || "Task's Department"}</label>
+                <select id="taskDepartment" class="form-control" disabled>
+                    <option value="${deptName}" selected>${deptName || 'No Department'}</option>
+                </select>
+            </div>
+        `;
+    } else {
+        departmentSelectHTML = `
+            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                <label class="form-label">${t('ui_department') || "Task's Department"}</label>
+                <select id="taskDepartment" class="form-control" onchange="window.handleTaskDepartmentChange('new', this.value)">
+                    <option value="">?" Select ?"</option>
+                    ${departmentOptions}
+                </select>
+            </div>
+        `;
+    }
 
     if (canCreateTask) {
         adminForm = `
@@ -3339,78 +3387,59 @@ async function renderTasks() {
                 <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm" class="task-assign-form">
                     <input type="hidden" id="taskParentId" value="">
 
-                    <!-- Row 1: Task Title, Category, Priority -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-                        <div class="form-group" style="margin-bottom: 0; grid-column: span 2;">
+                    <!-- Fluid Flexbox Layout for responsiveness -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+                        <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
                             <label class="form-label">${t('task_title') || 'Task Title'}</label>
                             <input type="text" autocomplete="off" id="taskTitle" class="form-control" required placeholder="">
                         </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">${t('ui_category')}</label>
-                            <input type="text" id="taskCategory" class="form-control" placeholder="">
-                        </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">${t('ui_priority')}</label>
-                            <select id="taskPriority" class="form-control">
-                                <option value="critical">Critical</option>
-                                <option value="high">High</option>
-                                <option value="medium" selected>Medium</option>
-                                <option value="low">Low</option>
-                            </select>
-                        </div>
-                    </div>
 
-                    <!-- Row 2: Project, Assign To, Due Date / Supervisor -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">${t('ui_project')}</label>
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                            <label class="form-label">${t('task_due') || 'Due Date'}</label>
+                            <input type="date" id="taskDue" class="form-control">
+                        </div>
+
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                            <label class="form-label">${t('ui_project') || 'Project'}</label>
                             <select id="taskProject" class="form-control" onchange="handleTaskProjectChange('new')">
                                 <option value=""></option>
                                 ${projectOptions}
                             </select>
                         </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
-                            <select id="taskAssignee" class="form-control" onchange="handleTaskAssigneeChange('new')" required>
-                                <option value="">${t('task_sel_emp') || 'Select Employee'}</option>
-                                ${userOptions}
-                            </select>
-                        </div>
-                        <div class="form-group" style="position: relative; margin-bottom: 0; ${(currentUserRole === 'MANAGER' || currentUserRole === 'ADMIN') ? 'display: none;' : ''}">
-                            <label class="form-label">${t('task_supervisor')}</label>
-                            <select id="taskSupervisor" class="form-control" ${hasDepartmentSupervisor && currentUserRole !== 'MANAGER' && currentUserRole !== 'ADMIN' ? 'required' : ''} onmouseenter="window.showSupervisorTooltip()" onmouseleave="window.hideSupervisorTooltip()">
-                                <option value="">${hasDepartmentSupervisor ? t('task_select_supervisor') : t('task_no_department_manager')}</option>
-                                ${supervisorOptions}
-                            </select>
-                            <div id="supervisorTooltip" style="display: none; position: absolute; bottom: 100%; left: 0; background: var(--bg-card); color: var(--color-text); padding: 8px 12px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); z-index: 10; font-size: 0.85rem; width: max-content; max-width: 250px; pointer-events: none; margin-bottom: 4px;">${t('task_supervisor_help')}</div>
-                        </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">${t('task_due') || 'Due Date'}</label>
-                            <input type="date" id="taskDue" class="form-control">
-                        </div>
-                    </div>
+                        
+                        ${departmentSelectHTML}
 
-                    <!-- Row 3: Sub-Type, Department (under Assign To), Watchers -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-                        <div class="form-group" id="taskSubTypeGroup" style="margin-bottom: 0; display: none; grid-column: 1;">
-                            <label class="form-label">${t('ui_task_sub_type') || 'Task Sub-Type'}</label>
+                        <div class="form-group" id="taskSubTypeGroup" style="flex: 1 1 150px; margin-bottom: 0; display: ${isMarketing ? 'block' : 'none'};">
+                            <label class="form-label">${t('ui_task_type') || 'Task Type'}</label>
                             <select id="taskSubType" class="form-control">
                                 <option value=""></option>
                                 <option value="Designing Task">Designing Task</option>
                                 <option value="Marketing Task">Marketing Task</option>
                             </select>
                         </div>
-                        <div class="form-group" style="margin-bottom: 0; grid-column: 2;">
-                            <label class="form-label">${t('ui_department') || "Task's Department"}</label>
-                            <select id="taskDepartment" class="form-control" onchange="window.handleTaskDepartmentChange('new', this.value)">
-                                <option value="">— Select —</option>
-                                ${departmentOptions}
+
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                            <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
+                            <select id="taskAssignee" class="form-control" onchange="handleTaskAssigneeChange('new')" required ${isRegularEmployee ? 'disabled' : ''}>
+                                ${!isRegularEmployee ? `<option value="">${t('task_sel_emp') || 'Select Employee'}</option>` : ''}
+                                ${userOptions}
                             </select>
                         </div>
-                        <div class="form-group" style="margin-bottom: 0; grid-column: 3;">
+
+                        <div class="form-group" style="flex: 1 1 150px; margin-bottom: 0;">
+                            <label class="form-label">${t('ui_priority') || 'Priority'}</label>
+                            <select id="taskPriority" class="form-control">
+                                <option value="urgent">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
                             <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                                 <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'">
-                                ${t('ui_add_watcher') || 'Add Watcher'}
+                                ${t('ui_add_watcher') || 'Add Watchers'}
                             </label>
                             <div id="taskWatchersGroup" style="display: none; margin-top: 0.5rem;">
                                 <select id="taskWatchers" class="form-control" multiple size="4">
@@ -3421,28 +3450,10 @@ async function renderTasks() {
                         </div>
                     </div>
 
-                    <!-- Conditional Designer Fields -->
-                    <div id="newDesignFields" style="display: none; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">${t('ui_content_type')}</label>
-                            <input type="text" id="taskContentType" class="form-control" placeholder="e.g. Graphic, Video">
-                        </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">${t('ui_source_link')}</label>
-                            <input type="url" id="taskSourceLink" class="form-control" placeholder="https://...">
-                        </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">${t('ui_upload_link')}</label>
-                            <input type="url" id="taskUploadLink" class="form-control" placeholder="https://...">
-                        </div>
-                    </div>
-
                     <div style="text-align: right; margin-top: 0.5rem;">
                         <button type="submit" class="btn btn-primary">${t('task_assign_btn') || 'Create Task'}</button>
                     </div>
                 </form>
-
-
             </div>
         `;
     }
@@ -3458,7 +3469,6 @@ async function renderTasks() {
             <div class="card task-item-card" id="task-card-${task.id}" data-status="${task.status}" draggable="true" ondragstart="handleTaskDragStart(event, '${task.id}')" onclick="openTaskDetailsModal('${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${prioColor}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: pointer; background: var(--color-surface); position: relative;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 2.5rem; gap: 0.5rem;">
                     <h4 style="margin: 0; font-size: 0.95rem; line-height: 1.4; color: var(--color-text); font-weight: 500; word-break: break-word;">${escapeHTML(task.displayTitle)}</h4>
-                    ${task.category ? `<span class="badge" style="background: rgba(0,0,0,0.05); color: var(--color-text-secondary); font-size: 0.65rem; position: relative; top: -2px; flex-shrink: 0;">${escapeHTML(task.category)}</span>` : ''}
                 </div>
                 <button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1.25rem; right: 1rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 0;" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0; display: flex; flex-direction: column; gap: 0.35rem;">
@@ -3553,7 +3563,7 @@ window.handleAICreateTask = async function(e) {
     
     // Very basic heuristic parser (mock AI)
     let priority = 'medium';
-    if (input.toLowerCase().includes('critical') || input.toLowerCase().includes('urgent')) priority = 'critical';
+    if (input.toLowerCase().includes('critical') || input.toLowerCase().includes('urgent')) priority = 'urgent';
     if (input.toLowerCase().includes('high priority')) priority = 'high';
     if (input.toLowerCase().includes('low priority')) priority = 'low';
     
@@ -3607,8 +3617,10 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '') {
 };
 
 window.handleTaskAssigneeChange = async function (prefix = 'new') {
-    const assigneeId = document.getElementById('taskAssignee').value;
-    const designFields = document.getElementById('newDesignFields');
+    const assigneeId = document.getElementById(prefix === 'new' ? 'taskAssignee' : 'editTaskAssignee').value;
+    const designFields = document.getElementById(prefix === 'new' ? 'newDesignFields' : 'editDesignFields');
+    if (!designFields) return;
+    
     if (!assigneeId) {
         designFields.style.display = 'none';
         return;
@@ -3653,9 +3665,9 @@ window.handleCreateTask = async function (e) {
 
     let contentType = null, sourceLink = null, uploadLink = null;
     if (isDesigner) {
-        contentType = document.getElementById('taskContentType').value || null;
-        sourceLink = document.getElementById('taskSourceLink').value || null;
-        uploadLink = document.getElementById('taskUploadLink').value || null;
+        contentType = document.getElementById('taskContentType')?.value || null;
+        sourceLink = document.getElementById('taskSourceLink')?.value || null;
+        uploadLink = document.getElementById('taskUploadLink')?.value || null;
     }
 
     // Default visibility if project is selected
@@ -3675,7 +3687,8 @@ window.handleCreateTask = async function (e) {
 
     // Get department, sub-type, and watchers
     const department = document.getElementById('taskDepartment') ? document.getElementById('taskDepartment').value : null;
-    const subType = document.getElementById('taskSubType') && document.getElementById('taskSubTypeGroup').style.display !== 'none' ? document.getElementById('taskSubType').value : null;
+    const subTypeGroup = document.getElementById('taskSubTypeGroup');
+    const subType = document.getElementById('taskSubType') && subTypeGroup && subTypeGroup.style.display !== 'none' ? document.getElementById('taskSubType').value : null;
     let watchers = [];
     if (document.getElementById('enableWatchers') && document.getElementById('enableWatchers').checked) {
         watchers = Array.from(document.getElementById('taskWatchers').selectedOptions).map(opt => opt.value);
@@ -3806,7 +3819,7 @@ window.openEditTaskModal = async function(id) {
         
         document.getElementById('editTaskId').value = task.id;
         document.getElementById('editTaskTitle').value = task.title || '';
-        document.getElementById('editTaskCategory').value = task.category || '';
+
         document.getElementById('editTaskPriority').value = task.priority || 'medium';
         
         const formatDate = (dateStr) => {
@@ -3826,6 +3839,11 @@ window.openEditTaskModal = async function(id) {
         if (assigneeSelect) {
             assigneeSelect.innerHTML = window.taskAssigneeOptionsCache || '';
             assigneeSelect.value = task.assignee_id || '';
+            if (currentUserRole === 'EMPLOYEE') {
+                assigneeSelect.disabled = true;
+            } else {
+                assigneeSelect.disabled = false;
+            }
         }
 
         const projectSelect = document.getElementById('editTaskProject');
@@ -3895,7 +3913,7 @@ window.handleEditTaskSubmit = async function(e) {
     e.preventDefault();
     const id = document.getElementById('editTaskId').value;
     const title = document.getElementById('editTaskTitle').value;
-    const category = document.getElementById('editTaskCategory').value;
+
     const priority = document.getElementById('editTaskPriority').value;
     const assigneeId = document.getElementById('editTaskAssignee').value;
     const dueDate = document.getElementById('editTaskDue').value;
@@ -3920,7 +3938,6 @@ window.handleEditTaskSubmit = async function(e) {
 
     const updates = {
         title: title,
-        category: category,
         priority: priority,
         assignee_id: assigneeId,
         due_date: dueDate,
@@ -4020,7 +4037,7 @@ window.handleSaveContract = async function (e) {
         employee_id: currentContractEmployeeId,
         contract_type: document.getElementById('contractType').value,
         nationality: document.getElementById('contractNationality')?.value || 'Saudi',
-        job_title: jobTitle,
+        job_title_ar: jobTitle,
         job_title_en: jobTitle,
         start_date: document.getElementById('contractStartDate').value,
         end_date: document.getElementById('contractEndDate').value || null,
@@ -4396,19 +4413,38 @@ window.initCustomTranslations = function() {
 };
 window.initCustomTranslations();
 
-window.filterTranslations = function(query) {
-    const q = (query || '').toLowerCase().trim();
+window.filterTranslations = function() {
+    const searchInput = document.getElementById('transSearchInput');
+    const statusFilter = document.getElementById('transStatusFilter');
+    const q = searchInput ? (searchInput.value || '').toLowerCase().trim() : '';
+    const status = statusFilter ? statusFilter.value : 'all';
+    
     const rows = document.querySelectorAll('.trans-row');
+    let visibleCount = 0;
     rows.forEach(row => {
         const key = row.dataset.key || '';
         const en = row.dataset.en || '';
         const ar = row.dataset.ar || '';
-        if (!q || key.includes(q) || en.includes(q) || ar.includes(q)) {
+        
+        let matchesSearch = !q || key.includes(q) || en.includes(q) || ar.includes(q);
+        
+        let matchesStatus = true;
+        if (status === 'translated') {
+            matchesStatus = en.trim() !== '' && ar.trim() !== '';
+        } else if (status === 'untranslated') {
+            matchesStatus = en.trim() === '' || ar.trim() === '';
+        }
+        
+        if (matchesSearch && matchesStatus) {
             row.style.display = '';
+            visibleCount++;
         } else {
             row.style.display = 'none';
         }
     });
+
+    const countEl = document.getElementById('transTotalCount');
+    if (countEl) countEl.textContent = visibleCount;
 };
 
 window.saveSingleTranslation = function(key) {
@@ -4580,12 +4616,19 @@ async function renderTranslationsPage() {
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-12">
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
-                    <div style="position: relative; flex: 1; min-width: 250px;">
-                        <input type="text" class="form-control" placeholder="Search by key, English, or Arabic text..." oninput="filterTranslations(this.value)" style="padding-left: 2.2rem;">
-                        <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+                    <div style="display: flex; gap: 0.5rem; flex: 1; min-width: 300px;">
+                        <div style="position: relative; flex: 1;">
+                            <input type="text" id="transSearchInput" class="form-control" placeholder="Search by key, English, or Arabic text..." oninput="filterTranslations()" style="padding-left: 2.2rem;">
+                            <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+                        </div>
+                        <select id="transStatusFilter" class="form-control" onchange="filterTranslations()" style="width: auto; min-width: 150px;">
+                            <option value="all">All Fields</option>
+                            <option value="translated">Translated</option>
+                            <option value="untranslated">Not Translated</option>
+                        </select>
                     </div>
                     <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
-                        Total Keys: <strong>${allKeys.length}</strong>
+                        Total Keys: <strong id="transTotalCount">${allKeys.length}</strong>
                     </div>
                 </div>
 

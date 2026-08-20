@@ -381,7 +381,7 @@ const db = {
             return [];
         }
     },
-    async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '') {
+    async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '', departmentId = '') {
         if (!supabaseClient) {
             console.warn("Mock createUser");
             return { data: 'mock-user-id-1234', error: null };
@@ -396,7 +396,25 @@ const db = {
                 new_iqama: iqama,
                 new_phone: phone
             });
-            if (error) throw error;
+            if (error) {
+                if (error.code === '42P04' || error.status === 409 || error.message.includes('already exists')) {
+                    console.warn("User already exists:", email);
+                    return { data: null, error: new Error('User with this email already exists.') };
+                }
+                throw error;
+            }
+            
+            const userId = data;
+            
+            if (departmentId) {
+                const { error: updateError } = await supabaseClient
+                    .from('profiles')
+                    .update({ department_id: departmentId })
+                    .eq('id', userId);
+                if (updateError) {
+                    console.error("Failed to update department_id:", updateError);
+                }
+            }
             return { data, error: null };
         } catch (error) {
             console.error("createUser Error:", error);
@@ -437,7 +455,7 @@ const db = {
             // Update profile
             await supabaseClient.from('profiles').update({ job_title: jobTitle }).eq('id', userId);
             // Update contract if exists
-            await supabaseClient.from('contracts').update({ job_title: jobTitle, job_title_en: jobTitle }).eq('employee_id', userId);
+            await supabaseClient.from('contracts').update({ job_title_ar: jobTitle, job_title_en: jobTitle }).eq('employee_id', userId);
             return { success: true };
         } catch (error) {
             console.error("updateUserJobTitle Error:", error);
@@ -694,8 +712,8 @@ const db = {
             const newTask = { 
                 title, 
                 description, 
-                assignee_id: assigneeId, 
-                supervisor_id: supervisorId,
+                assignee_id: assigneeId || null, 
+                supervisor_id: supervisorId || null,
                 due_date: dueDate,
                 created_by: createdBy,
                 status: status,
@@ -707,16 +725,16 @@ const db = {
                 end_date: endDate,
                 estimated_time: estimatedTime,
                 visibility: visibility,
-                project_id: projectId,
+                project_id: projectId || null,
                 tags: tags,
                 visible_to: visibleTo,
                 content_type: contentType,
                 source_link: sourceLink,
                 upload_link: uploadLink,
-                department: department,
+                department: department || null,
                 sub_type: subType,
                 watchers: watchers,
-                parent_task_id: parentTaskId
+                parent_task_id: parentTaskId || null
             };
             const { data, error } = await supabaseClient
                 .from('tasks')

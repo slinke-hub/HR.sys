@@ -25,9 +25,9 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- CSS -->
-    <link rel="stylesheet" href="css/variables.css">
-    <link rel="stylesheet" href="css/layout.css">
-    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/variables.css?v=2">
+    <link rel="stylesheet" href="css/layout.css?v=2">
+    <link rel="stylesheet" href="css/components.css?v=2">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -638,6 +638,12 @@
                     <input type="text" autocomplete="off" id="newJobTitle" class="form-control" placeholder="e.g. Developer" data-i18n-placeholder="ph_e_g_developer">
                 </div>
                 <div class="form-group">
+                    <label class="form-label" data-i18n="users_department">Department</label>
+                    <select id="newDepartment" class="form-control">
+                        <option value="" data-i18n="ph_select_department">Select Department</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="form-label" data-i18n="users_role">Role</label>
                     <select id="newRole" class="form-control">
                         <option value="EMPLOYEE" data-i18n="users_role_emp">Employee</option>
@@ -852,7 +858,7 @@
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" data-i18n="html_priority">Priority</label>
                     <select id="editTaskPriority" class="form-control">
-                        <option value="critical">Critical</option>
+                        <option value="urgent">Critical</option>
                         <option value="high">High</option>
                         <option value="medium">Medium</option>
                         <option value="low">Low</option>
@@ -878,7 +884,7 @@
                     </select>
                 </div>
                 <div class="form-group" id="editTaskSubTypeGroup" style="margin-bottom: 0; display: none;">
-                    <label class="form-label" data-i18n="html_task_sub_type">Task Sub-Type</label>
+                    <label class="form-label" data-i18n="html_task_type">Task Type</label>
                     <select id="editTaskSubType" class="form-control">
                         <option value="">Select Sub-Type</option>
                         <option value="Designing Task">Designing Task</option>
@@ -963,7 +969,201 @@
                 <div><strong>Status:</strong> <span id="detailsTaskStatus" class="badge"></span></div>
                 <div><strong>Priority:</strong> <span id="detailsTaskPriority" class="badge"></span></div>
                 <div><strong>Visibility:</strong> <span id="detailsTaskVisibility"></span></div>
-                <div><strong>Category:</strong> <span id="detailsTaskCategory"></span></div>
+
+                <div><strong>Start Date:</strong> <span id="detailsTaskStart"></span></div>
+                <div><strong>Due Date:</strong> <span id="detailsTaskDue"></span></div>
+                <div><strong>End Date:</strong> <span id="detailsTaskEnd"></span></div>
+                <div><strong>Est. Time:</strong> <span id="detailsTaskEstimate"></span></div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
+                <h3 style="margin: 0;" data-i18n="html_sub_tasks">Sub-Tasks</h3>
+                <button class="btn btn-secondary btn-sm" onclick="handleCreateSubTaskClick()" data-i18n="html_create_sub_task">+ Create Sub-Task</button>
+            </div>
+            <div id="taskSubTasksList" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
+                <!-- Subtasks injected here -->
+            </div>
+
+            <h3 data-i18n="html_activity_comments">Activity & Comments</h3>
+            <div id="taskCommentsList" style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem; min-height: 100px;">
+                <!-- Comments injected here -->
+            </div>
+        </div>
+        <div class="side-panel-footer">
+            <form onsubmit="handleTaskCommentSubmit(event)" style="display: flex; gap: 0.5rem;">
+                <input type="hidden" id="detailsTaskId">
+                <input type="text" id="taskCommentInput" class="form-control" placeholder="Add a comment..." data-i18n-placeholder="ph_add_a_comment" required style="flex-grow: 1;">
+                <button type="submit" class="btn btn-primary" data-i18n="html_send">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Document View / Edit Modal -->
+    <div class="modal" id="employeeDocumentModal" role="dialog" aria-modal="true" aria-labelledby="employeeDocumentModalTitle">
+        <div class="modal-content fade-in-up" style="max-width: 860px;">
+            <div class="modal-header">
+                <h2 id="employeeDocumentModalTitle">Document Details</h2>
+                <button type="button" class="icon-btn" onclick="closeEmployeeDocumentModal()" aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <form id="employeeDocumentForm" autocomplete="off" onsubmit="handleEmployeeDocumentEdit(event)">
+                <input type="hidden" id="employeeDocumentRecordId">
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem;">
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_document_id">Document ID</label>
+                        <input type="text" id="employeeDocumentDisplayId" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_document_name">Document Name</label>
+                        <input type="text" id="employeeDocumentName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_owner_name">Owner Name</label>
+                        <input type="text" id="employeeDocumentOwnerName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_owner_email">Owner Email</label>
+                        <input type="email" id="employeeDocumentOwnerEmail" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_responsible_name">Responsible Name</label>
+                        <input type="text" id="employeeDocumentResponsibleName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_responsible_email">Responsible Email</label>
+                        <input type="email" id="employeeDocumentResponsibleEmail" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_expiry_date">Expiry Date</label>
+                        <input type="date" id="employeeDocumentExpiryDate" class="form-control" oninput="updateEmployeeDocumentModalExpiryPreview()" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_days_left">Days Left</label>
+                        <input type="number" id="employeeDocumentDaysLeft" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="status">Status</label>
+                        <input type="text" id="employeeDocumentStatus" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_notified_30_days">Notified 30 Days</label>
+                        <input type="text" id="employeeDocumentNotified" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="doc_owner_phone">Owner Phone</label>
+                        <input type="tel" id="employeeDocumentOwnerPhone" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-actions" style="margin-top:1.5rem; display:flex; justify-content:flex-end; gap:0.75rem; flex-wrap:wrap;">
+                    <button type="button" id="employeeDocumentLegacyFileButton" class="btn btn-secondary" onclick="openLegacyEmployeeDocumentFile()" style="display:none;">
+                        <i data-lucide="external-link"></i> <span data-i18n="doc_open_stored_file">Open Stored File</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="printEmployeeDocument(document.getElementById('employeeDocumentRecordId').value)">
+                        <i data-lucide="printer"></i> <span data-i18n="doc_action_print">Print</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEmployeeDocumentModal()" data-i18n="html_cancel">Close</button>
+                    <button type="submit" id="employeeDocumentSaveButton" class="btn btn-primary" data-i18n="html_save_changes">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Secure Admin Password Reset Modal -->
+    <div class="modal" id="adminPasswordResetModal" role="dialog" aria-modal="true" aria-labelledby="adminPasswordResetTitle">
+        <div class="modal-content fade-in-up" style="max-width: 520px;">
+            <div class="modal-header">
+                <h2 id="adminPasswordResetTitle"><i data-lucide="key-round"></i> <span data-i18n="password_reset_title">Set New Password</span></h2>
+                <button type="button" class="icon-btn" onclick="closeAdminPasswordResetModal()" aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <form id="adminPasswordResetForm" autocomplete="off" onsubmit="handleAdminPasswordReset(event)">
+                <input type="hidden" id="adminPasswordResetUserId">
+                <p style="color:var(--color-text-secondary); margin-bottom:1.25rem;">
+                    <span data-i18n="password_reset_for">Set a new password for</span>
+                    <strong id="adminPasswordResetUserName" style="color:var(--color-text);"></strong>.
+                </p>
+                <div class="form-group">
+                    <label class="form-label" for="adminNewPassword" data-i18n="password_reset_new">New Password</label>
+                    <input type="password" id="adminNewPassword" class="form-control" autocomplete="new-password" minlength="8" maxlength="128" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="adminConfirmPassword" data-i18n="password_reset_confirm">Confirm New Password</label>
+                    <input type="password" id="adminConfirmPassword" class="form-control" autocomplete="new-password" minlength="8" maxlength="128" required>
+                </div>
+                <label style="display:flex; align-items:center; gap:0.5rem; color:var(--color-text-secondary); cursor:pointer;">
+                    <input type="checkbox" onchange="toggleAdminPasswordVisibility(this.checked)">
+                    <span data-i18n="password_reset_show">Show passwords</span>
+                </label>
+                <p style="font-size:0.8rem; color:var(--color-text-secondary); margin-top:0.75rem;" data-i18n="password_reset_hint">Use at least 8 characters. The password is not displayed or stored after submission.</p>
+                <div class="form-actions" style="margin-top:1.5rem; display:flex; justify-content:flex-end; gap:0.75rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeAdminPasswordResetModal()" data-i18n="html_cancel">Cancel</button>
+                    <button type="submit" id="adminPasswordResetSubmit" class="btn btn-primary" data-i18n="password_reset_submit">Set Password</button>
+                <div id="editDesignFields" style="display: none; width: 100%; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                        <label class="form-label" data-i18n="html_content_type">Content Type</label>
+                        <input type="text" id="editTaskContentType" class="form-control" placeholder="e.g. Graphic, Video" data-i18n-placeholder="ph_e_g_graphic_video">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                        <label class="form-label" data-i18n="html_source_link">Source Link</label>
+                        <input type="url" id="editTaskSourceLink" class="form-control" placeholder="https://..." data-i18n-placeholder="ph_https">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                        <label class="form-label" data-i18n="html_upload_link">Upload Link</label>
+                        <input type="url" id="editTaskUploadLink" class="form-control" placeholder="https://..." data-i18n-placeholder="ph_https">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" data-i18n="html_visibility">Visibility</label>
+                    <select id="editTaskVisibility" class="form-control">
+                        <option value="public" data-i18n="html_public_everyone">Public (Everyone)</option>
+                        <option value="team" data-i18n="html_team_only">Team Only</option>
+                        <option value="private" data-i18n="html_private">Private</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label class="form-label" data-i18n="html_start_date">Start Date</label>
+                        <input type="date" id="editTaskStart" class="form-control">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label class="form-label" data-i18n="html_due_date">Due Date</label>
+                        <input type="date" id="editTaskDue" class="form-control">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label class="form-label" data-i18n="html_end_date">End Date</label>
+                        <input type="date" id="editTaskEnd" class="form-control">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label class="form-label" data-i18n="html_est_time">Est. Time</label>
+                        <input type="text" id="editTaskEstimate" class="form-control" placeholder="e.g. 5 hours" data-i18n-placeholder="ph_e_g_5_hours">
+                    </div>
+                </div>
+                <div class="form-group task-assign-btn-group" style="margin-bottom: 0; margin-top: 1rem; display: flex; gap: 1rem;">
+                    <button type="button" class="btn btn-secondary" style="color: var(--color-danger); border-color: var(--color-danger);" onclick="handleDeleteTask(document.getElementById('editTaskId').value)" data-i18n="html_delete">Delete</button>
+                    <button type="submit" class="btn btn-primary" style="flex: 1;" data-i18n="html_save_changes">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Task Details & Comments Side Panel -->
+    <div class="side-panel-overlay" id="taskSidePanelOverlay" onclick="document.getElementById('taskSidePanel').classList.remove('active'); document.getElementById('taskSidePanelOverlay').classList.remove('active');"></div>
+    <div class="side-panel" id="taskSidePanel">
+        <div class="side-panel-header">
+            <h2 id="detailsTaskTitle" style="margin:0; font-size: 1.25rem;" data-i18n="html_task_details">Task Details</h2>
+            <button class="close-modal" onclick="document.getElementById('taskSidePanel').classList.remove('active'); document.getElementById('taskSidePanelOverlay').classList.remove('active');" style="background:none; border:none; color:var(--color-text); font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+        <div class="side-panel-body">
+            <div class="task-details-grid">
+                <div><strong>Assignee:</strong> <span id="detailsTaskAssignee"></span></div>
+                <div><strong>Creator:</strong> <span id="detailsTaskCreator"></span></div>
+                <div><strong>Status:</strong> <span id="detailsTaskStatus" class="badge"></span></div>
+                <div><strong>Priority:</strong> <span id="detailsTaskPriority" class="badge"></span></div>
+                <div><strong>Visibility:</strong> <span id="detailsTaskVisibility"></span></div>
                 <div><strong>Start Date:</strong> <span id="detailsTaskStart"></span></div>
                 <div><strong>Due Date:</strong> <span id="detailsTaskDue"></span></div>
                 <div><strong>End Date:</strong> <span id="detailsTaskEnd"></span></div>
@@ -1102,9 +1302,9 @@
     <!-- Supabase & JS & Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="js/db.js?v=10"></script>
-    <script src="js/data.js?v=10"></script>
-    <script src="js/contract.js?v=1"></script>
-    <script src="js/app.js?v=10"></script>
+    <script src="js/db.js?v=20"></script>
+    <script src="js/data.js?v=20"></script>
+    <script src="js/contract.js?v=20"></script>
+    <script src="js/app.js?v=20"></script>
 </body>
 </html>

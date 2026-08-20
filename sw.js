@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hr-sys-v42';
+const CACHE_NAME = 'hr-sys-v45';
 const ASSETS = [
   '/',
   '/index.html',
@@ -29,5 +29,10 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   // Always fetch from network to bypass old cache completely
-  event.respondWith(fetch(event.request));
+  event.respondWith(
+    fetch(event.request).catch((error) => {
+      console.warn('Service Worker fetch failed:', error);
+      return Response.error();
+    })
+  );
 });
