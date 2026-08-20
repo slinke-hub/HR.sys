@@ -824,7 +824,7 @@
     </div>
 
     <!-- Confirm Modal -->
-    <div class="modal" id="confirmModal">
+    <div class="modal" id="confirmModal" style="z-index: 100000;">
         <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
             <div style="margin-bottom: 1rem;">
                 <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: var(--color-warning);"></i>
@@ -1100,51 +1100,6 @@
                 <div class="form-actions" style="margin-top:1.5rem; display:flex; justify-content:flex-end; gap:0.75rem;">
                     <button type="button" class="btn btn-secondary" onclick="closeAdminPasswordResetModal()" data-i18n="html_cancel">Cancel</button>
                     <button type="submit" id="adminPasswordResetSubmit" class="btn btn-primary" data-i18n="password_reset_submit">Set Password</button>
-                <div id="editDesignFields" style="display: none; width: 100%; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_content_type">Content Type</label>
-                        <input type="text" id="editTaskContentType" class="form-control" placeholder="e.g. Graphic, Video" data-i18n-placeholder="ph_e_g_graphic_video">
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_source_link">Source Link</label>
-                        <input type="url" id="editTaskSourceLink" class="form-control" placeholder="https://..." data-i18n-placeholder="ph_https">
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_upload_link">Upload Link</label>
-                        <input type="url" id="editTaskUploadLink" class="form-control" placeholder="https://..." data-i18n-placeholder="ph_https">
-                    </div>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_visibility">Visibility</label>
-                    <select id="editTaskVisibility" class="form-control">
-                        <option value="public" data-i18n="html_public_everyone">Public (Everyone)</option>
-                        <option value="team" data-i18n="html_team_only">Team Only</option>
-                        <option value="private" data-i18n="html_private">Private</option>
-                    </select>
-                </div>
-                <div style="display: flex; gap: 1rem;">
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_start_date">Start Date</label>
-                        <input type="date" id="editTaskStart" class="form-control">
-                    </div>
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_due_date">Due Date</label>
-                        <input type="date" id="editTaskDue" class="form-control">
-                    </div>
-                </div>
-                <div style="display: flex; gap: 1rem;">
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_end_date">End Date</label>
-                        <input type="date" id="editTaskEnd" class="form-control">
-                    </div>
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_est_time">Est. Time</label>
-                        <input type="text" id="editTaskEstimate" class="form-control" placeholder="e.g. 5 hours" data-i18n-placeholder="ph_e_g_5_hours">
-                    </div>
-                </div>
-                <div class="form-group task-assign-btn-group" style="margin-bottom: 0; margin-top: 1rem; display: flex; gap: 1rem;">
-                    <button type="button" class="btn btn-secondary" style="color: var(--color-danger); border-color: var(--color-danger);" onclick="handleDeleteTask(document.getElementById('editTaskId').value)" data-i18n="html_delete">Delete</button>
-                    <button type="submit" class="btn btn-primary" style="flex: 1;" data-i18n="html_save_changes">Save Changes</button>
                 </div>
             </form>
         </div>

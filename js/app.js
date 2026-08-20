@@ -3392,12 +3392,14 @@ async function renderTasks() {
         adminForm = `
             <div class="card col-span-12" style="margin-bottom: 1rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <div class="card-title" style="margin-bottom: 0;">${t('task_assign_new') || 'Create New Task'}</div>
+                    <div class="card-title" style="margin-bottom: 0;">${t('task_assign_new') || 'Assign New Task'}</div>
+                    <button class="btn btn-primary btn-sm" id="btnToggleCreateTaskForm" onclick="document.getElementById('taskFormContainer').style.display='block'; this.style.display='none';">${t('add_new_task') || '+ Add new task'}</button>
                 </div>
                 
-                <!-- Standard Form -->
-                <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm" class="task-assign-form">
-                    <input type="hidden" id="taskParentId" value="">
+                <div id="taskFormContainer" style="display: none;">
+                    <!-- Standard Form -->
+                    <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm" class="task-assign-form">
+                        <input type="hidden" id="taskParentId" value="">
 
                     <!-- Fluid Flexbox Layout for responsiveness -->
                     <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
@@ -3462,10 +3464,12 @@ async function renderTasks() {
                         </div>
                     </div>
 
-                    <div style="text-align: right; margin-top: 0.5rem;">
+                    <div style="text-align: right; margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('taskFormContainer').style.display='none'; document.getElementById('btnToggleCreateTaskForm').style.display='inline-block';">Cancel</button>
                         <button type="submit" class="btn btn-primary">${t('task_assign_btn') || 'Create Task'}</button>
                     </div>
                 </form>
+                </div>
             </div>
         `;
     }
