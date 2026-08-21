@@ -676,15 +676,12 @@ const db = {
             return { success: false, error };
         }
     },
-    async fetchTasks(userId = null) {
+    async fetchTasks(_userId = null) {
         if (!supabaseClient) return [];
         try {
-            let query = supabaseClient.from('tasks').select('*').order('created_at', { ascending: false });
-            if (userId) {
-                // PostgREST syntax for arrays: visible_to.cs.{userId} checks if array contains userId
-                query = query.or(`assignee_id.eq.${userId},created_by.eq.${userId},supervisor_id.eq.${userId},visible_to.cs.{${userId}}`);
-            }
-            const { data, error } = await query;
+            // Row-level security is the single source of truth for task visibility.
+            const { data, error } = await supabaseClient
+                .from('tasks').select('*').order('created_at', { ascending: false });
             if (error) throw error;
             return data;
         } catch (error) {
@@ -706,7 +703,7 @@ const db = {
             return [];
         }
     },
-    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = [], parentTaskId = null) {
+    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = [], parentTaskId = null, marketingDepartment = null, contentLinks = [], submissionLinks = [], deliveryStatus = null) {
         if (!supabaseClient) return { success: false };
         try {
             const newTask = { 
@@ -734,7 +731,11 @@ const db = {
                 department: department || null,
                 sub_type: subType,
                 watchers: watchers,
-                parent_task_id: parentTaskId || null
+                parent_task_id: parentTaskId || null,
+                marketing_department: marketingDepartment,
+                content_links: contentLinks,
+                submission_links: submissionLinks,
+                delivery_status: deliveryStatus
             };
             const { data, error } = await supabaseClient
                 .from('tasks')
@@ -755,13 +756,23 @@ const db = {
                     delete safeTask.content_type;
                     delete safeTask.source_link;
                     delete safeTask.upload_link;
+                    delete safeTask.marketing_department;
+                    delete safeTask.content_links;
+                    delete safeTask.submission_links;
+                    delete safeTask.delivery_status;
+                    delete safeTask.parent_task_id;
                     
                     const retry = await supabaseClient.from('tasks').insert([safeTask]);
-                    if (retry.error) throw retry.error;
+                    if (retry.error) {
+                        console.error("createTask compatibility retry failed:", retry.error.message || retry.error, retry.error.details || '');
+                        throw retry.error;
+                    }
+                    await this.flushTaskNotificationEmails();
                     return { success: true };
                 }
                 throw error;
             }
+            await this.flushTaskNotificationEmails();
             return { success: true };
         } catch (error) {
             console.error("createTask Error:", error);
@@ -776,6 +787,7 @@ const db = {
                 .update({ status })
                 .eq('id', taskId);
             if (error) throw error;
+            await this.flushTaskNotificationEmails();
             return { success: true };
         } catch (error) {
             console.error("updateTaskStatus Error:", error);
@@ -806,13 +818,19 @@ const db = {
                     delete safeUpdates.content_type;
                     delete safeUpdates.source_link;
                     delete safeUpdates.upload_link;
+                    delete safeUpdates.marketing_department;
+                    delete safeUpdates.content_links;
+                    delete safeUpdates.submission_links;
+                    delete safeUpdates.delivery_status;
                     
                     const retry = await supabaseClient.from('tasks').update(safeUpdates).eq('id', taskId);
                     if (retry.error) throw retry.error;
+                    await this.flushTaskNotificationEmails();
                     return { success: true };
                 }
                 throw error;
             }
+            await this.flushTaskNotificationEmails();
             return { success: true };
         } catch (error) {
             console.error("updateTask Error:", error);
@@ -856,21 +874,7 @@ const db = {
                 }]);
             if (error) throw error;
             
-            // Notify assignee and watchers
-            const { data: taskData } = await supabaseClient.from('tasks').select('assignee_id, title, watchers').eq('id', taskId).single();
-            if (taskData) {
-                const notifyUserIds = new Set();
-                if (taskData.assignee_id && taskData.assignee_id !== userId) notifyUserIds.add(taskData.assignee_id);
-                if (taskData.watchers && Array.isArray(taskData.watchers)) {
-                    taskData.watchers.forEach(wId => {
-                        if (wId !== userId) notifyUserIds.add(wId);
-                    });
-                }
-                for (const uid of notifyUserIds) {
-                    await this.createNotification(uid, `New comment on task "${taskData.title}"`);
-                }
-            }
-
+            await this.flushTaskNotificationEmails();
             return { success: true };
         } catch (error) {
             console.error("addTaskComment Error:", error);
@@ -1069,6 +1073,19 @@ const db = {
             return { success: true };
         } catch (error) {
             console.error("createNotification Error:", error);
+            return { success: false, error };
+        }
+    },
+    async flushTaskNotificationEmails() {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.functions.invoke('task-notification-email', { body: {} });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            // In-app notifications are already persisted by the database trigger.
+            // Email delivery can be retried later from the outbox.
+            console.warn('Task email delivery deferred:', error?.message || error);
             return { success: false, error };
         }
     },

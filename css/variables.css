@@ -7,8 +7,9 @@
   --color-bg-base: #F8F9FA;
   --color-bg-surface: rgba(255, 255, 255, 0.85);
   --color-bg-elevated: rgba(255, 255, 255, 0.95);
-  --color-text-primary: #1A1A1A;
-  --color-text-secondary: #6B7280;
+  --color-text-primary: #0B192C;
+  --color-text-secondary: #0B192C;
+  --color-theme-highlight: #0B192C;
   --color-border: rgba(0, 0, 0, 0.1);
   --color-success: #10B981;
   --color-warning: #F59E0B;
@@ -16,11 +17,11 @@
 
   /* Sidebar styling */
   --sidebar-bg: rgba(255, 255, 255, 0.85);
-  --sidebar-text: #1A1A1A;
-  --sidebar-text-muted: #6B7280;
+  --sidebar-text: #0B192C;
+  --sidebar-text-muted: #0B192C;
   --sidebar-item-hover: rgba(11, 25, 44, 0.05);
-  --sidebar-item-active: #000000;
-  --sidebar-text-active: #ffffff;
+  --sidebar-item-active: rgba(11, 25, 44, 0.10);
+  --sidebar-text-active: #0B192C;
   --sidebar-border: rgba(0, 0, 0, 0.1);
 
   /* Typography */
@@ -69,17 +70,18 @@
   --color-bg-base: #0B192C; /* Main Navy Blue Background */
   --color-bg-surface: rgba(11, 25, 44, 0.75);
   --color-bg-elevated: rgba(30, 62, 98, 0.85);
-  --color-text-primary: #F3F4F6;
-  --color-text-secondary: #9CA3AF;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #FFFFFF;
+  --color-theme-highlight: #FFFFFF;
   --color-border: rgba(255, 255, 255, 0.15);
   --color-shadow: rgba(0, 0, 0, 0.5);
   
   --sidebar-bg: rgba(11, 25, 44, 0.75);
-  --sidebar-text: #F3F4F6;
-  --sidebar-text-muted: #9CA3AF;
+  --sidebar-text: #FFFFFF;
+  --sidebar-text-muted: #FFFFFF;
   --sidebar-item-hover: rgba(255,255,255,0.05);
-  --sidebar-item-active: #ffffff;
-  --sidebar-text-active: #000000;
+  --sidebar-item-active: rgba(255, 255, 255, 0.10);
+  --sidebar-text-active: #FFFFFF;
   --sidebar-border: rgba(255, 255, 255, 0.15);
 
   --shadow-sm: 0 1px 2px var(--color-shadow);

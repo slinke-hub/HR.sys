@@ -25,9 +25,9 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- CSS -->
-    <link rel="stylesheet" href="css/variables.css?v=2">
-    <link rel="stylesheet" href="css/layout.css?v=2">
-    <link rel="stylesheet" href="css/components.css?v=2">
+    <link rel="stylesheet" href="css/variables.css?v=4">
+    <link rel="stylesheet" href="css/layout.css?v=3">
+    <link rel="stylesheet" href="css/components.css?v=11">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -84,6 +84,7 @@
                 </a>
                 <a href="#" class="nav-item" data-view="projects"><i data-lucide="folder"></i> <span data-i18n="nav_projects">Projects</span></a>
                 <a href="#" class="nav-item" data-view="tasks"><i data-lucide="check-square"></i> <span data-i18n="nav_tasks">Tasks</span></a>
+                <a href="#" class="nav-item" data-view="tasks_v2"><i data-lucide="list-checks"></i> <span>Task Manager V2</span><span class="nav-beta-badge">BETA</span></a>
                 <a href="#" class="nav-item" id="navApprovals" style="display: none;" data-view="approvals"><i data-lucide="check-circle"></i> <span data-i18n="nav_approvals">Approvals</span></a>
                 <a href="#" class="nav-item" data-view="performance" style="display: none !important;">
                     <i data-lucide="target"></i>
@@ -133,7 +134,7 @@
         <!-- Main Content -->
         <main class="main-content">
             <!-- Top Bar -->
-            <header class="topbar" style="position: relative; z-index: 9999;">
+            <header class="topbar" style="position: relative; z-index: 100;">
                 <div class="header-logo" style="display: flex; align-items: center; gap: 0.5rem;">
                     <button id="globalBackButton" class="btn btn-icon" onclick="window.goBack()" style="display: none; background: transparent; border: none; cursor: pointer; color: var(--color-text); padding: 0.5rem; border-radius: 50%;">
                         <i data-lucide="arrow-left" style="width: 20px; height: 20px;"></i>
@@ -851,6 +852,10 @@
                     <label class="form-label" data-i18n="html_task_title">Task Title</label>
                     <input type="text" id="editTaskTitle" class="form-control" required>
                 </div>
+                <div class="form-group edit-task-description" style="margin-bottom: 0;">
+                    <label class="form-label">Description</label>
+                    <textarea id="editTaskDescription" class="form-control" rows="4" placeholder="Add a description"></textarea>
+                </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" data-i18n="html_category">Category</label>
                     <input type="text" id="editTaskCategory" class="form-control">
@@ -885,12 +890,13 @@
                 </div>
                 <div class="form-group" id="editTaskSubTypeGroup" style="margin-bottom: 0; display: none;">
                     <label class="form-label" data-i18n="html_task_type">Task Type</label>
-                    <select id="editTaskSubType" class="form-control">
+                    <select id="editTaskSubType" class="form-control" onchange="handleMarketingTaskTypeChange('edit', this.value)">
                         <option value="">Select Sub-Type</option>
+                        <option value="Daily Tasks">Daily Tasks</option>
                         <option value="Designing Task">Designing Task</option>
-                        <option value="Marketing Task">Marketing Task</option>
                     </select>
                 </div>
+                <div id="editMarketingDesignFields" class="marketing-design-fields" style="display:none;"></div>
                 <!-- Watchers -->
                 <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
                     <label class="form-label">
@@ -902,21 +908,6 @@
                             <!-- Populated dynamically -->
                         </select>
                         <small class="text-muted" style="display:block; margin-top:0.25rem;">Hold Ctrl/Cmd to select multiple</small>
-                    </div>
-                </div>
-                <!-- Conditional Designer Fields -->
-                <div id="editDesignFields" style="display: none; width: 100%; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_content_type">Content Type</label>
-                        <input type="text" id="editTaskContentType" class="form-control" placeholder="e.g. Graphic, Video" data-i18n-placeholder="ph_e_g_graphic_video">
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_source_link">Source Link</label>
-                        <input type="url" id="editTaskSourceLink" class="form-control" placeholder="https://..." data-i18n-placeholder="ph_https">
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_upload_link">Upload Link</label>
-                        <input type="url" id="editTaskUploadLink" class="form-control" placeholder="https://..." data-i18n-placeholder="ph_https">
                     </div>
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
@@ -978,7 +969,7 @@
             
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
                 <h3 style="margin: 0;" data-i18n="html_sub_tasks">Sub-Tasks</h3>
-                <button class="btn btn-secondary btn-sm" onclick="handleCreateSubTaskClick()" data-i18n="html_create_sub_task">+ Create Sub-Task</button>
+                <button class="btn btn-secondary btn-sm" onclick="openInlineSubtaskComposer()" data-i18n="html_create_sub_task">+ Create Sub-Task</button>
             </div>
             <div id="taskSubTasksList" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
                 <!-- Subtasks injected here -->
@@ -1127,7 +1118,7 @@
             
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
                 <h3 style="margin: 0;" data-i18n="html_sub_tasks">Sub-Tasks</h3>
-                <button id="btnCreateSubTask" class="btn btn-secondary btn-sm" onclick="handleCreateSubTaskClick()" data-i18n="html_create_sub_task">+ Create Sub-Task</button>
+                <button id="btnCreateSubTask" class="btn btn-secondary btn-sm" onclick="openInlineSubtaskComposer()" data-i18n="html_create_sub_task">+ Create Sub-Task</button>
             </div>
             <div id="taskSubTasksList" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
                 <!-- Subtasks injected here -->
@@ -1257,9 +1248,9 @@
     <!-- Supabase & JS & Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="js/db.js?v=20"></script>
+    <script src="js/db.js?v=21"></script>
     <script src="js/data.js?v=20"></script>
     <script src="js/contract.js?v=20"></script>
-    <script src="js/app.js?v=20"></script>
+    <script src="js/app.js?v=24"></script>
 </body>
 </html>

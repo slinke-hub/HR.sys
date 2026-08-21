@@ -1424,21 +1424,27 @@ window.openTaskDetailsModal = async function(id) {
     document.getElementById('detailsTaskCreator').textContent = task.creator?.full_name || 'System';
     document.getElementById('detailsTaskStatus').textContent = task.status;
     document.getElementById('detailsTaskPriority').textContent = task.priority;
+    document.getElementById('detailsTaskVisibility').textContent = task.visibility || 'public';
+    document.getElementById('detailsTaskStart').textContent = task.start_date || 'Not set';
+    document.getElementById('detailsTaskDue').textContent = task.due_date || 'Not set';
+    document.getElementById('detailsTaskEnd').textContent = task.end_date || 'Not set';
     document.getElementById('detailsTaskEstimate').textContent = task.estimated_time || 'Not set';
+    prepareTeamworkTaskDetail(task);
     
     const list = document.getElementById('taskCommentsList');
     list.innerHTML = '<div style="text-align: center; color: var(--color-text-secondary);">Loading comments...</div>';
     
     document.getElementById('taskSidePanel').classList.add('active');
     document.getElementById('taskSidePanelOverlay').classList.add('active');
+    document.getElementById('taskSidePanel').classList.toggle('task-v2-detail', currentView === 'tasks_v2');
     
     // Check permission to create tasks
-    const canCreateTask = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    const canCreateTask = !!currentUser;
     const btnCreateSubTask = document.getElementById('btnCreateSubTask');
     if (btnCreateSubTask) {
         btnCreateSubTask.style.display = canCreateTask ? 'inline-block' : 'none';
     }
-    const subTaskButtons = document.querySelectorAll('[onclick="handleCreateSubTaskClick()"]');
+    const subTaskButtons = document.querySelectorAll('[onclick="openInlineSubtaskComposer()"]');
     subTaskButtons.forEach(btn => {
         btn.style.display = canCreateTask ? 'inline-block' : 'none';
     });
@@ -1481,6 +1487,110 @@ window.openTaskDetailsModal = async function(id) {
     }
 };
 
+function prepareTeamworkTaskDetail(task) {
+    window.activeTaskDetail = task;
+    const panel = document.getElementById('taskSidePanel');
+    if (!panel) return;
+    panel.classList.add('teamwork-task-detail');
+    const header = panel.querySelector('.side-panel-header');
+    if (header) {
+        const canEdit = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing' && window.isMarketingDepartmentManager);
+        let actions = header.querySelector('.task-detail-actions');
+        if (!actions) {
+            actions = document.createElement('div');
+            actions.className = 'task-detail-actions';
+            header.appendChild(actions);
+        }
+        actions.innerHTML = `${canEdit ? '<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById(\'detailsTaskId\').value)"><i data-lucide="pencil"></i> Edit</button>' : ''}<button type="button" class="task-detail-close" aria-label="Close task" onclick="document.getElementById('taskSidePanel').classList.remove('active');document.getElementById('taskSidePanelOverlay').classList.remove('active')">&times;</button>`;
+        header.querySelector('.close-modal')?.remove();
+    }
+    const grid = panel.querySelector('.task-details-grid');
+    if (grid) {
+        let content = panel.querySelector('.task-detail-reference-content');
+        if (!content) {
+            content = document.createElement('div');
+            content.className = 'task-detail-reference-content';
+            grid.insertAdjacentElement('afterend', content);
+        }
+        const links = [...(task.content_links || []), ...(task.submission_links || [])].filter(Boolean);
+        content.innerHTML = `
+            <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : '<span>Add a description</span>'}</p></section>
+            <nav class="task-detail-tabs" aria-label="Task information"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">Details</button><button type="button" data-task-info-tab="custom-fields" onclick="setTaskDetailInfoTab('custom-fields')">Custom fields</button><button type="button" data-task-info-tab="dependencies" onclick="setTaskDetailInfoTab('dependencies')">Dependencies</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">Proofs</button></nav>
+            <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
+            <section class="task-detail-files"><h3>Files & links</h3>${links.length ? `<div class="task-detail-link-list">${links.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : '<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>No files or links have been added</span></div>'}</section>`;
+    }
+    const commentsHeading = Array.from(panel.querySelectorAll('h3')).find(item => item.textContent.includes('Activity') || item.textContent.includes('Comments'));
+    if (commentsHeading) {
+        commentsHeading.className = 'task-comment-tabs';
+        commentsHeading.innerHTML = '<button type="button" class="active" data-task-activity-tab="comments" onclick="setTaskActivityTab(\'comments\')">Comments</button><button type="button" data-task-activity-tab="activity" onclick="setTaskActivityTab(\'activity\')">Activity</button><button type="button" data-task-activity-tab="info" onclick="setTaskActivityTab(\'info\')">Info</button>';
+        let activityPanel = panel.querySelector('#taskActivityPanel');
+        if (!activityPanel) {
+            activityPanel = document.createElement('div');
+            activityPanel.id = 'taskActivityPanel';
+            activityPanel.className = 'task-activity-panel';
+            commentsHeading.insertAdjacentElement('afterend', activityPanel);
+        }
+    }
+    const legacySubtaskHeading = Array.from(panel.querySelectorAll('h3')).find(item => item.textContent.toLowerCase().includes('sub-task'))?.parentElement;
+    if (legacySubtaskHeading) legacySubtaskHeading.style.display = 'none';
+    const legacySubtaskList = document.getElementById('taskSubTasksList');
+    if (legacySubtaskList) legacySubtaskList.style.display = 'none';
+    setTaskDetailInfoTab('details');
+    setTaskActivityTab('comments');
+    if (window.lucide) window.lucide.createIcons();
+}
+
+window.setTaskDetailInfoTab = function(tab) {
+    const task = window.activeTaskDetail;
+    const panel = document.getElementById('taskDetailInfoPanel');
+    if (!task || !panel) return;
+    document.querySelectorAll('[data-task-info-tab]').forEach(button => button.classList.toggle('active', button.dataset.taskInfoTab === tab));
+    const allTasks = Object.values(window.taskCache || {});
+    const parent = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
+    const subtasks = allTasks.filter(item => item.parent_task_id === task.id);
+    const contentLinks = task.content_links || (task.source_link ? [task.source_link] : []);
+    const proofLinks = task.submission_links || (task.upload_link ? [task.upload_link] : []);
+    if (tab === 'custom-fields') {
+        const fields = [
+            ['Department', task.department], ['Task type', task.sub_type], ['Business', task.marketing_department],
+            ['Content type', task.content_type], ['Delivery status', task.delivery_status], ['Category', task.category]
+        ].filter(([, value]) => value);
+        panel.innerHTML = fields.length ? `<div class="task-detail-data-grid">${fields.map(([label, value]) => `<div><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong></div>`).join('')}</div>` : '<div class="task-tab-empty">No custom fields have been set.</div>';
+    } else if (tab === 'dependencies') {
+        panel.innerHTML = `<div class="task-detail-data-grid"><div><span>Parent task</span><strong>${parent ? escapeHTML(parent.displayTitle || parent.title) : 'None'}</strong></div><div><span>Subtasks</span><strong>${subtasks.length}</strong></div><div><span>Blocking dependencies</span><strong>None</strong></div></div>`;
+    } else if (tab === 'proofs') {
+        panel.innerHTML = proofLinks.length ? `<div class="task-detail-link-list">${proofLinks.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : '<div class="task-tab-empty">No submission proofs have been added.</div>';
+    } else {
+        panel.innerHTML = `<div class="task-detail-data-grid"><div><span>Status</span><strong>${escapeHTML(task.status || 'Not set')}</strong></div><div><span>Priority</span><strong>${escapeHTML(task.priority || 'Not set')}</strong></div><div><span>Content links</span><strong>${contentLinks.length}</strong></div><div><span>Due date</span><strong>${escapeHTML(task.due_date || 'Not set')}</strong></div></div>
+            <section class="task-detail-inline-subtasks"><div class="task-detail-subtask-heading"><strong>Subtasks <span>${subtasks.length}</span></strong><button type="button" onclick="openInlineSubtaskComposer()"><i data-lucide="plus"></i> Add a subtask</button></div><div id="taskDetailSubtaskHost">${subtasks.length ? subtasks.map(subtask => `<button type="button" class="task-detail-subtask-row" onclick="openTaskDetailsModal('${subtask.id}')"><i data-lucide="circle"></i><span>${escapeHTML(subtask.displayTitle || subtask.title)}</span><small>${escapeHTML(subtask.due_date || 'No due date')}</small></button>`).join('') : '<div class="task-tab-empty">No subtasks yet.</div>'}</div></section>`;
+    }
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.setTaskActivityTab = function(tab) {
+    const task = window.activeTaskDetail;
+    const panel = document.getElementById('taskSidePanel');
+    const activityPanel = document.getElementById('taskActivityPanel');
+    const comments = document.getElementById('taskCommentsList');
+    const composer = panel?.querySelector('.side-panel-footer');
+    if (!task || !activityPanel || !comments) return;
+    panel.querySelectorAll('[data-task-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.taskActivityTab === tab));
+    comments.style.display = tab === 'comments' ? 'flex' : 'none';
+    if (composer) composer.style.display = tab === 'comments' ? '' : 'none';
+    activityPanel.style.display = tab === 'comments' ? 'none' : 'block';
+    if (tab === 'activity') {
+        activityPanel.innerHTML = `<div class="task-activity-event"><i data-lucide="circle-plus"></i><div><strong>Task created</strong><span>${task.created_at ? new Date(task.created_at).toLocaleString() : 'Date unavailable'}</span></div></div><div class="task-activity-event"><i data-lucide="workflow"></i><div><strong>Current stage: ${escapeHTML(task.status || 'Not set')}</strong><span>Assigned to ${escapeHTML(task.assignee?.full_name || 'Unassigned')}</span></div></div>`;
+    } else if (tab === 'info') {
+        activityPanel.innerHTML = `<div class="task-detail-data-grid"><div><span>Created by</span><strong>${escapeHTML(task.creator?.full_name || 'System')}</strong></div><div><span>Assigned to</span><strong>${escapeHTML(task.assignee?.full_name || 'Unassigned')}</strong></div><div><span>Visibility</span><strong>${escapeHTML(task.visibility || 'public')}</strong></div><div><span>Estimated time</span><strong>${escapeHTML(task.estimated_time || 'Not set')}</strong></div></div>`;
+    }
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.closeTaskDetailsModal = function() {
+    document.getElementById('taskSidePanel')?.classList.remove('active');
+    document.getElementById('taskSidePanelOverlay')?.classList.remove('active');
+};
+
 window.handleTaskCommentSubmit = async function(e) {
     e.preventDefault();
     const id = document.getElementById('detailsTaskId').value;
@@ -1495,10 +1605,9 @@ window.handleTaskCommentSubmit = async function(e) {
     if (success) {
         input.value = '';
         
-        // Fetch task details to notify assignee
+        // In-app and email notifications are queued by the database trigger.
         const task = window.taskCache ? window.taskCache[id] : null;
-        if (task && task.assignee_id && task.assignee_id !== currentUser.id) {
-            await db.createNotification(task.assignee_id, `New comment on your task "${task.title}": ${content}`);
+        if (task) {
             await db.triggerWebhooks('task_activity_email', {
                 type: 'comment',
                 task_id: id,
@@ -3257,12 +3366,7 @@ window.handleUpdateProfileDetails = async function (e) {
 
 async function renderTasks() {
     console.log("renderTasks: Starting...");
-    let tasksPromise;
-    if (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) {
-        tasksPromise = db.fetchTasks(); 
-    } else {
-        tasksPromise = db.fetchTasks(currentUser.id);
-    }
+    const tasksPromise = db.fetchTasks();
     
     console.log("renderTasks: Fetching users and tasks...");
     // Fetch users, tasks, and the signed-in user's department manager in parallel
@@ -3274,12 +3378,9 @@ async function renderTasks() {
     ]);
     console.log("renderTasks: Fetched users and tasks.", { usersCount: allUsers.length, tasksCount: fetchedTasks.length });
     let tasks = fetchedTasks;
-
-    if (((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) {
-        let teamIds = allUsers.filter(u => u.manager_id === currentUser.id).map(u => u.id);
-        teamIds.push(currentUser.id);
-        tasks = tasks.filter(t => teamIds.includes(t.assignee_id) || t.created_by === currentUser.id || t.supervisor_id === currentUser.id);
-    }
+    window.taskDepartmentSupervisors = departmentSupervisors || [];
+    const marketingDepartmentRecord = allDepartments.find(department => department.name === 'Marketing');
+    window.isMarketingDepartmentManager = !!currentUser && [marketingDepartmentRecord?.head_id, marketingDepartmentRecord?.manager_id].includes(currentUser.id);
 
     window.taskCache = {};
     window.taskAssigneeOptionsCache = ''; // Default empty string
@@ -3307,18 +3408,7 @@ async function renderTasks() {
         return taskObj;
     });
 
-    // Filter by visibility
-    tasks = tasks.filter(t => {
-        if (currentUserRole === 'ADMIN') return true;
-        if (t.created_by === currentUser.id || t.assignee_id === currentUser.id || t.supervisor_id === currentUser.id) return true;
-        if (t.visibility === 'private') return false;
-        if (t.visibility === 'team') {
-            let teamIds = allUsers.filter(u => u.manager_id === currentUser.id).map(u => u.id);
-            teamIds.push(currentUser.id);
-            return teamIds.includes(t.assignee_id) || teamIds.includes(t.created_by);
-        }
-        return true; // public
-    });
+    window.visibleTaskIds = tasks.map(task => task.id);
 
     const pending = tasks.filter(t => t.status === 'Pending Approval');
     const todo = tasks.filter(t => t.status === 'todo' || t.status === 'Approved' || t.status === 'Rejected');
@@ -3337,7 +3427,7 @@ async function renderTasks() {
     const departmentOptions = allDepartments.map(d => `<option value="${escapeHTML(d.name)}">${escapeHTML(d.name)}</option>`).join('');
 
     let adminForm = '';
-    let canCreateTask = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    let canCreateTask = !!currentUser;
     
     let teamIds = [currentUser.id];
     if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
@@ -3425,11 +3515,15 @@ async function renderTasks() {
 
                         <div class="form-group" id="taskSubTypeGroup" style="flex: 1 1 150px; margin-bottom: 0; display: ${isMarketing ? 'block' : 'none'};">
                             <label class="form-label">${t('ui_task_type') || 'Task Type'}</label>
-                            <select id="taskSubType" class="form-control">
+                            <select id="taskSubType" class="form-control" onchange="handleMarketingTaskTypeChange('new', this.value)" ${isMarketing ? 'required' : ''}>
                                 <option value=""></option>
+                                <option value="Daily Tasks">Daily Tasks</option>
                                 <option value="Designing Task">Designing Task</option>
-                                <option value="Marketing Task">Marketing Task</option>
                             </select>
+                        </div>
+
+                        <div id="newMarketingDesignFields" class="marketing-design-fields" style="display: none; flex: 1 1 100%;">
+                            ${renderMarketingDesignFields('new')}
                         </div>
 
                         <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
@@ -3475,6 +3569,7 @@ async function renderTasks() {
     }
 
     function renderTaskCard(task) {
+        const canManageTask = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing' && window.isMarketingDepartmentManager);
         let prioColor = 'var(--color-border)';
         if (task.priority === 'medium') prioColor = 'var(--color-primary)';
         if (task.priority === 'high') prioColor = 'var(--color-warning)';
@@ -3486,7 +3581,7 @@ async function renderTasks() {
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 2.5rem; gap: 0.5rem;">
                     <h4 style="margin: 0; font-size: 0.95rem; line-height: 1.4; color: var(--color-text); font-weight: 500; word-break: break-word;">${escapeHTML(task.displayTitle)}</h4>
                 </div>
-                ${canCreateTask ? `<button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1.25rem; right: 1rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 0;" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>` : ''}
+                ${canManageTask ? `<button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1.25rem; right: 1rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 0;" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>` : ''}
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0; display: flex; flex-direction: column; gap: 0.35rem;">
                     <div style="display: flex; align-items: center;"><i data-lucide="calendar" style="width: 12px; height: 12px; margin-right: 4px;"></i> Due: ${task.due_date || t('task_no_date') || 'No Date'}</div>
                     ${task.start_date ? `<div style="display: flex; align-items: center;"><i data-lucide="play" style="width: 12px; height: 12px; margin-right: 4px;"></i> Start: ${escapeHTML(task.start_date)}</div>` : ''}
@@ -3560,6 +3655,224 @@ async function renderTasks() {
     `;
 }
 
+async function renderTasksV2() {
+    const legacyHTML = await renderTasks();
+    const visibleIds = new Set(window.visibleTaskIds || []);
+    const tasks = Object.values(window.taskCache || {}).filter(task => visibleIds.has(task.id));
+    const openCount = tasks.filter(task => task.status !== 'completed').length;
+    const dueSoonCount = tasks.filter(task => {
+        if (!task.due_date || task.status === 'completed') return false;
+        const days = (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000;
+        return days >= 0 && days <= 7;
+    }).length;
+    const overdueCount = tasks.filter(task => task.due_date && task.status !== 'completed' && new Date(`${task.due_date}T23:59:59`) < new Date()).length;
+    const gridStart = legacyHTML.indexOf('<div class="dashboard-grid');
+    const taskContent = gridStart >= 0 ? legacyHTML.slice(gridStart) : legacyHTML;
+    const projects = window.projectsCache || [];
+    const canCreateTask = !!currentUser;
+    const selectedProject = window.taskV2SelectedProject || 'all';
+    const statusLabels = { 'Pending Approval': 'Pending approval', todo: 'To do', in_progress: 'In progress', review: 'Review', completed: 'Done', Approved: 'Approved', Rejected: 'Rejected' };
+
+    const projectItems = [
+        `<button class="task-v2-list-link ${selectedProject === 'all' ? 'active' : ''}" onclick="selectTaskV2Project('all')"><span>All tasks</span><b>${tasks.length}</b></button>`,
+        ...projects.map(project => {
+            const count = tasks.filter(task => task.project_id === project.id).length;
+            return `<button class="task-v2-list-link ${selectedProject === project.id ? 'active' : ''}" onclick="selectTaskV2Project('${project.id}')"><span>${escapeHTML(project.project_name)}</span><b>${count}</b></button>`;
+        }),
+        `<button class="task-v2-list-link ${selectedProject === 'none' ? 'active' : ''}" onclick="selectTaskV2Project('none')"><span>No project</span><b>${tasks.filter(task => !task.project_id).length}</b></button>`
+    ].join('');
+
+    const taskRows = tasks.map(task => {
+        const canManageTask = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing' && window.isMarketingDepartmentManager);
+        const project = projects.find(item => item.id === task.project_id);
+        const dueDate = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
+        const overdue = dueDate && task.status !== 'completed' && dueDate < new Date(new Date().toDateString());
+        return `<article class="task-v2-row" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-status="${escapeHTML(task.status)}" data-due="${task.due_date || ''}">
+            <button class="task-v2-complete ${task.status === 'completed' ? 'complete' : ''}" type="button" aria-label="${task.status === 'completed' ? 'Reopen' : 'Mark complete'}" onclick="event.stopPropagation(); taskV2ToggleComplete('${task.id}', '${task.status === 'completed' ? 'todo' : 'completed'}')"><i data-lucide="check"></i></button>
+            <button class="task-v2-avatar" type="button" title="${escapeHTML(task.assignee?.full_name || 'Unassigned')}">${escapeHTML((task.assignee?.full_name || '?').charAt(0).toUpperCase())}</button>
+            <button class="task-v2-row-main" type="button" onclick="openTaskDetailsModal('${task.id}')">
+                <span class="task-v2-row-title">${escapeHTML(task.displayTitle || task.title)}</span>
+                <span class="task-v2-row-context">${escapeHTML(project?.project_name || 'No project')} · ${escapeHTML(task.category || 'General')}</span>
+            </button>
+            <span class="task-v2-status task-v2-status-${String(task.status).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}">${escapeHTML(statusLabels[task.status] || task.status)}</span>
+            <span class="task-v2-priority task-v2-priority-${escapeHTML(task.priority || 'medium')}">${escapeHTML(task.priority || 'medium')}</span>
+            <button class="task-v2-date ${overdue ? 'overdue' : ''}" type="button" ${canManageTask ? `onclick="openEditTaskModal('${task.id}')"` : 'disabled'}><i data-lucide="calendar"></i>${task.due_date || 'No due date'}</button>
+            ${canManageTask ? `<button class="task-v2-more" type="button" aria-label="Edit ${escapeHTML(task.displayTitle || task.title)}" onclick="openEditTaskModal('${task.id}')"><i data-lucide="more-horizontal"></i></button>` : '<span></span>'}
+        </article>`;
+    }).join('');
+
+    return `
+        <section class="task-v2-shell" aria-labelledby="task-v2-title">
+            <div class="task-v2-header">
+                <div>
+                    <div class="task-v2-eyebrow">WORK MANAGEMENT <span>BETA</span></div>
+                    <h1 class="page-title" id="task-v2-title">Task Manager V2</h1>
+                    <p class="page-subtitle">Plan, assign and track team work from one focused workspace.</p>
+                </div>
+                <button class="btn btn-secondary" type="button" onclick="renderView('tasks')"><i data-lucide="arrow-left"></i> Legacy Tasks</button>
+            </div>
+            <nav class="task-v2-tabs" aria-label="Task views">
+                <button class="active" data-task-v2-mode="list" onclick="setTaskV2Mode('list')">List</button>
+                <button data-task-v2-mode="board" onclick="setTaskV2Mode('board')">Board</button>
+            </nav>
+            <div class="task-v2-stats" aria-label="Task summary">
+                <div><strong>${tasks.length}</strong><span>Total tasks</span></div>
+                <div><strong>${openCount}</strong><span>Open</span></div>
+                <div><strong>${dueSoonCount}</strong><span>Due this week</span></div>
+                <div class="${overdueCount ? 'is-alert' : ''}"><strong>${overdueCount}</strong><span>Overdue</span></div>
+            </div>
+            <div class="task-v2-toolbar" role="search">
+                <label class="task-v2-search"><i data-lucide="search"></i><input type="search" id="taskV2Search" placeholder="Search tasks, assignees or projects" oninput="filterTasksV2()" aria-label="Search tasks"></label>
+                <select id="taskV2Status" class="form-control" onchange="filterTasksV2()" aria-label="Filter by status">
+                    <option value="">All statuses</option><option value="Pending Approval">Pending approval</option><option value="todo">To do</option><option value="in_progress">In progress</option><option value="review">Review</option><option value="completed">Done</option>
+                </select>
+                <button class="btn btn-secondary task-v2-quick-filter" data-filter="overdue" type="button" onclick="setTaskV2QuickFilter('overdue')">Late</button>
+                <button class="btn btn-secondary task-v2-quick-filter" data-filter="week" type="button" onclick="setTaskV2QuickFilter('week')">Due this week</button>
+                <button class="btn btn-secondary" type="button" onclick="clearTaskV2Filters()">Clear</button>
+                ${canCreateTask ? `<button class="btn btn-primary" type="button" onclick="toggleTaskV2Create()"><i data-lucide="plus"></i> Add a task</button>` : ''}
+            </div>
+            <div class="task-v2-workspace">
+                <aside class="task-v2-lists"><h3>Projects</h3>${projectItems}</aside>
+                <main class="task-v2-list-pane">
+                    <div class="task-v2-list-heading"><div><h2>Tasks</h2><span id="taskV2VisibleCount">${tasks.length}</span></div><span>${tasks.reduce((sum, task) => sum + (parseFloat(task.estimated_time) || 0), 0)}h estimated</span></div>
+                    <div id="taskV2Rows" class="task-v2-rows">${taskRows || '<div class="task-v2-empty">No tasks in this view.</div>'}</div>
+                </main>
+            </div>
+            <div class="task-v2-legacy-host">${taskContent}</div>
+        </section>`;
+}
+
+window.filterTasksV2 = function() {
+    const query = (document.getElementById('taskV2Search')?.value || '').trim().toLowerCase();
+    const status = document.getElementById('taskV2Status')?.value || '';
+    const projectId = window.taskV2SelectedProject || 'all';
+    const quickFilter = window.taskV2QuickFilter || '';
+    const now = new Date(new Date().toDateString());
+    let visibleCount = 0;
+    const visibleIds = new Set(window.visibleTaskIds || []);
+    Object.values(window.taskCache || {}).filter(task => visibleIds.has(task.id)).forEach(task => {
+        const row = document.querySelector(`.task-v2-row[data-task-id="${task.id}"]`);
+        if (!row) return;
+        const project = (window.projectsCache || []).find(item => item.id === task.project_id);
+        const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, project?.project_name].filter(Boolean).join(' ').toLowerCase();
+        const due = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
+        const days = due ? (due - now) / 86400000 : null;
+        const matchesQuick = !quickFilter || (quickFilter === 'overdue' && days < 0 && task.status !== 'completed') || (quickFilter === 'week' && days >= 0 && days <= 7 && task.status !== 'completed');
+        const matchesProject = projectId === 'all' || (projectId === 'none' ? !task.project_id : task.project_id === projectId);
+        const visible = (!query || searchable.includes(query)) && (!status || task.status === status) && matchesProject && matchesQuick;
+        row.style.display = visible ? '' : 'none';
+        if (visible) visibleCount += 1;
+    });
+    const count = document.getElementById('taskV2VisibleCount');
+    if (count) count.textContent = visibleCount;
+};
+
+window.openInlineSubtaskComposer = function() {
+    const parentId = document.getElementById('detailsTaskId')?.value;
+    const list = document.getElementById('taskDetailSubtaskHost') || document.getElementById('taskSubTasksList');
+    if (!parentId || !list || document.getElementById('inlineSubtaskForm')) return;
+    const parent = window.taskCache?.[parentId];
+    if (!parent) return;
+    list.insertAdjacentHTML('afterbegin', `
+        <form id="inlineSubtaskForm" class="inline-subtask-form" onsubmit="handleInlineSubtaskSubmit(event, '${parentId}')">
+            <div class="inline-subtask-title-row">
+                <span class="inline-subtask-avatar">${escapeHTML((currentUser?.full_name || currentUser?.email || '?').charAt(0).toUpperCase())}</span>
+                <input id="inlineSubtaskTitle" class="form-control" type="text" placeholder="Write a task name or type / for commands" aria-label="Subtask name" required autofocus>
+                <label class="inline-subtask-date"><i data-lucide="calendar"></i><input id="inlineSubtaskDue" type="date" aria-label="Subtask due date"></label>
+            </div>
+            <div class="inline-subtask-options">
+                <i data-lucide="calendar-days" aria-hidden="true"></i>
+                <select id="inlineSubtaskAssignee" class="form-control inline-subtask-compact" aria-label="Subtask assignee" title="Assignee">
+                    <option value="">Unassigned</option>${window.taskAssigneeOptionsCache || ''}
+                </select>
+                <select id="inlineSubtaskPriority" class="form-control inline-subtask-compact" aria-label="Priority" title="Priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option><option value="urgent">Critical</option></select>
+                <label class="inline-subtask-estimate"><i data-lucide="hourglass"></i><input id="inlineSubtaskEstimate" type="text" placeholder="Estimate" aria-label="Estimated time"></label>
+                <label class="inline-subtask-notify" title="Task notifications are required by the workflow"><input type="checkbox" checked disabled> Notify</label>
+                <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('inlineSubtaskForm')?.remove()">Cancel</button>
+                <button class="btn btn-primary btn-sm" type="submit">Add subtask</button>
+            </div>
+        </form>`);
+    const assignee = document.getElementById('inlineSubtaskAssignee');
+    if (assignee) assignee.value = parent.assignee_id || currentUser.id;
+    document.getElementById('inlineSubtaskTitle')?.focus();
+    lucide.createIcons();
+};
+
+window.handleInlineSubtaskSubmit = async function(event, parentId) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = form.querySelector('button[type="submit"]');
+    const parent = window.taskCache?.[parentId];
+    if (!parent) return;
+    const title = document.getElementById('inlineSubtaskTitle').value.trim();
+    const assigneeId = document.getElementById('inlineSubtaskAssignee').value || currentUser.id;
+    const dueDate = document.getElementById('inlineSubtaskDue').value || null;
+    const priority = document.getElementById('inlineSubtaskPriority').value || parent.priority || 'medium';
+    const estimatedTime = document.getElementById('inlineSubtaskEstimate').value.trim() || null;
+    if (!title) return;
+    submit.disabled = true;
+    const result = await db.createTask(
+        title, '', assigneeId, dueDate, currentUser.id, priority,
+        parent.category || 'General', { en: title }, {}, null, null, estimatedTime,
+        parent.visibility || 'public', parent.project_id || null, parent.tags || [],
+        parent.visible_to || [], null, null, null, 'todo', parent.supervisor_id || null,
+        parent.department || null, parent.sub_type || null, parent.watchers || [], parentId
+    );
+    if (!result.success) {
+        submit.disabled = false;
+        showToast(result.error?.message || 'Failed to create subtask', 'danger');
+        return;
+    }
+    showToast('Subtask created successfully', 'success');
+    await db.triggerWebhooks('task_created', { title, assignee_id: assigneeId, parent_task_id: parentId });
+    await renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
+    await openTaskDetailsModal(parentId);
+};
+
+window.selectTaskV2Project = function(projectId) {
+    window.taskV2SelectedProject = projectId;
+    document.querySelectorAll('.task-v2-list-link').forEach(button => button.classList.toggle('active', button.getAttribute('onclick').includes(`'${projectId}'`)));
+    window.filterTasksV2();
+};
+
+window.setTaskV2QuickFilter = function(filter) {
+    window.taskV2QuickFilter = window.taskV2QuickFilter === filter ? '' : filter;
+    document.querySelectorAll('.task-v2-quick-filter').forEach(button => button.classList.toggle('active', button.dataset.filter === window.taskV2QuickFilter));
+    window.filterTasksV2();
+};
+
+window.taskV2ToggleComplete = async function(taskId, status) {
+    await window.handleUpdateTaskStatus(taskId, status);
+    await renderView('tasks_v2');
+};
+
+window.setTaskV2Mode = function(mode) {
+    document.querySelectorAll('[data-task-v2-mode]').forEach(button => button.classList.toggle('active', button.dataset.taskV2Mode === mode));
+    document.querySelector('.task-v2-workspace')?.classList.toggle('hidden', mode !== 'list');
+    document.querySelector('.task-v2-legacy-host')?.classList.toggle('v2-board-active', mode === 'board');
+};
+
+window.toggleTaskV2Create = function() {
+    const host = document.querySelector('.task-v2-legacy-host');
+    const form = document.getElementById('taskFormContainer');
+    if (!host || !form) return;
+    host.classList.toggle('show-form');
+    form.style.display = host.classList.contains('show-form') ? 'block' : 'none';
+    if (host.classList.contains('show-form')) document.getElementById('taskTitle')?.focus();
+};
+
+window.clearTaskV2Filters = function() {
+    const search = document.getElementById('taskV2Search');
+    const status = document.getElementById('taskV2Status');
+    if (search) search.value = '';
+    if (status) status.value = '';
+    window.taskV2QuickFilter = '';
+    window.taskV2SelectedProject = 'all';
+    document.querySelectorAll('.task-v2-quick-filter').forEach(button => button.classList.remove('active'));
+    document.querySelectorAll('.task-v2-list-link').forEach((button, index) => button.classList.toggle('active', index === 0));
+    window.filterTasksV2();
+};
+
 window.toggleAITaskMode = function() {
     const std = document.getElementById('standardTaskForm');
     const ai = document.getElementById('aiTaskForm');
@@ -3574,7 +3887,7 @@ window.toggleAITaskMode = function() {
 
 window.handleAICreateTask = async function(e) {
     e.preventDefault();
-    const canCreateTask = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    const canCreateTask = !!currentUser;
     if (!canCreateTask) {
         showToast("You do not have permission to create tasks.", "danger");
         return;
@@ -3614,7 +3927,7 @@ window.handleAICreateTask = async function(e) {
     if (success) {
         showToast(t('toast_ai_parsed_and_created_task'), "success");
         await db.triggerWebhooks('task_created', { title: input, assignee_id: assigneeId, due_date: dueStr, priority: priority, is_ai_parsed: true });
-        renderView('tasks');
+        renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
     } else {
         showToast(t('toast_failed_to_create_task'), "danger");
     }
@@ -3630,12 +3943,64 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '') {
     
     if (value === 'Marketing') {
         subTypeGroup.style.display = 'block';
+        const select = document.getElementById(prefix === 'new' ? 'taskSubType' : 'editTaskSubType');
+        if (select) select.required = true;
     } else {
         subTypeGroup.style.display = 'none';
         const select = document.getElementById(prefix === 'new' ? 'taskSubType' : 'editTaskSubType');
-        if (select) select.value = '';
+        if (select) { select.value = ''; select.required = false; }
+        handleMarketingTaskTypeChange(prefix, '');
     }
 };
+
+function renderMarketingDesignFields(prefix) {
+    const id = prefix === 'new' ? 'task' : 'editTask';
+    return `
+        <div class="marketing-design-grid">
+            <div class="form-group"><label class="form-label">The Department</label><select id="${id}MarketingDepartment" class="form-control" required disabled><option value="">Select Department</option><option value="Muqamsa">Muqamsa</option><option value="Muqam.party">Muqam.party</option><option value="Coffee Corner">Coffee Corner</option></select></div>
+            <div class="form-group"><label class="form-label">Content Type</label><select id="${id}ContentType" class="form-control" required disabled><option value="">Select Content Type</option><option value="Posts design">Posts design</option><option value="Video Reels">Video Reels</option><option value="Video Promo">Video Promo</option><option value="Cover Designing">Cover Designing</option><option value="Advertising Video">Advertising Video</option><option value="Advertisement Design">Advertisement Design</option><option value="Proposal">Proposal</option></select></div>
+            <div class="form-group marketing-design-full"><label class="form-label">Description</label><textarea id="${id}DesignDescription" class="form-control" rows="3" placeholder="Insert note" disabled></textarea></div>
+            <div class="form-group marketing-design-full"><label class="form-label">Content link</label><div id="${id}ContentLinks" class="marketing-link-list"><div class="marketing-link-row"><input type="url" class="form-control" placeholder="https://..." disabled><button type="button" class="btn btn-secondary" onclick="addMarketingLink('${id}ContentLinks')">Add</button></div></div></div>
+            <div class="form-group marketing-design-full"><label class="form-label">Task submission link</label><div id="${id}SubmissionLinks" class="marketing-link-list"><div class="marketing-link-row"><input type="url" class="form-control" placeholder="https://..." disabled><button type="button" class="btn btn-secondary" onclick="addMarketingLink('${id}SubmissionLinks')">Add</button></div></div></div>
+            <div class="form-group"><label class="form-label">Deadline</label><input type="date" id="${id}DesignDeadline" class="form-control" required disabled></div>
+            <div class="form-group"><label class="form-label">Delivery Status</label><select id="${id}DeliveryStatus" class="form-control" data-manager-only="true" disabled><option value="">Awaiting manager review</option><option value="Approved">Approved</option><option value="Edit needed">Edit needed</option></select><small class="text-muted">Only the Marketing department manager can change this field.</small></div>
+        </div>`;
+}
+
+window.handleMarketingTaskTypeChange = function(prefix = 'new', value = '') {
+    const container = document.getElementById(prefix === 'new' ? 'newMarketingDesignFields' : 'editMarketingDesignFields');
+    if (!container) return;
+    const active = value === 'Designing Task';
+    container.style.display = active ? 'block' : 'none';
+    container.querySelectorAll('input, textarea, select').forEach(field => {
+        field.disabled = !active || (field.dataset.managerOnly === 'true' && !window.isMarketingDepartmentManager);
+    });
+};
+
+window.addMarketingLink = function(containerId, value = '') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const row = document.createElement('div');
+    row.className = 'marketing-link-row';
+    row.innerHTML = `<input type="url" class="form-control" placeholder="https://..." value="${escapeHTML(value)}"><button type="button" class="btn btn-secondary" onclick="this.parentElement.remove()">Remove</button>`;
+    container.appendChild(row);
+};
+
+function getMarketingLinks(containerId) {
+    return Array.from(document.querySelectorAll(`#${containerId} input[type="url"]`)).map(input => input.value.trim()).filter(Boolean);
+}
+
+function setMarketingLinks(containerId, values = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const links = Array.isArray(values) && values.length ? values : [''];
+    container.innerHTML = '';
+    links.forEach((value, index) => {
+        const row = document.createElement('div'); row.className = 'marketing-link-row';
+        row.innerHTML = `<input type="url" class="form-control" placeholder="https://..." value="${escapeHTML(value)}"><button type="button" class="btn btn-secondary" onclick="${index === 0 ? `addMarketingLink('${containerId}')` : 'this.parentElement.remove()'}">${index === 0 ? 'Add' : 'Remove'}</button>`;
+        container.appendChild(row);
+    });
+}
 
 window.handleTaskAssigneeChange = async function (prefix = 'new') {
     const assigneeId = document.getElementById(prefix === 'new' ? 'taskAssignee' : 'editTaskAssignee').value;
@@ -3664,7 +4029,7 @@ window.handleTaskAssigneeChange = async function (prefix = 'new') {
 window.handleCreateTask = async function(e) {
     e.preventDefault();
     
-    const canCreateTask = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    const canCreateTask = !!currentUser;
     if (!canCreateTask) {
         showToast("You do not have permission to create tasks.", "danger");
         return;
@@ -3676,7 +4041,9 @@ window.handleCreateTask = async function(e) {
     const priority = document.getElementById('taskPriority').value;
     const projectId = document.getElementById('taskProject').value || null;
     const supervisorSelect = document.getElementById('taskSupervisor');
-    const supervisorId = supervisorSelect && !supervisorSelect.disabled ? supervisorSelect.value : null;
+    const supervisorId = supervisorSelect && !supervisorSelect.disabled
+        ? supervisorSelect.value
+        : (window.taskDepartmentSupervisors?.[0]?.id || null);
 
     // Check if assignee is in Designing
     const allUsers = await db.fetchUsers();
@@ -3717,25 +4084,30 @@ window.handleCreateTask = async function(e) {
     const department = document.getElementById('taskDepartment') ? document.getElementById('taskDepartment').value : null;
     const subTypeGroup = document.getElementById('taskSubTypeGroup');
     const subType = document.getElementById('taskSubType') && subTypeGroup && subTypeGroup.style.display !== 'none' ? document.getElementById('taskSubType').value : null;
+    const isMarketingDesign = department === 'Marketing' && subType === 'Designing Task';
+    if (isMarketingDesign) status = 'review';
+    const description = isMarketingDesign ? (document.getElementById('taskDesignDescription')?.value.trim() || '') : '';
+    const marketingDepartment = isMarketingDesign ? document.getElementById('taskMarketingDepartment')?.value : null;
+    const contentLinks = isMarketingDesign ? getMarketingLinks('taskContentLinks') : [];
+    const submissionLinks = isMarketingDesign ? getMarketingLinks('taskSubmissionLinks') : [];
+    const deliveryStatus = isMarketingDesign && window.isMarketingDepartmentManager ? document.getElementById('taskDeliveryStatus')?.value || null : null;
+    if (isMarketingDesign) {
+        contentType = document.getElementById('taskContentType')?.value || null;
+        sourceLink = contentLinks[0] || null;
+        uploadLink = submissionLinks[0] || null;
+        document.getElementById('taskDue').value = document.getElementById('taskDesignDeadline')?.value || due;
+    }
     let watchers = [];
     if (document.getElementById('enableWatchers') && document.getElementById('enableWatchers').checked) {
         watchers = Array.from(document.getElementById('taskWatchers').selectedOptions).map(opt => opt.value);
     }
     const parentTaskId = document.getElementById('taskParentId') ? document.getElementById('taskParentId').value || null : null;
 
-    const { success, error } = await db.createTask(title, '', assignee, due, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, supervisorId, department, subType, watchers, parentTaskId);
+    const finalDue = isMarketingDesign ? document.getElementById('taskDesignDeadline').value : due;
+    const { success, error } = await db.createTask(title, description, assignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, supervisorId, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus);
     if (success) {
         showToast(t('toast_task_created_successfully'), "success");
         await db.triggerWebhooks('task_created', { title, assignee_id: assignee, supervisor_id: supervisorId, due_date: due, priority, project_id: projectId });
-        if (assignee && assignee !== currentUser.id) {
-            await db.createNotification(assignee, `You have been assigned a new task: ${title}`);
-        }
-        if (currentUser.department_id) {
-            const currentDept = depts.find(d => d.id === currentUser.department_id);
-            if (currentDept && currentDept.head_id && currentDept.head_id !== currentUser.id) {
-                await db.createNotification(currentDept.head_id, `A new task was created by your department member: ${title}`);
-            }
-        }
         if (status === 'Pending Approval') {
             const hussain = allUsers.find(u => u.full_name && u.full_name.toLowerCase().includes('hussain') || u.email && u.email.toLowerCase().includes('hussain'));
             if (hussain) {
@@ -3743,7 +4115,7 @@ window.handleCreateTask = async function(e) {
             }
             showToast(t('toast_task_sent_to_hussain_for_approval'), "info");
         }
-        renderView('tasks');
+        renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
     } else {
         showToast(t('toast_failed_to_create_task') + (error?.message || ''), "danger");
     }
@@ -3754,8 +4126,8 @@ window.handleUpdateTaskStatus = async function (id, status) {
     let actualStatus = status;
     let needsManagerApproval = false;
 
-    if (status === 'completed' && task && task.department === 'Marketing' && task.sub_type === 'Designing Task') {
-        actualStatus = 'Pending Approval';
+    if (status === 'completed' && task && task.department === 'Marketing' && task.sub_type === 'Designing Task' && task.delivery_status !== 'Approved') {
+        actualStatus = 'review';
         needsManagerApproval = true;
     }
 
@@ -3767,7 +4139,7 @@ window.handleUpdateTaskStatus = async function (id, status) {
         await db.triggerWebhooks('task_status_updated', { task_id: id, status: actualStatus });
         
         if (needsManagerApproval) {
-            showToast('Task requires manager approval', 'info');
+            showToast('Designing task remains in Review until the Marketing manager approves it.', 'info');
             if (task.supervisor_id) {
                 await db.createNotification(task.supervisor_id, `Designing task requires your approval: ${task.title}`);
             } else {
@@ -3814,8 +4186,8 @@ window.handleTaskDrop = async function(e, status) {
         // Intercept Marketing / Designing Task going to 'completed'
         const task = window.taskCache ? window.taskCache[id] : null;
         let actualStatus = status;
-        if (status === 'completed' && task && task.department === 'Marketing' && task.sub_type === 'Designing Task') {
-            actualStatus = 'Pending Approval';
+        if (status === 'completed' && task && task.department === 'Marketing' && task.sub_type === 'Designing Task' && task.delivery_status !== 'Approved') {
+            actualStatus = 'review';
         }
 
         // Optimistic UI update
@@ -3847,6 +4219,8 @@ window.openEditTaskModal = async function(id) {
         
         document.getElementById('editTaskId').value = task.id;
         document.getElementById('editTaskTitle').value = task.title || '';
+        document.getElementById('editTaskDescription').value = task.description || '';
+        document.getElementById('editTaskCategory').value = task.category || '';
 
         document.getElementById('editTaskPriority').value = task.priority || 'medium';
         
@@ -3880,9 +4254,8 @@ window.openEditTaskModal = async function(id) {
             projectSelect.value = task.project_id || '';
         }
 
-        document.getElementById('editTaskContentType').value = task.content_type || '';
-        document.getElementById('editTaskSourceLink').value = task.source_link || '';
-        document.getElementById('editTaskUploadLink').value = task.upload_link || '';
+        const marketingFields = document.getElementById('editMarketingDesignFields');
+        if (marketingFields) marketingFields.innerHTML = renderMarketingDesignFields('edit');
 
         // Department, Sub-Type, and Watchers
         const deptSelect = document.getElementById('editTaskDepartment');
@@ -3900,6 +4273,16 @@ window.openEditTaskModal = async function(id) {
         const subTypeSelect = document.getElementById('editTaskSubType');
         if (subTypeSelect) {
             subTypeSelect.value = task.sub_type || '';
+        }
+        handleMarketingTaskTypeChange('edit', task.sub_type || '');
+        if (task.sub_type === 'Designing Task') {
+            document.getElementById('editTaskMarketingDepartment').value = task.marketing_department || '';
+            document.getElementById('editTaskContentType').value = task.content_type || '';
+            document.getElementById('editTaskDesignDescription').value = task.description || '';
+            document.getElementById('editTaskDesignDeadline').value = formatDate(task.due_date);
+            document.getElementById('editTaskDeliveryStatus').value = task.delivery_status || '';
+            setMarketingLinks('editTaskContentLinks', task.content_links?.length ? task.content_links : (task.source_link ? [task.source_link] : []));
+            setMarketingLinks('editTaskSubmissionLinks', task.submission_links?.length ? task.submission_links : (task.upload_link ? [task.upload_link] : []));
         }
 
         const watchersCheckbox = document.getElementById('editEnableWatchers');
@@ -3926,6 +4309,7 @@ window.openEditTaskModal = async function(id) {
         
         const modal = document.getElementById('editTaskModal');
         if (modal) {
+            prepareTeamworkEditModal(task);
             modal.classList.add('active');
         } else {
             console.error('editTaskModal not found in DOM');
@@ -3937,10 +4321,40 @@ window.openEditTaskModal = async function(id) {
     }
 };
 
+function prepareTeamworkEditModal(task) {
+    const modal = document.getElementById('editTaskModal');
+    const form = document.getElementById('editTaskForm');
+    if (!modal || !form) return;
+    modal.classList.add('teamwork-edit-task');
+    let context = form.querySelector('.teamwork-edit-context');
+    if (!context) {
+        context = document.createElement('div');
+        context.className = 'teamwork-edit-context';
+        context.innerHTML = `<div class="teamwork-edit-list">Task list <strong>Inbox</strong></div><div class="teamwork-edit-tabs"><button type="button" class="active" onclick="setEditTaskTab('details')">Details</button><button type="button" onclick="setEditTaskTab('advanced')">Advanced options</button></div>`;
+        form.querySelector('#editTaskId').insertAdjacentElement('afterend', context);
+    }
+    const advancedIds = ['editTaskCategory', 'editTaskProject', 'editTaskDepartment', 'editTaskSubType', 'editEnableWatchers'];
+    form.querySelectorAll('.edit-task-advanced').forEach(element => element.classList.remove('edit-task-advanced'));
+    advancedIds.forEach(id => document.getElementById(id)?.closest('.form-group')?.classList.add('edit-task-advanced'));
+    document.getElementById('editMarketingDesignFields')?.classList.add('edit-task-advanced');
+    setEditTaskTab('details');
+}
+
+window.setEditTaskTab = function(tab) {
+    const modal = document.getElementById('editTaskModal');
+    if (!modal) return;
+    modal.dataset.editTab = tab;
+    modal.querySelectorAll('.teamwork-edit-tabs button').forEach((button, index) => button.classList.toggle('active', tab === 'details' ? index === 0 : index === 1));
+    modal.querySelectorAll('.edit-task-advanced').forEach(field => field.style.display = tab === 'advanced' ? '' : 'none');
+    const marketingFields = document.getElementById('editMarketingDesignFields');
+    if (marketingFields && tab === 'advanced') handleMarketingTaskTypeChange('edit', document.getElementById('editTaskSubType')?.value || '');
+};
+
 window.handleEditTaskSubmit = async function(e) {
     e.preventDefault();
     const id = document.getElementById('editTaskId').value;
     const title = document.getElementById('editTaskTitle').value;
+    const category = document.getElementById('editTaskCategory').value;
 
     const priority = document.getElementById('editTaskPriority').value;
     const assigneeId = document.getElementById('editTaskAssignee').value;
@@ -3966,6 +4380,8 @@ window.handleEditTaskSubmit = async function(e) {
 
     const updates = {
         title: title,
+        description: document.getElementById('editTaskDescription').value.trim(),
+        category: category || null,
         priority: priority,
         assignee_id: assigneeId,
         due_date: dueDate,
@@ -3975,12 +4391,6 @@ window.handleEditTaskSubmit = async function(e) {
         estimated_time: estimate || null,
         project_id: projectId
     };
-
-    if (isDesigner) {
-        updates.content_type = document.getElementById('editTaskContentType').value || null;
-        updates.source_link = document.getElementById('editTaskSourceLink').value || null;
-        updates.upload_link = document.getElementById('editTaskUploadLink').value || null;
-    }
 
     if (projectId) {
         const proj = window.projectsCache.find(p => p.id === projectId);
@@ -3998,6 +4408,25 @@ window.handleEditTaskSubmit = async function(e) {
         updates.sub_type = subTypeEl.value || null;
     } else {
         updates.sub_type = null;
+    }
+    const isMarketingDesign = updates.department === 'Marketing' && updates.sub_type === 'Designing Task';
+    if (isMarketingDesign) {
+        updates.marketing_department = document.getElementById('editTaskMarketingDepartment').value || null;
+        updates.content_type = document.getElementById('editTaskContentType').value || null;
+        updates.description = document.getElementById('editTaskDesignDescription').value.trim();
+        updates.content_links = getMarketingLinks('editTaskContentLinks');
+        updates.submission_links = getMarketingLinks('editTaskSubmissionLinks');
+        updates.source_link = updates.content_links[0] || null;
+        updates.upload_link = updates.submission_links[0] || null;
+        updates.due_date = document.getElementById('editTaskDesignDeadline').value;
+        if (window.isMarketingDepartmentManager) {
+            updates.delivery_status = document.getElementById('editTaskDeliveryStatus').value || null;
+        }
+    } else {
+        updates.marketing_department = null;
+        updates.content_links = [];
+        updates.submission_links = [];
+        updates.delivery_status = null;
     }
 
     const watchersCheckbox = document.getElementById('editEnableWatchers');
@@ -4023,7 +4452,8 @@ window.handleEditTaskSubmit = async function(e) {
         showToast(t('toast_task_updated_successfully'), "success");
         await db.triggerWebhooks('task_updated', { task_id: id, updates: updates });
         document.getElementById('editTaskModal').classList.remove('active');
-        renderView('tasks');
+        await renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
+        if (window.taskCache?.[id]) openTaskDetailsModal(id);
     }
 };
 
@@ -4036,7 +4466,7 @@ window.handleDeleteTask = async function(id) {
             showToast(t('toast_task_deleted_successfully'), "success");
             await db.triggerWebhooks('task_deleted', { task_id: id });
             document.getElementById('editTaskModal').classList.remove('active');
-            renderView('tasks');
+            renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
         }
     });
 };
@@ -4776,6 +5206,7 @@ window.renderView = async function(viewId, isBack = false) {
             case 'projects': content = await renderProjects(); break;
             case 'approvals': content = await renderApprovals(); break;
             case 'tasks': content = await renderTasks(); break;
+            case 'tasks_v2': content = await renderTasksV2(); break;
             case 'departments': content = await renderDepartments(); break;
             case 'translations': content = await renderTranslationsPage(); break;
             case 'clients': content = await renderClients(); break;
@@ -4866,14 +5297,14 @@ async function renderNotifications() {
 
     if (notifs && notifs.length > 0) {
         listHtml = notifs.map(n => `
-            <div class="card fade-in-up" style="margin-bottom: 1rem; ${!n.is_read ? 'border-left: 4px solid var(--color-primary); background: rgba(37,99,235,0.02);' : ''}">
+            <div class="card fade-in-up" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''} style="margin-bottom: 1rem; ${n.task_id ? 'cursor: pointer;' : ''} ${!n.is_read ? 'border-left: 4px solid var(--color-primary); background: rgba(37,99,235,0.02);' : ''}">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div style="display: flex; gap: 1rem; align-items: center;">
                         <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--color-surface); display: flex; align-items: center; justify-content: center; color: var(--color-primary);">
                             <i data-lucide="bell"></i>
                         </div>
                         <div>
-                            <div style="font-weight: 500; font-size: 1rem; color: var(--color-text);">${n.message}</div>
+                            <div style="font-weight: 500; font-size: 1rem; color: var(--color-text);">${escapeHTML(n.message)}</div>
                             <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(n.created_at).toLocaleString()}</div>
                         </div>
                     </div>
@@ -4924,7 +5355,7 @@ async function pollNotifications() {
             dropdown.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--color-text-secondary);">${t('notif_no_dropdown')}</div>`;
         } else {
             dropdown.innerHTML = notifs.map(n => `
-                <div class="notification-item ${!n.is_read ? 'unread' : ''}" style="padding: 10px; border-bottom: 1px solid var(--color-border); ${!n.is_read ? 'background: rgba(var(--color-primary-rgb), 0.05); font-weight: 500;' : ''}">
+                <div class="notification-item ${!n.is_read ? 'unread' : ''}" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''} style="padding: 10px; border-bottom: 1px solid var(--color-border); ${n.task_id ? 'cursor: pointer;' : ''} ${!n.is_read ? 'background: rgba(var(--color-primary-rgb), 0.05); font-weight: 500;' : ''}">
                     <div style="font-size: 0.875rem;">${escapeHTML(n.message)}</div>
                     <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">${new Date(n.created_at).toLocaleDateString()}</div>
                 </div>
@@ -4932,6 +5363,17 @@ async function pollNotifications() {
         }
     }
 }
+
+window.openTaskNotification = async function(taskId) {
+    const dropdown = document.getElementById('notificationsDropdown');
+    if (dropdown) dropdown.classList.remove('show');
+    await renderView('tasks_v2');
+    if (window.taskCache?.[taskId]) {
+        openTaskDetailsModal(taskId);
+    } else {
+        showToast('This task is no longer available or you do not have access.', 'warning');
+    }
+};
 
 window.toggleNotifications = async function () {
     const dropdown = document.getElementById('notificationsDropdown');
@@ -6848,7 +7290,7 @@ window.handleApprovalAction = async function(taskId, newStatus) {
             const reason = prompt("Please enter the rejection reason:");
             if (reason === null) return; // User cancelled
             
-            const res = await db.updateTaskStatus(taskId, 'in_progress');
+            const res = await db.updateTask(taskId, { delivery_status: 'Edit needed' });
             if (res.error) {
                 showToast(t('toast_failed_to_update_task'), 'danger');
             } else {
@@ -6876,7 +7318,9 @@ window.handleApprovalAction = async function(taskId, newStatus) {
     } else { // Approve
         const targetStatus = isDesigningTask ? 'completed' : newStatus;
         window.showConfirmModal(t('modal_title_task_approval'), t('modal_body_are_you_sure_you_want_to') + 'approve this task?', async () => {
-            const res = await db.updateTaskStatus(taskId, targetStatus);
+            const res = isDesigningTask
+                ? await db.updateTask(taskId, { delivery_status: 'Approved' })
+                : await db.updateTaskStatus(taskId, targetStatus);
             if (res.error) {
                 showToast(t('toast_failed_to_update_task'), 'danger');
             } else {
