@@ -1436,7 +1436,7 @@ window.openTaskDetailsModal = async function(id) {
     
     document.getElementById('taskSidePanel').classList.add('active');
     document.getElementById('taskSidePanelOverlay').classList.add('active');
-    document.getElementById('taskSidePanel').classList.toggle('task-v2-detail', currentView === 'tasks_v2');
+    document.getElementById('taskSidePanel').classList.toggle('task-v2-detail', currentView === 'tasks' || currentView === 'tasks_v2');
     
     // Check permission to create tasks
     const canCreateTask = !!currentUser;
@@ -3705,11 +3705,10 @@ async function renderTasksV2() {
         <section class="task-v2-shell" aria-labelledby="task-v2-title">
             <div class="task-v2-header">
                 <div>
-                    <div class="task-v2-eyebrow">WORK MANAGEMENT <span>BETA</span></div>
-                    <h1 class="page-title" id="task-v2-title">Task Manager V2</h1>
+                    <div class="task-v2-eyebrow">WORK MANAGEMENT</div>
+                    <h1 class="page-title" id="task-v2-title">Task Manager</h1>
                     <p class="page-subtitle">Plan, assign and track team work from one focused workspace.</p>
                 </div>
-                <button class="btn btn-secondary" type="button" onclick="renderView('tasks')"><i data-lucide="arrow-left"></i> Legacy Tasks</button>
             </div>
             <nav class="task-v2-tabs" aria-label="Task views">
                 <button class="active" data-task-v2-mode="list" onclick="setTaskV2Mode('list')">List</button>
@@ -5145,6 +5144,9 @@ window.renderView = async function(viewId, isBack = false) {
     if (viewId === 'null') {
         viewId = 'dashboard';
     }
+    // Preserve old bookmarks/notification links while keeping Task Manager as
+    // the single canonical destination.
+    if (viewId === 'tasks_v2') viewId = 'tasks';
     currentView = viewId;
     
     if (!currentUser && viewId !== 'login') {
@@ -5205,7 +5207,7 @@ window.renderView = async function(viewId, isBack = false) {
             case 'profile': content = await renderProfile(); break;
             case 'projects': content = await renderProjects(); break;
             case 'approvals': content = await renderApprovals(); break;
-            case 'tasks': content = await renderTasks(); break;
+            case 'tasks': content = await renderTasksV2(); break;
             case 'tasks_v2': content = await renderTasksV2(); break;
             case 'departments': content = await renderDepartments(); break;
             case 'translations': content = await renderTranslationsPage(); break;
@@ -5367,7 +5369,7 @@ async function pollNotifications() {
 window.openTaskNotification = async function(taskId) {
     const dropdown = document.getElementById('notificationsDropdown');
     if (dropdown) dropdown.classList.remove('show');
-    await renderView('tasks_v2');
+    await renderView('tasks');
     if (window.taskCache?.[taskId]) {
         openTaskDetailsModal(taskId);
     } else {
