@@ -14,6 +14,15 @@
   --color-success: #10B981;
   --color-warning: #F59E0B;
   --color-danger: #EF4444;
+  --color-violet: #8B5CF6;
+  --color-pink: #EC4899;
+  --color-cyan: #06B6D4;
+  --color-amber: #F59E0B;
+  --color-emerald: #10B981;
+  --color-coral: #F97316;
+  --gradient-brand: linear-gradient(135deg, #06B6D4 0%, #3B82F6 48%, #8B5CF6 100%);
+  --gradient-warm: linear-gradient(135deg, #F59E0B 0%, #F97316 52%, #EC4899 100%);
+  --gradient-fresh: linear-gradient(135deg, #10B981 0%, #06B6D4 100%);
 
   /* Sidebar styling */
   --sidebar-bg: rgba(255, 255, 255, 0.85);
@@ -75,6 +84,9 @@
   --color-theme-highlight: #FFFFFF;
   --color-border: rgba(255, 255, 255, 0.15);
   --color-shadow: rgba(0, 0, 0, 0.5);
+  --gradient-brand: linear-gradient(135deg, #22D3EE 0%, #3B82F6 48%, #A78BFA 100%);
+  --gradient-warm: linear-gradient(135deg, #FBBF24 0%, #FB7185 52%, #F472B6 100%);
+  --gradient-fresh: linear-gradient(135deg, #34D399 0%, #22D3EE 100%);
   
   --sidebar-bg: rgba(11, 25, 44, 0.75);
   --sidebar-text: #FFFFFF;

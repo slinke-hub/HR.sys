@@ -256,6 +256,8 @@ BEGIN
             SELECT unnest(array_remove(ARRAY[task_row.created_by, task_row.assignee_id, task_row.supervisor_id], NULL)) AS recipient_id
             UNION SELECT unnest(COALESCE(task_row.watchers, '{}'))
             UNION SELECT unnest(COALESCE(task_row.visible_to, '{}'))
+            UNION SELECT department.head_id FROM public.departments department
+                WHERE department.name = task_row.department AND department.head_id IS NOT NULL
             UNION SELECT unnest(COALESCE(project.assigned_people, '{}'))
                 FROM public.projects project WHERE project.id = task_row.project_id
             UNION SELECT user_id FROM public.task_comments WHERE task_id = p_task_id
@@ -264,7 +266,8 @@ BEGIN
     LOOP
         INSERT INTO public.notifications(user_id, message, event_type, task_id, actor_id, action_url, metadata)
         VALUES (recipient, p_message, p_event_type, p_task_id, p_actor_id, '/tasks-v2?task=' || p_task_id,
-                jsonb_build_object('task_title', task_row.title, 'parent_task_id', task_row.parent_task_id))
+                jsonb_build_object('task_title', task_row.title, 'parent_task_id', task_row.parent_task_id,
+                    'department_manager_id', (SELECT head_id FROM public.departments WHERE name = task_row.department LIMIT 1)))
         RETURNING * INTO notification_row;
 
         -- Authentication emails live in auth.users in this project. Email queue
@@ -300,13 +303,14 @@ BEGIN
             CASE WHEN NEW.parent_task_id IS NULL THEN 'New task: ' ELSE 'New subtask: ' END || NEW.title
         );
     ELSIF NEW.status IS DISTINCT FROM OLD.status THEN
-        PERFORM public.queue_task_notification(NEW.id, auth.uid(), 'task_status_changed',
-            'Task "' || NEW.title || '" moved ' ||
+        PERFORM public.queue_task_notification(NEW.id, auth.uid(), CASE WHEN NEW.status = 'Pending Approval' THEN 'task_approval_requested' ELSE 'task_status_changed' END,
+            CASE WHEN NEW.status = 'Pending Approval' THEN 'Completion approval requested for "' || NEW.title || '"'
+            ELSE 'Task "' || NEW.title || '" moved ' ||
             CASE
                 WHEN (CASE NEW.status WHEN 'todo' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'review' THEN 3 WHEN 'completed' THEN 4 ELSE 0 END)
                    >= (CASE OLD.status WHEN 'todo' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'review' THEN 3 WHEN 'completed' THEN 4 ELSE 0 END)
                 THEN 'forward' ELSE 'backward'
-            END || ' from ' || OLD.status || ' to ' || NEW.status);
+            END || ' from ' || OLD.status || ' to ' || NEW.status END);
     ELSIF NEW.assignee_id IS DISTINCT FROM OLD.assignee_id THEN
         PERFORM public.queue_task_notification(NEW.id, auth.uid(), 'task_assigned',
             'Task assigned: ' || NEW.title);

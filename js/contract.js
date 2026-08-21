@@ -85,7 +85,7 @@ window.renderContractForm = async function() {
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Job Title</label>
-                        <input type="text" id="job_title" value="${escapeContractHTML(employee.job_title)}" required>
+                        <select id="job_title" required>${typeof companyJobTitleOptions === 'function' ? companyJobTitleOptions(employee.job_title || '') : `<option value="${escapeContractHTML(employee.job_title)}">${escapeContractHTML(employee.job_title)}</option>`}</select>
                     </div>
                     <div class="form-group">
                         <label>Work Arrangement</label>

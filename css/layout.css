@@ -245,6 +245,31 @@
   color: var(--color-text-secondary);
 }
 
+/* Keep the header search field on the same high-contrast input palette. */
+[data-theme="dark"] .search-container,
+[data-theme="dark"] .search-container:focus-within {
+  background-color: #0B192C;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+[data-theme="dark"] .search-input,
+[data-theme="dark"] .search-input::placeholder {
+  color: #FFFFFF !important;
+  -webkit-text-fill-color: #FFFFFF;
+}
+
+[data-theme="light"] .search-container,
+[data-theme="light"] .search-container:focus-within {
+  background-color: #FFFFFF;
+  border-color: rgba(11, 25, 44, 0.22);
+}
+
+[data-theme="light"] .search-input,
+[data-theme="light"] .search-input::placeholder {
+  color: #0B192C !important;
+  -webkit-text-fill-color: #0B192C;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;

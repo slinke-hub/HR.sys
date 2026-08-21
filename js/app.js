@@ -179,7 +179,11 @@ window.showEditUserModal = async (userId) => {
     document.getElementById('editFullName').value = user.full_name || '';
     document.getElementById('editIqama').value = user.iqama_number || '';
     document.getElementById('editPhone').value = user.phone_number || '';
-    document.getElementById('editJobTitle').value = user.job_title || '';
+    const departments = await db.fetchDepartments();
+    const departmentSelect = document.getElementById('editDepartment');
+    departmentSelect.innerHTML = '<option value="">Select Department</option>' + departments.map(department => `<option value="${department.id}" ${department.id === user.department_id ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('');
+    const selectedDepartment = departments.find(department => department.id === user.department_id)?.name || '';
+    document.getElementById('editJobTitle').innerHTML = companyJobTitleOptions(user.job_title || '',selectedDepartment);
     if (document.getElementById('editAvatarUrl')) {
         document.getElementById('editAvatarUrl').value = user.avatar_url || localStorage.getItem('user_avatar_' + user.id) || '';
     }
@@ -203,6 +207,7 @@ window.handleUpdateUser = async (e) => {
         iqama_number: document.getElementById('editIqama').value,
         phone_number: document.getElementById('editPhone').value,
         job_title: document.getElementById('editJobTitle').value,
+        department_id: document.getElementById('editDepartment').value || null,
         avatar_url: document.getElementById('editAvatarUrl')?.value || null,
         role: document.getElementById('editRole').value,
         manager_id: document.getElementById('editManagerId').value || null
@@ -212,7 +217,7 @@ window.handleUpdateUser = async (e) => {
         localStorage.setItem('user_avatar_' + userId, updates.avatar_url);
     }
     const res = await db.updateUserProfile(userId, updates);
-    if (res) {
+    if (res.success) {
         // Invalidate view cache
         if (window.viewHTMLCache) {
             delete window.viewHTMLCache.dashboard;
@@ -391,7 +396,48 @@ window.showNewRequestModal = async () => {
     }
     
 
+    document.getElementById('requestType').value = 'Leave Request';
+    document.getElementById('requestLoanAmount').value = '';
+    document.getElementById('requestNumberOfDays').value = '';
+    document.getElementById('requestLeaveType').value = 'Annual/Vacation';
+    document.getElementById('requestShortLeaveReason').value = '';
+    document.getElementById('requestShortLeaveDuration').value = '15';
+    handleNewRequestTypeChange('Leave Request');
     document.getElementById('requestModal').classList.add('active');
+};
+
+window.handleNewRequestTypeChange = function(requestType) {
+    const isLeave = requestType === 'Leave Request';
+    const isLoan = requestType === 'Loan Request' || requestType === 'Loan';
+    document.getElementById('leaveTypeGroup').style.display = isLeave ? 'block' : 'none';
+    const daysGroup = document.getElementById('leaveDaysGroup');
+    const daysInput = document.getElementById('requestNumberOfDays');
+    daysGroup.style.display = isLeave ? 'block' : 'none';
+    daysInput.required = isLeave;
+    if (!isLeave) daysInput.value = '';
+    const amountGroup = document.getElementById('loanAmountGroup');
+    const amountInput = document.getElementById('requestLoanAmount');
+    amountGroup.style.display = isLoan ? 'block' : 'none';
+    amountInput.required = isLoan;
+    if (!isLoan) amountInput.value = '';
+    handleRequestLeaveTypeChange(isLeave ? document.getElementById('requestLeaveType').value : '');
+};
+
+window.handleRequestLeaveTypeChange = function(leaveType) {
+    const isShortLeave = leaveType === 'Short Leave';
+    const shortFields = document.getElementById('requestShortLeaveFields');
+    const reasonInput = document.getElementById('requestShortLeaveReason');
+    const durationInput = document.getElementById('requestShortLeaveDuration');
+    const daysGroup = document.getElementById('leaveDaysGroup');
+    const daysInput = document.getElementById('requestNumberOfDays');
+    if (shortFields) shortFields.style.display = isShortLeave ? 'block' : 'none';
+    if (reasonInput) reasonInput.required = isShortLeave;
+    if (durationInput) durationInput.required = isShortLeave;
+    if (daysGroup) daysGroup.style.display = isShortLeave ? 'none' : 'block';
+    if (daysInput) {
+        daysInput.required = !isShortLeave;
+        if (isShortLeave) daysInput.value = '';
+    }
 };
 
 window.handleCreateRequest = async (e) => {
@@ -400,14 +446,40 @@ window.handleCreateRequest = async (e) => {
     const empId = document.getElementById('requestEmployeeId').value;
     const reqType = document.getElementById('requestType').value;
     const leaveType = reqType === 'Leave Request' ? document.getElementById('requestLeaveType').value : null;
+    const isShortLeave = reqType === 'Leave Request' && leaveType === 'Short Leave';
+    const isLoan = reqType === 'Loan Request' || reqType === 'Loan';
+    const loanAmount = isLoan ? Number(document.getElementById('requestLoanAmount').value) : null;
+    const numberOfDays = reqType === 'Leave Request' && !isShortLeave ? Number(document.getElementById('requestNumberOfDays').value) : null;
+    if (isLoan && (!Number.isFinite(loanAmount) || loanAmount <= 0)) {
+        showToast('Enter a valid loan amount greater than zero.', 'danger');
+        return;
+    }
+    if (reqType === 'Leave Request' && !isShortLeave && (!Number.isInteger(numberOfDays) || numberOfDays <= 0)) {
+        showToast('Enter a valid number of leave days.', 'danger');
+        return;
+    }
 
-    const res = await db.createRequest(empId, reqType, leaveType);
-    if (res) {
+    let res;
+    if (isShortLeave) {
+        const shortReason = document.getElementById('requestShortLeaveReason').value;
+        const shortDuration = Number(document.getElementById('requestShortLeaveDuration').value);
+        if (!shortReason) return showToast('Select a reason for the short leave.', 'danger');
+        const today = new Date().toISOString().slice(0, 10);
+        const success = await db.submitLeaveRequest(empId, {
+            leave_type: 'Short Leave', start_date: today, end_date: today,
+            reason: shortReason, short_leave_reason: shortReason,
+            short_leave_duration_minutes: shortDuration
+        });
+        res = { success };
+    } else {
+        res = await db.createRequest(empId, reqType, leaveType, loanAmount, numberOfDays);
+    }
+    if (res?.success) {
         showToast(t('toast_request_submitted_successfully'), "success");
         document.getElementById('requestModal').classList.remove('active');
         renderView('requests');
     } else {
-        showToast(t('toast_failed_to_submit_request'), "danger");
+        showToast(res.error?.message || t('toast_failed_to_submit_request'), "danger");
     }
 };
 
@@ -556,6 +628,7 @@ function getRingSVG(percentage, color, labelKey) {
 
 // --- TOAST NOTIFICATIONS ---
 function showToast(message, type = 'info', detail = '') {
+    if (type === 'error') type = 'danger';
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -742,15 +815,21 @@ window.handleLogout = async function () {
 window.handleLeaveSubmit = async function (e) {
     e.preventDefault();
     const type = document.getElementById('leaveType').value;
-    const start = document.getElementById('leaveStart').value;
-    const end = document.getElementById('leaveEnd').value;
-    const reason = document.getElementById('leaveReason').value;
+    const isShortLeave = type === 'Short Leave';
+    const today = new Date().toISOString().slice(0,10);
+    const start = isShortLeave ? today : document.getElementById('leaveStart').value;
+    const end = isShortLeave ? today : document.getElementById('leaveEnd').value;
+    const shortReason = isShortLeave ? document.getElementById('leaveShortReason').value : null;
+    const shortDuration = isShortLeave ? Number(document.getElementById('leaveShortDuration').value) : null;
+    const reason = isShortLeave ? shortReason : document.getElementById('leaveReason').value;
 
     const success = await db.submitLeaveRequest(currentUser.id, {
         leave_type: type,
         start_date: start,
         end_date: end,
-        reason: reason
+        reason: reason,
+        short_leave_reason: shortReason,
+        short_leave_duration_minutes: shortDuration
     });
 
     if (success) {
@@ -1103,26 +1182,90 @@ async function renderTeamHierarchyWidget() {
     `;
 }
 
+async function translateSaudiNewsTitle(title) {
+    if (currentLang !== 'en' || !/[\u0600-\u06FF]/.test(title || '')) return title;
+    const cacheKey = `saudi_news_en_${title}`;
+    try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) return cached;
+        const endpoint = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=en&dt=t&q=${encodeURIComponent(title)}`;
+        const response = await fetch(endpoint);
+        if (!response.ok) throw new Error(`Translation failed (${response.status})`);
+        const payload = await response.json();
+        const translated = (payload?.[0] || []).map(part => part?.[0] || '').join('').trim();
+        if (translated) {
+            localStorage.setItem(cacheKey, translated);
+            return translated;
+        }
+    } catch (error) {
+        console.warn('Saudi news title translation unavailable; retaining the approved Arabic headline.', error);
+    }
+    return title;
+}
+
 async function renderDashboard() {
-    const newsQuery = currentLang === 'ar' ? '"السعودية" (أعمال OR "نظام العمل")' : '"Saudi Arabia" (business OR "labor law" OR "labour law")';
-    const newsHl = currentLang === 'ar' ? 'ar' : 'en-US';
-    const newsGl = currentLang === 'ar' ? 'SA' : 'US';
-    const newsCeid = currentLang === 'ar' ? 'SA:ar' : 'US:en';
+    // Always use one approved Saudi-Arabic feed. UI language may translate its
+    // headlines, but must never change the underlying topics, sources or URLs.
+    const newsQuery = '"السعودية" (أعمال OR "نظام العمل")';
+    const newsHl = 'ar';
+    const newsGl = 'SA';
+    const newsCeid = 'SA:ar';
     const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(newsQuery)}&hl=${newsHl}&gl=${newsGl}&ceid=${newsCeid}`;
     const newsApiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
 
     // Run independent fetches in parallel
-    const [todayAttendance, announcements, newsRes, profile] = await Promise.all([
+    const [todayAttendance, announcements, newsRes, profile, dashboardLeaves, dashboardGenericRequests] = await Promise.all([
         db.fetchTodayAttendance(currentUser?.id),
         db.fetchAnnouncements(),
         fetch(newsApiUrl).catch(() => null),
-        db.getUserProfile(currentUser?.id)
+        db.getUserProfile(currentUser?.id),
+        db.fetchLeaveRequests(currentUser?.id),
+        db.fetchGenericRequests()
     ]);
 
     const isClockedIn = todayAttendance != null && !todayAttendance.clock_out_time;
     const announcementsList = announcements || [];
     const dashboardName = getProfileDisplayName(profile);
     const welcomeMessage = t('welcome').replace('{name}', escapeHTML(dashboardName));
+    const currentYear = new Date().getFullYear();
+    const configuredAnnualAllowance = Number(profile?.annual_leave_allowance);
+    const annualAllowance = Number.isFinite(configuredAnnualAllowance) && configuredAnnualAllowance > 0 ? configuredAnnualAllowance : 30;
+    const annualLeaveDays = request => {
+        if (!request.start_date || !request.end_date) return 0;
+        const start = new Date(`${request.start_date}T00:00:00`);
+        const end = new Date(`${request.end_date}T00:00:00`);
+        return Math.max(0, Math.floor((end-start)/86400000)+1);
+    };
+    const isAnnualLeaveType = value => ['annual leave', 'annual/vacation', 'annual vacation'].includes(String(value || '').trim().toLowerCase());
+    const currentAnnualLeaves = (dashboardLeaves || []).filter(request => {
+        const requestDate = request.start_date || request.created_at;
+        return isAnnualLeaveType(request.leave_type) && requestDate && new Date(requestDate).getFullYear() === currentYear;
+    }).map(request => ({
+        status: String(request.status || 'PENDING').toUpperCase(),
+        days: annualLeaveDays(request)
+    }));
+    const currentGenericAnnualLeaves = (dashboardGenericRequests || []).filter(request =>
+        request.employee_id === currentUser?.id &&
+        request.request_type === 'Leave Request' &&
+        isAnnualLeaveType(request.leave_type) &&
+        request.created_at && new Date(request.created_at).getFullYear() === currentYear
+    ).map(request => ({
+        status: String(request.status || 'PENDING').toUpperCase(),
+        days: Math.max(0, Number(request.number_of_days) || 0)
+    }));
+    const annualRequests = [...currentAnnualLeaves, ...currentGenericAnnualLeaves];
+    const annualRequested = annualRequests.filter(request => request.status.startsWith('PENDING')).reduce((sum, request) => sum + request.days, 0);
+    const annualUtilized = annualRequests.filter(request => request.status.startsWith('APPROVED')).reduce((sum, request) => sum + request.days, 0);
+    const now = new Date();
+    const yearStart = new Date(currentYear, 0, 1);
+    const nextYearStart = new Date(currentYear + 1, 0, 1);
+    const daysInYear = Math.round((nextYearStart - yearStart) / 86400000);
+    const elapsedDays = Math.min(daysInYear, Math.max(1, Math.floor((now - yearStart) / 86400000) + 1));
+    const accruedAnnualLeave = annualAllowance * (elapsedDays / daysInYear);
+    const annualAvailable = Math.max(0, accruedAnnualLeave - annualUtilized - annualRequested);
+    const annualAvailableByYearEnd = Math.max(0, annualAllowance - annualUtilized - annualRequested);
+    const annualBalanceAsOf = now.toLocaleDateString(undefined,{day:'2-digit',month:'short',year:'numeric'});
+    const canUsePersonalLeaveWidgets = ['EMPLOYEE', 'MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').toUpperCase());
 
     let announcementsHTML = announcementsList.map(a => `
         <div class="announcement-item">
@@ -1146,9 +1289,11 @@ async function renderDashboard() {
         if (newsRes && newsRes.ok) {
             const newsData = await newsRes.json();
             if (newsData.status === 'ok') {
-                newsHTML = newsData.items.slice(0, 5).map(item => `
+                const approvedSaudiItems = newsData.items.slice(0, 5);
+                const localizedTitles = await Promise.all(approvedSaudiItems.map(item => translateSaudiNewsTitle(item.title)));
+                newsHTML = approvedSaudiItems.map((item, index) => `
                     <div style="margin-bottom: 1rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem;">
-                        <a href="${item.link}" target="_blank" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">${item.title}</a>
+                        <a href="${escapeHTML(item.link)}" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">${escapeHTML(localizedTitles[index])}</a>
                         <div style="font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(item.pubDate).toLocaleDateString()}</div>
                     </div>
                 `).join('');
@@ -1226,6 +1371,32 @@ async function renderDashboard() {
 
         <div class="dashboard-grid">
             ${expirationAlerts ? `<div class="col-span-12">${expirationAlerts}</div>` : ''}
+            ${canUsePersonalLeaveWidgets ? `
+            <div class="card col-span-12 annual-leave-widget">
+                <div class="annual-leave-widget-title"><i data-lucide="plane-takeoff"></i><span>Annual Leave</span></div>
+                <div class="annual-leave-widget-balance"><i data-lucide="luggage"></i><strong>${annualAvailable.toFixed(2)}</strong></div>
+                <div class="annual-leave-widget-date">Days available as of ${annualBalanceAsOf}</div>
+                <div class="annual-leave-widget-breakdown">
+                    <span>${annualRequested.toFixed(2)} Days requested.</span>
+                    <span>${annualUtilized.toFixed(2)} Days utilized.</span>
+                    <span>${annualAvailableByYearEnd.toFixed(2)} Days available by year end.</span>
+                </div>
+            </div>` : ''}
+            ${canUsePersonalLeaveWidgets ? `
+            <div class="card col-span-12 short-leave-card">
+                <div class="short-leave-title"><i data-lucide="person-standing"></i><span>Short Leave</span></div>
+                <div class="short-leave-reasons">
+                    <label><input type="radio" name="dashboardShortLeaveReason" value="I am running late to the office."> I am running late to the office.</label>
+                    <label><input type="radio" name="dashboardShortLeaveReason" value="I will be out for a meeting."> I will be out for a meeting.</label>
+                    <label><input type="radio" name="dashboardShortLeaveReason" value="I need to attend an urgent family matter."> I need to attend an urgent family matter.</label>
+                </div>
+                <div class="short-leave-durations">
+                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(15)">15 Minutes</button>
+                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(60)">1 Hour</button>
+                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(120)">2 Hours</button>
+                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(180)">3 Hours</button>
+                </div>
+            </div>` : ''}
             
             <div class="card col-span-12 md:col-span-8">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
@@ -1293,7 +1464,12 @@ window.handlePostAnnouncement = async (e) => {
     e.preventDefault();
     const title = document.getElementById('announceTitle').value;
     const content = document.getElementById('announceContent').value;
-    await db.postAnnouncement(currentUser.id, title, content);
+    const result = await db.postAnnouncement(currentUser.id, title, content);
+    if (!result.success) {
+        showToast(result.error?.message || 'Failed to publish announcement.', 'danger');
+        return;
+    }
+    showToast('Announcement published successfully.', 'success');
     closeAnnouncementModal();
     renderView('dashboard');
 };
@@ -1494,14 +1670,15 @@ function prepareTeamworkTaskDetail(task) {
     panel.classList.add('teamwork-task-detail');
     const header = panel.querySelector('.side-panel-header');
     if (header) {
-        const canEdit = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing' && window.isMarketingDepartmentManager);
+        const canEdit = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
+        const canApproveCompletion = task.status === 'Pending Approval' && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
         let actions = header.querySelector('.task-detail-actions');
         if (!actions) {
             actions = document.createElement('div');
             actions.className = 'task-detail-actions';
             header.appendChild(actions);
         }
-        actions.innerHTML = `${canEdit ? '<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById(\'detailsTaskId\').value)"><i data-lucide="pencil"></i> Edit</button>' : ''}<button type="button" class="task-detail-close" aria-label="Close task" onclick="document.getElementById('taskSidePanel').classList.remove('active');document.getElementById('taskSidePanelOverlay').classList.remove('active')">&times;</button>`;
+        actions.innerHTML = `${canApproveCompletion ? `<button type="button" class="btn btn-primary" onclick="approveTaskCompletion('${task.id}')"><i data-lucide="check-circle"></i> Approve</button>` : ''}${canEdit ? '<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById(\'detailsTaskId\').value)"><i data-lucide="pencil"></i> Edit</button>' : ''}<button type="button" class="task-detail-close" aria-label="Close task" onclick="document.getElementById('taskSidePanel').classList.remove('active');document.getElementById('taskSidePanelOverlay').classList.remove('active')">&times;</button>`;
         header.querySelector('.close-modal')?.remove();
     }
     const grid = panel.querySelector('.task-details-grid');
@@ -1539,6 +1716,65 @@ function prepareTeamworkTaskDetail(task) {
     setTaskActivityTab('comments');
     if (window.lucide) window.lucide.createIcons();
 }
+
+window.handleLeaveTypeChange = function(type) {
+    const isShortLeave = type === 'Short Leave';
+    document.getElementById('leaveStartGroup').style.display = isShortLeave ? 'none' : 'block';
+    document.getElementById('leaveEndGroup').style.display = isShortLeave ? 'none' : 'block';
+    document.getElementById('leaveReasonGroup').style.display = isShortLeave ? 'none' : 'block';
+    document.getElementById('leaveShortFields').style.display = isShortLeave ? 'block' : 'none';
+    document.getElementById('leaveStart').required = !isShortLeave;
+    document.getElementById('leaveEnd').required = !isShortLeave;
+    document.getElementById('leaveReason').required = !isShortLeave;
+    document.getElementById('leaveShortReason').required = isShortLeave;
+    document.getElementById('leaveShortDuration').required = isShortLeave;
+};
+
+window.submitDashboardShortLeave = async function(durationMinutes) {
+    const selectedReason = document.querySelector('input[name="dashboardShortLeaveReason"]:checked');
+    if (!selectedReason) {
+        showToast('Select a reason for the short leave.', 'danger');
+        return;
+    }
+    const buttons = document.querySelectorAll('.short-leave-duration-button');
+    buttons.forEach(button => button.disabled=true);
+    const today = new Date().toISOString().slice(0,10);
+    const success = await db.submitLeaveRequest(currentUser.id,{
+        leave_type:'Short Leave',start_date:today,end_date:today,
+        reason:selectedReason.value,short_leave_reason:selectedReason.value,
+        short_leave_duration_minutes:durationMinutes
+    });
+    buttons.forEach(button => button.disabled=false);
+    if (!success) return showToast('Failed to submit short leave request.', 'danger');
+    showToast('Short leave request submitted successfully.', 'success');
+    renderView('dashboard');
+};
+
+const COMPANY_JOB_TITLES = {
+    'Executive & Administrative': ['General Manager', 'HR Manager', 'Finance Manager', 'Accountant'],
+    'Event Production & Operations': ['Event Manager', 'Event Coordinator', 'Operations Manager', 'Warehouse Manager', 'Logistics Coordinator', 'Procurement Officer', 'Client Account Manager', 'Barista'],
+    'Marketing & Sales': ['Marketing Manager', 'Marketing Representative', 'Sales Supervisor', 'Sales Representative', 'Graphic Designer', 'Photographer'],
+    'IT & Technical Support': ['IT Administrator', 'IT Support', 'Audio-Visual (AV) Specialist', 'Technician']
+};
+
+function companyJobTitleOptions(selected = '', departmentName = '') {
+    const groups = departmentName && COMPANY_JOB_TITLES[departmentName]
+        ? [[departmentName, COMPANY_JOB_TITLES[departmentName]]]
+        : Object.entries(COMPANY_JOB_TITLES);
+    return '<option value="">Select Job Title</option>' + groups.map(([department, titles]) =>
+        `<optgroup label="${escapeHTML(department)}">${titles.map(title => `<option value="${escapeHTML(title)}" ${title === selected ? 'selected' : ''}>${escapeHTML(title)}</option>`).join('')}</optgroup>`
+    ).join('');
+}
+
+window.syncJobTitlesWithDepartment = function(departmentSelectId,jobTitleSelectId) {
+    const departmentSelect = document.getElementById(departmentSelectId);
+    const titleSelect = document.getElementById(jobTitleSelectId);
+    if (!departmentSelect || !titleSelect) return;
+    const previous = titleSelect.value;
+    const departmentName = departmentSelect.options[departmentSelect.selectedIndex]?.text || '';
+    titleSelect.innerHTML = companyJobTitleOptions(previous,departmentName);
+    if (![...titleSelect.options].some(option => option.value === previous)) titleSelect.value = '';
+};
 
 window.setTaskDetailInfoTab = function(tab) {
     const task = window.activeTaskDetail;
@@ -1589,6 +1825,33 @@ window.setTaskActivityTab = function(tab) {
 window.closeTaskDetailsModal = function() {
     document.getElementById('taskSidePanel')?.classList.remove('active');
     document.getElementById('taskSidePanelOverlay')?.classList.remove('active');
+};
+
+window.approveTaskCompletion = async function(taskId) {
+    let task = window.taskCache?.[taskId];
+    if (!task) task = (await db.fetchTasks()).find(item => item.id === taskId);
+    if (!window.taskDepartmentManagerByName) {
+        const departments = await db.fetchDepartments();
+        window.taskDepartmentManagerByName = Object.fromEntries(departments.map(department => [department.name, department.head_id || department.manager_id || null]));
+    }
+    if (!task || window.taskDepartmentManagerByName?.[task.department] !== currentUser?.id) {
+        showToast('Only this task’s department manager can approve completion.', 'danger');
+        return;
+    }
+    const result = await db.updateTaskStatus(taskId, 'completed');
+    if (!result.success) {
+        showToast(result.error?.message || 'Unable to approve task completion.', 'danger');
+        return;
+    }
+    showToast('Task approved and moved to Done.', 'success');
+    if (currentView === 'tasks') {
+        await renderView('tasks');
+        if (window.taskCache?.[taskId]) openTaskDetailsModal(taskId);
+    } else if (currentView === 'notifications') {
+        await renderView('notifications');
+    } else {
+        await pollNotifications();
+    }
 };
 
 window.handleTaskCommentSubmit = async function(e) {
@@ -1760,23 +2023,42 @@ async function renderLeave() {
                 <form autocomplete="off" onsubmit="handleLeaveSubmit(event)">
                     <div class="form-group">
                         <label class="form-label">${t('leave_type')}</label>
-                        <select id="leaveType" class="form-control" required>
+                        <select id="leaveType" class="form-control" required onchange="handleLeaveTypeChange(this.value)">
                             <option value="Annual Leave">${t('annual_leave')}</option>
                             <option value="Sick Leave">${t('sick_leave')}</option>
                             <option value="Unpaid Leave">${t('unpaid_leave')}</option>
+                            <option value="Short Leave">Short Leave</option>
                         </select>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="leaveStartGroup">
                         <label class="form-label">${t('start_date')}</label>
                         <input id="leaveStart" type="date" class="form-control" required>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="leaveEndGroup">
                         <label class="form-label">${t('end_date')}</label>
                         <input id="leaveEnd" type="date" class="form-control" required>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="leaveReasonGroup">
                         <label class="form-label">${t('reason')}</label>
                         <textarea id="leaveReason" class="form-control" required></textarea>
+                    </div>
+                    <div id="leaveShortFields" style="display:none;">
+                        <div class="form-group">
+                            <label class="form-label">Short Leave Reason</label>
+                            <select id="leaveShortReason" class="form-control">
+                                <option value="">Select reason</option>
+                                <option value="I am running late to the office.">I am running late to the office.</option>
+                                <option value="I will be out for a meeting.">I will be out for a meeting.</option>
+                                <option value="I need to attend an urgent family matter.">I need to attend an urgent family matter.</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Duration</label>
+                            <select id="leaveShortDuration" class="form-control">
+                                <option value="15">15 Minutes</option><option value="60">1 Hour</option>
+                                <option value="120">2 Hours</option><option value="180">3 Hours</option>
+                            </select>
+                        </div>
                     </div>
                     <button type="submit" class="btn-primary" style="width: 100%;">${t('submit')}</button>
                 </form>
@@ -2237,19 +2519,40 @@ window.handleChangeRole = async function (id, role) {
     }
 }
 
-window.handleChangeJobTitle = async function (id, jobTitle) {
-    const { success } = await db.updateUserJobTitle(id, jobTitle);
+window.handleChangeJobTitle = async function (id, jobTitle, selectElement = null) {
+    const departmentId = selectElement?.closest('tr')?.querySelector('[data-directory-department]')?.value || null;
+    const { success } = await db.updateUserJobTitle(id, jobTitle, departmentId);
     if (success) {
         showToast(t('toast_job_title_updated'), "success");
+        renderView('users');
     } else {
         showToast(t('toast_failed_to_update_job_title'), "danger");
     }
 }
 
+window.handleDirectoryDepartmentChange = async function(userId, departmentId, selectElement) {
+    if (!departmentId) return;
+    const departmentName = selectElement.options[selectElement.selectedIndex]?.text || '';
+    const jobTitleSelect = selectElement.closest('tr')?.querySelector('[data-directory-job-title]');
+    const currentTitle = jobTitleSelect?.value || '';
+    if (!COMPANY_JOB_TITLES[departmentName]?.includes(currentTitle)) {
+        if (jobTitleSelect) jobTitleSelect.innerHTML = companyJobTitleOptions('', departmentName);
+        showToast(`Now select a job title for ${departmentName}. The department will be saved with that title.`, 'info');
+        return;
+    }
+    const result = await db.updateUserProfile(userId, { department_id: departmentId });
+    if (!result) {
+        showToast('Failed to update department.', 'danger');
+        renderView('users');
+        return;
+    }
+    showToast('Department updated successfully.', 'success');
+};
+
 async function renderUsers() {
     if (currentUserRole !== 'ADMIN') return '<div style="padding: 2rem;">Unauthorized</div>';
 
-    const users = await db.fetchUsers();
+    const [users, departments] = await Promise.all([db.fetchUsers(), db.fetchDepartments()]);
     window.currentAdminUsers = users;
 
     return `
@@ -2272,6 +2575,7 @@ async function renderUsers() {
                                 <th>${t('users_details')}</th>
                                 <th>${t('users_role')}</th>
                                 <th>${t('users_job_title')}</th>
+                                <th>${t('users_department')}</th>
                                 <th>${t('users_assign_role')}</th>
                                 <th>${t('users_assign_mgr')}</th>
                                 <th>${t('users_contract')}</th>
@@ -2292,7 +2596,13 @@ async function renderUsers() {
                                     </td>
                                     <td><span class="status-badge ${u.role === 'ADMIN' ? 'success' : 'info'}">${u.role}</span></td>
                                     <td>
-                                        <input type="text" autocomplete="off" class="form-control" style="width: 160px; padding: 0.25rem; font-size: 0.8rem;" value="${u.job_title || ''}" placeholder="${t('users_job_title')}" onblur="handleChangeJobTitle('${u.id}', this.value)">
+                                        <select data-directory-job-title class="form-control" style="width: 210px; padding: 0.25rem; font-size: 0.8rem;" onchange="handleChangeJobTitle('${u.id}', this.value, this)">${companyJobTitleOptions(u.job_title || '', departments.find(department => department.id === u.department_id)?.name || '')}</select>
+                                    </td>
+                                    <td>
+                                        <select data-directory-department class="form-control" style="width: 230px; padding: 0.25rem;" onchange="handleDirectoryDepartmentChange('${u.id}', this.value, this)">
+                                            <option value="">Select Department</option>
+                                            ${departments.map(department => `<option value="${department.id}" ${u.department_id === department.id ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('')}
+                                        </select>
                                     </td>
                                     <td>
                                         <select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
@@ -2347,6 +2657,7 @@ window.showAddUserModal = async () => {
         deptSelect.innerHTML = '<option value="" data-i18n="ph_select_department">Select Department</option>' +
             depts.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
     }
+    document.getElementById('newJobTitle').innerHTML = companyJobTitleOptions();
 
     if (window.lucide) window.lucide.createIcons();
 };
@@ -3379,8 +3690,9 @@ async function renderTasks() {
     console.log("renderTasks: Fetched users and tasks.", { usersCount: allUsers.length, tasksCount: fetchedTasks.length });
     let tasks = fetchedTasks;
     window.taskDepartmentSupervisors = departmentSupervisors || [];
-    const marketingDepartmentRecord = allDepartments.find(department => department.name === 'Marketing');
+    const marketingDepartmentRecord = allDepartments.find(department => department.name === 'Marketing & Sales');
     window.isMarketingDepartmentManager = !!currentUser && [marketingDepartmentRecord?.head_id, marketingDepartmentRecord?.manager_id].includes(currentUser.id);
+    window.taskDepartmentManagerByName = Object.fromEntries(allDepartments.map(department => [department.name, department.head_id || department.manager_id || null]));
 
     window.taskCache = {};
     window.taskAssigneeOptionsCache = ''; // Default empty string
@@ -3456,7 +3768,7 @@ async function renderTasks() {
     if (isRegularEmployee) {
         const currentDeptObj = allDepartments.find(d => d.id === currentUser.department_id);
         const deptName = currentDeptObj ? escapeHTML(currentDeptObj.name) : '';
-        isMarketing = (currentDeptObj && currentDeptObj.name === 'Marketing');
+        isMarketing = (currentDeptObj && currentDeptObj.name === 'Marketing & Sales');
 
         departmentSelectHTML = `
             <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
@@ -3569,7 +3881,8 @@ async function renderTasks() {
     }
 
     function renderTaskCard(task) {
-        const canManageTask = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing' && window.isMarketingDepartmentManager);
+        const canManageTask = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
+        const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
         let prioColor = 'var(--color-border)';
         if (task.priority === 'medium') prioColor = 'var(--color-primary)';
         if (task.priority === 'high') prioColor = 'var(--color-warning)';
@@ -3579,13 +3892,14 @@ async function renderTasks() {
         return `
             <div class="card task-item-card" id="task-card-${task.id}" data-status="${task.status}" draggable="true" ondragstart="handleTaskDragStart(event, '${task.id}')" onclick="openTaskDetailsModal('${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${prioColor}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: pointer; background: var(--color-surface); position: relative;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 2.5rem; gap: 0.5rem;">
-                    <h4 style="margin: 0; font-size: 0.95rem; line-height: 1.4; color: var(--color-text); font-weight: 500; word-break: break-word;">${escapeHTML(task.displayTitle)}</h4>
+                    <h4 style="margin: 0; font-size: 0.95rem; line-height: 1.4; color: var(--color-text); font-weight: 500; word-break: break-word;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${escapeHTML(task.displayTitle)}</h4>
                 </div>
                 ${canManageTask ? `<button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1.25rem; right: 1rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 0;" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>` : ''}
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0; display: flex; flex-direction: column; gap: 0.35rem;">
                     <div style="display: flex; align-items: center;"><i data-lucide="calendar" style="width: 12px; height: 12px; margin-right: 4px;"></i> Due: ${task.due_date || t('task_no_date') || 'No Date'}</div>
                     ${task.start_date ? `<div style="display: flex; align-items: center;"><i data-lucide="play" style="width: 12px; height: 12px; margin-right: 4px;"></i> Start: ${escapeHTML(task.start_date)}</div>` : ''}
                     <div style="display: flex; align-items: center;"><i data-lucide="user" style="width: 12px; height: 12px; margin-right: 4px;"></i> ${task.assignee?.full_name || t('task_unknown') || 'Unassigned'}</div>
+                    ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> Subtask of: ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
                     ${task.estimated_time ? `<div style="display: flex; align-items: center;"><i data-lucide="clock" style="width: 12px; height: 12px; margin-right: 4px;"></i> Est: ${escapeHTML(task.estimated_time)}</div>` : ''}
                 </div>
             </div>
@@ -3598,7 +3912,7 @@ async function renderTasks() {
                 <div style="display: flex; gap: 1.5rem; min-width: 1400px;">
                     <div style="flex: 1; min-width: 280px;">
                         <div class="card" style="background: rgba(139, 92, 246, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid #8b5cf6;">
-                            <div class="card-title" style="padding: 1rem 1rem 0;">${t('task_pending_approval') || 'Pending Approval'} <span id="badge-pending" class="badge" style="background: #8b5cf6; color: #fff;">${pending.length}</span></div>
+                            <div class="card-title" style="padding: 1rem 1rem 0;">Awaiting Approval <span id="badge-pending" class="badge" style="background: #8b5cf6; color: #fff;">${pending.length}</span></div>
                             <div id="col-pending" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'Pending Approval')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
                                 ${pending.map(renderTaskCard).join('')}
                             </div>
@@ -3671,7 +3985,7 @@ async function renderTasksV2() {
     const projects = window.projectsCache || [];
     const canCreateTask = !!currentUser;
     const selectedProject = window.taskV2SelectedProject || 'all';
-    const statusLabels = { 'Pending Approval': 'Pending approval', todo: 'To do', in_progress: 'In progress', review: 'Review', completed: 'Done', Approved: 'Approved', Rejected: 'Rejected' };
+    const statusLabels = { 'Pending Approval': 'Awaiting approval', todo: 'To do', in_progress: 'In progress', review: 'Review', completed: 'Done', Approved: 'Approved', Rejected: 'Rejected' };
 
     const projectItems = [
         `<button class="task-v2-list-link ${selectedProject === 'all' ? 'active' : ''}" onclick="selectTaskV2Project('all')"><span>All tasks</span><b>${tasks.length}</b></button>`,
@@ -3683,16 +3997,17 @@ async function renderTasksV2() {
     ].join('');
 
     const taskRows = tasks.map(task => {
-        const canManageTask = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing' && window.isMarketingDepartmentManager);
+        const canManageTask = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
         const project = projects.find(item => item.id === task.project_id);
+        const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
         const dueDate = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
         const overdue = dueDate && task.status !== 'completed' && dueDate < new Date(new Date().toDateString());
         return `<article class="task-v2-row" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-status="${escapeHTML(task.status)}" data-due="${task.due_date || ''}">
             <button class="task-v2-complete ${task.status === 'completed' ? 'complete' : ''}" type="button" aria-label="${task.status === 'completed' ? 'Reopen' : 'Mark complete'}" onclick="event.stopPropagation(); taskV2ToggleComplete('${task.id}', '${task.status === 'completed' ? 'todo' : 'completed'}')"><i data-lucide="check"></i></button>
             <button class="task-v2-avatar" type="button" title="${escapeHTML(task.assignee?.full_name || 'Unassigned')}">${escapeHTML((task.assignee?.full_name || '?').charAt(0).toUpperCase())}</button>
             <button class="task-v2-row-main" type="button" onclick="openTaskDetailsModal('${task.id}')">
-                <span class="task-v2-row-title">${escapeHTML(task.displayTitle || task.title)}</span>
-                <span class="task-v2-row-context">${escapeHTML(project?.project_name || 'No project')} · ${escapeHTML(task.category || 'General')}</span>
+                <span class="task-v2-row-title"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${escapeHTML(task.displayTitle || task.title)}</span>
+                <span class="task-v2-row-context">${task.parent_task_id ? `Subtask of: ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')} · ` : ''}${escapeHTML(project?.project_name || 'No project')} · ${escapeHTML(task.category || 'General')}</span>
             </button>
             <span class="task-v2-status task-v2-status-${String(task.status).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}">${escapeHTML(statusLabels[task.status] || task.status)}</span>
             <span class="task-v2-priority task-v2-priority-${escapeHTML(task.priority || 'medium')}">${escapeHTML(task.priority || 'medium')}</span>
@@ -3723,7 +4038,7 @@ async function renderTasksV2() {
             <div class="task-v2-toolbar" role="search">
                 <label class="task-v2-search"><i data-lucide="search"></i><input type="search" id="taskV2Search" placeholder="Search tasks, assignees or projects" oninput="filterTasksV2()" aria-label="Search tasks"></label>
                 <select id="taskV2Status" class="form-control" onchange="filterTasksV2()" aria-label="Filter by status">
-                    <option value="">All statuses</option><option value="Pending Approval">Pending approval</option><option value="todo">To do</option><option value="in_progress">In progress</option><option value="review">Review</option><option value="completed">Done</option>
+                    <option value="">All statuses</option><option value="Pending Approval">Awaiting approval</option><option value="todo">To do</option><option value="in_progress">In progress</option><option value="review">Review</option><option value="completed">Done</option>
                 </select>
                 <button class="btn btn-secondary task-v2-quick-filter" data-filter="overdue" type="button" onclick="setTaskV2QuickFilter('overdue')">Late</button>
                 <button class="btn btn-secondary task-v2-quick-filter" data-filter="week" type="button" onclick="setTaskV2QuickFilter('week')">Due this week</button>
@@ -3753,7 +4068,8 @@ window.filterTasksV2 = function() {
         const row = document.querySelector(`.task-v2-row[data-task-id="${task.id}"]`);
         if (!row) return;
         const project = (window.projectsCache || []).find(item => item.id === task.project_id);
-        const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, project?.project_name].filter(Boolean).join(' ').toLowerCase();
+        const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
+        const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, project?.project_name, task.parent_task_id ? 'subtask' : 'parent task', parentTask?.displayTitle, parentTask?.title].filter(Boolean).join(' ').toLowerCase();
         const due = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
         const days = due ? (due - now) / 86400000 : null;
         const matchesQuick = !quickFilter || (quickFilter === 'overdue' && days < 0 && task.status !== 'completed') || (quickFilter === 'week' && days >= 0 && days <= 7 && task.status !== 'completed');
@@ -3940,7 +4256,7 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '') {
     const subTypeGroup = document.getElementById(prefix === 'new' ? 'taskSubTypeGroup' : 'editTaskSubTypeGroup');
     if (!subTypeGroup) return;
     
-    if (value === 'Marketing') {
+    if (value === 'Marketing & Sales') {
         subTypeGroup.style.display = 'block';
         const select = document.getElementById(prefix === 'new' ? 'taskSubType' : 'editTaskSubType');
         if (select) select.required = true;
@@ -4083,7 +4399,7 @@ window.handleCreateTask = async function(e) {
     const department = document.getElementById('taskDepartment') ? document.getElementById('taskDepartment').value : null;
     const subTypeGroup = document.getElementById('taskSubTypeGroup');
     const subType = document.getElementById('taskSubType') && subTypeGroup && subTypeGroup.style.display !== 'none' ? document.getElementById('taskSubType').value : null;
-    const isMarketingDesign = department === 'Marketing' && subType === 'Designing Task';
+    const isMarketingDesign = department === 'Marketing & Sales' && subType === 'Designing Task';
     if (isMarketingDesign) status = 'review';
     const description = isMarketingDesign ? (document.getElementById('taskDesignDescription')?.value.trim() || '') : '';
     const marketingDepartment = isMarketingDesign ? document.getElementById('taskMarketingDepartment')?.value : null;
@@ -4125,8 +4441,9 @@ window.handleUpdateTaskStatus = async function (id, status) {
     let actualStatus = status;
     let needsManagerApproval = false;
 
-    if (status === 'completed' && task && task.department === 'Marketing' && task.sub_type === 'Designing Task' && task.delivery_status !== 'Approved') {
-        actualStatus = 'review';
+    const isDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
+    if (status === 'completed' && task && !isDepartmentManager) {
+        actualStatus = 'Pending Approval';
         needsManagerApproval = true;
     }
 
@@ -4138,18 +4455,7 @@ window.handleUpdateTaskStatus = async function (id, status) {
         await db.triggerWebhooks('task_status_updated', { task_id: id, status: actualStatus });
         
         if (needsManagerApproval) {
-            showToast('Designing task remains in Review until the Marketing manager approves it.', 'info');
-            if (task.supervisor_id) {
-                await db.createNotification(task.supervisor_id, `Designing task requires your approval: ${task.title}`);
-            } else {
-                // Find marketing manager
-                const users = await db.fetchUsers();
-                const depts = await db.fetchDepartments();
-                const marketingDept = depts.find(d => d.name === 'Marketing');
-                if (marketingDept && marketingDept.manager_id) {
-                    await db.createNotification(marketingDept.manager_id, `Designing task requires your approval: ${task.title}`);
-                }
-            }
+            showToast('Task moved to Awaiting Approval. The department manager has been notified.', 'info');
         }
     }
 };
@@ -4175,18 +4481,20 @@ window.handleTaskDrop = async function(e, status) {
         taskCard.style.opacity = '1';
         if (currentStatus === status) return; // No change
         
-        // Prevent unauthorized dragging from or to Pending Approval
+        const task = window.taskCache ? window.taskCache[id] : null;
+        const isTaskDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
+        // Only the department manager (or system admin) can approve a pending task.
         const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
-        if ((currentStatus === 'Pending Approval' || status === 'Pending Approval') && currentUserRole !== 'ADMIN' && !isHussain) {
+        if (currentStatus === 'Pending Approval' && status === 'completed' && currentUserRole !== 'ADMIN' && !isHussain && !isTaskDepartmentManager) {
             showToast(t('toast_you_do_not_have_permission_to_modify_pending_approval_tasks'), 'danger');
             return;
         }
 
-        // Intercept Marketing / Designing Task going to 'completed'
-        const task = window.taskCache ? window.taskCache[id] : null;
+        // Intercept completion requests from non-managers.
         let actualStatus = status;
-        if (status === 'completed' && task && task.department === 'Marketing' && task.sub_type === 'Designing Task' && task.delivery_status !== 'Approved') {
-            actualStatus = 'review';
+        const isDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
+        if (status === 'completed' && task && !isDepartmentManager) {
+            actualStatus = 'Pending Approval';
         }
 
         // Optimistic UI update
@@ -4408,7 +4716,7 @@ window.handleEditTaskSubmit = async function(e) {
     } else {
         updates.sub_type = null;
     }
-    const isMarketingDesign = updates.department === 'Marketing' && updates.sub_type === 'Designing Task';
+    const isMarketingDesign = updates.department === 'Marketing & Sales' && updates.sub_type === 'Designing Task';
     if (isMarketingDesign) {
         updates.marketing_department = document.getElementById('editTaskMarketingDepartment').value || null;
         updates.content_type = document.getElementById('editTaskContentType').value || null;
@@ -4576,7 +4884,7 @@ async function renderContractPage() {
                     <div class="dashboard-grid">
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('users_job_title') || 'Job Title'}</label>
-                            <input type="text" id="contractJobTitle" class="form-control" value="${jobTitle}" placeholder="${t('users_job_title') || 'Job Title'}">
+                            <select id="contractJobTitle" class="form-control">${companyJobTitleOptions(jobTitle)}</select>
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_type')}</label>
@@ -5308,6 +5616,7 @@ async function renderNotifications() {
                         <div>
                             <div style="font-weight: 500; font-size: 1rem; color: var(--color-text);">${escapeHTML(n.message)}</div>
                             <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(n.created_at).toLocaleString()}</div>
+                            ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.65rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')"><i data-lucide="check-circle"></i> Approve</button>` : ''}
                         </div>
                     </div>
                     ${!n.is_read ? `<span class="badge" style="background: var(--color-primary); color: white;">${t('notif_new')}</span>` : ''}
@@ -5360,6 +5669,7 @@ async function pollNotifications() {
                 <div class="notification-item ${!n.is_read ? 'unread' : ''}" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''} style="padding: 10px; border-bottom: 1px solid var(--color-border); ${n.task_id ? 'cursor: pointer;' : ''} ${!n.is_read ? 'background: rgba(var(--color-primary-rgb), 0.05); font-weight: 500;' : ''}">
                     <div style="font-size: 0.875rem;">${escapeHTML(n.message)}</div>
                     <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">${new Date(n.created_at).toLocaleDateString()}</div>
+                    ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.5rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')">Approve</button>` : ''}
                 </div>
             `).join('');
         }
@@ -6181,15 +6491,28 @@ window.showDepartmentModal = async (dept = null) => {
     try {
         if(db.fetchAllProfiles) {
             const profiles = await db.fetchAllProfiles();
+            window.departmentProfilesCache = profiles;
             const headSelect = document.getElementById('departmentHead');
             headSelect.innerHTML = '<option value="">Select a head...</option>' + 
-                profiles.map(p => `<option value="${p.id}">${p.full_name}</option>`).join('');
+                profiles.map(p => `<option value="${p.id}">${escapeHTML(p.full_name || 'Employee')} — ${escapeHTML(p.job_title || 'No job title')}</option>`).join('');
                 
             const empSelect = document.getElementById('departmentEmployees');
+            empSelect.classList.add('department-employee-select');
             empSelect.innerHTML = profiles.map(p => {
                 const isSelected = dept && p.department_id === dept.id ? 'selected' : '';
-                return `<option value="${p.id}" ${isSelected}>${p.full_name}</option>`;
+                return `<option value="${p.id}" ${isSelected}>${escapeHTML(p.full_name || 'Employee')} — ${escapeHTML(p.job_title || 'No job title')}</option>`;
             }).join('');
+            if (!empSelect.dataset.toggleSelectionReady) {
+                empSelect.addEventListener('mousedown', event => {
+                    const option = event.target.closest('option');
+                    if (!option) return;
+                    event.preventDefault();
+                    option.selected = !option.selected;
+                    empSelect.focus();
+                    empSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+                empSelect.dataset.toggleSelectionReady = 'true';
+            }
         }
     } catch (e) {
         console.error("Error loading profiles for department head:", e);
@@ -6279,20 +6602,41 @@ window.deleteDepartment = (id) => {
 window.handleCreateDepartment = async (e) => {
     e.preventDefault();
     const id = document.getElementById('departmentId').value;
+    const departmentName = document.getElementById('departmentName').value.trim();
+    if (!departmentName) {
+        showToast('Department name is required.', 'danger');
+        return;
+    }
     const data = {
-        name: document.getElementById('departmentName').value,
+        name: departmentName,
         description: document.getElementById('departmentDescription').value,
         head_id: document.getElementById('departmentHead').value || null
     };
     
     const empSelect = document.getElementById('departmentEmployees');
     const selectedEmployeeIds = Array.from(empSelect.selectedOptions).map(opt => opt.value);
+    const allowedTitles = COMPANY_JOB_TITLES[data.name] || null;
+    const selectedProfiles = (window.departmentProfilesCache || []).filter(profile => selectedEmployeeIds.includes(profile.id));
+    const incompatibleEmployees = allowedTitles ? selectedProfiles.filter(profile => !allowedTitles.includes(profile.job_title)) : [];
+    if (incompatibleEmployees.length) {
+        const names = incompatibleEmployees.map(profile => `${profile.full_name || 'Employee'} (${profile.job_title || 'no job title'})`).join(', ');
+        showToast(`Cannot assign: ${names}. Select a job title that belongs to ${data.name} first.`, 'danger');
+        return;
+    }
+    const selectedHead = (window.departmentProfilesCache || []).find(profile => profile.id === data.head_id);
+    if (selectedHead && allowedTitles && !allowedTitles.includes(selectedHead.job_title)) {
+        showToast(`${selectedHead.full_name || 'The selected head'} has the job title “${selectedHead.job_title || 'Not set'}”, which does not belong to ${data.name}.`, 'danger');
+        return;
+    }
     
     let res;
     if (id) {
         res = await db.updateDepartment(id, data, selectedEmployeeIds);
     } else {
-        res = await db.createDepartment(data, selectedEmployeeIds);
+        const existingDepartment = (await db.fetchDepartments()).find(department => department.name.toLowerCase() === data.name.toLowerCase());
+        res = existingDepartment
+            ? await db.updateDepartment(existingDepartment.id, data, selectedEmployeeIds)
+            : await db.createDepartment(data, selectedEmployeeIds);
     }
     
     if (res.success) {
@@ -6301,7 +6645,7 @@ window.handleCreateDepartment = async (e) => {
         e.target.reset();
         if(currentView === 'departments') renderView('departments');
     } else {
-        showToast(t('toast_error_saving_department'), "danger");
+        showToast(res.error?.message || t('toast_error_saving_department'), "danger");
     }
 };
 
@@ -6682,48 +7026,65 @@ async function initApp() {
     renderView(currentView);
 }
 
-window.handleRequestAction = async function (type, id, status, employeeId) {
-    let success = false;
-    if (type === 'Leave') {
-        const res = await db.updateLeaveStatus(id, status);
-        success = res.success;
-    } else if (type === 'Document') {
-        const res = await db.updateDocumentStatus(id, status);
-        success = res.success;
-    } else if (type === 'Expense') {
-        const res = await db.updateExpenseStatus(id, status);
-        success = res.success;
-    }
+const REQUEST_STAGE_LABELS = {
+    SUPERVISOR_MANAGER: 'Supervisor / Manager',
+    DEPARTMENT_MANAGER: 'Department Manager',
+    ACCOUNTANT_MANAGER: 'Accounting Manager',
+    GENERAL_MANAGER: 'General Manager',
+    ADMIN_FALLBACK: 'System Administrator'
+};
 
-    if (success) {
-        const displayStatus = status.includes('_ARCHIVED') ? 'archived' : status.toLowerCase();
-        showToast(`${type} request ${displayStatus}`, "success");
-        if (employeeId && !status.includes('_ARCHIVED')) await db.createNotification(employeeId, `Your ${type.toLowerCase()} request has been ${status.toLowerCase()}.`);
+function getRequestWorkflowStage(workflow) {
+    if (!workflow) return 'Awaiting workflow setup';
+    if (workflow.status === 'APPROVED') return 'Final approval completed';
+    if (workflow.status === 'REJECTED') return 'Rejected';
+    const step = workflow.steps?.find(item => item.step_order === workflow.current_step);
+    return `Awaiting ${REQUEST_STAGE_LABELS[step?.stage_key] || 'approval'}`;
+}
+
+function renderRequestWorkflowProgress(workflow) {
+    if (!workflow?.steps?.length) return '';
+    return `<div class="request-workflow-progress">${workflow.steps.map(step => {
+        const active = workflow.status === 'PENDING' && step.step_order === workflow.current_step;
+        const className = step.status === 'APPROVED' ? 'completed' : (step.status === 'REJECTED' ? 'rejected' : (active ? 'active' : 'upcoming'));
+        return `<span class="request-workflow-step ${className}">${escapeHTML(REQUEST_STAGE_LABELS[step.stage_key] || step.stage_key)}</span>`;
+    }).join('<i data-lucide="chevron-right"></i>')}</div>`;
+}
+
+window.handleRequestAction = async function (sourceTable, id, decision) {
+    let note = null;
+    if (decision === 'REJECTED') {
+        note = window.prompt('Please enter the reason for rejecting this request:');
+        if (note === null) return;
+        if (!note.trim()) return showToast('A rejection reason is required.', 'warning');
+    }
+    const result = await db.decideRequestApproval(sourceTable, id, decision, note);
+    if (result.success) {
+        showToast(decision === 'APPROVED' ? 'Approval recorded and request moved to its next stage.' : 'Request rejected and employee notified.', 'success');
         renderView('requests');
     } else {
-        showToast(`Failed to update ${type} request`, "danger");
+        showToast(result.error?.message || 'Failed to update request approval.', 'danger');
     }
-}
+};
 
 // Unified Requests Page
 async function renderRequests() {
     const isManagerOrAdmin = currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR');
 
     // Fetch data
-    let leaves = await db.fetchLeaveRequests(isManagerOrAdmin ? null : currentUser?.id);
-    let docs = await db.fetchDocuments(isManagerOrAdmin ? null : currentUser?.id);
-    let expenses = await db.fetchExpenses(isManagerOrAdmin ? null : currentUser?.id);
+    const [leaves, docs, expenses, genericRequests, workflows] = await Promise.all([
+        db.fetchLeaveRequests(), db.fetchDocuments(), db.fetchExpenses(), db.fetchGenericRequests(), db.fetchRequestApprovalWorkflows()
+    ]);
+    const workflowMap = new Map(workflows.map(workflow => [`${workflow.source_table}:${workflow.source_id}`, workflow]));
+    const canApproveAny = workflows.some(workflow => workflow.status === 'PENDING' && workflow.steps?.some(step => step.step_order === workflow.current_step && step.approver_id === currentUser?.id));
+    const showApprovalColumns = isManagerOrAdmin || canApproveAny;
 
     let profilesMap = {};
-    if (isManagerOrAdmin) {
+    if (showApprovalColumns) {
         const allProfiles = await db.fetchAllProfiles();
-        let teamIds = [currentUser.id];
         allProfiles.forEach(p => {
             profilesMap[p.id] = p.full_name || 'Unknown User';
-            if (p.manager_id === currentUser.id) teamIds.push(p.id);
         });
-        
-        
     }
 
     // Normalize requests
@@ -6733,9 +7094,12 @@ async function renderRequests() {
             id: r.id,
             type: 'Leave',
             employee_id: r.employee_id,
-            details: `${r.leave_type}: ${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}`,
+            details: r.leave_type === 'Short Leave'
+                ? `Short Leave: ${r.short_leave_reason || r.reason || 'No reason'} — ${r.short_leave_duration_minutes || 0} minutes`
+                : `${r.leave_type}: ${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}`,
             status: r.status,
             created_at: r.created_at,
+            source_table: 'leave_requests',
             raw: r
         });
     });
@@ -6748,15 +7112,44 @@ async function renderRequests() {
             details: `SAR ${r.amount} - ${r.description}`,
             status: r.status,
             created_at: r.created_at,
+            source_table: 'expenses',
             raw: r
         });
     });
 
+    docs.forEach(r => allRequests.push({
+        id: r.id,
+        type: 'Document',
+        employee_id: r.employee_id,
+        details: `${r.doc_type} - ${r.purpose || 'No purpose provided'}`,
+        status: r.status,
+        created_at: r.created_at,
+        source_table: 'document_requests',
+        raw: r
+    }));
+
+    genericRequests.forEach(r => allRequests.push({
+        id: r.id,
+        type: r.request_type || 'Employee Request',
+        employee_id: r.employee_id,
+        details: /^loan/i.test(r.request_type || '')
+            ? `Loan amount: ${Number(r.loan_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`
+            : r.request_type === 'Leave Request'
+                ? `${r.leave_type || 'Leave'} — ${r.number_of_days || 0} day${Number(r.number_of_days) === 1 ? '' : 's'}`
+                : (r.leave_type || r.request_type || 'Employee Request'),
+        status: String(r.status || 'PENDING').toUpperCase(),
+        created_at: r.created_at,
+        source_table: 'requests',
+        raw: r
+    }));
+
+    allRequests.forEach(request => {
+        request.workflow = workflowMap.get(`${request.source_table}:${request.id}`);
+        request.status = request.workflow?.status || request.status;
+    });
+
     // Sort by created_at desc
     allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-    // Filter out archived
-    allRequests = allRequests.filter(r => r.status === 'PENDING');
 
     // Render UI
     let rowsHTML = allRequests.map(r => {
@@ -6764,44 +7157,38 @@ async function renderRequests() {
         if (r.status === 'APPROVED') badgeClass = 'success';
         if (r.status === 'REJECTED') badgeClass = 'danger';
 
-        const employeeName = isManagerOrAdmin ? (profilesMap[r.employee_id] || 'Unknown') : 'Me';
+        const employeeName = showApprovalColumns ? (profilesMap[r.employee_id] || 'Unknown') : 'Me';
+        const currentStep = r.workflow?.steps?.find(step => step.step_order === r.workflow.current_step);
+        const canApprove = r.workflow?.status === 'PENDING' && currentStep?.approver_id === currentUser?.id;
 
         let actionsCell = '';
-        if (isManagerOrAdmin) {
-            if (r.status === 'PENDING') {
+        if (showApprovalColumns) {
+            if (canApprove) {
                 actionsCell = `
                     <td>
-                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleRequestAction('${r.type}', '${r.id}', 'APPROVED', '${r.employee_id}')">${t('leave_approve')}</button>
-                        <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleRequestAction('${r.type}', '${r.id}', 'REJECTED', '${r.employee_id}')">${t('leave_reject')}</button>
-                    </td>
-                `;
-            } else if (r.status === 'APPROVED' || r.status === 'REJECTED') {
-                actionsCell = `
-                    <td>
-                        <button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleRequestAction('${r.type}', '${r.id}', '${r.status}_ARCHIVED', '${r.employee_id}')">
-                            <i data-lucide="archive" style="width:12px;height:12px;"></i> ${t('req_archive_btn')}
-                        </button>
+                        <button class="btn-primary" onclick="handleRequestAction('${r.source_table}', '${r.id}', 'APPROVED')">${t('leave_approve')}</button>
+                        <button class="btn-primary request-reject-button" onclick="handleRequestAction('${r.source_table}', '${r.id}', 'REJECTED')">${t('leave_reject')}</button>
                     </td>
                 `;
             } else {
-                actionsCell = `<td>-</td>`;
+                actionsCell = `<td><span class="request-awaiting-label">${r.status === 'PENDING' ? escapeHTML(getRequestWorkflowStage(r.workflow)) : '—'}</span></td>`;
             }
         }
 
         return `
             <tr class="request-row" data-type="${r.type}" data-status="${r.status}" data-emp="${employeeName.toLowerCase()}" data-details="${r.details.toLowerCase()}">
                 <td>${new Date(r.created_at).toLocaleDateString()}</td>
-                ${isManagerOrAdmin ? `<td>${employeeName}</td>` : ''}
+                ${showApprovalColumns ? `<td>${escapeHTML(employeeName)}</td>` : ''}
                 <td><strong>${r.type}</strong></td>
-                <td>${r.details}</td>
-                <td><span class="status-badge ${badgeClass}">${r.status}</span></td>
+                <td>${escapeHTML(r.details)}${renderRequestWorkflowProgress(r.workflow)}</td>
+                <td><span class="status-badge ${badgeClass}">${escapeHTML(getRequestWorkflowStage(r.workflow))}</span></td>
                 ${actionsCell}
             </tr>
         `;
     }).join('');
 
     if (allRequests.length === 0) {
-        const colSpan = isManagerOrAdmin ? 6 : 4;
+        const colSpan = showApprovalColumns ? 6 : 4;
         rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('req_no_found')}</td></tr>`;
     }
 
@@ -6815,7 +7202,7 @@ async function renderRequests() {
         
         <div class="dashboard-grid fade-in-up" style="margin-bottom: 2rem;">
             <!-- HR Letter Requests -->
-            <div class="card col-span-4">
+            <div class="card col-span-12">
                 <div class="card-title">${t('doc_req_letter')}</div>
                 <form autocomplete="off" onsubmit="handleDocSubmit(event)">
                     <div class="form-group">
@@ -6824,6 +7211,9 @@ async function renderRequests() {
                             <option value="Salary Certificate">${t('doc_type_salary')}</option>
                             <option value="NOC">${t('doc_type_noc')}</option>
                             <option value="Employment Letter">${t('doc_type_emp')}</option>
+                            <option value="Pay Slip">Pay Slip</option>
+                            <option value="Loan">Loan</option>
+                            <option value="Item Purchase">Item Purchase</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -6833,28 +7223,12 @@ async function renderRequests() {
                     <button type="submit" class="btn-secondary" style="width: 100%;">${t('doc_submit_req')}</button>
                 </form>
             </div>
-            
-            <div class="card col-span-8">
-                <div class="card-title">${currentUserRole === 'ADMIN' ? t('doc_all_reqs') : t('doc_my_reqs')}</div>
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead><tr><th>${t('req_type')}</th><th>${t('doc_purpose')}</th><th>${t('req_status')}</th><th>${t('date')}</th></tr></thead>
-                        <tbody>
-                            ${docs.length === 0 ? `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_reqs')}</td></tr>` : docs.map(d => `
-                                <tr>
-                                    <td>${d.doc_type}</td>
-                                    <td>${d.purpose.substring(0, 30)}...</td>
-                                    <td><span class="status-badge ${d.status === 'PENDING' ? 'warning' : (d.status.startsWith('REJECTED') ? 'danger' : 'success')}">${d.status.replace('_ARCHIVED', '')}</span></td>
-                                    <td>${new Date(d.created_at).toLocaleDateString()}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
         </div>
 
-        <h2 style="margin-bottom: 1rem; font-size: 1.25rem;">Other Requests</h2>
+        <h2 style="margin-bottom: 1rem; font-size: 1.25rem; display: flex; align-items: center; gap: .6rem;">
+            ${showApprovalColumns ? 'All Employee Requests' : 'My Requests'}
+            <span class="status-badge info" aria-label="${allRequests.length} requests">${allRequests.length}</span>
+        </h2>
         <div class="card fade-in-up" style="margin-bottom: 2rem;">
             <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 200px;">
@@ -6867,6 +7241,8 @@ async function renderRequests() {
                         <option value="ALL">${t('req_type_all')}</option>
                         <option value="Leave">${t('req_type_leave')}</option>
                         <option value="Expense">${t('req_type_exp')}</option>
+                        <option value="Document">Document / Financial</option>
+                        <option value="Loan Request">Loan Request</option>
                     </select>
                 </div>
                 <div style="width: 150px;">
@@ -6887,11 +7263,11 @@ async function renderRequests() {
                     <thead>
                         <tr>
                             <th>${t('date')}</th>
-                            ${isManagerOrAdmin ? `<th>${t('leave_employee')}</th>` : ''}
+                            ${showApprovalColumns ? `<th>${t('leave_employee')}</th>` : ''}
                             <th>${t('req_type')}</th>
                             <th>${t('req_details')}</th>
                             <th>${t('req_status')}</th>
-                            ${isManagerOrAdmin ? `<th>${t('leave_actions')}</th>` : ''}
+                            ${showApprovalColumns ? `<th>${t('leave_actions')}</th>` : ''}
                         </tr>
                     </thead>
                     <tbody id="requestsTableBody">
@@ -7285,7 +7661,7 @@ window.handleApprovalAction = async function(taskId, newStatus) {
         return;
     }
 
-    const isDesigningTask = taskData.department === 'Marketing' && taskData.sub_type === 'Designing Task';
+    const isDesigningTask = taskData.department === 'Marketing & Sales' && taskData.sub_type === 'Designing Task';
 
     if (newStatus === 'Rejected') {
         if (isDesigningTask) {

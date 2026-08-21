@@ -102,20 +102,81 @@ const db = {
             return [];
         }
     },
-    async createRequest(employeeId, requestType, leaveType, notes) {
-        if (!supabaseClient) return null;
+    async createRequest(employeeId, requestType, leaveType, loanAmount = null, numberOfDays = null, notes = null) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase is not initialized') };
         try {
             const { data, error } = await supabaseClient.from('requests').insert([{
                 employee_id: employeeId,
                 request_type: requestType,
-                leave_type: leaveType
-                // notes could be added to schema if needed, skipping for now
+                leave_type: leaveType,
+                loan_amount: loanAmount,
+                number_of_days: numberOfDays
             }]).select();
             if (error) throw error;
-            return data;
+            await this.flushTaskNotificationEmails();
+            return { success: true, data };
         } catch (error) {
-            console.error("Error creating request:", error);
-            return null;
+            console.error("Error creating request:", error?.message || error, error?.details || '', error?.hint || '');
+            const missingAmountColumn = error?.code === 'PGRST204' && /loan_amount/i.test(error?.message || '') || /loan_amount.*(column|schema cache|does not exist)/i.test(error?.message || '');
+            const missingDaysColumn = error?.code === 'PGRST204' && /number_of_days/i.test(error?.message || '') || /number_of_days.*(column|schema cache|does not exist)/i.test(error?.message || '');
+            return {
+                success: false,
+                error: new Error(missingAmountColumn
+                    ? 'The loan amount database migration has not been applied. Run loan_request_amount_migration.sql in Supabase, then refresh.'
+                    : missingDaysColumn
+                        ? 'The leave days database migration has not been applied. Run leave_request_days_migration.sql in Supabase, then refresh.'
+                        : (error?.message || 'Failed to create request'))
+            };
+        }
+    },
+
+    async fetchGenericRequests() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('requests').select('*').order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchGenericRequests Error:', error);
+            return [];
+        }
+    },
+
+    async fetchRequestApprovalWorkflows() {
+        if (!supabaseClient) return [];
+        try {
+            const [{ data: workflows, error: workflowError }, { data: steps, error: stepsError }] = await Promise.all([
+                supabaseClient.from('request_approval_workflows').select('*').order('created_at', { ascending: false }),
+                supabaseClient.from('request_approval_steps').select('*').order('step_order', { ascending: true })
+            ]);
+            if (workflowError) throw workflowError;
+            if (stepsError) throw stepsError;
+            const stepsByWorkflow = (steps || []).reduce((map, step) => {
+                (map[step.workflow_id] ||= []).push(step);
+                return map;
+            }, {});
+            return (workflows || []).map(workflow => ({ ...workflow, steps: stepsByWorkflow[workflow.id] || [] }));
+        } catch (error) {
+            console.error('fetchRequestApprovalWorkflows Error:', error);
+            return [];
+        }
+    },
+
+    async decideRequestApproval(sourceTable, sourceId, decision, note = null) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('decide_request_approval', {
+                p_source_table: sourceTable,
+                p_source_id: sourceId,
+                p_decision: decision,
+                p_note: note
+            });
+            if (error) throw error;
+            await this.flushTaskNotificationEmails();
+            return { success: true, data };
+        } catch (error) {
+            console.error('decideRequestApproval Error:', error);
+            return { success: false, error };
         }
     },
 
@@ -274,6 +335,7 @@ const db = {
                 .from('leave_requests')
                 .insert([{ ...requestData, employee_id: userId }]);
             if (error) throw error;
+            await this.flushTaskNotificationEmails();
             return true;
         } catch (error) {
             console.error("Error submitting leave request:", error.message);
@@ -449,13 +511,25 @@ const db = {
             return { success: false, error };
         }
     },
-    async updateUserJobTitle(userId, jobTitle) {
+    async updateUserJobTitle(userId, jobTitle, departmentId = null) {
         if (!supabaseClient) return { success: true };
         try {
-            // Update profile
-            await supabaseClient.from('profiles').update({ job_title: jobTitle }).eq('id', userId);
+            let resolvedDepartmentId = departmentId;
+            if (!resolvedDepartmentId) {
+                const { data: profile, error: profileLookupError } = await supabaseClient.from('profiles').select('department_id').eq('id', userId).single();
+                if (profileLookupError) throw profileLookupError;
+                resolvedDepartmentId = profile?.department_id || null;
+            }
+            let titleQuery = supabaseClient.from('job_titles').select('department_id').eq('name', jobTitle).eq('is_active', true);
+            if (resolvedDepartmentId) titleQuery = titleQuery.eq('department_id', resolvedDepartmentId);
+            const { data: titleRecord, error: titleError } = await titleQuery.limit(1).maybeSingle();
+            if (titleError) throw titleError;
+            if (!titleRecord) throw new Error('This job title is not available for the selected department.');
+            const { error: profileError } = await supabaseClient.from('profiles').update({ job_title: jobTitle, department_id: titleRecord.department_id }).eq('id', userId);
+            if (profileError) throw profileError;
             // Update contract if exists
-            await supabaseClient.from('contracts').update({ job_title_ar: jobTitle, job_title_en: jobTitle }).eq('employee_id', userId);
+            const { error: contractError } = await supabaseClient.from('contracts').update({ job_title_ar: jobTitle, job_title_en: jobTitle }).eq('employee_id', userId);
+            if (contractError) throw contractError;
             return { success: true };
         } catch (error) {
             console.error("updateUserJobTitle Error:", error);
@@ -518,6 +592,7 @@ const db = {
                 .from('document_requests')
                 .insert([{ employee_id: employeeId, doc_type: docType, purpose }]);
             if (error) throw error;
+            await this.flushTaskNotificationEmails();
             return { success: true };
         } catch (error) {
             console.error("requestDocument Error:", error);
@@ -1022,6 +1097,7 @@ const db = {
                 .from('expenses')
                 .insert([{ employee_id: employeeId, amount, description, receipt_base64: receiptBase64 }]);
             if (error) throw error;
+            await this.flushTaskNotificationEmails();
             return { success: true };
         } catch (error) {
             console.error("submitExpense Error:", error);
@@ -1172,7 +1248,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('id, full_name, role, avatar_url')
+                .select('id, full_name, role, avatar_url, job_title, department_id, manager_id')
                 .eq('is_active', true);
             if (error) throw error;
             return data || [];
@@ -1309,9 +1385,14 @@ const db = {
     async postAnnouncement(adminId, title, content) {
         if (!supabaseClient) return { success: false };
         try {
-            const { error } = await supabaseClient
+            let { error } = await supabaseClient
                 .from('announcements')
                 .insert([{ admin_id: adminId, title, content }]);
+            // Older installations created announcements without admin_id.
+            // Keep posting functional until the compatibility migration is run.
+            if (error && (error.code === 'PGRST204' || /admin_id.*(column|schema cache|does not exist)/i.test(error.message || ''))) {
+                ({ error } = await supabaseClient.from('announcements').insert([{ title, content }]));
+            }
             if (error) throw error;
             return { success: true };
         } catch (error) {
@@ -1382,11 +1463,25 @@ const db = {
     async fetchDepartments() {
         if (!supabaseClient) return [];
         try {
-            const { data, error } = await supabaseClient.from('departments').select('*').order('created_at', { ascending: false });
+            let { data, error } = await supabaseClient.from('departments').select('*').eq('is_active', true).order('name');
+            if (error && error.message?.includes('is_active')) {
+                ({ data, error } = await supabaseClient.from('departments').select('*').order('name'));
+            }
             if (error) throw error;
             return data || [];
         } catch (error) {
             console.error("fetchDepartments Error:", error);
+            return [];
+        }
+    },
+    async fetchJobTitles() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('job_titles').select('id,name,department_id,is_active').eq('is_active', true).order('name');
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchJobTitles Error:', error);
             return [];
         }
     },
@@ -1414,18 +1509,23 @@ const db = {
             if (error) throw error;
             
             if (employeeIds !== null) {
-                // Clear existing assignments for this department
-                await supabaseClient.from('profiles').update({ department_id: null }).eq('department_id', id);
-                // Assign new employees
+                // Validate/assign the requested employees first. If a title belongs
+                // to another department, the catalog trigger rejects this without
+                // clearing the employee's existing assignment.
                 if (employeeIds.length > 0) {
                     const { error: profileError } = await supabaseClient.from('profiles').update({ department_id: id }).in('id', employeeIds);
-                    if (profileError) console.error("Error setting department for employees:", profileError);
+                    if (profileError) throw profileError;
+                    const { error: unassignError } = await supabaseClient.from('profiles').update({ department_id: null }).eq('department_id', id).not('id', 'in', `(${employeeIds.join(',')})`);
+                    if (unassignError) throw unassignError;
+                } else {
+                    const { error: unassignError } = await supabaseClient.from('profiles').update({ department_id: null }).eq('department_id', id);
+                    if (unassignError) throw unassignError;
                 }
             }
             
             return { success: true };
         } catch (error) {
-            console.error("updateDepartment Error:", error);
+            console.error("updateDepartment Error:", error?.message || error);
             return { success: false, error };
         }
     },

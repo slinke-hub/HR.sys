@@ -54,8 +54,6 @@ BEGIN
 
     IF NEW.delivery_status IS DISTINCT FROM OLD.delivery_status THEN
         NEW.status := CASE WHEN NEW.delivery_status = 'Approved' THEN 'completed' ELSE 'review' END;
-    ELSIF NEW.status = 'completed' AND COALESCE(NEW.delivery_status, '') <> 'Approved' THEN
-        NEW.status := 'review';
     END IF;
     RETURN NEW;
 END;
