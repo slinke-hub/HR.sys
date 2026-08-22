@@ -1839,3 +1839,263 @@ button:disabled > :is([data-lucide="edit"], [data-lucide="edit-2"], [data-lucide
 .annual-leave-widget-balance strong { color:#EF4444 !important; font-size:2rem; font-weight:700; }
 .annual-leave-widget-date { text-align:center; color:var(--color-text-secondary); }
 .annual-leave-widget-breakdown { display:grid; gap:.55rem; max-width:440px; margin:1.5rem auto 0; }
+.task-watcher-picker {
+    position: relative;
+}
+
+.task-watcher-toggle {
+    text-align: left;
+    cursor: pointer;
+}
+
+.task-watcher-dropdown {
+    position: absolute;
+    z-index: 1000;
+    left: 0;
+    right: 0;
+    margin-top: 0.35rem;
+    padding: 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.65rem;
+    background: var(--color-surface, #0c1b2e);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.task-watcher-search {
+    margin-bottom: 0.5rem;
+}
+
+.task-watcher-options {
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.task-watcher-option {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.55rem;
+    border-radius: 0.4rem;
+    cursor: pointer;
+}
+
+.task-watcher-option:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.task-watcher-option[hidden] {
+    display: none;
+}
+
+/* Responsive hardening for phones, tablets, desktop browsers and installed PWA mode. */
+.dashboard-grid > *,
+.task-assign-form > *,
+.modal-content > *,
+.side-panel > *,
+.form-group,
+.form-control {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.form-control,
+input,
+select,
+textarea,
+button {
+    box-sizing: border-box;
+}
+
+textarea { resize: vertical; }
+.modal-content { overscroll-behavior: contain; }
+.table-responsive { max-width: 100%; overscroll-behavior-inline: contain; }
+.data-table { min-width: 640px; }
+.card:has(> table),
+.card:has(.data-table) { overflow-x: auto; }
+
+@media (max-width: 767px) {
+    .card {
+        width: 100%;
+        padding: 1rem;
+        border-radius: .75rem;
+    }
+
+    .dashboard-grid,
+    .dashboard-grid[style] {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: .875rem !important;
+    }
+
+    .dashboard-grid > *,
+    .dashboard-grid[style] > * {
+        grid-column: 1 !important;
+        width: 100%;
+    }
+
+    .modal {
+        align-items: flex-start;
+        padding: max(.5rem, env(safe-area-inset-top)) max(.5rem, env(safe-area-inset-right)) max(.5rem, env(safe-area-inset-bottom)) max(.5rem, env(safe-area-inset-left));
+        overflow: hidden;
+    }
+
+    .modal-content,
+    .modal-content[style] {
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: calc(100dvh - max(1rem, env(safe-area-inset-top) + env(safe-area-inset-bottom))) !important;
+        margin: 0;
+        padding: 1rem;
+        border-radius: .75rem;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    .modal-header {
+        position: sticky;
+        top: -1rem;
+        z-index: 20;
+        gap: .75rem;
+        margin: -1rem -1rem 1rem;
+        padding: 1rem;
+        background: inherit;
+    }
+
+    .modal-header h1,
+    .modal-header h2,
+    .modal-header h3 {
+        min-width: 0;
+        font-size: 1.25rem;
+        overflow-wrap: anywhere;
+    }
+
+    .close-modal {
+        width: 44px;
+        height: 44px;
+        flex: 0 0 44px;
+    }
+
+    .modal-content form > div[style*="display: flex"],
+    .modal-content .form-row,
+    .task-assign-form > div[style*="display: flex"] {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+
+    .modal-content form > div[style*="display: flex"] > *,
+    .task-assign-form > div[style*="display: flex"] > * {
+        flex: 1 1 auto !important;
+        width: 100% !important;
+    }
+
+    .modal-content input:not([type="checkbox"]):not([type="radio"]),
+    .modal-content select,
+    .modal-content textarea,
+    .view-container input:not([type="checkbox"]):not([type="radio"]),
+    .view-container select,
+    .view-container textarea {
+        width: 100%;
+        font-size: 16px;
+    }
+
+    .task-assign-btn-group,
+    .form-actions {
+        flex-wrap: wrap;
+    }
+
+    .task-assign-btn-group .btn,
+    .form-actions .btn {
+        flex: 1 1 100% !important;
+        width: 100%;
+        min-height: 44px;
+    }
+
+    .side-panel,
+    .side-panel.task-v2-detail,
+    .side-panel.teamwork-task-detail,
+    .side-panel.task-v2-detail.teamwork-task-detail {
+        width: 100vw;
+        max-width: 100vw;
+        border-left: 0;
+    }
+
+    .side-panel-header,
+    .side-panel-body,
+    .side-panel-footer {
+        padding-left: max(1rem, env(safe-area-inset-left));
+        padding-right: max(1rem, env(safe-area-inset-right));
+    }
+
+    .side-panel-header { padding-top: max(1rem, env(safe-area-inset-top)); }
+    .side-panel-footer { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+
+    .task-details-grid,
+    .teamwork-task-detail .task-details-grid,
+    .task-detail-data-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: .875rem;
+    }
+
+    .kanban-board,
+    .task-board {
+        margin-inline: -.25rem;
+        padding-inline: .25rem;
+        scroll-snap-type: x proximity;
+    }
+
+    .kanban-col,
+    .task-board-column {
+        min-width: min(86vw, 320px);
+        flex-basis: min(86vw, 320px);
+        scroll-snap-align: start;
+    }
+
+    .task-v2-toolbar,
+    .task-detail-tabs,
+    .teamwork-edit-tabs,
+    .task-comment-tabs {
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .task-v2-search { min-width: 100%; }
+
+    .task-watcher-dropdown {
+        position: static;
+        width: 100%;
+        margin-top: .4rem;
+        box-shadow: none;
+    }
+
+    .task-watcher-options { max-height: min(240px, 35dvh); }
+    .profile-dropdown-menu { position: fixed; top: calc(56px + env(safe-area-inset-top)); right: .5rem; left: .5rem; width: auto; }
+}
+
+@media (max-width: 380px) {
+    .card { padding: .8rem; }
+    .modal { padding-inline: 0; }
+    .modal-content,
+    .modal-content[style] { border-radius: 0; }
+    .quick-action-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+    .modal { align-items: flex-start; }
+    .modal-content,
+    .modal-content[style] { max-height: 100dvh !important; border-radius: 0; }
+    .side-panel-header { padding-block: .65rem; }
+    .side-panel-body { padding-block: .75rem; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+    button,
+    .btn,
+    .icon-btn,
+    .nav-item,
+    input[type="checkbox"],
+    input[type="radio"] { min-height: 44px; }
+
+    .card:hover,
+    .kanban-card:hover { transform: none; }
+}

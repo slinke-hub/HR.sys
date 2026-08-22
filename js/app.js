@@ -4121,6 +4121,12 @@ async function renderTasks() {
         return `<option value="${escapeHTML(u.id)}" ${selected}>${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
     }).join('');
     window.taskAssigneeOptionsCache = userOptions;
+    window.taskAllUsersCache = allUsers;
+    window.taskDepartmentsCache = allDepartments;
+    window.taskWatcherOptionsCache = allUsers.map(u => {
+        const label = u.full_name || u.id.substring(0, 8);
+        return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
+    }).join('');
 
     let departmentSelectHTML = '';
     let isMarketing = false;
@@ -4218,14 +4224,11 @@ async function renderTasks() {
 
                         <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
                             <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'">
+                                <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'; if (this.checked) populateTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache || '', Array.from(document.getElementById('taskWatchers').selectedOptions).map(option => option.value))">
                                 ${t('ui_add_watcher') || 'Add Watchers'}
                             </label>
                             <div id="taskWatchersGroup" style="display: none; margin-top: 0.5rem;">
-                                <select id="taskWatchers" class="form-control" multiple size="4">
-                                    ${userOptions}
-                                </select>
-                                <small class="text-muted" style="display:block; margin-top:0.25rem;">Hold Ctrl/Cmd to select multiple</small>
+                                ${renderTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache)}
                             </div>
                         </div>
                     </div>
@@ -4620,7 +4623,8 @@ window.handleTaskProjectChange = function (prefix = 'new') {
     // We could filter tags based on the selected project, but for now we'll just log it.
 };
 
-window.handleTaskDepartmentChange = function (prefix = 'new', value = '') {
+window.handleTaskDepartmentChange = function (prefix = 'new', value = '', selectedAssigneeId = '') {
+    updateTaskAssigneeOptions(prefix, value, selectedAssigneeId);
     const subTypeGroup = document.getElementById(prefix === 'new' ? 'taskSubTypeGroup' : 'editTaskSubTypeGroup');
     if (!subTypeGroup) return;
     
@@ -4635,6 +4639,78 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '') {
         handleMarketingTaskTypeChange(prefix, '');
     }
 };
+
+function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = '') {
+    const select = document.getElementById(prefix === 'new' ? 'taskAssignee' : 'editTaskAssignee');
+    if (!select || currentUserRole === 'EMPLOYEE') return;
+    const department = (window.taskDepartmentsCache || []).find(item => item.name === departmentName);
+    const employees = department
+        ? (window.taskAllUsersCache || []).filter(user => user.department_id === department.id)
+        : [];
+    select.innerHTML = `<option value="">${department ? (t('task_sel_emp') || 'Select Employee') : 'Select a department first'}</option>` + employees.map(user => {
+        const label = user.full_name || user.id.substring(0, 8);
+        return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(user.role)})</option>`;
+    }).join('');
+    select.value = employees.some(user => user.id === selectedAssigneeId) ? selectedAssigneeId : '';
+    handleTaskAssigneeChange(prefix);
+}
+
+function renderTaskWatcherPicker(selectId, options = '') {
+    return `<div class="task-watcher-picker" data-watcher-picker="${selectId}">
+        <button type="button" class="form-control task-watcher-toggle" onclick="toggleTaskWatcherDropdown('${selectId}')" aria-expanded="false">Select watchers</button>
+        <div class="task-watcher-dropdown" hidden>
+            <input type="search" class="form-control task-watcher-search" placeholder="Search employees..." aria-label="Search employees" oninput="filterTaskWatchers('${selectId}', this.value)">
+            <div class="task-watcher-options"></div>
+        </div>
+        <select id="${selectId}" multiple hidden>${options}</select>
+    </div>`;
+}
+
+window.populateTaskWatcherPicker = function(selectId, options, selectedIds = []) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    select.innerHTML = options || '';
+    Array.from(select.options).forEach(option => { option.selected = selectedIds.includes(option.value); });
+    const picker = select.closest('.task-watcher-picker');
+    const list = picker?.querySelector('.task-watcher-options');
+    if (!list) return;
+    list.innerHTML = Array.from(select.options).map(option => `<label class="task-watcher-option" data-search="${escapeHTML(option.text.toLowerCase())}"><input type="checkbox" value="${escapeHTML(option.value)}" ${option.selected ? 'checked' : ''} onchange="syncTaskWatcherSelection('${selectId}', this)"><span>${escapeHTML(option.text)}</span></label>`).join('');
+    updateTaskWatcherLabel(selectId);
+};
+
+window.toggleTaskWatcherDropdown = function(selectId) {
+    const select = document.getElementById(selectId);
+    const picker = select?.closest('.task-watcher-picker');
+    const dropdown = picker?.querySelector('.task-watcher-dropdown');
+    const button = picker?.querySelector('.task-watcher-toggle');
+    if (!dropdown || !button) return;
+    dropdown.hidden = !dropdown.hidden;
+    button.setAttribute('aria-expanded', String(!dropdown.hidden));
+    if (!dropdown.hidden) picker.querySelector('.task-watcher-search')?.focus();
+};
+
+window.filterTaskWatchers = function(selectId, query) {
+    const select = document.getElementById(selectId);
+    const normalized = query.trim().toLowerCase();
+    select?.closest('.task-watcher-picker')?.querySelectorAll('.task-watcher-option').forEach(option => {
+        option.hidden = normalized && !option.dataset.search.includes(normalized);
+    });
+};
+
+window.syncTaskWatcherSelection = function(selectId, checkbox) {
+    const select = document.getElementById(selectId);
+    const option = Array.from(select?.options || []).find(item => item.value === checkbox.value);
+    if (option) option.selected = checkbox.checked;
+    updateTaskWatcherLabel(selectId);
+};
+
+function updateTaskWatcherLabel(selectId) {
+    const select = document.getElementById(selectId);
+    const button = select?.closest('.task-watcher-picker')?.querySelector('.task-watcher-toggle');
+    if (!select || !button) return;
+    const selected = Array.from(select.selectedOptions);
+    button.textContent = selected.length === 0 ? 'Select watchers' : selected.length === 1 ? selected[0].text : `${selected.length} watchers selected`;
+}
 
 function renderMarketingDesignFields(prefix) {
     const id = prefix === 'new' ? 'task' : 'editTask';
@@ -4914,8 +4990,6 @@ window.openEditTaskModal = async function(id) {
         
         const assigneeSelect = document.getElementById('editTaskAssignee');
         if (assigneeSelect) {
-            assigneeSelect.innerHTML = window.taskAssigneeOptionsCache || '';
-            assigneeSelect.value = task.assignee_id || '';
             if (currentUserRole === 'EMPLOYEE') {
                 assigneeSelect.disabled = true;
             } else {
@@ -4942,7 +5016,7 @@ window.openEditTaskModal = async function(id) {
             }
             deptSelect.innerHTML = `<option value="">— Select Department —</option>${window.deptOptionsCache}`;
             deptSelect.value = task.department || '';
-            window.handleTaskDepartmentChange('edit', task.department || '');
+            window.handleTaskDepartmentChange('edit', task.department || '', task.assignee_id || '');
         }
         
         const subTypeSelect = document.getElementById('editTaskSubType');
@@ -4961,18 +5035,13 @@ window.openEditTaskModal = async function(id) {
         }
 
         const watchersCheckbox = document.getElementById('editEnableWatchers');
-        const watchersSelect = document.getElementById('editTaskWatchers');
         const watchersGroup = document.getElementById('editTaskWatchersGroup');
+        const watchersSelect = document.getElementById('editTaskWatchers');
         if (watchersSelect) {
-            watchersSelect.innerHTML = window.taskAssigneeOptionsCache || '';
+            populateTaskWatcherPicker('editTaskWatchers', window.taskWatcherOptionsCache || '', task.watchers || []);
             if (task.watchers && task.watchers.length > 0) {
                 if (watchersCheckbox) watchersCheckbox.checked = true;
                 if (watchersGroup) watchersGroup.style.display = 'block';
-                Array.from(watchersSelect.options).forEach(opt => {
-                    if (task.watchers.includes(opt.value)) {
-                        opt.selected = true;
-                    }
-                });
             } else {
                 if (watchersCheckbox) watchersCheckbox.checked = false;
                 if (watchersGroup) watchersGroup.style.display = 'none';
