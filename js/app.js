@@ -974,7 +974,6 @@ async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
     if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
-    if (viewId === 'payroll_beta') return ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole) || String(currentUserProfile?.job_title || '').trim().toUpperCase() === 'FINANCE MANAGER';
     if (viewId === 'orders' || viewId === 'projects') {
         return normalizedRole === 'EMPLOYEE' && (await getCurrentDepartmentName()).trim().toLowerCase() === 'marketing & sales';
     }
@@ -992,7 +991,6 @@ window.updateSidebarVisibility = async function() {
     const approvalsNav = document.getElementById('navApprovals');
     const ordersNav = document.querySelector('.nav-item[data-view="orders"]');
     const projectsNav = document.querySelector('.nav-item[data-view="projects"]');
-    const payrollBetaNav = document.querySelector('.nav-item[data-view="payroll_beta"]');
 
     const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
     if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
@@ -1005,7 +1003,6 @@ window.updateSidebarVisibility = async function() {
     const canUseMarketingPages = normalizedRole === 'EMPLOYEE' && (await getCurrentDepartmentName()).trim().toLowerCase() === 'marketing & sales';
     if (ordersNav) ordersNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (projectsNav) projectsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
-    if (payrollBetaNav) payrollBetaNav.style.display = (isAdmin || String(currentUserProfile?.job_title || '').trim().toUpperCase() === 'FINANCE MANAGER') ? 'flex' : 'none';
     
     let isHussain = false;
     if (typeof currentUser !== 'undefined' && currentUser) {
@@ -2859,109 +2856,6 @@ function initCharts() {
 // ==========================================
 // PAYROLL
 // ==========================================
-function payrollBetaMoney(value) {
-    return `${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`;
-}
-
-function getPayrollBetaInput() {
-    const month = document.getElementById('payrollBetaMonth')?.value || new Date().toISOString().slice(0, 7);
-    const [year, monthNumber] = month.split('-').map(Number);
-    const daysInMonth = year && monthNumber ? new Date(year, monthNumber, 0).getDate() : 30;
-    return {
-        employeeName: document.getElementById('payrollBetaEmployee')?.value || 'Test Employee',
-        payrollMonth: month,
-        payableDays: document.getElementById('payrollBetaDays')?.value || daysInMonth,
-        daysInMonth,
-        basicSalary: document.getElementById('payrollBetaBasic')?.value,
-        salaryRaise: document.getElementById('payrollBetaRaise')?.value,
-        otherDeductions: document.getElementById('payrollBetaDeductions')?.value,
-        deductionDescription: document.getElementById('payrollBetaDeductionDescription')?.value,
-        loanBalance: document.getElementById('payrollBetaLoanBalance')?.value,
-        loanPaymentMode: document.getElementById('payrollBetaLoanMode')?.value,
-        loanInstallment: document.getElementById('payrollBetaLoanInstallment')?.value,
-        cashReward: document.getElementById('payrollBetaReward')?.value,
-        commission: document.getElementById('payrollBetaCommission')?.value,
-        transferMethod: document.getElementById('payrollBetaTransfer')?.value,
-        iban: document.getElementById('payrollBetaTransfer')?.value === 'Bank Transfer' ? document.getElementById('payrollBetaIban')?.value : ''
-    };
-}
-
-window.handlePayrollBetaTransferChange = function() {
-    const isBankTransfer = document.getElementById('payrollBetaTransfer')?.value === 'Bank Transfer';
-    const bankingField = document.getElementById('payrollBetaBankingField');
-    const bankingInput = document.getElementById('payrollBetaIban');
-    if (bankingField) bankingField.hidden = !isBankTransfer;
-    if (bankingInput) {
-        bankingInput.required = isBankTransfer;
-        if (!isBankTransfer) bankingInput.value = '';
-    }
-    window.updatePayrollBetaPreview();
-};
-
-window.handlePayrollBetaDeductionChange = function() {
-    const hasDeduction = Number(document.getElementById('payrollBetaDeductions')?.value || 0) > 0;
-    const descriptionField = document.getElementById('payrollBetaDeductionDescriptionField');
-    const descriptionInput = document.getElementById('payrollBetaDeductionDescription');
-    if (descriptionField) descriptionField.hidden = !hasDeduction;
-    if (descriptionInput) {
-        descriptionInput.required = hasDeduction;
-        if (!hasDeduction) descriptionInput.value = '';
-    }
-    window.updatePayrollBetaPreview();
-};
-
-window.handlePayrollBetaLoanModeChange = function() {
-    const isInstallment = document.getElementById('payrollBetaLoanMode')?.value !== 'FULL';
-    const installmentField = document.getElementById('payrollBetaInstallmentField');
-    const installmentInput = document.getElementById('payrollBetaLoanInstallment');
-    if (installmentField) installmentField.hidden = !isInstallment;
-    if (installmentInput) installmentInput.required = isInstallment;
-    window.updatePayrollBetaPreview();
-};
-
-window.updatePayrollBetaPreview = function() {
-    if (!window.PayrollBeta) return;
-    const result = window.PayrollBeta.calculate(getPayrollBetaInput());
-    const remainingLoanField = document.getElementById('payrollBetaRemainingLoan');
-    if (remainingLoanField) remainingLoanField.value = result.remainingLoanBalance.toFixed(2);
-    const preview = document.getElementById('payrollBetaPreviewBody');
-    if (preview) preview.innerHTML = `<tr>
-        <td>${escapeHTML(result.employeeName)}</td><td>${result.payableDays} / ${result.daysInMonth}</td>
-        <td>${payrollBetaMoney(result.adjustedBasicSalary)}${result.salaryRaise ? `<small class="payroll-beta-adjustment">Includes ${payrollBetaMoney(result.salaryRaise)} raise</small>` : ''}</td>
-        <td>${payrollBetaMoney(result.otherDeductions)}${result.deductionDescription ? `<small class="payroll-beta-adjustment">${escapeHTML(result.deductionDescription)}</small>` : ''}</td><td>${payrollBetaMoney(result.loanDeduction)}<small class="payroll-beta-adjustment">${result.loanPaymentMode === 'FULL' ? 'Full payment' : 'Installment'}${result.remainingLoanBalance ? ` · Balance: ${payrollBetaMoney(result.remainingLoanBalance)}` : ''}</small></td>
-        <td>${payrollBetaMoney(result.cashReward)}</td><td>${payrollBetaMoney(result.commission)}</td>
-        <td><strong>${payrollBetaMoney(result.netPay)}</strong></td><td>${escapeHTML(result.transferMethod)}</td><td>${escapeHTML(result.iban || 'Not provided')}</td>
-    </tr>`;
-    const breakdown = document.getElementById('payrollBetaBreakdown');
-    if (breakdown) breakdown.innerHTML = `<div><span>Earned basic salary</span><strong>${payrollBetaMoney(result.earnedBasicSalary)}</strong></div><div><span>Gross pay</span><strong>${payrollBetaMoney(result.grossPay)}</strong></div><div><span>Total deductions</span><strong>−${payrollBetaMoney(result.totalDeductions)}</strong></div><div class="payroll-beta-net"><span>Net pay</span><strong>${payrollBetaMoney(result.netPay)}</strong></div>${result.warnings.map(warning => `<p class="payroll-beta-warning">${escapeHTML(warning)}</p>`).join('')}`;
-};
-
-function renderPayrollBeta() {
-    const today = new Date();
-    const month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-    const days = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    setTimeout(() => window.updatePayrollBetaPreview(), 0);
-    return `<div class="page-header fade-in-up"><div><h1 class="page-title">Payroll Workflow</h1><p class="page-subtitle">Local calculation preview. No payroll records will be saved or deployed.</p></div><span class="status-badge warning">Beta Test</span></div>
-    <div class="card payroll-beta-form fade-in-up"><div class="payroll-beta-section-title">Test Payroll Inputs</div><div class="payroll-beta-input-grid">
-        <div class="form-group"><label class="form-label">Employee Name</label><input id="payrollBetaEmployee" class="form-control" value="Test Employee" oninput="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Payroll Month</label><input id="payrollBetaMonth" type="month" class="form-control" value="${month}" onchange="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Number of Payable Days</label><input id="payrollBetaDays" type="number" min="0" max="31" class="form-control" value="${days}" oninput="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Basic Salary (SAR)</label><input id="payrollBetaBasic" type="number" min="0" step="0.01" class="form-control" value="10000" oninput="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Salary Raise Effective This Month (SAR)</label><input id="payrollBetaRaise" type="number" min="0" step="0.01" class="form-control" value="0" oninput="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Other Deductions (SAR)</label><input id="payrollBetaDeductions" type="number" min="0" step="0.01" class="form-control" value="0" oninput="handlePayrollBetaDeductionChange()"></div>
-        <div class="form-group" id="payrollBetaDeductionDescriptionField" hidden><label class="form-label">Deduction Description</label><input id="payrollBetaDeductionDescription" class="form-control" placeholder="Explain the reason for this deduction" oninput="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Current Loan Balance (SAR)</label><input id="payrollBetaLoanBalance" type="number" min="0" step="0.01" class="form-control" value="12000" oninput="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Loan Payment Method</label><select id="payrollBetaLoanMode" class="form-control" onchange="handlePayrollBetaLoanModeChange()"><option value="INSTALLMENT">Installment</option><option value="FULL">Full Payment</option></select></div>
-        <div class="form-group" id="payrollBetaInstallmentField"><label class="form-label">Monthly Loan Installment (SAR)</label><input id="payrollBetaLoanInstallment" type="number" min="0" step="0.01" class="form-control" value="1000" oninput="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Remaining Loan Balance (SAR)</label><input id="payrollBetaRemainingLoan" type="number" class="form-control" value="11000.00" readonly aria-readonly="true"></div>
-        <div class="form-group"><label class="form-label">Cash Reward (SAR)</label><input id="payrollBetaReward" type="number" min="0" step="0.01" class="form-control" value="0" oninput="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Commission (SAR)</label><input id="payrollBetaCommission" type="number" min="0" step="0.01" class="form-control" value="0" oninput="updatePayrollBetaPreview()"></div>
-        <div class="form-group"><label class="form-label">Transfer Method</label><select id="payrollBetaTransfer" class="form-control" onchange="handlePayrollBetaTransferChange()"><option value="Cash">Cash</option><option value="Bank Transfer">Bank Transfer</option></select></div>
-        <div class="form-group" id="payrollBetaBankingField" hidden><label class="form-label">IBAN / Account Number</label><input id="payrollBetaIban" class="form-control" placeholder="Enter IBAN or account number" oninput="updatePayrollBetaPreview()"></div>
-    </div></div>
-    <div class="card fade-in-up"><div class="payroll-beta-section-title">English Payslip Preview</div><div class="table-responsive"><table class="data-table payroll-beta-table"><thead><tr><th>Employee Name</th><th>Number of Days</th><th>Basic Salary</th><th>Deductions</th><th>Loan Installment</th><th>Cash Reward</th><th>Commission</th><th>Net Salary</th><th>Transfer Method</th><th>IBAN</th></tr></thead><tbody id="payrollBetaPreviewBody"></tbody></table></div><div id="payrollBetaBreakdown" class="payroll-beta-breakdown"></div></div>`;
-}
-
 window.handleViewPayslip = function (month, netPay) {
     alert(`SAP Detailed Payslip for ${month}\n------------------------\nBase Salary: $${(netPay * 0.8).toFixed(2)}\nAllowances: $${(netPay * 0.2).toFixed(2)}\n\nNet Pay: $${netPay.toFixed(2)}`);
 }
@@ -6388,7 +6282,6 @@ window.renderView = async function(viewId, isBack = false) {
             case 'requests': content = String(currentUserRole || '').toUpperCase() === 'EMPLOYEE' ? await renderMyRequestStatuses() : await renderRequests(); break;
             case 'archived': content = await renderArchivedRequests(); break;
             case 'payroll': content = await renderPayroll(); break;
-            case 'payroll_beta': content = renderPayrollBeta(); break;
             case 'expenses': content = await renderExpenses(); break;
             case 'analytics': content = await renderAnalytics(); break;
             case 'admin': content = await renderAdmin(); break;
@@ -7977,7 +7870,7 @@ async function initApp() {
 
         const restorableViews = new Set([
             'dashboard', 'community', 'time', 'leave', 'requests', 'archived',
-            'payroll', 'payroll_beta', 'expenses', 'analytics', 'admin', 'users', 'employees',
+            'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
             'archived_contracts', 'messages', 'notifications', 'performance',
             'documents', 'profile', 'projects', 'approvals', 'tasks',
             'departments', 'translations', 'clients', 'crm', 'orders', 'integrations'
