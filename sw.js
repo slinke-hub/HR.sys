@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hr-sys-v49';
+const CACHE_NAME = 'hr-sys-v84';
 const ASSETS = [
   '/',
   '/index.html',
@@ -29,9 +29,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
-  if (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') return;
-  // Always fetch from network to bypass old cache completely
-  event.respondWith(
-    fetch(event.request)
-  );
+  // Never intercept Supabase, CDN, extension, or other cross-origin traffic.
+  if (requestUrl.origin !== self.location.origin || event.request.method !== 'GET') return;
+  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
 });

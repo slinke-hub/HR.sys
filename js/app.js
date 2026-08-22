@@ -5,6 +5,7 @@ let currentView = 'login';
 let loginMode = 'login';
 let currentUser = null;
 let viewHistory = [];
+const defaultTranslationsSnapshot = typeof i18n !== 'undefined' ? JSON.parse(JSON.stringify(i18n)) : { en: {}, ar: {} };
 
 // XSS Protection Utility
 function escapeHTML(str) {
@@ -67,8 +68,25 @@ window.hideSupervisorTooltip = function() {
 };
 
 let currentUserRole = null;
+let currentUserProfile = null;
 let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
+let recentLoginsChannel = null;
+let recentLoginsPollInterval = null;
+
+window.canCurrentUserEditContracts = function(profile = currentUserProfile) {
+    return String(currentUserRole || '').toUpperCase() === 'ADMIN' ||
+        String(profile?.job_title || '').trim().toUpperCase() === 'HR MANAGER';
+};
+
+async function syncLegacyLocalProfilePhoto(profile) {
+    if (!profile?.id || profile.avatar_url) return profile;
+    const localAvatar = localStorage.getItem('user_avatar_' + profile.id);
+    if (!localAvatar) return profile;
+    const result = await db.updateProfilePhoto(profile.id, localAvatar);
+    if (result.success) profile.avatar_url = localAvatar;
+    return profile;
+}
 
 // Inactivity Tracker (5 Minutes)
 let inactivityTimeout;
@@ -88,14 +106,24 @@ function resetInactivityTimeout() {
 let deferredPrompt;
 
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
-                console.log('SW registered: ', registration);
-            })
-            .catch(registrationError => {
-                console.log('SW registration failed: ', registrationError);
-            });
+    window.addEventListener('load', async () => {
+        try {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(registration => registration.unregister()));
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                await Promise.all(cacheNames.filter(name => name.startsWith('hr-sys-')).map(name => caches.delete(name)));
+            }
+            console.log('Legacy service workers and caches cleared.');
+            if (navigator.serviceWorker.controller && sessionStorage.getItem('sw_cleanup_reloaded') !== 'true') {
+                sessionStorage.setItem('sw_cleanup_reloaded', 'true');
+                window.location.reload();
+                return;
+            }
+            sessionStorage.removeItem('sw_cleanup_reloaded');
+        } catch (cleanupError) {
+            console.warn('Service worker cleanup failed:', cleanupError);
+        }
     });
 }
 
@@ -183,10 +211,16 @@ window.showEditUserModal = async (userId) => {
     const departmentSelect = document.getElementById('editDepartment');
     departmentSelect.innerHTML = '<option value="">Select Department</option>' + departments.map(department => `<option value="${department.id}" ${department.id === user.department_id ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('');
     const selectedDepartment = departments.find(department => department.id === user.department_id)?.name || '';
-    document.getElementById('editJobTitle').innerHTML = companyJobTitleOptions(user.job_title || '',selectedDepartment);
-    if (document.getElementById('editAvatarUrl')) {
-        document.getElementById('editAvatarUrl').value = user.avatar_url || localStorage.getItem('user_avatar_' + user.id) || '';
-    }
+    const jobTitleSelect = document.getElementById('editJobTitle');
+    jobTitleSelect.disabled = !selectedDepartment;
+    jobTitleSelect.innerHTML = selectedDepartment
+        ? companyJobTitleOptions(user.job_title || '', selectedDepartment)
+        : '<option value="">Select Department first</option>';
+    const currentAvatar = user.avatar_url || localStorage.getItem('user_avatar_' + user.id) || '';
+    const avatarPreview = document.getElementById('editAvatarPreview');
+    document.getElementById('editAvatarFile').value = '';
+    avatarPreview.src = currentAvatar;
+    avatarPreview.hidden = !currentAvatar;
     document.getElementById('editRole').value = user.role || 'EMPLOYEE';
     
     const mgrSelect = document.getElementById('editManagerId');
@@ -199,6 +233,32 @@ window.showEditUserModal = async (userId) => {
     document.getElementById('editUserModal').classList.add('active');
 };
 
+window.refreshUserRowInPlace = async function(userId, knownUpdates = null) {
+    const cached = (window.currentAdminUsers || []).find(item => item.id === userId);
+    const user = knownUpdates ? { ...cached, ...knownUpdates, id: userId } : await db.getUserProfile(userId);
+    if (!user) return;
+    const index = (window.currentAdminUsers || []).findIndex(item => item.id === userId);
+    if (index >= 0) window.currentAdminUsers[index] = { ...window.currentAdminUsers[index], ...user };
+
+    const row = document.querySelector(`[data-user-row="${userId}"]`);
+    if (!row) return;
+    const details = row.querySelector('[data-user-details]');
+    if (details) details.innerHTML = `<div style="font-weight:bold;color:var(--primary-color);">EMP-${escapeHTML(String(user.emp_index || 'New'))}</div><div style="font-weight:bold;">${escapeHTML(user.full_name || 'N/A')}</div><div style="font-size:.8rem;color:var(--text-light);">ID: <span title="${user.id}">${user.id.substring(0, 8)}...</span><br>Iqama: ${escapeHTML(user.iqama_number || 'N/A')}<br>Phone: ${escapeHTML(user.phone_number || 'N/A')}</div>`;
+    const badge = row.querySelector('[data-user-role-badge]');
+    if (badge) {
+        badge.className = `status-badge ${user.role === 'ADMIN' ? 'success' : 'info'}`;
+        badge.textContent = user.role || 'EMPLOYEE';
+    }
+    const roleSelect = row.querySelector('[data-user-role-select]');
+    if (roleSelect && user.role) roleSelect.value = user.role;
+    const managerSelect = row.querySelector('[data-user-manager-select]');
+    if (managerSelect) managerSelect.value = user.manager_id || '';
+    const departmentSelect = row.querySelector('[data-directory-department]');
+    if (departmentSelect && Object.prototype.hasOwnProperty.call(user, 'department_id')) departmentSelect.value = user.department_id || '';
+    const titleSelect = row.querySelector('[data-directory-job-title]');
+    if (titleSelect && user.job_title) titleSelect.value = user.job_title;
+};
+
 window.handleUpdateUser = async (e) => {
     e.preventDefault();
     const userId = document.getElementById('editUserId').value;
@@ -208,16 +268,22 @@ window.handleUpdateUser = async (e) => {
         phone_number: document.getElementById('editPhone').value,
         job_title: document.getElementById('editJobTitle').value,
         department_id: document.getElementById('editDepartment').value || null,
-        avatar_url: document.getElementById('editAvatarUrl')?.value || null,
         role: document.getElementById('editRole').value,
         manager_id: document.getElementById('editManagerId').value || null
     };
 
-    if (updates.avatar_url) {
-        localStorage.setItem('user_avatar_' + userId, updates.avatar_url);
+    const photoFile = document.getElementById('editAvatarFile')?.files?.[0];
+    if (photoFile) {
+        try {
+            updates.avatar_url = await compressProfileImage(photoFile);
+        } catch (error) {
+            showToast(error.message || 'Unable to process the selected profile photo.', 'danger');
+            return;
+        }
     }
     const res = await db.updateUserProfile(userId, updates);
     if (res.success) {
+        if (updates.avatar_url) localStorage.setItem('user_avatar_' + userId, updates.avatar_url);
         // Invalidate view cache
         if (window.viewHTMLCache) {
             delete window.viewHTMLCache.dashboard;
@@ -225,7 +291,7 @@ window.handleUpdateUser = async (e) => {
         }
         showToast(t('toast_user_updated_successfully'), "success");
         document.getElementById('editUserModal').classList.remove('active');
-        renderView('users');
+        await window.refreshUserRowInPlace(userId, updates);
     } else {
         showToast(t('toast_failed_to_update_user'), "danger");
     }
@@ -305,13 +371,14 @@ window.handleAdminPasswordReset = async (event) => {
 window.handleResetUserPassword = window.showAdminPasswordResetModal;
 
 window.handleDeleteUser = (userId) => {
-    window.showConfirmModal(t('modal_title_delete_user'), t('modal_body_are_you_sure_you_want_to_delete_this_user_this_action_cannot_be_undone'), async () => {
-        const success = await db.deleteUser(userId);
-        if (success) {
-            showToast(t('toast_user_deleted_successfully'), "success");
+    window.showConfirmModal(t('modal_title_delete_user'), 'This permanently removes the user and their data. Their contract will be moved to Archived Contracts.', async () => {
+        const result = await db.deleteUser(userId);
+        if (result.success) {
+            const archivedCount = Number(result.data?.archived_contracts || 0);
+            showToast(`User deleted successfully. ${archivedCount} contract${archivedCount === 1 ? '' : 's'} archived.`, "success");
             renderView('users');
         } else {
-            showToast(t('toast_failed_to_delete_user'), "danger");
+            showToast(result.error?.message || t('toast_failed_to_delete_user'), "danger");
         }
     });
 };
@@ -406,6 +473,39 @@ window.showNewRequestModal = async () => {
     document.getElementById('requestModal').classList.add('active');
 };
 
+function compressProfileImage(file) {
+    return new Promise((resolve, reject) => {
+        if (!file?.type?.startsWith('image/')) return reject(new Error('Please select a valid image file.'));
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Unable to read the selected image.'));
+        reader.onload = event => {
+            const image = new Image();
+            image.onerror = () => reject(new Error('The selected image could not be opened.'));
+            image.onload = () => {
+                const maxDimension = 320;
+                const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(image.width * scale));
+                canvas.height = Math.max(1, Math.round(image.height * scale));
+                canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', 0.85));
+            };
+            image.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+window.previewEditUserPhoto = function(input) {
+    const file = input?.files?.[0];
+    const preview = document.getElementById('editAvatarPreview');
+    if (!file || !preview) return;
+    const objectUrl = URL.createObjectURL(file);
+    preview.src = objectUrl;
+    preview.hidden = false;
+    preview.onload = () => URL.revokeObjectURL(objectUrl);
+};
+
 window.handleNewRequestTypeChange = function(requestType) {
     const isLeave = requestType === 'Leave Request';
     const isLoan = requestType === 'Loan Request' || requestType === 'Loan';
@@ -424,7 +524,8 @@ window.handleNewRequestTypeChange = function(requestType) {
 };
 
 window.handleRequestLeaveTypeChange = function(leaveType) {
-    const isShortLeave = leaveType === 'Short Leave';
+    const isLeaveRequest = document.getElementById('requestType')?.value === 'Leave Request';
+    const isShortLeave = isLeaveRequest && leaveType === 'Short Leave';
     const shortFields = document.getElementById('requestShortLeaveFields');
     const reasonInput = document.getElementById('requestShortLeaveReason');
     const durationInput = document.getElementById('requestShortLeaveDuration');
@@ -433,10 +534,10 @@ window.handleRequestLeaveTypeChange = function(leaveType) {
     if (shortFields) shortFields.style.display = isShortLeave ? 'block' : 'none';
     if (reasonInput) reasonInput.required = isShortLeave;
     if (durationInput) durationInput.required = isShortLeave;
-    if (daysGroup) daysGroup.style.display = isShortLeave ? 'none' : 'block';
+    if (daysGroup) daysGroup.style.display = isLeaveRequest && !isShortLeave ? 'block' : 'none';
     if (daysInput) {
-        daysInput.required = !isShortLeave;
-        if (isShortLeave) daysInput.value = '';
+        daysInput.required = isLeaveRequest && !isShortLeave;
+        if (!isLeaveRequest || isShortLeave) daysInput.value = '';
     }
 };
 
@@ -665,6 +766,9 @@ function showToast(message, type = 'info', detail = '') {
         if (message && message.includes('column')) {
             const colMatch = message.match(/column "([^"]+)"/);
             if (colMatch) displayDetail = `Unknown column: "${colMatch[1]}". The database may need a migration to be run.`;
+        } else if (message && /row-level security|permission denied|not authorized/i.test(message)) {
+            displayMessage = 'Permission Denied';
+            displayDetail = 'Your Admin or HR Manager account is not authorized by the database policy. Apply the onboarding permissions migration and try again.';
         } else if (message && message.includes('violates')) {
             displayDetail = 'A database constraint was violated. Please check your input values.';
         } else if (message && message.includes('duplicate')) {
@@ -804,12 +908,21 @@ window.handleLogout = async function () {
         console.error("Logout error:", error);
     }
 
-    // Forcefully wipe all local and session storage to guarantee no stale auth tokens remain
+    stopRecentLoginsRealtime();
+    if (notificationsInterval) {
+        clearInterval(notificationsInterval);
+        notificationsInterval = null;
+    }
     localStorage.clear();
     sessionStorage.clear();
-
-    // A clean reload ensures all intervals, states, and UI elements (like sidebar/topbar) are completely reset
-    window.location.reload();
+    currentUser = null;
+    currentUserRole = null;
+    currentUserProfile = null;
+    currentView = 'login';
+    viewHistory = [];
+    document.querySelector('.sidebar').style.display = 'none';
+    document.querySelector('.topbar').style.display = 'none';
+    await renderView('login');
 }
 
 window.handleLeaveSubmit = async function (e) {
@@ -863,6 +976,7 @@ window.updateSidebarVisibility = function() {
     if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
     if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') ? 'flex' : 'none';
     if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') ? 'flex' : 'none';
+    if (employeesNav && window.canCurrentUserEditContracts()) employeesNav.style.display = 'flex';
     if (departmentsNav) departmentsNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
     if (translationsNav) translationsNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
     
@@ -910,10 +1024,12 @@ window.handleLoginSubmit = async function (e) {
     currentUser = user;
 
     // Update last_login
-    db.updateLastLogin(user.id);
+    await db.updateLastLogin(user.id);
 
     const profile = await db.getUserProfile(user.id);
     if (profile) {
+        await syncLegacyLocalProfilePhoto(profile);
+        currentUserProfile = profile;
         currentUserRole = profile.role;
         updateTopbarProfile(profile);
         // Check for Birthday
@@ -1103,6 +1219,8 @@ async function renderTeamHierarchyWidget() {
         `;
     }
 
+    window.hierarchyProfilesById = Object.fromEntries(allUsers.map(user => [user.id, user]));
+    const canViewEmployeeInfo = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').toUpperCase());
     let rootUsers = [];
     if (currentUserRole === 'ADMIN') {
         rootUsers = allUsers.filter(u => u.role === 'ADMIN' || u.role === 'MANAGER' || !u.manager_id);
@@ -1132,16 +1250,20 @@ async function renderTeamHierarchyWidget() {
         else if (user.role === 'MANAGER') roleBadgeClass = 'primary';
         else if (user.role === 'SUPERVISOR') roleBadgeClass = 'warning';
 
-        const userAvatar = user.avatar_url || localStorage.getItem('user_avatar_' + user.id);
+        const userAvatar = user.avatar_url || localStorage.getItem('user_avatar_' + user.id) || '';
         const hasCustomAvatar = userAvatar && typeof userAvatar === 'string' && userAvatar.trim().length > 0;
-        const avatarUrl = hasCustomAvatar 
-            ? userAvatar.trim() 
-            : `https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name || 'User')}&background=0B192C&color=fff&size=128`;
+        const avatarContent = hasCustomAvatar
+            ? `<img src="${escapeHTML(userAvatar.trim())}" class="hierarchy-square-avatar" alt="${escapeHTML(user.full_name || 'Employee')}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
+               <span class="hierarchy-square-avatar hierarchy-avatar-placeholder" hidden aria-label="Profile photo unavailable"><i data-lucide="user"></i></span>`
+            : `<span class="hierarchy-square-avatar hierarchy-avatar-placeholder" aria-label="No profile photo"><i data-lucide="user"></i></span>`;
+        const avatarMarkup = canViewEmployeeInfo
+            ? `<button type="button" class="hierarchy-avatar-button" aria-label="View ${escapeHTML(user.full_name || 'employee')} information" onclick="openHierarchyEmployeeInfo('${user.id}')">${avatarContent}</button>`
+            : avatarContent;
 
         return `
             <div style="display: flex; flex-direction: column; align-items: center;">
                 <div class="hierarchy-square-card ${isSelf ? 'is-self-card' : ''}">
-                    <img src="${avatarUrl}" class="hierarchy-square-avatar" alt="${escapeHTML(user.full_name || 'Employee')}" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name || 'User')}&background=007AFF&color=fff';">
+                    ${avatarMarkup}
                     <div style="width: 100%;">
                         <div class="hierarchy-square-name" title="${escapeHTML(user.full_name || 'Employee')}">${escapeHTML(user.full_name || 'Employee')}</div>
                         <div class="hierarchy-square-title" title="${escapeHTML(user.job_title || 'Team Member')}">${escapeHTML(user.job_title || 'Team Member')}</div>
@@ -1203,6 +1325,41 @@ async function translateSaudiNewsTitle(title) {
     return title;
 }
 
+window.openHierarchyEmployeeInfo = function(userId) {
+    if (!['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').toUpperCase())) return;
+    const employee = window.hierarchyProfilesById?.[userId];
+    if (!employee) return showToast('Employee information is unavailable.', 'danger');
+    document.getElementById('hierarchyEmployeeInfoModal')?.remove();
+    const avatar = employee.avatar_url || localStorage.getItem('user_avatar_' + employee.id) || '';
+    const modal = document.createElement('div');
+    modal.id = 'hierarchyEmployeeInfoModal';
+    modal.className = 'modal active hierarchy-employee-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'hierarchyEmployeeInfoTitle');
+    modal.innerHTML = `<div class="modal-content hierarchy-employee-card">
+        <button type="button" class="close-modal" aria-label="Close employee information" onclick="closeHierarchyEmployeeInfo()">&times;</button>
+        <div class="hierarchy-employee-card-header">
+            ${avatar ? `<img src="${escapeHTML(avatar)}" alt="${escapeHTML(employee.full_name || 'Employee')}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;"><span class="hierarchy-employee-card-avatar hierarchy-avatar-placeholder" hidden><i data-lucide="user"></i></span>` : `<span class="hierarchy-employee-card-avatar hierarchy-avatar-placeholder"><i data-lucide="user"></i></span>`}
+            <div><h2 id="hierarchyEmployeeInfoTitle">${escapeHTML(employee.full_name || 'Employee')}</h2><p>${escapeHTML(employee.job_title || 'No job title')}</p></div>
+        </div>
+        <dl class="hierarchy-employee-details">
+            <div><dt>Full Name</dt><dd>${escapeHTML(employee.full_name || 'Not provided')}</dd></div>
+            <div><dt>Nationality</dt><dd>${escapeHTML(employee.nationality || 'Not provided')}</dd></div>
+            <div><dt>Iqama / ID Number</dt><dd>${escapeHTML(employee.iqama_number || 'Not provided')}</dd></div>
+            <div><dt>Phone Number</dt><dd>${escapeHTML(employee.phone_number || 'Not provided')}</dd></div>
+            <div><dt>Latest Login</dt><dd>${employee.last_login ? escapeHTML(new Date(employee.last_login).toLocaleString()) : 'No login recorded'}</dd></div>
+        </dl>
+    </div>`;
+    modal.addEventListener('click', event => { if (event.target === modal) closeHierarchyEmployeeInfo(); });
+    document.body.appendChild(modal);
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.closeHierarchyEmployeeInfo = function() {
+    document.getElementById('hierarchyEmployeeInfoModal')?.remove();
+};
+
 async function renderDashboard() {
     // Always use one approved Saudi-Arabic feed. UI language may translate its
     // headlines, but must never change the underlying topics, sources or URLs.
@@ -1224,6 +1381,7 @@ async function renderDashboard() {
     ]);
 
     const isClockedIn = todayAttendance != null && !todayAttendance.clock_out_time;
+    window.currentTodayAttendance = todayAttendance || null;
     const announcementsList = announcements || [];
     const dashboardName = getProfileDisplayName(profile);
     const welcomeMessage = t('welcome').replace('{name}', escapeHTML(dashboardName));
@@ -1342,17 +1500,12 @@ async function renderDashboard() {
     let adminWidgets = '';
     if (currentUserRole === 'ADMIN') {
         const allProfiles = await db.fetchAllProfiles();
-        const lastLoginsHTML = allProfiles.filter(p => p.last_login).sort((a, b) => new Date(b.last_login) - new Date(a.last_login)).slice(0, 5).map(p => `
-            <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem;">
-                <span>${p.full_name}</span>
-                <span style="color:var(--color-text-secondary); font-size:0.85rem;">${new Date(p.last_login).toLocaleString()}</span>
-            </div>
-        `).join('') || `<p>${t('ui_no_recent_logins') || 'No recent logins.'}</p>`;
+        const lastLoginsHTML = renderRecentLoginsHTML(allProfiles);
 
         adminWidgets += `
             <div class="card col-span-12 md:col-span-6">
                 <div class="card-title">${t('last_login')}</div>
-                <div>${lastLoginsHTML}</div>
+                <div id="recentLoginsList" aria-live="polite">${lastLoginsHTML}</div>
             </div>
         `;
     }
@@ -1364,8 +1517,8 @@ async function renderDashboard() {
                 <p class="page-subtitle">${t('welcome_sub')}</p>
             </div>
             ${isClockedIn
-            ? `<button class="btn-primary" style="background: var(--color-danger);" onclick="handleClockOutPrompt('${todayAttendance.id}')">${t('attendance_clock_out')}</button>`
-            : `<button class="btn-primary" onclick="handleClockIn()">${t('attendance_clock_in')}</button>`
+            ? `<button id="attendanceClockButton" class="btn-primary" style="background: var(--color-danger);" onclick="handleClockOutPrompt('${todayAttendance.id}')">${t('attendance_clock_out')}</button>`
+            : `<button id="attendanceClockButton" class="btn-primary" onclick="handleClockIn()">${t('attendance_clock_in')}</button>`
         }
         </div>
 
@@ -1451,7 +1604,7 @@ async function renderDashboard() {
                 <p style="margin-bottom: 1.5rem; color:var(--color-text-secondary);">Please select your logout location:</p>
                 <div style="display: flex; flex-direction:column; gap: 1rem;">
                     <button class="btn-primary" onclick="executeClockOut('OFFICE')">${t('attendance_location_office')}</button>
-                    <button class="btn-primary" style="background:var(--color-warning);" onclick="executeClockOut('ORDER')">${t('attendance_location_order')}</button>
+                    <button id="orderLocationClockOutButton" class="btn-primary" style="background:var(--color-warning);" onclick="executeClockOut('ORDER')">${t('attendance_location_order')}</button>
                 </div>
             </div>
         </div>
@@ -1477,13 +1630,33 @@ window.handlePostAnnouncement = async (e) => {
 let currentAttendanceId = null;
 window.handleClockIn = async () => {
     const fallbackClockIn = async (loc) => {
+        const button = document.getElementById('attendanceClockButton');
+        if (button?.disabled) return;
+        if (button) {
+            button.disabled = true;
+            button.dataset.originalText = button.textContent;
+            button.textContent = 'Clocking in...';
+        }
         try {
-            await db.clockIn(currentUser.id, loc);
+            const result = await db.clockIn(currentUser.id, loc);
+            if (!result.success || !result.data) throw result.error || new Error('Clock in was not saved.');
             showToast(t('toast_clocked_in_successfully'), "success");
-            renderView('dashboard');
+            currentAttendanceId = result.data.id;
+            window.currentTodayAttendance = result.data;
+            if (button) {
+                button.disabled = false;
+                button.textContent = t('attendance_clock_out');
+                button.style.background = 'var(--color-danger)';
+                button.setAttribute('onclick', `handleClockOutPrompt('${result.data.id}')`);
+                button.setAttribute('aria-label', t('attendance_clock_out'));
+            }
         } catch (err) {
             console.error(err);
             showToast(t('toast_error_clocking_in'), "danger");
+            if (button) {
+                button.disabled = false;
+                button.textContent = button.dataset.originalText || t('attendance_clock_in');
+            }
         }
     };
 
@@ -1504,85 +1677,158 @@ window.handleClockOutPrompt = (attendanceId) => {
     currentAttendanceId = attendanceId;
     document.getElementById('clockOutModal').classList.add('show');
 };
-window.closeClockOutModal = () => document.getElementById('clockOutModal').classList.remove('show');
+window.closeClockOutModal = () => document.getElementById('clockOutModal')?.classList.remove('show');
 
 window.executeClockOut = async (type) => {
-    const fallbackClockOut = async (loc) => {
-        try {
-            const attendance = await db.fetchTodayAttendance(currentUser.id);
-            if (!attendance) {
-                showToast(t('toast_no_active_clock_in_found_for_today'), "danger");
-                closeClockOutModal();
-                return;
-            }
-            const inTime = new Date(attendance.clock_in_time);
-            const diffHours = (new Date() - inTime) / (1000 * 60 * 60);
-            const overtime = Math.max(0, diffHours - 8).toFixed(2);
-
-            await db.clockOut(currentAttendanceId, loc, type, overtime);
-            closeClockOutModal();
-            showToast(t('toast_clocked_out_successfully'), "success");
-            renderView('dashboard');
-        } catch (err) {
-            console.error(err);
-            showToast(t('toast_error_clocking_out'), "danger");
-        }
-    };
-
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((position) => {
-            const loc = position.coords.latitude + ',' + position.coords.longitude;
-            fallbackClockOut(loc);
-        }, (error) => {
-            console.warn("Geolocation failed or denied, using fallback location.");
-            fallbackClockOut("Location Unavailable");
-        });
-    } else {
-        fallbackClockOut("Location Unavailable");
+    const attendance = window.currentTodayAttendance;
+    const attendanceId = currentAttendanceId || attendance?.id;
+    if (!attendanceId || !attendance?.clock_in_time) {
+        showToast(t('toast_no_active_clock_in_found_for_today'), 'danger');
+        closeClockOutModal();
+        return;
     }
+
+    let locationDetails = null;
+    let locationLabel = 'Office';
+    if (type === 'ORDER') {
+        const locationButton = document.getElementById('orderLocationClockOutButton');
+        if (!navigator.geolocation) {
+            showToast('Location sharing is not supported by this device.', 'danger');
+            return;
+        }
+        if (locationButton) {
+            locationButton.disabled = true;
+            locationButton.dataset.originalText = locationButton.textContent;
+            locationButton.textContent = 'Waiting for location permission...';
+        }
+        try {
+            const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 0
+            }));
+            locationDetails = {
+                latitude: Number(position.coords.latitude.toFixed(7)),
+                longitude: Number(position.coords.longitude.toFixed(7)),
+                accuracy: Number(position.coords.accuracy.toFixed(2)),
+                capturedAt: new Date(position.timestamp || Date.now()).toISOString()
+            };
+            locationLabel = `${locationDetails.latitude},${locationDetails.longitude}`;
+            if (locationButton) locationButton.textContent = 'Location received — clocking out...';
+        } catch (error) {
+            if (locationButton) {
+                locationButton.disabled = false;
+                locationButton.textContent = locationButton.dataset.originalText || t('attendance_location_order');
+            }
+            const message = error?.code === 1
+                ? 'Location permission is required to clock out from an order location.'
+                : 'Unable to get your current location. Please enable location services and try again.';
+            showToast(message, 'danger');
+            return;
+        }
+    }
+    const overtime = Math.max(0, (Date.now() - new Date(attendance.clock_in_time).getTime()) / 3600000 - 8).toFixed(2);
+    const button = document.getElementById('attendanceClockButton');
+
+    // Optimistic UI: the selected action is reflected immediately while the
+    // database request completes in the background.
+    closeClockOutModal();
+    if (button) {
+        button.disabled = false;
+        button.textContent = t('attendance_clock_in');
+        button.style.background = '';
+        button.setAttribute('onclick', 'handleClockIn()');
+        button.setAttribute('aria-label', t('attendance_clock_in'));
+    }
+    currentAttendanceId = null;
+    window.currentTodayAttendance = { ...attendance, clock_out_time: new Date().toISOString(), clock_out_location: locationLabel, clock_out_type: type, ...(locationDetails ? {
+        order_location_latitude: locationDetails.latitude,
+        order_location_longitude: locationDetails.longitude,
+        order_location_accuracy: locationDetails.accuracy,
+        order_location_shared_at: locationDetails.capturedAt
+    } : {}) };
+
+    const result = await db.clockOut(attendanceId, locationLabel, type, overtime, locationDetails);
+    if (result.success) {
+        showToast(t('toast_clocked_out_successfully'), 'success');
+        return;
+    }
+
+    // Restore the Clock Out state if the database rejects the update.
+    window.currentTodayAttendance = attendance;
+    currentAttendanceId = attendanceId;
+    if (button) {
+        button.textContent = t('attendance_clock_out');
+        button.style.background = 'var(--color-danger)';
+        button.setAttribute('onclick', `handleClockOutPrompt('${attendanceId}')`);
+        button.setAttribute('aria-label', t('attendance_clock_out'));
+    }
+    showToast(result.error?.message || t('toast_error_clocking_out'), 'danger');
 };
 
 // Render Time & Attendance
 async function renderTime() {
-    const punches = await db.fetchTimePunches(currentUserRole === 'ADMIN' ? null : currentUser?.id);
+    const viewerProfile = currentUserProfile || await db.getUserProfile(currentUser?.id);
+    const normalizedRole = String(currentUserRole || viewerProfile?.role || '').toUpperCase();
+    const canViewAllAttendance = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole) || String(viewerProfile?.job_title || '').trim().toUpperCase() === 'HR MANAGER';
+    const [punches, employees] = await Promise.all([
+        db.fetchTimePunches(canViewAllAttendance ? null : currentUser?.id),
+        canViewAllAttendance ? db.fetchUsers() : Promise.resolve([viewerProfile || currentUser])
+    ]);
+    const employeeMap = Object.fromEntries((employees || []).filter(Boolean).map(employee => [employee.id, employee]));
+    const dateKey = value => {
+        const date = new Date(value);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    const todayKey = dateKey(new Date());
+    const initialVisibleCount = canViewAllAttendance ? punches.filter(punch => dateKey(punch.punch_time) === todayKey).length : punches.length;
 
     let tableRows = punches.map(p => `
-        <tr>
+        <tr class="attendance-record-row" data-attendance-date="${dateKey(p.punch_time)}" data-employee-name="${escapeHTML(String(employeeMap[p.employee_id]?.full_name || '').toLowerCase())}" data-employee-id="${escapeHTML(String(employeeMap[p.employee_id]?.iqama_number || p.employee_id || '').toLowerCase())}" ${canViewAllAttendance && dateKey(p.punch_time) !== todayKey ? 'hidden' : ''}>
             <td>${new Date(p.punch_time).toLocaleDateString()}</td>
             <td>${new Date(p.punch_time).toLocaleTimeString()}</td>
-            ${currentUserRole === 'ADMIN' ? `<td><span style="font-size: 0.75rem; color: var(--color-text-secondary);">${p.employee_id.substring(0, 8)}...</span></td>` : ''}
+            ${canViewAllAttendance ? `<td><strong>${escapeHTML(employeeMap[p.employee_id]?.full_name || 'Unknown employee')}</strong></td><td>${escapeHTML(employeeMap[p.employee_id]?.iqama_number || p.employee_id)}</td>` : ''}
             <td>${p.punch_type}</td>
             <td><span class="status-badge ${p.punch_type === 'IN' ? 'success' : 'info'}">${p.punch_type}</span></td>
         </tr>
     `).join('');
 
     if (punches.length === 0) {
-        tableRows = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
+        tableRows = `<tr><td colspan="${canViewAllAttendance ? 6 : 4}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
     }
 
-    const empName = currentUser ? (currentUser.full_name || currentUser.email || 'Employee') : 'Employee';
+    const empName = viewerProfile?.full_name || currentUser?.user_metadata?.full_name || 'Employee';
+    const isSystemAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    const pageTitle = isSystemAdmin ? t('nav_time') : `${t('nav_time')} - ${escapeHTML(empName)}`;
     return `
         <div class="page-header">
             <div>
-                <h1 class="page-title">${t('nav_time')} - ${empName}</h1>
+                <h1 class="page-title">${pageTitle}</h1>
                 <p class="page-subtitle">${t('timesheet_sub')}</p>
             </div>
         </div>
         <div class="card">
             <div class="card-title">${t('timesheet')}</div>
+            ${canViewAllAttendance ? `<div class="attendance-filters" aria-label="Attendance filters">
+                <div class="form-group"><label class="form-label" for="attendanceFilterDate">Date</label><input type="date" id="attendanceFilterDate" class="form-control" value="${todayKey}" onchange="applyAttendanceFilters()"></div>
+                <div class="form-group"><label class="form-label" for="attendanceFilterName">Employee Name</label><input type="search" id="attendanceFilterName" class="form-control" placeholder="Search employee name" oninput="applyAttendanceFilters()"></div>
+                <div class="form-group"><label class="form-label" for="attendanceFilterId">ID Number</label><input type="search" id="attendanceFilterId" class="form-control" placeholder="Search Iqama / ID" oninput="applyAttendanceFilters()"></div>
+                <button type="button" class="btn btn-secondary attendance-filter-clear" onclick="clearAttendanceFilters()"><i data-lucide="rotate-ccw"></i> Clear</button>
+            </div>` : ''}
             <div class="table-responsive">
                 <table class="data-table">
                     <thead>
                         <tr>
                             <th>${t('date')}</th>
                             <th>${t('time')}</th>
-                            ${currentUserRole === 'ADMIN' ? `<th>${t('time_emp_id')}</th>` : ''}
+                            ${canViewAllAttendance ? '<th>Employee Name</th><th>ID Number</th>' : ''}
                             <th>${t('time_punch_type')}</th>
                             <th>${t('status')}</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${tableRows}
+                        ${punches.length ? `<tr id="attendanceNoFilterResults" ${initialVisibleCount ? 'hidden' : ''}><td colspan="${canViewAllAttendance ? 6 : 4}" style="text-align:center;padding:2rem;color:var(--color-text-secondary);">No attendance records match these filters.</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
@@ -1690,11 +1936,15 @@ function prepareTeamworkTaskDetail(task) {
             grid.insertAdjacentElement('afterend', content);
         }
         const links = [...(task.content_links || []), ...(task.submission_links || [])].filter(Boolean);
+        const canUploadFiles = !!currentUser && (currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser.id) || (task.watchers || []).includes(currentUser.id));
         content.innerHTML = `
             <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : '<span>Add a description</span>'}</p></section>
             <nav class="task-detail-tabs" aria-label="Task information"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">Details</button><button type="button" data-task-info-tab="custom-fields" onclick="setTaskDetailInfoTab('custom-fields')">Custom fields</button><button type="button" data-task-info-tab="dependencies" onclick="setTaskDetailInfoTab('dependencies')">Dependencies</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">Proofs</button></nav>
             <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
-            <section class="task-detail-files"><h3>Files & links</h3>${links.length ? `<div class="task-detail-link-list">${links.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : '<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>No files or links have been added</span></div>'}</section>`;
+            <section class="task-detail-files">
+                <div class="task-detail-files-heading"><h3>Files & links</h3>${canUploadFiles ? `<button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> Upload file</button><input id="taskAttachmentInput" type="file" hidden onchange="uploadTaskAttachment(this)">` : ''}</div>
+                <div id="taskDetailFileList">${links.length ? `<div class="task-detail-link-list">${links.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : '<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>No files or links have been added</span></div>'}</div>
+            </section>`;
     }
     const commentsHeading = Array.from(panel.querySelectorAll('h3')).find(item => item.textContent.includes('Activity') || item.textContent.includes('Comments'));
     if (commentsHeading) {
@@ -1715,6 +1965,102 @@ function prepareTeamworkTaskDetail(task) {
     setTaskDetailInfoTab('details');
     setTaskActivityTab('comments');
     if (window.lucide) window.lucide.createIcons();
+}
+
+window.applyAttendanceFilters = function() {
+    const date = document.getElementById('attendanceFilterDate')?.value || '';
+    const name = document.getElementById('attendanceFilterName')?.value.trim().toLowerCase() || '';
+    const id = document.getElementById('attendanceFilterId')?.value.trim().toLowerCase() || '';
+    let visible = 0;
+    document.querySelectorAll('.attendance-record-row').forEach(row => {
+        const matches = (!date || row.dataset.attendanceDate === date) &&
+            (!name || row.dataset.employeeName.includes(name)) &&
+            (!id || row.dataset.employeeId.includes(id));
+        row.hidden = !matches;
+        if (matches) visible += 1;
+    });
+    const empty = document.getElementById('attendanceNoFilterResults');
+    if (empty) empty.hidden = visible !== 0;
+};
+
+window.clearAttendanceFilters = function() {
+    ['attendanceFilterDate', 'attendanceFilterName', 'attendanceFilterId'].forEach(id => {
+        const field = document.getElementById(id);
+        if (field) field.value = '';
+    });
+    window.applyAttendanceFilters();
+};
+
+window.uploadTaskAttachment = async function(input) {
+    const file = input?.files?.[0];
+    const task = window.activeTaskDetail;
+    if (!file || !task || !currentUser?.id) return;
+    const button = document.querySelector('.task-file-upload-button');
+    const original = button?.innerHTML;
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner"></span> Uploading...';
+    }
+    const upload = await db.uploadTaskAttachment(task.id, currentUser.id, file);
+    if (!upload.success) {
+        showToast(upload.error?.message || 'Unable to upload the file.', 'danger');
+        if (button) { button.disabled = false; button.innerHTML = original; }
+        input.value = '';
+        return;
+    }
+    const links = [...new Set([...(task.submission_links || []), upload.url])];
+    const update = await db.updateTask(task.id, { submission_links: links, upload_link: links[0] || null });
+    if (!update.success) {
+        showToast(update.error?.message || 'The file uploaded, but could not be linked to the task.', 'danger');
+        if (button) { button.disabled = false; button.innerHTML = original; }
+        input.value = '';
+        return;
+    }
+    task.submission_links = links;
+    task.upload_link = links[0] || null;
+    showToast(`${file.name} uploaded successfully.`, 'success');
+    prepareTeamworkTaskDetail(task);
+};
+
+function renderRecentLoginsHTML(profiles) {
+    return (profiles || []).filter(profile => profile.last_login)
+        .sort((a, b) => new Date(b.last_login) - new Date(a.last_login))
+        .slice(0, 5)
+        .map(profile => `
+            <div style="display:flex; justify-content:space-between; gap:1rem; margin-bottom:0.5rem;">
+                <span>${escapeHTML(profile.full_name || 'Employee')}</span>
+                <time datetime="${escapeHTML(profile.last_login)}" style="color:var(--color-text-secondary); font-size:0.85rem; white-space:nowrap;">${new Date(profile.last_login).toLocaleString()}</time>
+            </div>
+        `).join('') || `<p>${t('ui_no_recent_logins') || 'No recent logins.'}</p>`;
+}
+
+async function refreshRecentLoginsWidget() {
+    const container = document.getElementById('recentLoginsList');
+    if (!container || currentView !== 'dashboard' || currentUserRole !== 'ADMIN') return;
+    container.innerHTML = renderRecentLoginsHTML(await db.fetchAllProfiles());
+}
+
+function stopRecentLoginsRealtime() {
+    if (recentLoginsPollInterval) clearInterval(recentLoginsPollInterval);
+    recentLoginsPollInterval = null;
+    if (recentLoginsChannel && window.supabaseClient?.removeChannel) {
+        window.supabaseClient.removeChannel(recentLoginsChannel);
+    }
+    recentLoginsChannel = null;
+}
+
+function startRecentLoginsRealtime() {
+    stopRecentLoginsRealtime();
+    if (currentUserRole !== 'ADMIN' || !document.getElementById('recentLoginsList')) return;
+    if (window.supabaseClient?.channel) {
+        recentLoginsChannel = window.supabaseClient
+            .channel('dashboard-recent-logins')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, payload => {
+                if (payload.new?.last_login && payload.new.last_login !== payload.old?.last_login) refreshRecentLoginsWidget();
+            })
+            .subscribe();
+    }
+    recentLoginsPollInterval = setInterval(refreshRecentLoginsWidget, 15000);
 }
 
 window.handleLeaveTypeChange = function(type) {
@@ -1751,10 +2097,13 @@ window.submitDashboardShortLeave = async function(durationMinutes) {
 };
 
 const COMPANY_JOB_TITLES = {
-    'Executive & Administrative': ['General Manager', 'HR Manager', 'Finance Manager', 'Accountant'],
-    'Event Production & Operations': ['Event Manager', 'Event Coordinator', 'Operations Manager', 'Warehouse Manager', 'Logistics Coordinator', 'Procurement Officer', 'Client Account Manager', 'Barista'],
+    'Executive & Administrative': [
+        'General Manager', 'HR Manager'
+    ],
+    'Finance': ['Finance Manager', 'Accountant', 'Senior Financial Analyst', 'Senior Accountant', 'Internal Auditor', 'Staff Accountant / Junior Accountant', 'Bookkeeper', 'Payroll Clerk / Specialist'],
+    'Event Production & Operations': ['Event Manager', 'Event Coordinator', 'Operations Manager', 'Warehouse Manager', 'Logistics Coordinator', 'Procurement Officer', 'Client Account Manager', 'Barista', 'Technician'],
     'Marketing & Sales': ['Marketing Manager', 'Marketing Representative', 'Sales Supervisor', 'Sales Representative', 'Graphic Designer', 'Photographer'],
-    'IT & Technical Support': ['IT Administrator', 'IT Support', 'Audio-Visual (AV) Specialist', 'Technician']
+    'IT & Technical Support': ['IT Administrator', 'IT Support', 'Audio-Visual (AV) Specialist']
 };
 
 function companyJobTitleOptions(selected = '', departmentName = '') {
@@ -1772,6 +2121,13 @@ window.syncJobTitlesWithDepartment = function(departmentSelectId,jobTitleSelectI
     if (!departmentSelect || !titleSelect) return;
     const previous = titleSelect.value;
     const departmentName = departmentSelect.options[departmentSelect.selectedIndex]?.text || '';
+    if (!departmentSelect.value || !COMPANY_JOB_TITLES[departmentName]) {
+        titleSelect.innerHTML = '<option value="">Select Department first</option>';
+        titleSelect.value = '';
+        titleSelect.disabled = true;
+        return;
+    }
+    titleSelect.disabled = false;
     titleSelect.innerHTML = companyJobTitleOptions(previous,departmentName);
     if (![...titleSelect.options].some(option => option.value === previous)) titleSelect.value = '';
 };
@@ -2493,14 +2849,15 @@ window.handleCreateUser = async function (e) {
     e.preventDefault();
     const email = document.getElementById('newEmail').value;
     const password = document.getElementById('newPassword').value;
-    const role = document.getElementById('newRole').value;
-    const jobTitle = document.getElementById('newJobTitle').value;
+    const role = 'EMPLOYEE';
+    const jobTitle = '';
     const fullName = document.getElementById('newFullName').value;
     const iqama = document.getElementById('newIqama').value;
     const phone = document.getElementById('newPhone').value;
-    const departmentId = document.getElementById('newDepartment')?.value || '';
+    const departmentId = '';
+    const nationality = document.getElementById('newNationality').value;
 
-    const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone, departmentId);
+    const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone, departmentId, nationality);
     if (!error) {
         showToast(t('toast_user_created_successfully'), 'success');
         if (typeof closeAddUserModal === 'function') closeAddUserModal();
@@ -2515,7 +2872,10 @@ window.handleChangeRole = async function (id, role) {
     const { success } = await db.updateUserRole(id, role);
     if (success) {
         showToast(t('toast_role_updated'), "success");
-        renderView('users');
+        await window.refreshUserRowInPlace(id, { role });
+    } else {
+        showToast('Failed to update role.', 'danger');
+        await window.refreshUserRowInPlace(id);
     }
 }
 
@@ -2524,9 +2884,10 @@ window.handleChangeJobTitle = async function (id, jobTitle, selectElement = null
     const { success } = await db.updateUserJobTitle(id, jobTitle, departmentId);
     if (success) {
         showToast(t('toast_job_title_updated'), "success");
-        renderView('users');
+        await window.refreshUserRowInPlace(id, { job_title: jobTitle, department_id: departmentId });
     } else {
         showToast(t('toast_failed_to_update_job_title'), "danger");
+        await window.refreshUserRowInPlace(id);
     }
 }
 
@@ -2541,11 +2902,12 @@ window.handleDirectoryDepartmentChange = async function(userId, departmentId, se
         return;
     }
     const result = await db.updateUserProfile(userId, { department_id: departmentId });
-    if (!result) {
+    if (!result.success) {
         showToast('Failed to update department.', 'danger');
-        renderView('users');
+        await window.refreshUserRowInPlace(userId);
         return;
     }
+    await window.refreshUserRowInPlace(userId, { department_id: departmentId });
     showToast('Department updated successfully.', 'success');
 };
 
@@ -2584,8 +2946,8 @@ async function renderUsers() {
                         </thead>
                         <tbody>
                             ${users.map(u => `
-                                <tr>
-                                    <td>
+                                <tr data-user-row="${u.id}">
+                                    <td data-user-details>
                                         <div style="font-weight: bold; color: var(--primary-color);">EMP-${u.emp_index || 'New'}</div>
                                         <div style="font-weight: bold;">${u.full_name || 'N/A'}</div>
                                         <div style="font-size: 0.8rem; color: var(--text-light);">
@@ -2594,7 +2956,7 @@ async function renderUsers() {
                                             Phone: ${u.phone_number || 'N/A'}
                                         </div>
                                     </td>
-                                    <td><span class="status-badge ${u.role === 'ADMIN' ? 'success' : 'info'}">${u.role}</span></td>
+                                    <td><span data-user-role-badge class="status-badge ${u.role === 'ADMIN' ? 'success' : 'info'}">${u.role}</span></td>
                                     <td>
                                         <select data-directory-job-title class="form-control" style="width: 210px; padding: 0.25rem; font-size: 0.8rem;" onchange="handleChangeJobTitle('${u.id}', this.value, this)">${companyJobTitleOptions(u.job_title || '', departments.find(department => department.id === u.department_id)?.name || '')}</select>
                                     </td>
@@ -2605,7 +2967,7 @@ async function renderUsers() {
                                         </select>
                                     </td>
                                     <td>
-                                        <select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
+                                        <select data-user-role-select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
                                             <option value="EMPLOYEE" ${u.role === 'EMPLOYEE' ? 'selected' : ''}>${t('users_role_emp')}</option>
                                             <option value="SUPERVISOR" ${u.role === 'SUPERVISOR' ? 'selected' : ''}>Supervisor</option>
                                             <option value="MANAGER" ${u.role === 'MANAGER' ? 'selected' : ''}>${t('users_role_mgr')}</option>
@@ -2613,7 +2975,7 @@ async function renderUsers() {
                                         </select>
                                     </td>
                                     <td>
-                                        <select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleAssignManager('${u.id}', this.value)">
+                                        <select data-user-manager-select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleAssignManager('${u.id}', this.value)">
                                             <option value="">${t('users_no_mgr')}</option>
                                             ${users.filter(m => (m.role === 'MANAGER' || m.role === 'ADMIN' || m.role === 'SUPERVISOR') && m.id !== u.id).map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${escapeHTML(m.full_name || 'User')} (${m.role})</option>`).join('')}
                                         </select>
@@ -2650,14 +3012,7 @@ window.showAddUserModal = async () => {
     document.getElementById('addUserForm').reset();
     document.getElementById('addUserModal').classList.add('show');
     
-    // Populate departments
-    const depts = await db.fetchDepartments();
-    const deptSelect = document.getElementById('newDepartment');
-    if (deptSelect) {
-        deptSelect.innerHTML = '<option value="" data-i18n="ph_select_department">Select Department</option>' +
-            depts.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
-    }
-    document.getElementById('newJobTitle').innerHTML = companyJobTitleOptions();
+    handleNewUserNationalityChange('Saudi');
 
     if (window.lucide) window.lucide.createIcons();
 };
@@ -2671,7 +3026,10 @@ window.handleAssignManager = async function (id, managerId) {
     const { success } = await db.assignManager(id, managerId);
     if (success) {
         showToast(t('toast_manager_assigned'), "success");
-        renderView('users');
+        await window.refreshUserRowInPlace(id, { manager_id: managerId || null });
+    } else {
+        showToast('Failed to assign manager.', 'danger');
+        await window.refreshUserRowInPlace(id);
     }
 }
 
@@ -3610,12 +3968,13 @@ window.handleUpdateProfilePhoto = async function (e) {
 
             localStorage.setItem('user_avatar_' + currentUser.id, compressedBase64);
             const { success, error } = await db.updateProfilePhoto(currentUser.id, compressedBase64);
-            if (success || true) { // Always update UI instantly
+            if (success) {
                 showToast(t('toast_profile_photo_updated') || 'Profile photo updated successfully!', "success");
                 const topAvatar = document.getElementById('topbarAvatar');
                 if (topAvatar) topAvatar.src = compressedBase64;
                 
                 if (currentUser) currentUser.avatar_url = compressedBase64;
+                if (currentUserProfile) currentUserProfile.avatar_url = compressedBase64;
 
                 // Clear view cache so new profile picture immediately reflects on Dashboard Hierarchy
                 if (window.viewHTMLCache) {
@@ -3625,7 +3984,8 @@ window.handleUpdateProfilePhoto = async function (e) {
                 }
                 renderView('profile');
             } else {
-                showToast(t('toast_error_updating_photo') || 'Error updating profile photo', "danger");
+                localStorage.removeItem('user_avatar_' + currentUser.id);
+                showToast(error?.message || t('toast_error_updating_photo') || 'Error updating profile photo', "danger");
             }
         };
         img.src = rawUrl;
@@ -4080,6 +4440,14 @@ window.filterTasksV2 = function() {
     });
     const count = document.getElementById('taskV2VisibleCount');
     if (count) count.textContent = visibleCount;
+};
+
+window.handleNewUserNationalityChange = function(nationality) {
+    const isSaudi = nationality === 'Saudi';
+    const label = document.getElementById('newIdentityLabel');
+    const input = document.getElementById('newIqama');
+    if (label) label.textContent = isSaudi ? 'National ID' : 'Iqama Number';
+    if (input) input.placeholder = isSaudi ? 'Enter National ID' : 'Enter Iqama Number';
 };
 
 window.openInlineSubtaskComposer = function() {
@@ -4789,6 +5157,10 @@ document.addEventListener('dragend', function(e) {
 // Employees & Contracts (HR View)
 // ==========================================
 window.navigateToContract = function (employeeId, empName) {
+    if (!window.canCurrentUserEditContracts()) {
+        showToast('Only an HR Manager or Administrator can edit contracts.', 'danger');
+        return;
+    }
     currentContractEmployeeId = employeeId;
     currentContractEmployeeName = empName;
     currentView = 'contract';
@@ -4797,11 +5169,31 @@ window.navigateToContract = function (employeeId, empName) {
 
 window.handleSaveContract = async function (e) {
     e.preventDefault();
+    const viewerProfile = await db.getUserProfile(currentUser?.id);
+    if (!window.canCurrentUserEditContracts(viewerProfile)) {
+        showToast('Only an HR Manager or Administrator can edit contracts.', 'danger');
+        return;
+    }
     const jobTitle = document.getElementById('contractJobTitle')?.value || '';
+    const departmentSelect = document.getElementById('contractDepartment');
+    const departmentId = departmentSelect?.value || null;
+    const departmentName = departmentSelect?.selectedOptions?.[0]?.textContent || '';
+    const policyFile = document.getElementById('contractPolicyDocument')?.files?.[0];
+    let policyUrl = document.getElementById('existingContractPolicyUrl')?.value || null;
+    if (policyFile) {
+        const uploadResult = await db.uploadContractPolicy(currentContractEmployeeId, policyFile);
+        if (!uploadResult.success) {
+            showToast('The contract will be saved without the optional policy document. ' + (uploadResult.error?.message || 'Document upload failed.'), 'warning');
+        } else {
+            policyUrl = uploadResult.url;
+        }
+    }
     const contractData = {
         employee_id: currentContractEmployeeId,
         contract_type: document.getElementById('contractType').value,
         nationality: document.getElementById('contractNationality')?.value || 'Saudi',
+        department_id: departmentId,
+        department: departmentName,
         job_title_ar: jobTitle,
         job_title_en: jobTitle,
         start_date: document.getElementById('contractStartDate').value,
@@ -4814,6 +5206,9 @@ window.handleSaveContract = async function (e) {
         probation_period_days: document.getElementById('contractProbation').value || null,
         notice_period_days: document.getElementById('contractNotice').value || null,
         annual_leave_days: document.getElementById('contractLeave').value || null,
+        primary_workplace: document.getElementById('contractWorkplace').value || null,
+        weekly_rest_day: document.getElementById('contractRestDays').value || null,
+        confidentiality_policy_url: policyUrl,
         status: document.getElementById('contractStatus').value
     };
 
@@ -4822,11 +5217,31 @@ window.handleSaveContract = async function (e) {
         contractData.id = existingContract.id;
     }
 
-    const { success, error } = await db.upsertContract(contractData);
+    const { success, data: savedContract, error } = await db.upsertContract(contractData);
     if (success) {
-        if (jobTitle) {
-            await db.updateUserJobTitle(currentContractEmployeeId, jobTitle);
+        if (policyFile && policyUrl && savedContract?.id) {
+            const documentResult = await db.addContractDocument(savedContract.id, currentContractEmployeeId, policyUrl, policyFile.name, 'confidentiality_policy', currentUser?.id || null);
+            if (!documentResult.success) showToast('Contract saved, but the uploaded document could not be indexed.', 'warning');
         }
+        if (jobTitle) {
+            const profileSync = await db.updateUserJobTitle(currentContractEmployeeId, jobTitle, departmentId);
+            if (!profileSync.success) {
+                showToast(profileSync.error?.message || 'Contract saved, but the Employee Directory could not be synchronized.', 'warning');
+                return;
+            }
+            const derivedRole = /supervisor/i.test(jobTitle) ? 'SUPERVISOR' : /manager/i.test(jobTitle) ? 'MANAGER' : 'EMPLOYEE';
+            const roleSync = await db.updateUserRole(currentContractEmployeeId, derivedRole);
+            if (!roleSync.success) {
+                showToast(roleSync.error?.message || 'Contract saved, but the employee role could not be synchronized.', 'warning');
+                return;
+            }
+        }
+        await db.updateUserProfile(currentContractEmployeeId, {
+            nationality: contractData.nationality,
+            base_salary: contractData.salary
+        });
+        delete window.viewHTMLCache.users;
+        delete window.viewHTMLCache.employees;
         showToast(t('toast_contract_saved_successfully'), "success");
         currentView = 'users';
         renderView('users');
@@ -4836,18 +5251,28 @@ window.handleSaveContract = async function (e) {
 }
 
 async function renderContractPage() {
+    const viewerProfile = await db.getUserProfile(currentUser?.id);
+    if (!window.canCurrentUserEditContracts(viewerProfile)) {
+        return `<div class="card" style="padding:2rem;">Only an HR Manager or Administrator can edit contracts.</div>`;
+    }
     if (!currentContractEmployeeId) {
         return `<div class="card">${t('notif_no_found')}</div>`;
     }
 
     // Fetch existing contract and user profile
-    const contract = await db.fetchContractByEmployeeId(currentContractEmployeeId);
-    const users = await db.fetchUsers();
-    const userProfile = users.find(u => u.id === currentContractEmployeeId);
+    const [contract, userProfile, departments, jobTitles] = await Promise.all([
+        db.fetchContractByEmployeeId(currentContractEmployeeId),
+        db.getUserProfile(currentContractEmployeeId),
+        db.fetchDepartments(),
+        db.fetchJobTitles()
+    ]);
+    window.contractJobTitlesCache = jobTitles || [];
 
     // Default values if no contract exists
     const contractType = contract?.contract_type || 'Full-time';
-    const nationality = contract?.nationality || 'Saudi';
+    const nationality = contract?.nationality || userProfile?.nationality || 'Saudi';
+    const selectedDepartmentId = contract?.department_id || userProfile?.department_id || '';
+    const selectedDepartment = departments.find(department => department.id === selectedDepartmentId);
     const jobTitle = contract?.job_title || contract?.job_title_en || userProfile?.job_title || '';
     const startDate = contract?.start_date || '';
     const endDate = contract?.end_date || '';
@@ -4860,6 +5285,24 @@ async function renderContractPage() {
     const notice = contract?.notice_period_days || 30;
     const leave = contract?.annual_leave_days || 30;
     const status = contract?.status || 'Active';
+    const workplace = contract?.primary_workplace || contract?.workplace_location || '';
+    const restDays = contract?.weekly_rest_day || contract?.rest_days || 'Friday, Saturday';
+    const confidentialityPolicyUrl = contract?.confidentiality_policy_url || '';
+    const storedContractDocuments = contract?.id ? await db.fetchContractDocuments(contract.id) : [];
+    const contractDocuments = [];
+    const addContractDocument = (url, label) => {
+        if (!url || contractDocuments.some(document => document.url === url)) return;
+        let fileName = label;
+        try { fileName = decodeURIComponent(new URL(url).pathname.split('/').pop() || label).replace(/^\d+-/, ''); } catch (_) {}
+        const separator = String(url).includes('?') ? '&' : '?';
+        contractDocuments.push({ url, fileName, downloadUrl: `${url}${separator}download=${encodeURIComponent(fileName)}` });
+    };
+    addContractDocument(confidentialityPolicyUrl, 'Company Policy and Regulations');
+    addContractDocument(contract?.policy_document_url, 'Contract Policy Document');
+    (Array.isArray(contract?.attachment_urls) ? contract.attachment_urls : []).forEach((url, index) => addContractDocument(url, `Contract attachment ${index + 1}`));
+    storedContractDocuments.forEach(document => addContractDocument(document.file_url, document.file_name || 'Contract document'));
+    const departmentOptions = `<option value="">Select Department</option>${departments.map(department => `<option value="${department.id}" ${department.id === selectedDepartmentId ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('')}`;
+    const contractTitleOptions = `<option value="">Select Job Title</option>${(jobTitles || []).filter(title => title.department_id === selectedDepartmentId).map(title => `<option value="${escapeHTML(title.name)}" ${title.name === jobTitle ? 'selected' : ''}>${escapeHTML(title.name)}</option>`).join('')}`;
 
     return `
         <div class="page-header fade-in-up">
@@ -4883,21 +5326,17 @@ async function renderContractPage() {
                     </h3>
                     <div class="dashboard-grid">
                         <div class="form-group col-span-12 md:col-span-6">
-                            <label class="form-label">${t('users_job_title') || 'Job Title'}</label>
-                            <select id="contractJobTitle" class="form-control">${companyJobTitleOptions(jobTitle)}</select>
+                            <label class="form-label">Department</label>
+                            <select id="contractDepartment" class="form-control" required onchange="handleContractDepartmentChange(this.value)">${departmentOptions}</select>
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
-                            <label class="form-label">${t('contract_type')}</label>
-                            <select id="contractType" class="form-control" required>
-                                <option value="Full-time" ${contractType === 'Full-time' ? 'selected' : ''}>${t('contract_ft') || 'Full-time'}</option>
-                                <option value="Part-time" ${contractType === 'Part-time' ? 'selected' : ''}>${t('contract_pt') || 'Part-time'}</option>
-                                <option value="Contractor" ${contractType === 'Contractor' ? 'selected' : ''}>${t('contract_c') || 'Contractor'}</option>
-                                <option value="Freelance" ${contractType === 'Freelance' ? 'selected' : ''}>${t('contract_fl') || 'Freelance'}</option>
-                            </select>
+                            <label class="form-label">${t('users_job_title') || 'Job Title'}</label>
+                            <select id="contractJobTitle" class="form-control" required>${contractTitleOptions}</select>
                         </div>
+                        <input type="hidden" id="contractType" value="${escapeHTML(contractType || 'Full-time')}">
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_nationality') || 'Nationality'}</label>
-                            <select id="contractNationality" class="form-control">
+                            <select id="contractNationality" class="form-control" disabled>
                                 <option value="Saudi" ${nationality === 'Saudi' ? 'selected' : ''}>Saudi</option>
                                 <option value="Non-Saudi" ${nationality === 'Non-Saudi' ? 'selected' : ''}>Non-Saudi</option>
                             </select>
@@ -4929,7 +5368,7 @@ async function renderContractPage() {
                     </h3>
                     <div class="dashboard-grid">
                         <div class="form-group col-span-12 md:col-span-6">
-                            <label class="form-label">${t('contract_salary')}</label>
+                            <label class="form-label">Monthly Salary</label>
                             <input type="number" id="contractSalary" class="form-control" step="0.01" value="${salary}" placeholder="0.00">
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
@@ -4963,19 +5402,53 @@ async function renderContractPage() {
                             <input type="number" id="contractProbation" class="form-control" value="${probation}">
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
-                            <label class="form-label">${t('contract_notice')}</label>
-                            <input type="number" id="contractNotice" class="form-control" value="${notice}">
-                        </div>
-                        <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_leave')}</label>
                             <input type="number" id="contractLeave" class="form-control" value="${leave}">
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">Workplace Location</label>
+                            <input type="text" id="contractWorkplace" class="form-control" value="${escapeHTML(workplace)}" placeholder="Office or worksite location">
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">Rest Days</label>
+                            <input type="text" id="contractRestDays" class="form-control" value="${escapeHTML(restDays)}" placeholder="e.g. Friday, Saturday">
                         </div>
                     </div>
                 </div>
 
+                <div class="card">
+                    <h3 style="margin-top:0; margin-bottom:1.5rem; border-bottom:1px solid var(--color-border); padding-bottom:.75rem;">Termination &amp; Notice Period</h3>
+                    <div class="form-group">
+                        <label class="form-label">Notice Period (Days)</label>
+                        <input type="number" id="contractNotice" class="form-control" min="0" value="${notice}">
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-top:0; margin-bottom:1.5rem; border-bottom:1px solid var(--color-border); padding-bottom:.75rem;">Additional / Optional Clauses</h3>
+                    <input type="hidden" id="existingContractPolicyUrl" value="${escapeHTML(confidentialityPolicyUrl)}">
+                    <div class="form-group">
+                        <label class="form-label" for="contractPolicyDocument">Confidentiality Clause — Company Policy and Regulations</label>
+                        <input type="file" id="contractPolicyDocument" class="form-control" accept=".pdf,.doc,.docx,image/*">
+                        ${confidentialityPolicyUrl ? `<small>Current document: <a href="${escapeHTML(confidentialityPolicyUrl)}" target="_blank" rel="noopener noreferrer">View uploaded policy</a></small>` : '<small>Optional. Accepted formats: PDF, Word, or image.</small>'}
+                    </div>
+                </div>
+
+                <div class="card contract-documents-card">
+                    <h3><i data-lucide="folder-open"></i> Uploaded Contract Files <span class="status-badge info">${contractDocuments.length}</span></h3>
+                    ${contractDocuments.length ? `<div class="contract-document-list">${contractDocuments.map(document => `
+                        <div class="contract-document-row">
+                            <div class="contract-document-info"><i data-lucide="file-text"></i><div><strong>${escapeHTML(document.fileName)}</strong><small>Contract document</small></div></div>
+                            <div class="contract-document-actions">
+                                <a class="btn btn-secondary" href="${escapeHTML(document.url)}" target="_blank" rel="noopener noreferrer"><i data-lucide="eye"></i> View</a>
+                                <a class="btn btn-primary" href="${escapeHTML(document.downloadUrl)}" download="${escapeHTML(document.fileName)}"><i data-lucide="download"></i> Download</a>
+                            </div>
+                        </div>`).join('')}</div>` : '<div class="contract-document-empty"><i data-lucide="file-x"></i><span>No files have been uploaded for this contract.</span></div>'}
+                </div>
+
                 <!-- Action Buttons -->
                 <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 0.5rem;">
-                    <button type="button" class="btn-secondary" onclick="currentView='users'; render();">${t('contract_cancel') || 'Cancel'}</button>
+                    <button type="button" class="btn-secondary" onclick="currentView='users'; renderView('users');">${t('contract_cancel') || 'Cancel'}</button>
                     <button type="submit" class="btn-primary" style="min-width: 150px;">
                         <i data-lucide="save" style="width:16px;height:16px;margin-right:8px;"></i> ${t('contract_save') || 'Save Contract'}
                     </button>
@@ -4986,14 +5459,15 @@ async function renderContractPage() {
 }
 
 async function renderEmployeesDirectory() {
-    const users = await db.fetchUsers();
+    const [users, viewerProfile] = await Promise.all([db.fetchUsers(), db.getUserProfile(currentUser?.id)]);
+    const canEditContracts = window.canCurrentUserEditContracts(viewerProfile);
 
     // Directory is visible to everyone, but we only show basic info.
 
     // Only Admins or the Manager themselves can see team members' contracts
     // For now, let's allow ADMIN to see all, Manager to see their team
     let visibleUsers = users;
-    if (currentUserRole === 'ADMIN') {
+    if (canEditContracts) {
         visibleUsers = users;
     } else if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR') {
         visibleUsers = users.filter(u => u.manager_id === currentUser.id || u.id === currentUser.id);
@@ -5012,6 +5486,10 @@ async function renderEmployeesDirectory() {
                 <h1 class="page-title">${t('nav_emp_dir')}</h1>
                 <p class="page-subtitle">${t('emp_dir_sub')}</p>
             </div>
+        </div>
+        <div class="card fade-in-up" style="padding: .5rem; margin-bottom: 1rem; display: flex; gap: .5rem;">
+            <button class="btn-primary" type="button" aria-current="page"><i data-lucide="users"></i> Active Contracts</button>
+            ${canEditContracts ? `<button class="btn-secondary" type="button" onclick="renderView('archived_contracts')"><i data-lucide="archive"></i> Archived Contracts</button>` : ''}
         </div>
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-12">
@@ -5052,6 +5530,10 @@ async function renderEmployeesDirectory() {
                                         <span style="font-size: 0.85rem; color: var(--text-light); margin-top: 4px; display: inline-block;">${u.job_title || t('emp_no_title')}</span>
                                     </td>
                                     <td>
+                                        ${canEditContracts ? `
+                                        <button class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')" title="Edit Contract">
+                                            <i data-lucide="file-pen-line"></i> Edit Contract
+                                        </button>` : ''}
                                         <button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')" title="${t('ui_print_contract') || 'Print Contract'}">
                                             <i data-lucide="printer"></i> ${t('ui_print_contract') || 'Print Contract'}
                                         </button>
@@ -5272,7 +5754,13 @@ window.persistCustomTranslations = function() {
 window.resetTranslationsToDefault = function() {
     window.showConfirmModal("Reset Translations", "Are you sure you want to reset all custom translations to defaults?", () => {
         localStorage.removeItem('custom_i18n');
-        location.reload();
+        ['en', 'ar'].forEach(language => {
+            Object.keys(i18n[language] || {}).forEach(key => delete i18n[language][key]);
+            Object.assign(i18n[language], defaultTranslationsSnapshot[language] || {});
+        });
+        updateTranslations();
+        renderView('translations');
+        showToast('Translations reset to defaults.', 'success');
     });
 };
 
@@ -5464,6 +5952,8 @@ window.renderView = async function(viewId, isBack = false) {
 
     if (viewId !== 'login') {
         localStorage.setItem('muqam_hr_last_view', viewId);
+        if (currentUser?.id) localStorage.setItem(`muqam_hr_last_view_${currentUser.id}`, viewId);
+        navItems.forEach(nav => nav.classList.toggle('active', nav.getAttribute('data-view') === viewId));
     }
 
     if (!isBack && viewId !== 'login') {
@@ -5508,6 +5998,7 @@ window.renderView = async function(viewId, isBack = false) {
             case 'contract_form': content = await window.renderContractForm(); break;
             case 'contract_preview': content = await window.renderContractPrintPreview(); break;
             case 'employees': content = await renderEmployeesDirectory(); break;
+            case 'archived_contracts': content = await renderArchivedContracts(); break;
             case 'messages': content = await renderMessages(); break;
             case 'notifications': content = await renderNotifications(); break;
             case 'performance': content = await renderPerformance(); break;
@@ -5555,6 +6046,8 @@ window.renderView = async function(viewId, isBack = false) {
             console.error("lucide error:", e);
         }
         if (viewId === 'analytics') setTimeout(initCharts, 100);
+        if (viewId === 'dashboard') startRecentLoginsRealtime();
+        else stopRecentLoginsRealtime();
         console.log("renderView: done updating DOM.");
     } else {
         console.log("renderView: skipped DOM update because currentView changed.");
@@ -5615,6 +6108,7 @@ async function renderNotifications() {
                         </div>
                         <div>
                             <div style="font-weight: 500; font-size: 1rem; color: var(--color-text);">${escapeHTML(n.message)}</div>
+                            ${renderNotificationDetails(n)}
                             <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(n.created_at).toLocaleString()}</div>
                             ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.65rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')"><i data-lucide="check-circle"></i> Approve</button>` : ''}
                         </div>
@@ -5638,6 +6132,20 @@ async function renderNotifications() {
             </div>
         </div>
     `;
+}
+
+function renderNotificationDetails(notification, compact = false) {
+    const comment = String(notification?.metadata?.comment_text || '').trim();
+    const attachments = Array.isArray(notification?.metadata?.attachment_links) ? notification.metadata.attachment_links.filter(Boolean) : [];
+    if (!comment && !attachments.length) return '';
+    return `<div class="notification-details ${compact ? 'compact' : ''}" onclick="event.stopPropagation()">
+        ${comment ? `<div class="notification-comment"><strong>Comment:</strong><span>${escapeHTML(comment)}</span></div>` : ''}
+        ${attachments.length ? `<div class="notification-attachments"><strong>Files:</strong>${attachments.map((url, index) => {
+            let name = `Attachment ${index + 1}`;
+            try { name = decodeURIComponent(new URL(url).pathname.split('/').pop() || name).replace(/^\d+-/, ''); } catch (_) {}
+            return `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" download><i data-lucide="download"></i>${escapeHTML(name)}</a>`;
+        }).join('')}</div>` : ''}
+    </div>`;
 }
 
 // ==========================================
@@ -5668,6 +6176,7 @@ async function pollNotifications() {
             dropdown.innerHTML = notifs.map(n => `
                 <div class="notification-item ${!n.is_read ? 'unread' : ''}" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''} style="padding: 10px; border-bottom: 1px solid var(--color-border); ${n.task_id ? 'cursor: pointer;' : ''} ${!n.is_read ? 'background: rgba(var(--color-primary-rgb), 0.05); font-weight: 500;' : ''}">
                     <div style="font-size: 0.875rem;">${escapeHTML(n.message)}</div>
+                    ${renderNotificationDetails(n, true)}
                     <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">${new Date(n.created_at).toLocaleDateString()}</div>
                     ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.5rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')">Approve</button>` : ''}
                 </div>
@@ -5675,6 +6184,56 @@ async function pollNotifications() {
         }
     }
 }
+
+async function renderArchivedContracts() {
+    const viewerProfile = await db.getUserProfile(currentUser?.id);
+    if (!window.canCurrentUserEditContracts(viewerProfile)) {
+        return '<div class="card" style="padding:2rem;">You do not have permission to view archived contracts.</div>';
+    }
+    const contracts = await db.fetchArchivedContracts();
+    const isAdmin = currentUserRole === 'ADMIN';
+    return `
+        <div class="page-header fade-in-up"><div><h1 class="page-title">Archived Contracts</h1><p class="page-subtitle">Contracts retained after an employee account is removed.</p></div></div>
+        <div class="card fade-in-up" style="padding:.5rem;margin-bottom:1rem;display:flex;gap:.5rem;">
+            <button class="btn-secondary" type="button" onclick="renderView('employees')"><i data-lucide="users"></i> Active Contracts</button>
+            <button class="btn-primary" type="button" aria-current="page"><i data-lucide="archive"></i> Archived Contracts</button>
+        </div>
+        <div class="card fade-in-up"><div class="table-responsive"><table class="data-table">
+            <thead><tr><th>Former Employee</th><th>Employee No.</th><th>Contract Period</th><th>Status</th><th>Archived On</th><th>Actions</th></tr></thead>
+            <tbody>${contracts.length ? contracts.map(contract => `
+                <tr>
+                    <td><strong>${escapeHTML(contract.former_employee_name || 'Former employee')}</strong><br><small>${escapeHTML(contract.former_employee_email || '')}</small></td>
+                    <td>${escapeHTML(contract.former_employee_number ? `EMP-${contract.former_employee_number}` : '—')}</td>
+                    <td>${escapeHTML(contract.start_date || '—')} – ${escapeHTML(contract.end_date || 'Open-ended')}</td>
+                    <td><span class="status-badge info">${escapeHTML(contract.status || 'Archived')}</span></td>
+                    <td>${contract.archived_at ? new Date(contract.archived_at).toLocaleString() : '—'}</td>
+                    <td>${isAdmin ? `<button class="btn-secondary" style="color:var(--color-danger)" onclick="handleDeleteArchivedContract('${contract.id}')"><i data-lucide="trash-2"></i> Delete permanently</button>` : '<span class="status-badge info">View only</span>'}</td>
+                </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;padding:2rem;">No archived contracts.</td></tr>'}</tbody>
+        </table></div></div>`;
+}
+
+window.handleDeleteArchivedContract = contractId => {
+    if (currentUserRole !== 'ADMIN') {
+        showToast('Only an administrator can delete archived contracts.', 'danger');
+        return;
+    }
+    window.showConfirmModal('Delete archived contract', 'This permanently deletes the archived contract and cannot be undone.', async () => {
+        const result = await db.deleteArchivedContract(contractId);
+        if (!result.success) {
+            showToast(result.error?.message || 'Failed to delete the archived contract.', 'danger');
+            return;
+        }
+        showToast('Archived contract permanently deleted.', 'success');
+        renderView('archived_contracts');
+    });
+};
+
+window.handleContractDepartmentChange = function(departmentId) {
+    const jobTitleSelect = document.getElementById('contractJobTitle');
+    if (!jobTitleSelect) return;
+    const titles = (window.contractJobTitlesCache || []).filter(title => title.department_id === departmentId);
+    jobTitleSelect.innerHTML = `<option value="">Select Job Title</option>${titles.map(title => `<option value="${escapeHTML(title.name)}">${escapeHTML(title.name)}</option>`).join('')}`;
+};
 
 window.openTaskNotification = async function(taskId) {
     const dropdown = document.getElementById('notificationsDropdown');
@@ -6973,6 +7532,7 @@ async function initApp() {
         if (event === 'SIGNED_OUT' || !session) {
             currentUser = null;
             currentUserRole = null;
+            currentUserProfile = null;
             document.querySelector('.sidebar').style.display = 'none';
             document.querySelector('.topbar').style.display = 'none';
             if (currentView !== 'login') {
@@ -6985,6 +7545,8 @@ async function initApp() {
     if (session && session.user) {
         currentUser = session.user;
         const profile = await db.getUserProfile(currentUser.id);
+        await syncLegacyLocalProfilePhoto(profile);
+        currentUserProfile = profile;
         currentUserRole = profile.role;
         
         // TEMPORARY OVERRIDE: Force Admin role for privatepple@gmail.com in frontend
@@ -7009,12 +7571,24 @@ async function initApp() {
         if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
         if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
         if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
-        if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
+        if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR') || window.canCurrentUserEditContracts(profile)) ? 'flex' : 'none';
         
-        const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
-        if (approvalsNav) approvalsNav.style.display = (currentUserRole === 'ADMIN' || isHussain) ? 'flex' : 'none';
+        const canUseApprovals = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile?.job_title || '');
+        if (approvalsNav) approvalsNav.style.display = canUseApprovals ? 'flex' : 'none';
 
-        currentView = 'dashboard';
+        const restorableViews = new Set([
+            'dashboard', 'community', 'time', 'leave', 'requests', 'archived',
+            'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
+            'archived_contracts', 'messages', 'notifications', 'performance',
+            'documents', 'profile', 'projects', 'approvals', 'tasks',
+            'departments', 'translations', 'clients', 'crm', 'orders', 'integrations'
+        ]);
+        const savedView = localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view');
+        currentView = restorableViews.has(savedView) ? savedView : 'dashboard';
+
+        // Do not restore a sidebar page that is hidden for this user's role.
+        const restoredNav = document.querySelector(`.nav-item[data-view="${currentView}"]`);
+        if (restoredNav && getComputedStyle(restoredNav).display === 'none') currentView = 'dashboard';
 
         pollNotifications();
         if (notificationsInterval) clearInterval(notificationsInterval);
@@ -7147,6 +7721,7 @@ async function renderRequests() {
         request.workflow = workflowMap.get(`${request.source_table}:${request.id}`);
         request.status = request.workflow?.status || request.status;
     });
+    allRequests = allRequests.filter(request => !request.raw?.is_archived);
 
     // Sort by created_at desc
     allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -7311,9 +7886,11 @@ async function renderArchivedRequests() {
     }
 
     // Fetch data
-    const leaves = await db.fetchLeaveRequests();
-    const docs = await db.fetchDocuments();
-    const expenses = await db.fetchExpenses();
+    const [leaves, docs, expenses, genericRequests, workflows] = await Promise.all([
+        db.fetchLeaveRequests(), db.fetchDocuments(), db.fetchExpenses(),
+        db.fetchGenericRequests(), db.fetchRequestApprovalWorkflows()
+    ]);
+    const workflowMap = new Map(workflows.map(workflow => [`${workflow.source_table}:${workflow.source_id}`, workflow]));
 
     let profilesMap = {};
     const allProfiles = await db.fetchAllProfiles();
@@ -7323,24 +7900,27 @@ async function renderArchivedRequests() {
 
     // Normalize requests
     let allRequests = [];
-    const addToRequests = (items, type, getDetails) => {
+    const addToRequests = (items, type, sourceTable, getDetails) => {
         items.forEach(r => {
-            if (r.status.endsWith('_ARCHIVED')) {
+            if (r.is_archived || String(r.status || '').endsWith('_ARCHIVED')) {
+                const workflow = workflowMap.get(`${sourceTable}:${r.id}`);
                 allRequests.push({
                     id: r.id,
                     type: type,
                     employee_id: r.employee_id,
                     details: getDetails(r),
-                    status: r.status.replace('_ARCHIVED', ''), // Show original status
-                    created_at: r.created_at
+                    status: String(r.status || 'REJECTED').replace('_ARCHIVED', ''),
+                    created_at: r.created_at,
+                    rejection_reason: r.rejection_reason || workflow?.rejection_reason || ''
                 });
             }
         });
     };
 
-    addToRequests(leaves, 'Leave', r => `${r.leave_type}: ${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}`);
-    addToRequests(docs, 'Document', r => `${r.doc_type} - ${r.purpose}`);
-    addToRequests(expenses, 'Expense', r => `SAR ${r.amount} - ${r.description}`);
+    addToRequests(leaves, 'Leave', 'leave_requests', r => `${r.leave_type}: ${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}`);
+    addToRequests(docs, 'Document', 'document_requests', r => `${r.doc_type} - ${r.purpose}`);
+    addToRequests(expenses, 'Expense', 'expenses', r => `SAR ${r.amount} - ${r.description}`);
+    addToRequests(genericRequests, 'Employee Request', 'requests', r => `${r.request_type || 'Request'}${r.loan_amount ? ` - SAR ${Number(r.loan_amount).toLocaleString()}` : ''}`);
 
     // Sort by created_at desc
     allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -7358,7 +7938,7 @@ async function renderArchivedRequests() {
                 <td>${new Date(r.created_at).toLocaleDateString()}</td>
                 <td>${employeeName}</td>
                 <td><strong>${r.type}</strong></td>
-                <td>${r.details}</td>
+                <td>${escapeHTML(r.details)}${r.rejection_reason ? `<br><strong>Rejection reason:</strong> ${escapeHTML(r.rejection_reason)}` : ''}</td>
                 <td><span class="status-badge ${badgeClass}">${r.status}</span> <span style="font-size: 0.7rem; color: var(--color-text-secondary);">${t('req_archived_badge')}</span></td>
             </tr>
         `;
@@ -7578,80 +8158,97 @@ window.handleUpdateProject = async function(event) {
 // APPROVALS DASHBOARD
 // ==========================================
 async function renderApprovals() {
-    const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
-    if (currentUserRole !== 'ADMIN' && !isHussain) {
-        return `<div class="page-header"><h1 class="page-title">${t('ui_unauthorized')}</h1></div>`;
-    }
+    const [allTasks, allUsers, allProjects, departments, workflows, leaves, documents, expenses, genericRequests] = await Promise.all([
+        db.fetchTasks(), db.fetchUsers(), db.fetchProjects(), db.fetchDepartments(),
+        db.fetchRequestApprovalWorkflows(), db.fetchLeaveRequests(), db.fetchDocuments(),
+        db.fetchExpenses(), db.fetchGenericRequests()
+    ]);
+    const profile = (allUsers || []).find(user => user.id === currentUser?.id) || currentUserProfile || {};
+    const isAdmin = currentUserRole === 'ADMIN';
+    const managedDepartments = (departments || []).filter(department => department.head_id === currentUser?.id);
+    const isManager = isAdmin || ['MANAGER', 'SUPERVISOR'].includes(currentUserRole) || /manager|supervisor/i.test(profile.job_title || '') || managedDepartments.length > 0;
+    if (!isManager) return `<div class="page-header"><h1 class="page-title">${t('ui_unauthorized')}</h1></div>`;
 
-    let allTasks, allUsers, allProjects;
-    try {
-        [allTasks, allUsers, allProjects] = await Promise.all([
-            db.fetchTasks(),
-            db.fetchUsers(),
-            db.fetchProjects()
-        ]);
-    } catch (error) {
-        console.error('Error fetching approvals:', error);
-        return `<div class="page-header"><h1 class="page-title">${t('ui_error_loading_approvals')}</h1></div>`;
-    }
+    const userMap = new Map((allUsers || []).map(user => [user.id, user]));
+    const projectMap = new Map((allProjects || []).map(project => [project.id, project]));
+    const sourceMap = new Map();
+    (leaves || []).forEach(item => sourceMap.set(`leave_requests:${item.id}`, { details: `${item.leave_type || 'Leave'}${item.start_date ? ` · ${item.start_date} – ${item.end_date || ''}` : ''}` }));
+    (documents || []).forEach(item => sourceMap.set(`document_requests:${item.id}`, { details: `${item.doc_type || 'Document'} · ${item.purpose || 'No purpose provided'}` }));
+    (expenses || []).forEach(item => sourceMap.set(`expenses:${item.id}`, { details: `SAR ${Number(item.amount || 0).toLocaleString()} · ${item.description || 'Expense'}` }));
+    (genericRequests || []).forEach(item => sourceMap.set(`requests:${item.id}`, { details: /^loan/i.test(item.request_type || '') ? `Loan · SAR ${Number(item.loan_amount || 0).toLocaleString()}` : `${item.request_type || 'Employee Request'}${item.leave_type ? ` · ${item.leave_type}` : ''}` }));
 
-    const tasks = allTasks.filter(t => t.status === 'Pending Approval');
-
-    if (!tasks || tasks.length === 0) {
-        return `
-            <div class="page-header">
-                <h1 class="page-title">${t('ui_approvals_dashboard')}</h1>
-            </div>
-            <div class="card" style="padding: 2rem; text-align: center; color: var(--color-text-secondary);">
-                ${t('task_no_pending_approval') || 'No tasks pending approval.'}
-            </div>
-        `;
-    }
-
-    let rows = tasks.map(task => {
-        const title = task.title_i18n ? (task.title_i18n[currentLang] || task.title_i18n['en'] || task.title) : task.title;
-        const project = allProjects.find(p => p.id === task.project_id);
-        const user = allUsers.find(u => u.id === task.assignee_id);
-        return `
-            <tr>
-                <td>${title}</td>
-                <td>${project ? project.project_name : 'No Project'}</td>
-                <td>${user ? user.full_name : 'Unassigned'}</td>
-                <td>${task.content_type || '-'}</td>
-                <td>
-                    ${task.source_link ? `<a href="${task.source_link}" target="_blank">Source</a>` : '-'}
-                    ${task.upload_link ? ` | <a href="${task.upload_link}" target="_blank">Upload</a>` : ''}
-                </td>
-                <td style="text-align: right; white-space: nowrap;">
-                    <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApprovalAction('${task.id}', 'todo')">${t('ui_approve')}</button>
-                    <button class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApprovalAction('${task.id}', 'Rejected')">${t('ui_reject')}</button>
-                </td>
-            </tr>
-        `;
+    const pendingRequests = (workflows || []).filter(workflow => {
+        if (workflow.status !== 'PENDING') return false;
+        const step = workflow.steps?.find(item => item.step_order === workflow.current_step);
+        return isAdmin || step?.approver_id === currentUser?.id;
+    });
+    const requestRows = pendingRequests.map(workflow => {
+        const step = workflow.steps?.find(item => item.step_order === workflow.current_step);
+        const employee = userMap.get(workflow.employee_id);
+        const source = sourceMap.get(`${workflow.source_table}:${workflow.source_id}`);
+        const canDecide = step?.approver_id === currentUser?.id;
+        return `<tr><td><strong>${escapeHTML(employee?.full_name || 'Employee')}</strong></td><td>${escapeHTML(workflow.request_type || 'Employee Request')}</td><td>${escapeHTML(source?.details || workflow.request_type || 'Request details')}</td><td><span class="status-badge warning">${escapeHTML(REQUEST_STAGE_LABELS[step?.stage_key] || 'Pending approval')}</span></td><td>${workflow.created_at ? new Date(workflow.created_at).toLocaleDateString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
     }).join('');
 
-    return `
-        <div class="page-header">
-            <h1 class="page-title">${t('ui_approvals_dashboard')}</h1>
+    const departmentNames = new Set(managedDepartments.map(department => department.name));
+    if (profile.department_id) {
+        const ownDepartment = (departments || []).find(department => department.id === profile.department_id);
+        if (ownDepartment && /manager|supervisor/i.test(profile.job_title || '') || ownDepartment && ['MANAGER', 'SUPERVISOR'].includes(currentUserRole)) departmentNames.add(ownDepartment.name);
+    }
+    const pendingTasks = (allTasks || []).filter(task => String(task.status || '').trim().toLowerCase() === 'pending approval').filter(task =>
+        isAdmin || departmentNames.has(task.department) || (task.watchers || []).includes(currentUser?.id)
+    );
+    const taskRows = pendingTasks.map(task => {
+        const assignee = userMap.get(task.assignee_id);
+        const project = projectMap.get(task.project_id);
+        const department = (departments || []).find(item => item.name === task.department);
+        const canDecide = department?.head_id === currentUser?.id;
+        const title = task.title_i18n?.[currentLang] || task.title_i18n?.en || task.title || 'Untitled task';
+        return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(assignee?.full_name || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleTaskApprovalDecision('${task.id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleTaskApprovalDecision('${task.id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Watcher access · View only</span>'}</td></tr>`;
+    }).join('');
+
+    return `<div class="page-header"><div><h1 class="page-title">${t('ui_approvals_dashboard')}</h1><p class="page-subtitle">Requests and task completions waiting for management approval.</p></div></div>
+        <div class="card" style="padding:.5rem;margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
+            <button class="btn-primary" data-approval-tab="requests" onclick="setApprovalsTab('requests')">Employee requests approvals <span class="status-badge">${pendingRequests.length}</span></button>
+            <button class="btn-secondary" data-approval-tab="tasks" onclick="setApprovalsTab('tasks')">Tasks approval <span class="status-badge">${pendingTasks.length}</span></button>
         </div>
-        <div class="card">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Task</th>
-                        <th>${t('ui_project')}</th>
-                        <th>${t('ui_assignee')}</th>
-                        <th>${t('ui_content_type')}</th>
-                        <th>${t('ui_links')}</th>
-                        <th style="text-align: right;">${t('ui_actions')}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rows}
-                </tbody>
-            </table>
-        </div>
-    `;
+        <section data-approval-panel="requests" class="card"><div class="table-responsive"><table class="data-table"><thead><tr><th>Employee</th><th>Request</th><th>Details</th><th>Current stage</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${requestRows || '<tr><td colspan="6" style="text-align:center;padding:2rem">No employee requests are waiting for your approval.</td></tr>'}</tbody></table></div></section>
+        <section data-approval-panel="tasks" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>Task</th><th>Department</th><th>Project</th><th>Assignee</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${taskRows || '<tr><td colspan="6" style="text-align:center;padding:2rem">No tasks are waiting for approval.</td></tr>'}</tbody></table></div></section>`;
+};
+
+window.setApprovalsTab = function(tab) {
+    document.querySelectorAll('[data-approval-panel]').forEach(panel => { panel.hidden = panel.dataset.approvalPanel !== tab; });
+    document.querySelectorAll('[data-approval-tab]').forEach(button => {
+        button.classList.toggle('btn-primary', button.dataset.approvalTab === tab);
+        button.classList.toggle('btn-secondary', button.dataset.approvalTab !== tab);
+    });
+};
+
+window.handleApprovalRequestDecision = async function(sourceTable, sourceId, decision) {
+    let note = null;
+    if (decision === 'REJECTED') {
+        note = window.prompt('Please enter the rejection reason:');
+        if (note === null || !note.trim()) return;
+    }
+    const result = await db.decideRequestApproval(sourceTable, sourceId, decision, note);
+    if (!result.success) return showToast(result.error?.message || 'Unable to record this approval.', 'danger');
+    showToast(decision === 'APPROVED' ? 'Request approved and moved to its next stage.' : 'Request rejected and employee notified.', 'success');
+    renderView('approvals');
+};
+
+window.handleTaskApprovalDecision = async function(taskId, decision) {
+    if (decision === 'APPROVED') {
+        await window.approveTaskCompletion(taskId);
+        if (currentView === 'approvals') renderView('approvals');
+        return;
+    }
+    const reason = window.prompt('Please enter the reason for returning this task:');
+    if (reason === null || !reason.trim()) return;
+    const result = await db.updateTask(taskId, { status: 'in_progress', completion_requested_by: null, completion_requested_at: null });
+    if (!result.success) return showToast(result.error?.message || 'Unable to return this task.', 'danger');
+    await db.addTaskComment(taskId, currentUser.id, `Completion rejected: ${reason.trim()}`);
+    showToast('Task returned to In Progress.', 'success');
+    renderView('approvals');
 };
 
 window.handleApprovalAction = async function(taskId, newStatus) {

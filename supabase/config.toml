@@ -3,3 +3,7 @@ project_id = "hr-sys"
 [functions.document-expiry-notifier]
 verify_jwt = false
 entrypoint = "./functions/document-expiry-notifier/index.js"
+
+[functions.task-notification-email]
+verify_jwt = false
+entrypoint = "./functions/task-notification-email/index.js"

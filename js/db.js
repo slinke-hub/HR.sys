@@ -27,21 +27,21 @@ const db = {
                 .eq('id', userId)
                 .select();
             if (error) throw error;
-            return data;
+            return { success: true, data };
         } catch (error) {
             console.error("Error updating user profile:", error);
-            return null;
+            return { success: false, error };
         }
     },
     async deleteUser(userId) {
-        if (!supabaseClient) return null;
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {
-            const { data, error } = await supabaseClient.rpc('delete_user', { target_user_id: userId });
+            const { data, error } = await supabaseClient.rpc('archive_and_delete_employee', { target_user_id: userId });
             if (error) throw error;
-            return true;
+            return { success: true, data };
         } catch (error) {
             console.error("Error deleting user:", error);
-            return false;
+            return { success: false, error };
         }
     },
     async resetUserPassword(userId, newPassword) {
@@ -213,13 +213,21 @@ const db = {
     async fetchTimePunches(userId = null) {
         if (!supabaseClient) return [];
         try {
-            let query = supabaseClient.from('time_punches').select('*').order('punch_time', { ascending: false }).limit(50);
+            let query = supabaseClient
+                .from('attendance')
+                .select('id, employee_id, date, clock_in_time, clock_out_time, clock_in_location, clock_out_location, clock_out_type, overtime_hours, created_at')
+                .order('clock_in_time', { ascending: false })
+                .limit(userId ? 250 : 1000);
             if (userId) {
                 query = query.eq('employee_id', userId);
             }
             const { data, error } = await query;
             if (error) throw error;
-            return data;
+            return (data || []).flatMap(record => {
+                const punches = [{ id: `${record.id}-in`, attendance_id: record.id, employee_id: record.employee_id, punch_time: record.clock_in_time, punch_type: 'IN', location: record.clock_in_location }];
+                if (record.clock_out_time) punches.push({ id: `${record.id}-out`, attendance_id: record.id, employee_id: record.employee_id, punch_time: record.clock_out_time, punch_type: 'OUT', location: record.clock_out_location, clock_out_type: record.clock_out_type, overtime_hours: record.overtime_hours });
+                return punches;
+            }).sort((a, b) => new Date(b.punch_time) - new Date(a.punch_time));
         } catch (error) {
             console.error("Error fetching time punches:", error.message);
             return [];
@@ -433,7 +441,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('id, emp_index, full_name, iqama_number, phone_number, role, created_at, manager_id, base_salary, department_id, job_title, avatar_url')
+                .select('id, emp_index, full_name, nationality, iqama_number, phone_number, role, created_at, manager_id, base_salary, department_id, job_title, avatar_url, last_login')
                 .eq('is_active', true)
                 .order('emp_index', { ascending: true });
             if (error) throw error;
@@ -443,7 +451,7 @@ const db = {
             return [];
         }
     },
-    async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '', departmentId = '') {
+    async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '', departmentId = '', nationality = 'Saudi') {
         if (!supabaseClient) {
             console.warn("Mock createUser");
             return { data: 'mock-user-id-1234', error: null };
@@ -468,10 +476,13 @@ const db = {
             
             const userId = data;
             
-            if (departmentId) {
+            if (departmentId || nationality) {
                 const { error: updateError } = await supabaseClient
                     .from('profiles')
-                    .update({ department_id: departmentId })
+                    .update({
+                        ...(departmentId ? { department_id: departmentId } : {}),
+                        nationality
+                    })
                     .eq('id', userId);
                 if (updateError) {
                     console.error("Failed to update department_id:", updateError);
@@ -641,12 +652,15 @@ const db = {
     async updateProfilePhoto(userId, base64Url) {
         if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {
-            const { error } = await supabaseClient
+            const { data, error } = await supabaseClient
                 .from('profiles')
                 .update({ avatar_url: base64Url })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('id, avatar_url')
+                .maybeSingle();
             if (error) throw error;
-            return { success: true };
+            if (!data?.id) throw new Error('The profile photo was not saved. Check the profile avatar update policy.');
+            return { success: true, data };
         } catch (error) {
             console.error("updateProfilePhoto Error:", error);
             return { success: false, error };
@@ -856,18 +870,30 @@ const db = {
     },
     async updateTaskStatus(taskId, status) {
         if (!supabaseClient) return { success: false };
-        try {
-            const { data, error } = await supabaseClient
-                .from('tasks')
-                .update({ status })
-                .eq('id', taskId);
-            if (error) throw error;
-            await this.flushTaskNotificationEmails();
-            return { success: true };
-        } catch (error) {
-            console.error("updateTaskStatus Error:", error);
-            return { success: false, error };
+        let lastError;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+                const { error } = await supabaseClient.from('tasks').update({ status }).eq('id', taskId);
+                if (error) throw error;
+                await this.flushTaskNotificationEmails();
+                return { success: true };
+            } catch (error) {
+                lastError = error;
+                const message = String(error?.message || error || '').toLowerCase();
+                const isTransient = !error?.status || message.includes('failed to fetch') || message.includes('network') || message.includes('connection') || message.includes('timeout');
+                if (attempt > 0 || !isTransient) break;
+                await new Promise(resolve => setTimeout(resolve, 300));
+                try {
+                    const { data: currentTask, error: checkError } = await supabaseClient.from('tasks').select('status').eq('id', taskId).maybeSingle();
+                    if (!checkError && currentTask?.status === status) {
+                        await this.flushTaskNotificationEmails();
+                        return { success: true };
+                    }
+                } catch (_) { /* Retry the idempotent status update below. */ }
+            }
         }
+        console.error("updateTaskStatus Error:", lastError);
+        return { success: false, error: lastError };
     },
     async updateTask(taskId, updates) {
         if (!supabaseClient) return { success: false };
@@ -909,6 +935,25 @@ const db = {
             return { success: true };
         } catch (error) {
             console.error("updateTask Error:", error);
+            return { success: false, error };
+        }
+    },
+    async uploadTaskAttachment(taskId, userId, file) {
+        if (!supabaseClient || !taskId || !userId || !file) {
+            return { success: false, error: new Error('No file selected.') };
+        }
+        try {
+            const safeName = String(file.name || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_');
+            const path = `${taskId}/${userId}/${Date.now()}-${safeName}`;
+            const { error: uploadError } = await supabaseClient.storage
+                .from('task-attachments')
+                .upload(path, file, { upsert: false });
+            if (uploadError) throw uploadError;
+            const { data } = supabaseClient.storage.from('task-attachments').getPublicUrl(path);
+            if (!data?.publicUrl) throw new Error('Unable to create the attachment URL.');
+            return { success: true, url: data.publicUrl, name: file.name || safeName };
+        } catch (error) {
+            console.error('uploadTaskAttachment Error:', error);
             return { success: false, error };
         }
     },
@@ -1225,18 +1270,64 @@ const db = {
     async upsertContract(contractData) {
         if (!supabaseClient) return { success: false };
         try {
-            let error;
+            let error, data;
             if (contractData.id) {
-                const res = await supabaseClient.from('contracts').update(contractData).eq('id', contractData.id);
+                const res = await supabaseClient.from('contracts').update(contractData).eq('id', contractData.id).select().single();
                 error = res.error;
+                data = res.data;
             } else {
-                const res = await supabaseClient.from('contracts').insert([contractData]);
+                const res = await supabaseClient.from('contracts').insert([contractData]).select().single();
                 error = res.error;
+                data = res.data;
             }
             if (error) throw error;
-            return { success: true };
+            return { success: true, data };
         } catch (error) {
             console.error("upsertContract Error:", error);
+            return { success: false, error };
+        }
+    },
+    async uploadContractPolicy(employeeId, file) {
+        if (!supabaseClient || !file) return { success: false, error: new Error('No document selected') };
+        try {
+            const safeName = String(file.name || 'policy-document').replace(/[^a-zA-Z0-9._-]/g, '_');
+            const path = `${employeeId}/${Date.now()}-${safeName}`;
+            const { error: uploadError } = await supabaseClient.storage.from('contract-documents').upload(path, file, { upsert: false });
+            if (uploadError) throw uploadError;
+            const { data } = supabaseClient.storage.from('contract-documents').getPublicUrl(path);
+            if (!data?.publicUrl) throw new Error('Unable to create the policy document URL.');
+            return { success: true, url: data.publicUrl };
+        } catch (error) {
+            console.error('uploadContractPolicy Error:', error);
+            return { success: false, error };
+        }
+    },
+    async fetchContractDocuments(contractId) {
+        if (!supabaseClient || !contractId) return [];
+        try {
+            const { data, error } = await supabaseClient.from('contract_documents').select('*').eq('contract_id', contractId).order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchContractDocuments Error:', error);
+            return [];
+        }
+    },
+    async addContractDocument(contractId, employeeId, fileUrl, fileName, documentType = 'policy', uploadedBy = null) {
+        if (!supabaseClient || !contractId || !employeeId || !fileUrl) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.from('contract_documents').upsert({
+                contract_id: contractId,
+                employee_id: employeeId,
+                file_url: fileUrl,
+                file_name: fileName || 'Contract document',
+                document_type: documentType,
+                uploaded_by: uploadedBy
+            }, { onConflict: 'contract_id,file_url' }).select().single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('addContractDocument Error:', error);
             return { success: false, error };
         }
     },
@@ -1248,7 +1339,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('id, full_name, role, avatar_url, job_title, department_id, manager_id')
+                .select('id, full_name, role, avatar_url, job_title, department_id, manager_id, last_login')
                 .eq('is_active', true);
             if (error) throw error;
             return data || [];
@@ -1289,11 +1380,14 @@ const db = {
     // Phase 2 Features
     // ==========================================
     async updateLastLogin(userId) {
-        if (!supabaseClient) return;
+        if (!supabaseClient) return { success: false };
         try {
-            await supabaseClient.from('profiles').update({ last_login: new Date().toISOString() }).eq('id', userId);
+            const { error } = await supabaseClient.from('profiles').update({ last_login: new Date().toISOString() }).eq('id', userId);
+            if (error) throw error;
+            return { success: true };
         } catch (error) {
             console.error("updateLastLogin Error:", error);
+            return { success: false, error };
         }
     },
     async fetchTodayAttendance(employeeId) {
@@ -1347,32 +1441,41 @@ const db = {
         if (!supabaseClient) return { success: false };
         try {
             const today = new Date().toISOString().split('T')[0];
-            const { error } = await supabaseClient
+            const { data, error } = await supabaseClient
                 .from('attendance')
                 .insert([{ 
                     employee_id: employeeId, 
                     date: today,
                     clock_in_time: new Date().toISOString(),
                     clock_in_location: location
-                }]);
+                }])
+                .select()
+                .single();
             if (error) throw error;
-            return { success: true };
+            return { success: true, data };
         } catch (error) {
             console.error("clockIn Error:", error);
             return { success: false, error };
         }
     },
-    async clockOut(attendanceId, location, type, overtimeHours) {
+    async clockOut(attendanceId, location, type, overtimeHours, locationDetails = null) {
         if (!supabaseClient) return { success: false };
         try {
+            const updates = {
+                clock_out_time: new Date().toISOString(),
+                clock_out_location: location,
+                clock_out_type: type,
+                overtime_hours: overtimeHours
+            };
+            if (type === 'ORDER' && locationDetails) {
+                updates.order_location_latitude = locationDetails.latitude;
+                updates.order_location_longitude = locationDetails.longitude;
+                updates.order_location_accuracy = locationDetails.accuracy;
+                updates.order_location_shared_at = locationDetails.capturedAt;
+            }
             const { error } = await supabaseClient
                 .from('attendance')
-                .update({ 
-                    clock_out_time: new Date().toISOString(),
-                    clock_out_location: location,
-                    clock_out_type: type,
-                    overtime_hours: overtimeHours
-                })
+                .update(updates)
                 .eq('id', attendanceId);
             if (error) throw error;
             return { success: true };
@@ -1468,7 +1571,7 @@ const db = {
                 ({ data, error } = await supabaseClient.from('departments').select('*').order('name'));
             }
             if (error) throw error;
-            return data || [];
+            return (data || []).filter(department => String(department.name || '').trim().toLowerCase() !== 'finance');
         } catch (error) {
             console.error("fetchDepartments Error:", error);
             return [];
@@ -1796,7 +1899,7 @@ const db = {
     async fetchContracts(employeeId = null) {
         if (!supabaseClient) return [];
         try {
-            let query = supabaseClient.from('contracts').select('*').order('created_at', { ascending: false });
+            let query = supabaseClient.from('contracts').select('*').eq('is_archived', false).order('created_at', { ascending: false });
             if (employeeId) {
                 query = query.eq('employee_id', employeeId);
             }
@@ -1806,6 +1909,29 @@ const db = {
         } catch (error) {
             console.error("fetchContracts Error:", error);
             return [];
+        }
+    },
+    async fetchArchivedContracts() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('contracts').select('*')
+                .eq('is_archived', true).order('archived_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchArchivedContracts Error:', error);
+            return [];
+        }
+    },
+    async deleteArchivedContract(contractId) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { error } = await supabaseClient.rpc('delete_archived_contract', { target_contract_id: contractId });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('deleteArchivedContract Error:', error);
+            return { success: false, error };
         }
     },
     async createContract(contractData) {

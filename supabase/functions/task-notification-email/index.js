@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
@@ -17,8 +18,16 @@ const escapeHtml = (value) => String(value || "")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#039;");
 
+const attachmentName = (url, index) => {
+  try {
+    return decodeURIComponent(new URL(url).pathname.split("/").pop() || `Attachment ${index + 1}`).replace(/^\d+-/, "");
+  } catch (_) {
+    return `Attachment ${index + 1}`;
+  }
+};
+
 Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -41,7 +50,7 @@ Deno.serve(async (request) => {
 
   const { data: queued, error: queueError } = await admin
     .from("task_email_outbox")
-    .select("id,recipient_email,subject,message,action_url,attempts")
+    .select("id,recipient_email,subject,message,action_url,attempts,comment_text,attachment_links")
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(25);
@@ -57,6 +66,11 @@ Deno.serve(async (request) => {
   for (const item of queued) {
     try {
       const actionUrl = item.action_url && appUrl ? `${appUrl}${item.action_url}` : appUrl;
+      const attachments = Array.isArray(item.attachment_links) ? item.attachment_links.filter(Boolean) : [];
+      const commentText = String(item.comment_text || "").trim();
+      const textAttachments = attachments.length ? `\n\nFiles:\n${attachments.map((url, index) => `- ${attachmentName(url, index)}: ${url}`).join("\n")}` : "";
+      const htmlComment = commentText ? `<div style="margin:18px 0;padding:14px;border-left:4px solid #2563eb;background:#f4f7ff"><strong>Comment</strong><p style="white-space:pre-wrap;margin:7px 0 0">${escapeHtml(commentText)}</p></div>` : "";
+      const htmlAttachments = attachments.length ? `<div style="margin:18px 0"><strong>Files</strong><ul style="padding-left:20px">${attachments.map((url, index) => `<li style="margin:8px 0"><a href="${escapeHtml(url)}" target="_blank" style="color:#2563eb;text-decoration:underline">Download ${escapeHtml(attachmentName(url, index))}</a></li>`).join("")}</ul></div>` : "";
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${resendApiKey}`, "Content-Type": "application/json" },
@@ -64,8 +78,8 @@ Deno.serve(async (request) => {
           from: fromAddress,
           to: [item.recipient_email],
           subject: item.subject,
-          text: `${item.message}${actionUrl ? `\n\nOpen task: ${actionUrl}` : ""}`,
-          html: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#172033"><h2 style="font-size:18px">${escapeHtml(item.subject)}</h2><p>${escapeHtml(item.message)}</p>${actionUrl ? `<p><a href="${escapeHtml(actionUrl)}" style="display:inline-block;padding:10px 16px;border-radius:7px;background:#2563eb;color:#fff;text-decoration:none">Open task</a></p>` : ""}</div>`,
+          text: `${item.message}${commentText ? `\n\nComment:\n${commentText}` : ""}${textAttachments}${actionUrl ? `\n\nOpen task: ${actionUrl}` : ""}`,
+          html: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#172033"><h2 style="font-size:18px">${escapeHtml(item.subject)}</h2><p>${escapeHtml(item.message)}</p>${htmlComment}${htmlAttachments}${actionUrl ? `<p><a href="${escapeHtml(actionUrl)}" style="display:inline-block;padding:10px 16px;border-radius:7px;background:#2563eb;color:#fff;text-decoration:none">Open task</a></p>` : ""}</div>`,
         }),
       });
       if (!response.ok) throw new Error(`Resend returned ${response.status}: ${await response.text()}`);

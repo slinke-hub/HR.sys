@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en" dir="ltr" data-theme="dark">
 <head>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>MUQAM HR</title>
@@ -27,7 +30,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/layout.css?v=4">
-    <link rel="stylesheet" href="css/components.css?v=20">
+    <link rel="stylesheet" href="css/components.css?v=29">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -463,16 +466,14 @@
                     <input type="text" autocomplete="off" id="editPhone" class="form-control">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" data-i18n="users_job_title">Job Title</label>
-                    <select id="editJobTitle" class="form-control" required></select>
-                </div>
-                <div class="form-group">
                     <label class="form-label" data-i18n="users_department">Department</label>
                     <select id="editDepartment" class="form-control" required onchange="syncJobTitlesWithDepartment('editDepartment','editJobTitle')"></select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Profile Photo URL</label>
-                    <input type="text" autocomplete="off" id="editAvatarUrl" class="form-control" placeholder="https://... or leave blank for auto profile photo">
+                    <label class="form-label" data-i18n="users_job_title">Job Title</label>
+                    <select id="editJobTitle" class="form-control" required disabled>
+                        <option value="">Select Department first</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label" data-i18n="users_role">Role</label>
@@ -488,6 +489,14 @@
                     <select id="editManagerId" class="form-control">
                         <option value="" data-i18n="html_no_manager">No Manager</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Profile Photo</label>
+                    <div style="display:flex; align-items:center; gap:1rem;">
+                        <img id="editAvatarPreview" alt="Employee profile preview" hidden style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--color-border);">
+                        <input type="file" id="editAvatarFile" class="form-control" accept="image/*" onchange="previewEditUserPhoto(this)">
+                    </div>
+                    <small>Upload a JPG, PNG, or other image from your device.</small>
                 </div>
                 <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
                     <button type="button" class="btn btn-secondary" onclick="document.getElementById('editUserModal').classList.remove('active')" data-i18n="html_cancel">Cancel</button>
@@ -577,7 +586,7 @@
                         <option value="Short Leave">Short Leave</option>
                     </select>
                 </div>
-                <div class="form-group" id="leaveDaysGroup">
+                <div class="form-group" id="leaveDaysGroup" style="display:none;">
                     <label class="form-label" for="requestNumberOfDays">Number of Days</label>
                     <input type="number" id="requestNumberOfDays" class="form-control" min="1" step="1" inputmode="numeric" placeholder="Enter number of days" required>
                 </div>
@@ -628,15 +637,22 @@
             <form autocomplete="off" onsubmit="handleCreateUser(event)" id="addUserForm">
                 <div class="form-group">
                     <label class="form-label" data-i18n="users_fn">Full Name</label>
-                    <input type="text" autocomplete="off" id="newFullName" class="form-control" placeholder="Enter full name" data-i18n-placeholder="ph_enter_full_name">
+                    <input type="text" autocomplete="off" id="newFullName" class="form-control" placeholder="Enter full name" data-i18n-placeholder="ph_enter_full_name" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label" data-i18n="users_iqama">Iqama / ID Number</label>
-                    <input type="text" autocomplete="off" id="newIqama" class="form-control" placeholder="Optional" data-i18n-placeholder="ph_optional">
+                    <label class="form-label" for="newNationality">Nationality</label>
+                    <select id="newNationality" class="form-control" required onchange="handleNewUserNationalityChange(this.value)">
+                        <option value="Saudi">Saudi</option>
+                        <option value="Non-Saudi">Non-Saudi</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" id="newIdentityLabel" for="newIqama">National ID</label>
+                    <input type="text" autocomplete="off" id="newIqama" class="form-control" placeholder="Enter National ID" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label" data-i18n="users_phone">Phone Number</label>
-                    <input type="text" autocomplete="off" id="newPhone" class="form-control" placeholder="Optional" data-i18n-placeholder="ph_optional">
+                    <input type="tel" autocomplete="off" id="newPhone" class="form-control" placeholder="Enter phone number" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label" data-i18n="users_email">Email</label>
@@ -644,28 +660,10 @@
                 </div>
                 <div class="form-group" style="position: relative;">
                     <label class="form-label" data-i18n="users_temp_pass">Temporary Password</label>
-                    <input type="password" autocomplete="new-password" id="newPassword" class="form-control" required style="padding-right: 40px;">
+                    <input type="password" autocomplete="new-password" id="newPassword" class="form-control" required minlength="6" style="padding-right: 40px;">
                     <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('newPassword')">
                         <i data-lucide="eye" id="newPassword-eye-icon" style="width: 20px; height: 20px;"></i>
                     </button>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" data-i18n="users_job_title">Job Title</label>
-                    <select id="newJobTitle" class="form-control" required></select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" data-i18n="users_department">Department</label>
-                    <select id="newDepartment" class="form-control" required onchange="syncJobTitlesWithDepartment('newDepartment','newJobTitle')">
-                        <option value="" data-i18n="ph_select_department">Select Department</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" data-i18n="users_role">Role</label>
-                    <select id="newRole" class="form-control">
-                        <option value="EMPLOYEE" data-i18n="users_role_emp">Employee</option>
-                        <option value="MANAGER" data-i18n="users_role_mgr">Manager</option>
-                        <option value="ADMIN" data-i18n="users_role_admin">Admin</option>
-                    </select>
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
                     <button type="button" class="btn-secondary" onclick="closeAddUserModal()" data-i18n="html_cancel">Cancel</button>
@@ -912,19 +910,6 @@
                     </select>
                 </div>
                 <div id="editMarketingDesignFields" class="marketing-design-fields" style="display:none;"></div>
-                <!-- Watchers -->
-                <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 0;">
-                    <label class="form-label">
-                        <input type="checkbox" id="editEnableWatchers" onchange="document.getElementById('editTaskWatchersGroup').style.display = this.checked ? 'block' : 'none'"> 
-                        Add Watcher
-                    </label>
-                    <div id="editTaskWatchersGroup" style="display: none; margin-top: 0.5rem;">
-                        <select id="editTaskWatchers" class="form-control" multiple size="4">
-                            <!-- Populated dynamically -->
-                        </select>
-                        <small class="text-muted" style="display:block; margin-top:0.25rem;">Hold Ctrl/Cmd to select multiple</small>
-                    </div>
-                </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" data-i18n="html_visibility">Visibility</label>
                     <select id="editTaskVisibility" class="form-control">
@@ -951,6 +936,19 @@
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label class="form-label" data-i18n="html_est_time">Est. Time</label>
                         <input type="text" id="editTaskEstimate" class="form-control" placeholder="e.g. 5 hours" data-i18n-placeholder="ph_e_g_5_hours">
+                    </div>
+                </div>
+                <!-- Watchers -->
+                <div class="form-group edit-task-watchers" style="margin-top: 0.5rem; margin-bottom: 0;">
+                    <label class="form-label">
+                        <input type="checkbox" id="editEnableWatchers" onchange="document.getElementById('editTaskWatchersGroup').style.display = this.checked ? 'block' : 'none'">
+                        Add Watcher
+                    </label>
+                    <div id="editTaskWatchersGroup" style="display: none; margin-top: 0.5rem;">
+                        <select id="editTaskWatchers" class="form-control" multiple size="4">
+                            <!-- Populated dynamically -->
+                        </select>
+                        <small class="text-muted" style="display:block; margin-top:0.25rem;">Hold Ctrl/Cmd to select multiple</small>
                     </div>
                 </div>
                 <div class="form-group task-assign-btn-group" style="margin-bottom: 0; margin-top: 1rem; display: flex; gap: 1rem;">
@@ -1263,9 +1261,9 @@
     <!-- Supabase & JS & Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="js/db.js?v=30"></script>
+    <script src="js/db.js?v=44"></script>
     <script src="js/data.js?v=20"></script>
-    <script src="js/contract.js?v=21"></script>
-    <script src="js/app.js?v=49"></script>
+    <script src="js/contract.js?v=22"></script>
+    <script src="js/app.js?v=81"></script>
 </body>
 </html>

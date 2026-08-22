@@ -8,6 +8,10 @@ const escapeContractHTML = (value) => String(value ?? '')
     .replaceAll("'", '&#039;');
 
 window.renderContractForm = async function() {
+    const viewerProfile = await db.getUserProfile(currentUser?.id);
+    if (!window.canCurrentUserEditContracts?.(viewerProfile)) {
+        return '<div class="card" style="padding:2rem">Only an HR Manager or Administrator can edit contracts.</div>';
+    }
     // We expect window.currentContractEmployeeId to be set
     const employeeId = window.currentContractEmployeeId;
     
@@ -251,6 +255,10 @@ window.getContractFormData = function(status = 'Draft') {
 };
 
 window.saveContractDraft = async function() {
+    const viewerProfile = await db.getUserProfile(currentUser?.id);
+    if (!window.canCurrentUserEditContracts?.(viewerProfile)) {
+        return window.showToast('Only an HR Manager or Administrator can edit contracts.', 'danger');
+    }
     const data = window.getContractFormData('Draft');
     const res = await db.createContract(data);
     if (res.success) {
@@ -262,6 +270,10 @@ window.saveContractDraft = async function() {
 };
 
 window.submitContract = async function() {
+    const viewerProfile = await db.getUserProfile(currentUser?.id);
+    if (!window.canCurrentUserEditContracts?.(viewerProfile)) {
+        return window.showToast('Only an HR Manager or Administrator can edit contracts.', 'danger');
+    }
     const form = document.getElementById('saudiContractForm');
     if (!form.checkValidity()) {
         form.reportValidity();

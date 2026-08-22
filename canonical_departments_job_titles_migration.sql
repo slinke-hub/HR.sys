@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS public.job_titles (
 );
 
 WITH canonical(name,description) AS (VALUES
-('Executive & Administrative','Executive leadership, people operations and finance.'),
+('Executive & Administrative','Executive leadership and people operations.'),
+('Finance','Financial management, accounting, audit, bookkeeping and payroll.'),
 ('Event Production & Operations','Event delivery, operations, logistics, procurement and client operations.'),
 ('Marketing & Sales','Marketing, sales and creative production.'),
 ('IT & Technical Support','Technology administration, technical support and AV services.')
@@ -38,34 +39,43 @@ SELECT c.name,c.description,TRUE FROM canonical c
 WHERE NOT EXISTS(SELECT 1 FROM public.departments d WHERE lower(d.name)=lower(c.name));
 
 UPDATE public.departments SET is_active=TRUE WHERE lower(name) IN (
- lower('Executive & Administrative'),lower('Event Production & Operations'),
+ lower('Executive & Administrative'),lower('Finance'),lower('Event Production & Operations'),
  lower('Marketing & Sales'),lower('IT & Technical Support')
 );
 
 WITH catalog(department_name,title_name) AS (VALUES
 ('Executive & Administrative','General Manager'),('Executive & Administrative','HR Manager'),
-('Executive & Administrative','Finance Manager'),('Executive & Administrative','Accountant'),
+('Finance','Finance Manager'),('Finance','Accountant'),
+('Finance','Senior Financial Analyst'),('Finance','Senior Accountant'),
+('Finance','Internal Auditor'),('Finance','Staff Accountant / Junior Accountant'),
+('Finance','Bookkeeper'),('Finance','Payroll Clerk / Specialist'),
 ('Event Production & Operations','Event Manager'),('Event Production & Operations','Event Coordinator'),
 ('Event Production & Operations','Operations Manager'),('Event Production & Operations','Warehouse Manager'),
 ('Event Production & Operations','Logistics Coordinator'),('Event Production & Operations','Procurement Officer'),
 ('Event Production & Operations','Client Account Manager'),
-('Event Production & Operations','Barista'),
+('Event Production & Operations','Barista'),('Event Production & Operations','Technician'),
 ('Marketing & Sales','Marketing Manager'),('Marketing & Sales','Marketing Representative'),
 ('Marketing & Sales','Sales Supervisor'),('Marketing & Sales','Sales Representative'),
 ('Marketing & Sales','Graphic Designer'),('Marketing & Sales','Photographer'),
 ('IT & Technical Support','IT Administrator'),('IT & Technical Support','IT Support'),
-('IT & Technical Support','Audio-Visual (AV) Specialist'),('IT & Technical Support','Technician')
+('IT & Technical Support','Audio-Visual (AV) Specialist')
 )
 INSERT INTO public.job_titles(department_id,name,is_active)
 SELECT d.id,c.title_name,TRUE FROM catalog c JOIN public.departments d ON lower(d.name)=lower(c.department_name)
 ON CONFLICT(department_id,name) DO UPDATE SET is_active=TRUE;
 
+UPDATE public.job_titles title SET is_active=FALSE
+FROM public.departments department
+WHERE title.department_id=department.id
+  AND department.name='Executive & Administrative'
+  AND title.name IN ('Finance Manager','Accountant','Senior Financial Analyst','Senior Accountant','Internal Auditor','Staff Accountant / Junior Accountant','Bookkeeper','Payroll Clerk / Specialist');
+
 -- A recognized title is authoritative for the employee's canonical department.
 UPDATE public.profiles p SET department_id=jt.department_id
 FROM public.job_titles jt JOIN public.departments catalog_department ON catalog_department.id=jt.department_id
-WHERE lower(BTRIM(COALESCE(p.job_title,'')))=lower(jt.name)
+WHERE jt.is_active=TRUE AND lower(BTRIM(COALESCE(p.job_title,'')))=lower(jt.name)
   AND lower(catalog_department.name) IN (
-      lower('Executive & Administrative'),lower('Event Production & Operations'),
+      lower('Executive & Administrative'),lower('Finance'),lower('Event Production & Operations'),
       lower('Marketing & Sales'),lower('IT & Technical Support')
   );
 
@@ -76,6 +86,7 @@ WITH head_candidates AS (
     FROM public.departments d JOIN public.profiles p ON p.department_id=d.id
     WHERE d.is_active=TRUE AND (
         (d.name='Executive & Administrative' AND p.job_title='General Manager') OR
+        (d.name='Finance' AND p.job_title='Finance Manager') OR
         (d.name='Event Production & Operations' AND p.job_title IN ('Event Manager','Operations Manager')) OR
         (d.name='Marketing & Sales' AND p.job_title='Marketing Manager') OR
         (d.name='IT & Technical Support' AND p.job_title='IT Administrator')
@@ -95,14 +106,15 @@ UPDATE public.tasks SET department=CASE
     WHEN lower(department) ~ '(marketing|sales|design)' THEN 'Marketing & Sales'
     WHEN lower(department) ~ '(event|production|operation|warehouse|logistic|procurement|client|hospitality|coffee)' THEN 'Event Production & Operations'
     WHEN lower(department) ~ '(^it$|technical|audio|visual)' THEN 'IT & Technical Support'
-    WHEN lower(department) ~ '(executive|admin|human resource|^hr$|finance|account)' THEN 'Executive & Administrative'
+    WHEN lower(department) ~ '(finance|account|bookkeep|payroll|audit)' THEN 'Finance'
+    WHEN lower(department) ~ '(executive|admin|human resource|^hr$)' THEN 'Executive & Administrative'
     ELSE department END
 WHERE department IS NOT NULL;
 
 -- Archive every legacy department after employees have been safely reassigned.
 UPDATE public.departments SET is_active=FALSE
 WHERE lower(name) NOT IN (
- lower('Executive & Administrative'),lower('Event Production & Operations'),
+ lower('Executive & Administrative'),lower('Finance'),lower('Event Production & Operations'),
  lower('Marketing & Sales'),lower('IT & Technical Support')
 );
 

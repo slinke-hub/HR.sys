@@ -19,6 +19,21 @@ ALTER TABLE public.contracts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins have full access to contracts" ON public.contracts
     FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN'));
 
+CREATE POLICY "HR Managers can manage contracts" ON public.contracts
+    FOR ALL
+    USING (EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid()
+          AND is_active IS DISTINCT FROM FALSE
+          AND UPPER(COALESCE(job_title, '')) = 'HR MANAGER'
+    ))
+    WITH CHECK (EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid()
+          AND is_active IS DISTINCT FROM FALSE
+          AND UPPER(COALESCE(job_title, '')) = 'HR MANAGER'
+    ));
+
 -- Employees can view their own contracts
 CREATE POLICY "Employees can view their own contracts" ON public.contracts
     FOR SELECT USING (auth.uid() = employee_id);
