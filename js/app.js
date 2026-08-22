@@ -963,7 +963,26 @@ window.handleLeaveAction = async function (id, status, employeeId) {
 }
 
 
-window.updateSidebarVisibility = function() {
+async function getCurrentDepartmentName() {
+    const profile = currentUserProfile || currentUser || {};
+    if (!profile.department_id) return '';
+    window.sidebarDepartmentsCache ||= await db.fetchDepartments();
+    return window.sidebarDepartmentsCache.find(department => department.id === profile.department_id)?.name || '';
+}
+
+async function canCurrentUserAccessView(viewId) {
+    const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
+    if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
+    if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
+    if (viewId === 'payroll_beta') return ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole) || String(currentUserProfile?.job_title || '').trim().toUpperCase() === 'FINANCE MANAGER';
+    if (viewId === 'orders' || viewId === 'projects') {
+        return normalizedRole === 'EMPLOYEE' && (await getCurrentDepartmentName()).trim().toLowerCase() === 'marketing & sales';
+    }
+    return true;
+}
+
+window.updateSidebarVisibility = async function() {
+    const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const adminNav = document.querySelector('.nav-item[data-view=\'admin\']');
     const usersNav = document.querySelector('.nav-item[data-view=\'users\']');
     const analyticsNav = document.querySelector('.nav-item[data-view=\'analytics\']');
@@ -971,20 +990,28 @@ window.updateSidebarVisibility = function() {
     const departmentsNav = document.querySelector('.nav-item[data-view=\'departments\']');
     const translationsNav = document.querySelector('.nav-item[data-view=\'translations\']');
     const approvalsNav = document.getElementById('navApprovals');
+    const ordersNav = document.querySelector('.nav-item[data-view="orders"]');
+    const projectsNav = document.querySelector('.nav-item[data-view="projects"]');
+    const payrollBetaNav = document.querySelector('.nav-item[data-view="payroll_beta"]');
 
-    if (adminNav) adminNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
-    if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
-    if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') ? 'flex' : 'none';
-    if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') ? 'flex' : 'none';
-    if (employeesNav && window.canCurrentUserEditContracts()) employeesNav.style.display = 'flex';
-    if (departmentsNav) departmentsNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
-    if (translationsNav) translationsNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
+    const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
+    if (usersNav) usersNav.style.display = isAdmin ? 'flex' : 'none';
+    if (analyticsNav) analyticsNav.style.display = 'none';
+    if (employeesNav) employeesNav.style.display = normalizedRole !== 'EMPLOYEE' ? 'flex' : 'none';
+    if (departmentsNav) departmentsNav.style.display = isAdmin ? 'flex' : 'none';
+    if (translationsNav) translationsNav.style.display = isAdmin ? 'flex' : 'none';
+
+    const canUseMarketingPages = normalizedRole === 'EMPLOYEE' && (await getCurrentDepartmentName()).trim().toLowerCase() === 'marketing & sales';
+    if (ordersNav) ordersNav.style.display = canUseMarketingPages ? 'flex' : 'none';
+    if (projectsNav) projectsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
+    if (payrollBetaNav) payrollBetaNav.style.display = (isAdmin || String(currentUserProfile?.job_title || '').trim().toUpperCase() === 'FINANCE MANAGER') ? 'flex' : 'none';
     
     let isHussain = false;
     if (typeof currentUser !== 'undefined' && currentUser) {
         isHussain = (currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain')) || (currentUser.email && currentUser.email.toLowerCase().includes('hussain'));
     }
-    if (approvalsNav) approvalsNav.style.display = (currentUserRole === 'ADMIN' || isHussain) ? 'flex' : 'none';
+    if (approvalsNav) approvalsNav.style.display = (isAdmin || ['MANAGER', 'SUPERVISOR'].includes(normalizedRole) || isHussain) ? 'flex' : 'none';
 };
 
 window.handleLoginSubmit = async function (e) {
@@ -1206,7 +1233,15 @@ function renderLogin() {
 }
 
 async function renderTeamHierarchyWidget() {
-    const allUsers = await db.fetchUsers();
+    const fetchedUsers = (await db.fetchUsers()) || [];
+    const currentProfile = fetchedUsers.find(user => user.id === currentUser?.id) || currentUser || {};
+    const normalizedRole = String(currentUserRole || currentProfile.role || '').toUpperCase();
+    const isDepartmentEmployee = normalizedRole === 'EMPLOYEE';
+    // Employees receive only their department's profiles. This limits the data
+    // used by both the hierarchy renderer and its employee lookup cache.
+    const allUsers = isDepartmentEmployee && currentProfile.department_id
+        ? fetchedUsers.filter(user => user.department_id === currentProfile.department_id)
+        : fetchedUsers;
     if (!allUsers || allUsers.length === 0) {
         return `
             <div class="card col-span-12">
@@ -1220,12 +1255,18 @@ async function renderTeamHierarchyWidget() {
     }
 
     window.hierarchyProfilesById = Object.fromEntries(allUsers.map(user => [user.id, user]));
-    const canViewEmployeeInfo = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').toUpperCase());
+    const canViewEmployeeInfo = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'SUPERVISOR'].includes(normalizedRole);
     let rootUsers = [];
-    if (currentUserRole === 'ADMIN') {
+    if (['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole)) {
         rootUsers = allUsers.filter(u => u.role === 'ADMIN' || u.role === 'MANAGER' || !u.manager_id);
-    } else if (currentUserRole === 'MANAGER') {
+    } else if (normalizedRole === 'MANAGER') {
         rootUsers = allUsers.filter(u => u.id === currentUser.id);
+    } else if (isDepartmentEmployee && currentProfile.department_id) {
+        // Show the complete department tree, including colleagues who are not
+        // in the signed-in employee's direct reporting branch.
+        const visibleIds = new Set(allUsers.map(user => user.id));
+        rootUsers = allUsers.filter(user => !user.manager_id || !visibleIds.has(user.manager_id));
+        if (rootUsers.length === 0) rootUsers = [currentProfile];
     } else {
         let myMgr = allUsers.find(u => u.id === currentUser.manager_id);
         if (myMgr) {
@@ -2818,6 +2859,109 @@ function initCharts() {
 // ==========================================
 // PAYROLL
 // ==========================================
+function payrollBetaMoney(value) {
+    return `${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`;
+}
+
+function getPayrollBetaInput() {
+    const month = document.getElementById('payrollBetaMonth')?.value || new Date().toISOString().slice(0, 7);
+    const [year, monthNumber] = month.split('-').map(Number);
+    const daysInMonth = year && monthNumber ? new Date(year, monthNumber, 0).getDate() : 30;
+    return {
+        employeeName: document.getElementById('payrollBetaEmployee')?.value || 'Test Employee',
+        payrollMonth: month,
+        payableDays: document.getElementById('payrollBetaDays')?.value || daysInMonth,
+        daysInMonth,
+        basicSalary: document.getElementById('payrollBetaBasic')?.value,
+        salaryRaise: document.getElementById('payrollBetaRaise')?.value,
+        otherDeductions: document.getElementById('payrollBetaDeductions')?.value,
+        deductionDescription: document.getElementById('payrollBetaDeductionDescription')?.value,
+        loanBalance: document.getElementById('payrollBetaLoanBalance')?.value,
+        loanPaymentMode: document.getElementById('payrollBetaLoanMode')?.value,
+        loanInstallment: document.getElementById('payrollBetaLoanInstallment')?.value,
+        cashReward: document.getElementById('payrollBetaReward')?.value,
+        commission: document.getElementById('payrollBetaCommission')?.value,
+        transferMethod: document.getElementById('payrollBetaTransfer')?.value,
+        iban: document.getElementById('payrollBetaTransfer')?.value === 'Bank Transfer' ? document.getElementById('payrollBetaIban')?.value : ''
+    };
+}
+
+window.handlePayrollBetaTransferChange = function() {
+    const isBankTransfer = document.getElementById('payrollBetaTransfer')?.value === 'Bank Transfer';
+    const bankingField = document.getElementById('payrollBetaBankingField');
+    const bankingInput = document.getElementById('payrollBetaIban');
+    if (bankingField) bankingField.hidden = !isBankTransfer;
+    if (bankingInput) {
+        bankingInput.required = isBankTransfer;
+        if (!isBankTransfer) bankingInput.value = '';
+    }
+    window.updatePayrollBetaPreview();
+};
+
+window.handlePayrollBetaDeductionChange = function() {
+    const hasDeduction = Number(document.getElementById('payrollBetaDeductions')?.value || 0) > 0;
+    const descriptionField = document.getElementById('payrollBetaDeductionDescriptionField');
+    const descriptionInput = document.getElementById('payrollBetaDeductionDescription');
+    if (descriptionField) descriptionField.hidden = !hasDeduction;
+    if (descriptionInput) {
+        descriptionInput.required = hasDeduction;
+        if (!hasDeduction) descriptionInput.value = '';
+    }
+    window.updatePayrollBetaPreview();
+};
+
+window.handlePayrollBetaLoanModeChange = function() {
+    const isInstallment = document.getElementById('payrollBetaLoanMode')?.value !== 'FULL';
+    const installmentField = document.getElementById('payrollBetaInstallmentField');
+    const installmentInput = document.getElementById('payrollBetaLoanInstallment');
+    if (installmentField) installmentField.hidden = !isInstallment;
+    if (installmentInput) installmentInput.required = isInstallment;
+    window.updatePayrollBetaPreview();
+};
+
+window.updatePayrollBetaPreview = function() {
+    if (!window.PayrollBeta) return;
+    const result = window.PayrollBeta.calculate(getPayrollBetaInput());
+    const remainingLoanField = document.getElementById('payrollBetaRemainingLoan');
+    if (remainingLoanField) remainingLoanField.value = result.remainingLoanBalance.toFixed(2);
+    const preview = document.getElementById('payrollBetaPreviewBody');
+    if (preview) preview.innerHTML = `<tr>
+        <td>${escapeHTML(result.employeeName)}</td><td>${result.payableDays} / ${result.daysInMonth}</td>
+        <td>${payrollBetaMoney(result.adjustedBasicSalary)}${result.salaryRaise ? `<small class="payroll-beta-adjustment">Includes ${payrollBetaMoney(result.salaryRaise)} raise</small>` : ''}</td>
+        <td>${payrollBetaMoney(result.otherDeductions)}${result.deductionDescription ? `<small class="payroll-beta-adjustment">${escapeHTML(result.deductionDescription)}</small>` : ''}</td><td>${payrollBetaMoney(result.loanDeduction)}<small class="payroll-beta-adjustment">${result.loanPaymentMode === 'FULL' ? 'Full payment' : 'Installment'}${result.remainingLoanBalance ? ` · Balance: ${payrollBetaMoney(result.remainingLoanBalance)}` : ''}</small></td>
+        <td>${payrollBetaMoney(result.cashReward)}</td><td>${payrollBetaMoney(result.commission)}</td>
+        <td><strong>${payrollBetaMoney(result.netPay)}</strong></td><td>${escapeHTML(result.transferMethod)}</td><td>${escapeHTML(result.iban || 'Not provided')}</td>
+    </tr>`;
+    const breakdown = document.getElementById('payrollBetaBreakdown');
+    if (breakdown) breakdown.innerHTML = `<div><span>Earned basic salary</span><strong>${payrollBetaMoney(result.earnedBasicSalary)}</strong></div><div><span>Gross pay</span><strong>${payrollBetaMoney(result.grossPay)}</strong></div><div><span>Total deductions</span><strong>−${payrollBetaMoney(result.totalDeductions)}</strong></div><div class="payroll-beta-net"><span>Net pay</span><strong>${payrollBetaMoney(result.netPay)}</strong></div>${result.warnings.map(warning => `<p class="payroll-beta-warning">${escapeHTML(warning)}</p>`).join('')}`;
+};
+
+function renderPayrollBeta() {
+    const today = new Date();
+    const month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const days = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    setTimeout(() => window.updatePayrollBetaPreview(), 0);
+    return `<div class="page-header fade-in-up"><div><h1 class="page-title">Payroll Workflow</h1><p class="page-subtitle">Local calculation preview. No payroll records will be saved or deployed.</p></div><span class="status-badge warning">Beta Test</span></div>
+    <div class="card payroll-beta-form fade-in-up"><div class="payroll-beta-section-title">Test Payroll Inputs</div><div class="payroll-beta-input-grid">
+        <div class="form-group"><label class="form-label">Employee Name</label><input id="payrollBetaEmployee" class="form-control" value="Test Employee" oninput="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Payroll Month</label><input id="payrollBetaMonth" type="month" class="form-control" value="${month}" onchange="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Number of Payable Days</label><input id="payrollBetaDays" type="number" min="0" max="31" class="form-control" value="${days}" oninput="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Basic Salary (SAR)</label><input id="payrollBetaBasic" type="number" min="0" step="0.01" class="form-control" value="10000" oninput="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Salary Raise Effective This Month (SAR)</label><input id="payrollBetaRaise" type="number" min="0" step="0.01" class="form-control" value="0" oninput="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Other Deductions (SAR)</label><input id="payrollBetaDeductions" type="number" min="0" step="0.01" class="form-control" value="0" oninput="handlePayrollBetaDeductionChange()"></div>
+        <div class="form-group" id="payrollBetaDeductionDescriptionField" hidden><label class="form-label">Deduction Description</label><input id="payrollBetaDeductionDescription" class="form-control" placeholder="Explain the reason for this deduction" oninput="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Current Loan Balance (SAR)</label><input id="payrollBetaLoanBalance" type="number" min="0" step="0.01" class="form-control" value="12000" oninput="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Loan Payment Method</label><select id="payrollBetaLoanMode" class="form-control" onchange="handlePayrollBetaLoanModeChange()"><option value="INSTALLMENT">Installment</option><option value="FULL">Full Payment</option></select></div>
+        <div class="form-group" id="payrollBetaInstallmentField"><label class="form-label">Monthly Loan Installment (SAR)</label><input id="payrollBetaLoanInstallment" type="number" min="0" step="0.01" class="form-control" value="1000" oninput="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Remaining Loan Balance (SAR)</label><input id="payrollBetaRemainingLoan" type="number" class="form-control" value="11000.00" readonly aria-readonly="true"></div>
+        <div class="form-group"><label class="form-label">Cash Reward (SAR)</label><input id="payrollBetaReward" type="number" min="0" step="0.01" class="form-control" value="0" oninput="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Commission (SAR)</label><input id="payrollBetaCommission" type="number" min="0" step="0.01" class="form-control" value="0" oninput="updatePayrollBetaPreview()"></div>
+        <div class="form-group"><label class="form-label">Transfer Method</label><select id="payrollBetaTransfer" class="form-control" onchange="handlePayrollBetaTransferChange()"><option value="Cash">Cash</option><option value="Bank Transfer">Bank Transfer</option></select></div>
+        <div class="form-group" id="payrollBetaBankingField" hidden><label class="form-label">IBAN / Account Number</label><input id="payrollBetaIban" class="form-control" placeholder="Enter IBAN or account number" oninput="updatePayrollBetaPreview()"></div>
+    </div></div>
+    <div class="card fade-in-up"><div class="payroll-beta-section-title">English Payslip Preview</div><div class="table-responsive"><table class="data-table payroll-beta-table"><thead><tr><th>Employee Name</th><th>Number of Days</th><th>Basic Salary</th><th>Deductions</th><th>Loan Installment</th><th>Cash Reward</th><th>Commission</th><th>Net Salary</th><th>Transfer Method</th><th>IBAN</th></tr></thead><tbody id="payrollBetaPreviewBody"></tbody></table></div><div id="payrollBetaBreakdown" class="payroll-beta-breakdown"></div></div>`;
+}
+
 window.handleViewPayslip = function (month, netPay) {
     alert(`SAP Detailed Payslip for ${month}\n------------------------\nBase Salary: $${(netPay * 0.8).toFixed(2)}\nAllowances: $${(netPay * 0.2).toFixed(2)}\n\nNet Pay: $${netPay.toFixed(2)}`);
 }
@@ -3765,7 +3909,6 @@ window.printEmployeeDocument = documentId => {
         [t('doc_expiry_date'), expirationDate],
         [t('doc_days_left'), expiryInfo.daysLeft === null ? '-' : expiryInfo.daysLeft],
         [t('status'), expiryInfo.status || '-'],
-        [t('doc_notified_30_days'), t('doc_yes')],
         [t('doc_owner_phone'), documentRecord.owner_phone || '-']
     ];
     const printContent = `
@@ -3783,19 +3926,18 @@ function renderEmployeeDocumentRow(documentRecord) {
 
     return `
         <tr>
-            <td>${escapeHTML(String(documentRecord.document_id || '-'))}</td>
-            <td>${escapeHTML(documentRecord.doc_name || '-')}</td>
-            <td>${escapeHTML(documentRecord.owner_name || '-')}</td>
-            <td>${escapeHTML(documentRecord.owner_email || '-')}</td>
-            <td>${escapeHTML(documentRecord.responsible_name || '-')}</td>
-            <td>${escapeHTML(documentRecord.responsible_email || '-')}</td>
-            <td>${expirationDate}</td>
-            <td>${expiryInfo.daysLeft === null ? '-' : expiryInfo.daysLeft}</td>
-            <td><span class="status-badge ${expiryInfo.statusClass}">${escapeHTML(expiryInfo.status || '-')}</span></td>
-            <td>${t('doc_yes')}</td>
-            <td>${escapeHTML(documentRecord.owner_phone || '-')}</td>
-            <td>
-                <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+            <td data-label="${escapeHTML(t('doc_document_id'))}">${escapeHTML(String(documentRecord.document_id || '-'))}</td>
+            <td data-label="${escapeHTML(t('doc_document_name'))}">${escapeHTML(documentRecord.doc_name || '-')}</td>
+            <td data-label="${escapeHTML(t('doc_owner_name'))}">${escapeHTML(documentRecord.owner_name || '-')}</td>
+            <td data-label="${escapeHTML(t('doc_owner_email'))}" class="document-email-cell">${escapeHTML(documentRecord.owner_email || '-')}</td>
+            <td data-label="${escapeHTML(t('doc_responsible_name'))}">${escapeHTML(documentRecord.responsible_name || '-')}</td>
+            <td data-label="${escapeHTML(t('doc_responsible_email'))}" class="document-email-cell">${escapeHTML(documentRecord.responsible_email || '-')}</td>
+            <td data-label="${escapeHTML(t('doc_expiry_date'))}">${expirationDate}</td>
+            <td data-label="${escapeHTML(t('doc_days_left'))}">${expiryInfo.daysLeft === null ? '-' : expiryInfo.daysLeft}</td>
+            <td data-label="${escapeHTML(t('status'))}"><span class="status-badge ${expiryInfo.statusClass}">${escapeHTML(expiryInfo.status || '-')}</span></td>
+            <td data-label="${escapeHTML(t('doc_owner_phone'))}">${escapeHTML(documentRecord.owner_phone || '-')}</td>
+            <td data-label="${escapeHTML(t('ui_actions'))}" class="employee-document-actions">
+                <div class="employee-document-action-buttons">
                     <button type="button" class="btn-secondary" style="padding:0.4rem;" onclick="viewEmployeeDocument('${escapeHTML(documentRecord.id)}')" title="${t('doc_action_view')}" aria-label="${t('doc_action_view')}"><i data-lucide="eye" style="width:14px;height:14px;"></i></button>
                     <button type="button" class="btn-secondary" style="padding:0.4rem;" onclick="editEmployeeDocument('${escapeHTML(documentRecord.id)}')" title="${t('doc_action_edit')}" aria-label="${t('doc_action_edit')}"><i data-lucide="edit-2" style="width:14px;height:14px;"></i></button>
                     <button type="button" class="btn-secondary" style="padding:0.4rem;" onclick="printEmployeeDocument('${escapeHTML(documentRecord.id)}')" title="${t('doc_action_print')}" aria-label="${t('doc_action_print')}"><i data-lucide="printer" style="width:14px;height:14px;"></i></button>
@@ -3899,11 +4041,11 @@ async function renderDocuments() {
 
             <div class="card col-span-12">
                 <div class="card-title">${currentUserRole === 'ADMIN' ? t('doc_all_uploaded') : t('doc_my_uploaded')}</div>
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead><tr><th>${t('doc_document_id')}</th><th>${t('doc_document_name')}</th><th>${t('doc_owner_name')}</th><th>${t('doc_owner_email')}</th><th>${t('doc_responsible_name')}</th><th>${t('doc_responsible_email')}</th><th>${t('doc_expiry_date')}</th><th>${t('doc_days_left')}</th><th>${t('status')}</th><th>${t('doc_notified_30_days')}</th><th>${t('doc_owner_phone')}</th><th>${t('ui_actions')}</th></tr></thead>
+                <div class="table-responsive employee-documents-table-wrap">
+                    <table class="data-table employee-documents-table">
+                        <thead><tr><th>${t('doc_document_id')}</th><th>${t('doc_document_name')}</th><th>${t('doc_owner_name')}</th><th>${t('doc_owner_email')}</th><th>${t('doc_responsible_name')}</th><th>${t('doc_responsible_email')}</th><th>${t('doc_expiry_date')}</th><th>${t('doc_days_left')}</th><th>${t('status')}</th><th>${t('doc_owner_phone')}</th><th>${t('ui_actions')}</th></tr></thead>
                         <tbody>
-                            ${uploadedDocs.length === 0 ? `<tr><td colspan="12" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_uploaded')}</td></tr>` : uploadedDocs.map(renderEmployeeDocumentRow).join('')}
+                            ${uploadedDocs.length === 0 ? `<tr class="employee-documents-empty"><td colspan="11" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_uploaded')}</td></tr>` : uploadedDocs.map(renderEmployeeDocumentRow).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -6199,6 +6341,12 @@ window.renderView = async function(viewId, isBack = false) {
         currentView = 'login';
     }
 
+    if (currentUser && viewId !== 'login' && !(await canCurrentUserAccessView(viewId))) {
+        showToast('You do not have access to this page.', 'warning');
+        viewId = 'dashboard';
+        currentView = 'dashboard';
+    }
+
     if (viewId !== 'login') {
         localStorage.setItem('muqam_hr_last_view', viewId);
         if (currentUser?.id) localStorage.setItem(`muqam_hr_last_view_${currentUser.id}`, viewId);
@@ -6237,9 +6385,10 @@ window.renderView = async function(viewId, isBack = false) {
             case 'community': content = await renderCommunity(); break;
             case 'time': content = await renderTime(); break;
             case 'leave': content = await renderLeave(); break;
-            case 'requests': content = await renderRequests(); break;
+            case 'requests': content = String(currentUserRole || '').toUpperCase() === 'EMPLOYEE' ? await renderMyRequestStatuses() : await renderRequests(); break;
             case 'archived': content = await renderArchivedRequests(); break;
             case 'payroll': content = await renderPayroll(); break;
+            case 'payroll_beta': content = renderPayrollBeta(); break;
             case 'expenses': content = await renderExpenses(); break;
             case 'analytics': content = await renderAnalytics(); break;
             case 'admin': content = await renderAdmin(); break;
@@ -7824,10 +7973,11 @@ async function initApp() {
         
         const canUseApprovals = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile?.job_title || '');
         if (approvalsNav) approvalsNav.style.display = canUseApprovals ? 'flex' : 'none';
+        await window.updateSidebarVisibility();
 
         const restorableViews = new Set([
             'dashboard', 'community', 'time', 'leave', 'requests', 'archived',
-            'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
+            'payroll', 'payroll_beta', 'expenses', 'analytics', 'admin', 'users', 'employees',
             'archived_contracts', 'messages', 'notifications', 'performance',
             'documents', 'profile', 'projects', 'approvals', 'tasks',
             'departments', 'translations', 'clients', 'crm', 'orders', 'integrations'
@@ -7865,12 +8015,16 @@ function getRequestWorkflowStage(workflow) {
     return `Awaiting ${REQUEST_STAGE_LABELS[step?.stage_key] || 'approval'}`;
 }
 
-function renderRequestWorkflowProgress(workflow) {
+function renderRequestWorkflowProgress(workflow, approverNames = {}) {
     if (!workflow?.steps?.length) return '';
     return `<div class="request-workflow-progress">${workflow.steps.map(step => {
         const active = workflow.status === 'PENDING' && step.step_order === workflow.current_step;
         const className = step.status === 'APPROVED' ? 'completed' : (step.status === 'REJECTED' ? 'rejected' : (active ? 'active' : 'upcoming'));
-        return `<span class="request-workflow-step ${className}">${escapeHTML(REQUEST_STAGE_LABELS[step.stage_key] || step.stage_key)}</span>`;
+        const approverName = approverNames[step.approver_id] || 'Management';
+        return `<span class="request-workflow-step ${className}">
+            <span class="request-workflow-stage">${escapeHTML(REQUEST_STAGE_LABELS[step.stage_key] || step.stage_key)}</span>
+            <small>${escapeHTML(approverName)}</small>
+        </span>`;
     }).join('<i data-lucide="chevron-right"></i>')}</div>`;
 }
 
@@ -7890,25 +8044,82 @@ window.handleRequestAction = async function (sourceTable, id, decision) {
     }
 };
 
+async function renderMyRequestStatuses() {
+    const requests = await db.fetchMyRequestStatuses();
+    const rows = requests.map(request => {
+        const normalizedStatus = String(request.request_status || 'PENDING').toUpperCase().replace('_ARCHIVED', '');
+        const badgeClass = normalizedStatus === 'APPROVED' ? 'success' : (normalizedStatus === 'REJECTED' ? 'danger' : 'warning');
+        const stageLabel = normalizedStatus === 'APPROVED' ? 'Completed' : normalizedStatus === 'REJECTED' ? 'Rejected' : (REQUEST_STAGE_LABELS[request.current_stage] || 'Awaiting approval');
+        const requestDate = new Date(request.created_at).toISOString().slice(0, 10);
+        return `<tr class="my-request-status-row" data-request-date="${requestDate}">
+            <td>${new Date(request.created_at).toLocaleDateString()}</td>
+            <td><strong>${escapeHTML(request.request_type || 'Employee Request')}</strong><br><small>${escapeHTML(request.request_details || '')}</small></td>
+            <td><span class="status-badge ${badgeClass}">${escapeHTML(normalizedStatus)}</span></td>
+            <td><div class="my-request-current-stage"><strong>${escapeHTML(stageLabel)}</strong>${normalizedStatus === 'PENDING' ? `<small>${escapeHTML(request.current_approver_name || 'Management')}</small>` : ''}</div></td>
+            <td>${request.rejection_reason ? escapeHTML(request.rejection_reason) : '—'}</td>
+        </tr>`;
+    }).join('');
+
+    return `<div class="page-header fade-in-up">
+        <div><h1 class="page-title">My Requests</h1><p class="page-subtitle">Track your submitted requests and their current approval status.</p></div>
+        <button type="button" class="btn-primary" onclick="showNewRequestModal()"><i data-lucide="plus"></i> New Request</button>
+    </div>
+    <div class="card fade-in-up" style="margin-bottom:1rem"><div class="form-group" style="max-width:320px;margin:0">
+        <label class="form-label" for="myRequestStatusDate">Search by date</label>
+        <input type="date" id="myRequestStatusDate" class="form-control" onchange="filterMyRequestStatuses()">
+    </div></div>
+    <div class="card fade-in-up"><div class="table-responsive"><table class="data-table">
+        <thead><tr><th>Date</th><th>Request</th><th>Status</th><th>Approval Stage</th><th>Rejection Reason</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--color-text-secondary)">You have not submitted any requests yet.</td></tr>'}</tbody>
+    </table></div></div>`;
+}
+
+window.filterMyRequestStatuses = function() {
+    const selectedDate = document.getElementById('myRequestStatusDate')?.value || '';
+    document.querySelectorAll('.my-request-status-row').forEach(row => {
+        row.hidden = Boolean(selectedDate && row.dataset.requestDate !== selectedDate);
+    });
+};
+
 // Unified Requests Page
 async function renderRequests() {
-    const isManagerOrAdmin = currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR');
+    const normalizedRole = String(currentUserRole || '').toUpperCase();
+    const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    const isDepartmentManager = ['MANAGER', 'SUPERVISOR'].includes(normalizedRole);
+    const isManagerOrAdmin = isAdmin || isDepartmentManager;
+
+    const [allProfiles, requestDirectory] = await Promise.all([
+        db.fetchAllProfiles(),
+        db.fetchRequestDirectory()
+    ]);
+    const currentProfile = allProfiles.find(profile => profile.id === currentUser?.id) || currentUser || {};
+    let visibleEmployeeIds = null;
+    if (!isAdmin) {
+        visibleEmployeeIds = isDepartmentManager
+            ? requestDirectory.map(person => person.employee_id)
+            : [currentUser?.id].filter(Boolean);
+    }
 
     // Fetch data
     const [leaves, docs, expenses, genericRequests, workflows] = await Promise.all([
-        db.fetchLeaveRequests(), db.fetchDocuments(), db.fetchExpenses(), db.fetchGenericRequests(), db.fetchRequestApprovalWorkflows()
+        db.fetchLeaveRequests(visibleEmployeeIds),
+        db.fetchDocuments(visibleEmployeeIds),
+        db.fetchExpenses(visibleEmployeeIds),
+        db.fetchGenericRequests(visibleEmployeeIds),
+        db.fetchRequestApprovalWorkflows()
     ]);
     const workflowMap = new Map(workflows.map(workflow => [`${workflow.source_table}:${workflow.source_id}`, workflow]));
     const canApproveAny = workflows.some(workflow => workflow.status === 'PENDING' && workflow.steps?.some(step => step.step_order === workflow.current_step && step.approver_id === currentUser?.id));
     const showApprovalColumns = isManagerOrAdmin || canApproveAny;
 
-    let profilesMap = {};
-    if (showApprovalColumns) {
-        const allProfiles = await db.fetchAllProfiles();
-        allProfiles.forEach(p => {
-            profilesMap[p.id] = p.full_name || 'Unknown User';
-        });
-    }
+    const profilesMap = {};
+    allProfiles.forEach(profile => {
+        profilesMap[profile.id] = profile.full_name || 'Unknown User';
+    });
+    requestDirectory.forEach(person => {
+        profilesMap[person.employee_id] = person.full_name || profilesMap[person.employee_id] || 'Unknown User';
+    });
+    const emailMap = Object.fromEntries((requestDirectory || []).map(person => [person.employee_id, person.email || '']));
 
     // Normalize requests
     let allRequests = [];
@@ -8000,11 +8211,11 @@ async function renderRequests() {
         }
 
         return `
-            <tr class="request-row" data-type="${r.type}" data-status="${r.status}" data-emp="${employeeName.toLowerCase()}" data-details="${r.details.toLowerCase()}">
+            <tr class="request-row" data-type="${r.type}" data-status="${r.status}" data-emp="${escapeHTML(employeeName.toLowerCase())}" data-email="${escapeHTML(String(emailMap[r.employee_id] || '').toLowerCase())}" data-request-date="${new Date(r.created_at).toISOString().slice(0, 10)}" data-details="${escapeHTML(r.details.toLowerCase())}">
                 <td>${new Date(r.created_at).toLocaleDateString()}</td>
                 ${showApprovalColumns ? `<td>${escapeHTML(employeeName)}</td>` : ''}
                 <td><strong>${r.type}</strong></td>
-                <td>${escapeHTML(r.details)}${renderRequestWorkflowProgress(r.workflow)}</td>
+                <td>${escapeHTML(r.details)}${renderRequestWorkflowProgress(r.workflow, profilesMap)}</td>
                 <td><span class="status-badge ${badgeClass}">${escapeHTML(getRequestWorkflowStage(r.workflow))}</span></td>
                 ${actionsCell}
             </tr>
@@ -8050,15 +8261,18 @@ async function renderRequests() {
         </div>
 
         <h2 style="margin-bottom: 1rem; font-size: 1.25rem; display: flex; align-items: center; gap: .6rem;">
-            ${showApprovalColumns ? 'All Employee Requests' : 'My Requests'}
+            ${isAdmin ? 'All Employee Requests' : (isDepartmentManager ? 'Department Requests' : 'My Requests')}
             <span class="status-badge info" aria-label="${allRequests.length} requests">${allRequests.length}</span>
         </h2>
         <div class="card fade-in-up" style="margin-bottom: 2rem;">
             <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                <div style="flex: 1; min-width: 200px;">
+                ${isManagerOrAdmin ? `<div style="flex: 1; min-width: 220px;">
                     <label class="form-label">${t('req_search')}</label>
-                    <input type="text" id="reqSearch" class="form-control" placeholder="${t('req_search_ph')}" onkeyup="filterRequests()">
-                </div>
+                    <input type="search" id="reqSearch" class="form-control" placeholder="Search by full name or email" oninput="filterRequests()">
+                </div>` : `<div style="flex: 1; min-width: 220px;">
+                    <label class="form-label" for="reqDate">Request Date</label>
+                    <input type="date" id="reqDate" class="form-control" onchange="filterRequests()">
+                </div>`}
                 <div style="width: 150px;">
                     <label class="form-label">${t('req_type')}</label>
                     <select id="reqType" class="form-control" onchange="filterRequests()">
@@ -8104,7 +8318,8 @@ async function renderRequests() {
 }
 
 window.filterRequests = function () {
-    const searchVal = document.getElementById('reqSearch').value.toLowerCase();
+    const searchVal = (document.getElementById('reqSearch')?.value || '').toLowerCase();
+    const dateVal = document.getElementById('reqDate')?.value || '';
     const typeVal = document.getElementById('reqType').value;
     const statusVal = document.getElementById('reqStatus').value;
 
@@ -8113,13 +8328,16 @@ window.filterRequests = function () {
         const t = row.getAttribute('data-type');
         const s = row.getAttribute('data-status');
         const emp = row.getAttribute('data-emp');
+        const email = row.getAttribute('data-email') || '';
+        const requestDate = row.getAttribute('data-request-date') || '';
         const det = row.getAttribute('data-details');
 
-        const matchSearch = emp.includes(searchVal) || det.includes(searchVal);
+        const matchSearch = !searchVal || emp.includes(searchVal) || email.includes(searchVal);
+        const matchDate = !dateVal || requestDate === dateVal;
         const matchType = typeVal === 'ALL' || t === typeVal;
         const matchStatus = statusVal === 'ALL' || s === statusVal;
 
-        if (matchSearch && matchType && matchStatus) {
+        if (matchSearch && matchDate && matchType && matchStatus) {
             row.style.display = '';
         } else {
             row.style.display = 'none';

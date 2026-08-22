@@ -79,7 +79,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='contracts' AND column_name='department_id') THEN
         EXECUTE $sql$
             UPDATE public.contracts contract
-            SET department_id = $1, updated_at = NOW()
+            SET department_id = $1
             FROM public.profiles profile
             WHERE contract.employee_id = profile.id
               AND LOWER(BTRIM(COALESCE(profile.job_title, ''))) = ANY ($2)
@@ -89,7 +89,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='contracts' AND column_name='department') THEN
         EXECUTE $sql$
             UPDATE public.contracts contract
-            SET department = 'Finance', updated_at = NOW()
+            SET department = 'Finance'
             FROM public.profiles profile
             WHERE contract.employee_id = profile.id
               AND LOWER(BTRIM(COALESCE(profile.job_title, ''))) = ANY ($1)

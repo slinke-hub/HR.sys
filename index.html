@@ -30,7 +30,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/layout.css?v=5">
-    <link rel="stylesheet" href="css/components.css?v=32">
+    <link rel="stylesheet" href="css/components.css?v=36">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -48,68 +48,31 @@
         <aside class="sidebar">
 
             <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" data-view="dashboard">
-                    <i data-lucide="layout-dashboard"></i>
-                    <span data-i18n="nav_dashboard">Dashboard</span>
-                </a>
-                <a href="#" class="nav-item" data-view="admin">
-                    <i data-lucide="shield-check"></i>
-                    <span data-i18n="nav_admin">Admin Overview</span>
-                </a>
-                <a href="#" class="nav-item" data-view="integrations" style="display: none !important;">
-                    <i data-lucide="webhook"></i>
-                    <span>API Integrations</span>
-                </a>
-                <a href="#" class="nav-item" id="navApprovals" style="display: none;" data-view="approvals"><i data-lucide="check-circle"></i> <span data-i18n="nav_approvals">Approvals</span></a>
-                <a href="#" class="nav-item" data-view="archived" style="display: none !important;">
-                    <i data-lucide="archive"></i>
-                    <span>Archived Requests</span>
-                </a>
-                <a href="#" class="nav-item" data-view="clients">
-                    <i data-lucide="users"></i>
-                    <span data-i18n="nav_clients">Clients</span>
-                </a>
-                <a href="#" class="nav-item" data-view="community">
-                    <i data-lucide="globe"></i>
-                    <span data-i18n="nav_community">Community</span>
-                </a>
-                <a href="#" class="nav-item" data-view="crm">
-                    <i data-lucide="bar-chart-2"></i>
-                    <span data-i18n="nav_crm">CRM</span>
-                </a>
-                <a href="#" class="nav-item" data-view="employees">
-                    <i data-lucide="briefcase"></i>
-                    <span data-i18n="nav_emp_contracts">Employees & Contracts</span>
-                </a>
-                <a href="#" class="nav-item" data-view="departments">
-                    <i data-lucide="building-2"></i>
-                    <span data-i18n="nav_departments">Departments</span>
-                </a>
-                <a href="#" class="nav-item" data-view="documents">
-                    <i data-lucide="file-text"></i>
-                    <span data-i18n="nav_documents">Documents</span>
-                </a>
-                <a href="#" class="nav-item" data-view="requests">
-                    <i data-lucide="file-signature"></i>
-                    <span data-i18n="nav_employee_requests">Employee Requests</span>
-                </a>
-                <a href="#" class="nav-item" data-view="expenses" style="display: none !important;"><i data-lucide="receipt"></i><span>Expenses</span></a>
-                <a href="#" class="nav-item" data-view="leave"><i data-lucide="calendar-off"></i><span data-i18n="nav_leave">Leave</span></a>
-                <a href="#" class="nav-item" data-view="orders">
-                    <i data-lucide="shopping-cart"></i>
-                    <span data-i18n="nav_orders">Orders</span>
-                </a>
-                <a href="#" class="nav-item" data-view="payroll" style="display: none !important;"><i data-lucide="banknote"></i><span data-i18n="nav_payroll">Payroll</span></a>
-                <a href="#" class="nav-item" data-view="performance" style="display: none !important;"><i data-lucide="target"></i><span data-i18n="nav_performance">Performance</span></a>
-                <a href="#" class="nav-item" data-view="projects"><i data-lucide="folder"></i> <span data-i18n="nav_projects">Projects</span></a>
-                <a href="#" class="nav-item" data-view="tasks"><i data-lucide="list-checks"></i> <span>Task Manager</span></a>
+                <a href="#" class="nav-item active" data-view="dashboard"><i data-lucide="layout-dashboard"></i><span data-i18n="nav_dashboard">Dashboard</span></a>
+                <a href="#" class="nav-item" data-view="tasks"><i data-lucide="list-checks"></i><span>Task Manager</span></a>
+                <a href="#" class="nav-item" data-view="clients"><i data-lucide="users"></i><span data-i18n="nav_clients">Clients</span></a>
+                <a href="#" class="nav-item" data-view="crm"><i data-lucide="bar-chart-2"></i><span data-i18n="nav_crm">CRM</span></a>
+                <a href="#" class="nav-item" data-view="employees"><i data-lucide="briefcase"></i><span>Contracts</span></a>
+                <a href="#" class="nav-item" data-view="documents"><i data-lucide="file-text"></i><span data-i18n="nav_documents">Documents</span></a>
+                <a href="#" class="nav-item" data-view="requests"><i data-lucide="file-signature"></i><span data-i18n="nav_employee_requests">Employee Requests</span></a>
+                <a href="#" class="nav-item" data-view="orders"><i data-lucide="shopping-cart"></i><span data-i18n="nav_orders">Orders</span></a>
+                <a href="#" class="nav-item" data-view="projects"><i data-lucide="folder"></i><span data-i18n="nav_projects">Projects</span></a>
                 <a href="#" class="nav-item" data-view="time"><i data-lucide="clock"></i><span data-i18n="nav_time">Time & Attendance</span></a>
-                <a href="#" class="nav-item" data-view="translations" id="navTranslations">
-                    <i data-lucide="languages"></i>
-                    <span data-i18n="nav_translations">Translations</span>
-                </a>
-                <a href="#" class="nav-item" data-view="users"><i data-lucide="user-cog"></i><span data-i18n="nav_users">User Management</span></a>
+                <a href="#" class="nav-item" data-view="payroll_beta" style="display:none"><i data-lucide="calculator"></i><span>Payroll Workflow <small class="status-badge warning">Beta</small></span></a>
 
+                <a href="#" class="nav-item" id="navApprovals" style="display:none" data-view="approvals"><i data-lucide="check-circle"></i><span data-i18n="nav_approvals">Approvals</span></a>
+                <a href="#" class="nav-item" data-view="admin" style="display:none"><i data-lucide="shield-check"></i><span data-i18n="nav_admin">Admin Overview</span></a>
+                <a href="#" class="nav-item" data-view="departments" style="display:none"><i data-lucide="building-2"></i><span data-i18n="nav_departments">Departments</span></a>
+                <a href="#" class="nav-item" data-view="translations" id="navTranslations" style="display:none"><i data-lucide="languages"></i><span data-i18n="nav_translations">Translations</span></a>
+                <a href="#" class="nav-item" data-view="users" style="display:none"><i data-lucide="user-cog"></i><span data-i18n="nav_users">User Management</span></a>
+
+                <a href="#" class="nav-item" data-view="integrations" style="display:none !important"><i data-lucide="webhook"></i><span>API Integrations</span></a>
+                <a href="#" class="nav-item" data-view="archived" style="display:none !important"><i data-lucide="archive"></i><span>Archived Requests</span></a>
+                <a href="#" class="nav-item" data-view="community" style="display:none !important"><i data-lucide="globe"></i><span data-i18n="nav_community">Community</span></a>
+                <a href="#" class="nav-item" data-view="expenses" style="display:none !important"><i data-lucide="receipt"></i><span>Expenses</span></a>
+                <a href="#" class="nav-item" data-view="leave" style="display:none !important"><i data-lucide="calendar-off"></i><span data-i18n="nav_leave">Leave</span></a>
+                <a href="#" class="nav-item" data-view="payroll" style="display:none !important"><i data-lucide="banknote"></i><span data-i18n="nav_payroll">Payroll</span></a>
+                <a href="#" class="nav-item" data-view="performance" style="display:none !important"><i data-lucide="target"></i><span data-i18n="nav_performance">Performance</span></a>
             </nav>
         </aside>
 
@@ -1265,9 +1228,10 @@
     <!-- Supabase & JS & Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="js/db.js?v=45"></script>
+    <script src="js/db.js?v=49"></script>
     <script src="js/data.js?v=20"></script>
     <script src="js/contract.js?v=22"></script>
-    <script src="js/app.js?v=83"></script>
+    <script src="js/payroll-beta.js?v=2"></script>
+    <script src="js/app.js?v=95"></script>
 </body>
 </html>

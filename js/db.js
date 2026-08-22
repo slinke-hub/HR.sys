@@ -130,10 +130,14 @@ const db = {
         }
     },
 
-    async fetchGenericRequests() {
+    async fetchGenericRequests(employeeIds = null) {
         if (!supabaseClient) return [];
         try {
-            const { data, error } = await supabaseClient.from('requests').select('*').order('created_at', { ascending: false });
+            let query = supabaseClient.from('requests').select('*').order('created_at', { ascending: false });
+            const scopedIds = Array.isArray(employeeIds) ? employeeIds.filter(Boolean) : (employeeIds ? [employeeIds] : []);
+            if (scopedIds.length) query = query.in('employee_id', scopedIds);
+            else if (Array.isArray(employeeIds)) return [];
+            const { data, error } = await query;
             if (error) throw error;
             return data || [];
         } catch (error) {
@@ -158,6 +162,36 @@ const db = {
             return (workflows || []).map(workflow => ({ ...workflow, steps: stepsByWorkflow[workflow.id] || [] }));
         } catch (error) {
             console.error('fetchRequestApprovalWorkflows Error:', error);
+            return [];
+        }
+    },
+
+    async fetchRequestDirectory() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('get_request_filter_directory');
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.warn('Request directory is unavailable; using profile names without email.', error);
+            const profiles = await this.fetchAllProfiles();
+            return (profiles || []).map(profile => ({
+                employee_id: profile.id,
+                full_name: profile.full_name || 'Unknown User',
+                email: profile.id === window.currentUser?.id ? (window.currentUser?.email || '') : '',
+                department_id: profile.department_id || null
+            }));
+        }
+    },
+
+    async fetchMyRequestStatuses() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('get_my_request_statuses');
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchMyRequestStatuses Error:', error);
             return [];
         }
     },
@@ -355,9 +389,9 @@ const db = {
         if (!supabaseClient) return [];
         try {
             let query = supabaseClient.from('leave_requests').select('*').order('created_at', { ascending: false });
-            if (userId) {
-                query = query.eq('employee_id', userId);
-            }
+            const scopedIds = Array.isArray(userId) ? userId.filter(Boolean) : (userId ? [userId] : []);
+            if (scopedIds.length) query = query.in('employee_id', scopedIds);
+            else if (Array.isArray(userId)) return [];
             const { data, error } = await query;
             if (error) throw error;
             return data;
@@ -585,9 +619,9 @@ const db = {
         if (!supabaseClient) return [];
         try {
             let query = supabaseClient.from('document_requests').select('*').order('created_at', { ascending: false });
-            if (employeeId) {
-                query = query.eq('employee_id', employeeId);
-            }
+            const scopedIds = Array.isArray(employeeId) ? employeeId.filter(Boolean) : (employeeId ? [employeeId] : []);
+            if (scopedIds.length) query = query.in('employee_id', scopedIds);
+            else if (Array.isArray(employeeId)) return [];
             const { data, error } = await query;
             if (error) throw error;
             return data;
@@ -1124,9 +1158,9 @@ const db = {
         if (!supabaseClient) return [];
         try {
             let query = supabaseClient.from('expenses').select('*').order('created_at', { ascending: false });
-            if (employeeId) {
-                query = query.eq('employee_id', employeeId);
-            }
+            const scopedIds = Array.isArray(employeeId) ? employeeId.filter(Boolean) : (employeeId ? [employeeId] : []);
+            if (scopedIds.length) query = query.in('employee_id', scopedIds);
+            else if (Array.isArray(employeeId)) return [];
             const { data, error } = await query;
             if (error) throw error;
             return data;
@@ -1596,7 +1630,7 @@ const db = {
                 ({ data, error } = await supabaseClient.from('departments').select('*').order('name'));
             }
             if (error) throw error;
-            return (data || []).filter(department => String(department.name || '').trim().toLowerCase() !== 'finance');
+            return data || [];
         } catch (error) {
             console.error("fetchDepartments Error:", error);
             return [];

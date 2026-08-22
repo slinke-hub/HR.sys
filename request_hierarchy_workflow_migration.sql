@@ -61,15 +61,15 @@ BEGIN
     IF v_workflow_id IS NOT NULL THEN RETURN v_workflow_id; END IF;
     SELECT * INTO employee FROM public.profiles WHERE id=p_employee_id;
     SELECT head_id INTO department_manager FROM public.departments WHERE id=employee.department_id;
-    SELECT id INTO accountant_manager FROM public.profiles WHERE is_active IS DISTINCT FROM FALSE AND (upper(COALESCE(job_title,'')) IN ('FINANCE MANAGER','ACCOUNTANT MANAGER') OR upper(COALESCE(role,''))='ACCOUNTANT_MANAGER') ORDER BY created_at LIMIT 1;
-    IF accountant_manager IS NULL THEN SELECT head_id INTO accountant_manager FROM public.departments WHERE upper(name) IN ('ACCOUNTING','FINANCE') LIMIT 1; END IF;
+    SELECT id INTO accountant_manager FROM public.profiles WHERE is_active IS DISTINCT FROM FALSE AND (upper(trim(COALESCE(job_title,''))) IN ('FINANCE MANAGER','ACCOUNTING MANAGER','ACCOUNTANT MANAGER','SENIOR ACCOUNTANT','ACCOUNTANT') OR upper(trim(COALESCE(role,'')))='ACCOUNTANT_MANAGER') ORDER BY CASE WHEN upper(trim(COALESCE(job_title,''))) IN ('FINANCE MANAGER','ACCOUNTING MANAGER','ACCOUNTANT MANAGER') THEN 0 ELSE 1 END, created_at LIMIT 1;
+    IF accountant_manager IS NULL THEN SELECT head_id INTO accountant_manager FROM public.departments WHERE upper(trim(name)) LIKE '%FINANCE%' OR upper(trim(name)) LIKE '%ACCOUNTING%' ORDER BY CASE WHEN head_id IS NOT NULL THEN 0 ELSE 1 END LIMIT 1; END IF;
     SELECT id INTO general_manager FROM public.profiles WHERE is_active IS DISTINCT FROM FALSE AND (upper(COALESCE(job_title,'')) LIKE '%GENERAL MANAGER%' OR upper(COALESCE(role,''))='GENERAL_MANAGER') ORDER BY created_at LIMIT 1;
-    SELECT id INTO fallback_manager FROM public.profiles WHERE upper(COALESCE(role,'')) IN ('ADMIN','ROLE_SYSTEM_ADMIN') ORDER BY created_at LIMIT 1;
+    SELECT id INTO fallback_manager FROM public.profiles WHERE upper(trim(COALESCE(role,''))) IN ('ADMIN','ROLE_SYSTEM_ADMIN','SYSTEM_ADMIN') ORDER BY created_at LIMIT 1;
 
     approvers := ARRAY[employee.manager_id,department_manager]; stages := ARRAY['SUPERVISOR_MANAGER','DEPARTMENT_MANAGER'];
     IF p_is_financial THEN
-        IF accountant_manager IS NULL THEN RAISE EXCEPTION 'No Finance Manager is configured'; END IF;
-        IF general_manager IS NULL THEN RAISE EXCEPTION 'No General Manager is configured'; END IF;
+        accountant_manager := COALESCE(accountant_manager, fallback_manager);
+        general_manager := COALESCE(general_manager, fallback_manager);
         approvers := approvers||ARRAY[accountant_manager,general_manager]; stages := stages||ARRAY['ACCOUNTANT_MANAGER','GENERAL_MANAGER'];
     END IF;
     INSERT INTO public.request_approval_workflows(source_table,source_id,employee_id,request_type,is_financial) VALUES(p_source_table,p_source_id,p_employee_id,p_request_type,p_is_financial) RETURNING id INTO v_workflow_id;
