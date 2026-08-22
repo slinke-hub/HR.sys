@@ -1608,6 +1608,29 @@ async function renderDashboard() {
                 </div>
             </div>
         </div>
+
+        <div class="modal" id="orderClockOutCameraModal" role="dialog" aria-modal="true" aria-labelledby="orderClockOutCameraTitle">
+            <div class="modal-content order-clockout-camera-modal">
+                <div class="modal-header">
+                    <h3 id="orderClockOutCameraTitle">Order location photo</h3>
+                    <button type="button" class="close-modal" onclick="cancelOrderClockOutPhoto()" aria-label="Cancel photo capture">&times;</button>
+                </div>
+                <p class="order-clockout-camera-help">Take a current photo at the order location to complete clock out.</p>
+                <div class="order-clockout-camera-stage">
+                    <video id="orderClockOutCameraVideo" autoplay playsinline muted></video>
+                    <img id="orderClockOutCameraPreview" alt="Captured order location photo" hidden>
+                    <canvas id="orderClockOutCameraCanvas" hidden></canvas>
+                </div>
+                <p id="orderClockOutCameraStatus" class="text-muted" aria-live="polite">Requesting camera access…</p>
+                <input id="orderClockOutCameraInput" type="file" accept="image/*" capture="environment" hidden onchange="useOrderClockOutPhotoFile(this.files?.[0])">
+                <div class="order-clockout-camera-actions">
+                    <button id="orderClockOutCaptureButton" type="button" class="btn-primary" onclick="captureOrderClockOutPhoto()">Take photo</button>
+                    <button id="orderClockOutDeviceCameraButton" type="button" class="btn btn-secondary" onclick="document.getElementById('orderClockOutCameraInput').click()">Use device camera</button>
+                    <button id="orderClockOutRetakeButton" type="button" class="btn btn-secondary" onclick="retakeOrderClockOutPhoto()" hidden>Retake</button>
+                    <button id="orderClockOutConfirmPhotoButton" type="button" class="btn-primary" onclick="confirmOrderClockOutPhoto()" hidden>Use photo</button>
+                </div>
+            </div>
+        </div>
     `;
 }
 
@@ -1628,6 +1651,150 @@ window.handlePostAnnouncement = async (e) => {
 };
 
 let currentAttendanceId = null;
+let orderClockOutMediaStream = null;
+let orderClockOutPhotoBlob = null;
+let orderClockOutPhotoResolve = null;
+let orderClockOutPhotoReject = null;
+let orderClockOutPreviewUrl = null;
+
+function stopOrderClockOutCamera() {
+    orderClockOutMediaStream?.getTracks().forEach(track => track.stop());
+    orderClockOutMediaStream = null;
+    const video = document.getElementById('orderClockOutCameraVideo');
+    if (video) video.srcObject = null;
+}
+
+function resetOrderClockOutPhotoUI() {
+    orderClockOutPhotoBlob = null;
+    if (orderClockOutPreviewUrl) URL.revokeObjectURL(orderClockOutPreviewUrl);
+    orderClockOutPreviewUrl = null;
+    const video = document.getElementById('orderClockOutCameraVideo');
+    const preview = document.getElementById('orderClockOutCameraPreview');
+    const capture = document.getElementById('orderClockOutCaptureButton');
+    const deviceCamera = document.getElementById('orderClockOutDeviceCameraButton');
+    const retake = document.getElementById('orderClockOutRetakeButton');
+    const confirm = document.getElementById('orderClockOutConfirmPhotoButton');
+    if (video) video.hidden = false;
+    if (preview) { preview.hidden = true; preview.removeAttribute('src'); }
+    if (capture) capture.hidden = false;
+    if (deviceCamera) deviceCamera.hidden = false;
+    if (retake) retake.hidden = true;
+    if (confirm) confirm.hidden = true;
+}
+
+async function startOrderClockOutCamera() {
+    const status = document.getElementById('orderClockOutCameraStatus');
+    const capture = document.getElementById('orderClockOutCaptureButton');
+    if (!navigator.mediaDevices?.getUserMedia) {
+        if (status) status.textContent = 'Live camera preview is unavailable. Tap “Use device camera” instead.';
+        if (capture) capture.hidden = true;
+        return;
+    }
+    try {
+        if (status) status.textContent = 'Please allow camera access.';
+        orderClockOutMediaStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } },
+            audio: false
+        });
+        if (!document.getElementById('orderClockOutCameraModal')?.classList.contains('show')) {
+            stopOrderClockOutCamera();
+            return;
+        }
+        const video = document.getElementById('orderClockOutCameraVideo');
+        if (video) {
+            video.srcObject = orderClockOutMediaStream;
+            await video.play();
+        }
+        if (status) status.textContent = 'Position the order location in the frame, then take the photo.';
+    } catch (error) {
+        console.warn('Camera access failed:', error);
+        if (status) status.textContent = 'Camera permission was not granted. Enable it in browser settings or tap “Use device camera”.';
+        if (capture) capture.hidden = true;
+    }
+}
+
+function requestOrderClockOutPhoto() {
+    return new Promise((resolve, reject) => {
+        orderClockOutPhotoResolve = resolve;
+        orderClockOutPhotoReject = reject;
+        resetOrderClockOutPhotoUI();
+        document.getElementById('orderClockOutCameraModal')?.classList.add('show');
+        startOrderClockOutCamera();
+    });
+}
+
+window.captureOrderClockOutPhoto = function() {
+    const video = document.getElementById('orderClockOutCameraVideo');
+    const canvas = document.getElementById('orderClockOutCameraCanvas');
+    if (!video || !canvas || !video.videoWidth) {
+        showToast('The camera is not ready yet.', 'warning');
+        return;
+    }
+    const maxWidth = 1280;
+    const scale = Math.min(1, maxWidth / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+        if (!blob) return showToast('Unable to capture the photo. Please try again.', 'danger');
+        showOrderClockOutPhotoPreview(blob);
+    }, 'image/jpeg', 0.82);
+};
+
+function showOrderClockOutPhotoPreview(blob) {
+    orderClockOutPhotoBlob = blob;
+    stopOrderClockOutCamera();
+    if (orderClockOutPreviewUrl) URL.revokeObjectURL(orderClockOutPreviewUrl);
+    orderClockOutPreviewUrl = URL.createObjectURL(blob);
+    const video = document.getElementById('orderClockOutCameraVideo');
+    const preview = document.getElementById('orderClockOutCameraPreview');
+    if (video) video.hidden = true;
+    if (preview) { preview.src = orderClockOutPreviewUrl; preview.hidden = false; }
+    document.getElementById('orderClockOutCaptureButton').hidden = true;
+    document.getElementById('orderClockOutDeviceCameraButton').hidden = true;
+    document.getElementById('orderClockOutRetakeButton').hidden = false;
+    document.getElementById('orderClockOutConfirmPhotoButton').hidden = false;
+    document.getElementById('orderClockOutCameraStatus').textContent = 'Review the photo before continuing.';
+}
+
+window.useOrderClockOutPhotoFile = function(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return showToast('Please capture an image.', 'danger');
+    showOrderClockOutPhotoPreview(file);
+};
+
+window.retakeOrderClockOutPhoto = function() {
+    resetOrderClockOutPhotoUI();
+    const deviceCamera = document.getElementById('orderClockOutDeviceCameraButton');
+    if (deviceCamera) deviceCamera.hidden = false;
+    const input = document.getElementById('orderClockOutCameraInput');
+    if (input) input.value = '';
+    startOrderClockOutCamera();
+};
+
+window.confirmOrderClockOutPhoto = function() {
+    if (!orderClockOutPhotoBlob) return showToast('Take a photo before continuing.', 'warning');
+    const blob = orderClockOutPhotoBlob;
+    stopOrderClockOutCamera();
+    document.getElementById('orderClockOutCameraModal')?.classList.remove('show');
+    const resolve = orderClockOutPhotoResolve;
+    orderClockOutPhotoResolve = null;
+    orderClockOutPhotoReject = null;
+    resolve?.(blob);
+};
+
+window.cancelOrderClockOutPhoto = function() {
+    stopOrderClockOutCamera();
+    document.getElementById('orderClockOutCameraModal')?.classList.remove('show');
+    if (orderClockOutPreviewUrl) URL.revokeObjectURL(orderClockOutPreviewUrl);
+    orderClockOutPreviewUrl = null;
+    orderClockOutPhotoBlob = null;
+    const reject = orderClockOutPhotoReject;
+    orderClockOutPhotoResolve = null;
+    orderClockOutPhotoReject = null;
+    reject?.(new Error('Photo capture cancelled'));
+};
+
 window.handleClockIn = async () => {
     const fallbackClockIn = async (loc) => {
         const button = document.getElementById('attendanceClockButton');
@@ -1689,6 +1856,7 @@ window.executeClockOut = async (type) => {
     }
 
     let locationDetails = null;
+    let orderPhotoPath = null;
     let locationLabel = 'Office';
     if (type === 'ORDER') {
         const locationButton = document.getElementById('orderLocationClockOutButton');
@@ -1714,15 +1882,24 @@ window.executeClockOut = async (type) => {
                 capturedAt: new Date(position.timestamp || Date.now()).toISOString()
             };
             locationLabel = `${locationDetails.latitude},${locationDetails.longitude}`;
-            if (locationButton) locationButton.textContent = 'Location received — clocking out...';
+            if (locationButton) locationButton.textContent = 'Location received — opening camera...';
+            const photoBlob = await requestOrderClockOutPhoto();
+            if (locationButton) locationButton.textContent = 'Uploading photo…';
+            const uploadResult = await db.uploadAttendanceClockOutPhoto(attendanceId, currentUser.id, photoBlob);
+            if (!uploadResult.success || !uploadResult.path) throw uploadResult.error || new Error('The order location photo could not be uploaded.');
+            orderPhotoPath = uploadResult.path;
+            locationDetails.photoPath = orderPhotoPath;
+            if (locationButton) locationButton.textContent = 'Photo received — clocking out…';
         } catch (error) {
             if (locationButton) {
                 locationButton.disabled = false;
                 locationButton.textContent = locationButton.dataset.originalText || t('attendance_location_order');
             }
-            const message = error?.code === 1
+            const message = error?.message === 'Photo capture cancelled'
+                ? 'A current photo is required to clock out from an order location.'
+                : error?.code === 1
                 ? 'Location permission is required to clock out from an order location.'
-                : 'Unable to get your current location. Please enable location services and try again.';
+                : error?.message || 'Unable to get your current location or photo. Please check permissions and try again.';
             showToast(message, 'danger');
             return;
         }
@@ -1745,7 +1922,8 @@ window.executeClockOut = async (type) => {
         order_location_latitude: locationDetails.latitude,
         order_location_longitude: locationDetails.longitude,
         order_location_accuracy: locationDetails.accuracy,
-        order_location_shared_at: locationDetails.capturedAt
+        order_location_shared_at: locationDetails.capturedAt,
+        order_location_photo_path: orderPhotoPath
     } : {}) };
 
     const result = await db.clockOut(attendanceId, locationLabel, type, overtime, locationDetails);
@@ -1753,6 +1931,8 @@ window.executeClockOut = async (type) => {
         showToast(t('toast_clocked_out_successfully'), 'success');
         return;
     }
+
+    if (orderPhotoPath) await db.deleteAttendanceClockOutPhoto(orderPhotoPath);
 
     // Restore the Clock Out state if the database rejects the update.
     window.currentTodayAttendance = attendance;

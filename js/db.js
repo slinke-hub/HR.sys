@@ -1458,6 +1458,30 @@ const db = {
             return { success: false, error };
         }
     },
+    async uploadAttendanceClockOutPhoto(attendanceId, employeeId, photoBlob) {
+        if (!supabaseClient || !photoBlob) return { success: false };
+        try {
+            const path = `${employeeId}/${attendanceId}/${Date.now()}.jpg`;
+            const { error } = await supabaseClient.storage
+                .from('attendance-clockout-photos')
+                .upload(path, photoBlob, { contentType: 'image/jpeg', upsert: false });
+            if (error) throw error;
+            return { success: true, path };
+        } catch (error) {
+            console.error('uploadAttendanceClockOutPhoto Error:', error);
+            return { success: false, error };
+        }
+    },
+
+    async deleteAttendanceClockOutPhoto(path) {
+        if (!supabaseClient || !path) return;
+        try {
+            await supabaseClient.storage.from('attendance-clockout-photos').remove([path]);
+        } catch (error) {
+            console.warn('deleteAttendanceClockOutPhoto Error:', error);
+        }
+    },
+
     async clockOut(attendanceId, location, type, overtimeHours, locationDetails = null) {
         if (!supabaseClient) return { success: false };
         try {
@@ -1472,6 +1496,7 @@ const db = {
                 updates.order_location_longitude = locationDetails.longitude;
                 updates.order_location_accuracy = locationDetails.accuracy;
                 updates.order_location_shared_at = locationDetails.capturedAt;
+                updates.order_location_photo_path = locationDetails.photoPath;
             }
             const { error } = await supabaseClient
                 .from('attendance')

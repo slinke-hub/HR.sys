@@ -2099,3 +2099,15 @@ textarea { resize: vertical; }
     .card:hover,
     .kanban-card:hover { transform: none; }
 }
+
+.order-clockout-camera-modal { width: min(560px, calc(100vw - 2rem)); text-align: left; }
+.order-clockout-camera-help { margin: -.5rem 0 1rem; color: var(--color-text-secondary); }
+.order-clockout-camera-stage { display: grid; place-items: center; width: 100%; overflow: hidden; border: 1px solid var(--color-border); border-radius: .75rem; background: #020617; aspect-ratio: 4 / 3; }
+.order-clockout-camera-stage video,
+.order-clockout-camera-stage img { width: 100%; height: 100%; object-fit: cover; }
+.order-clockout-camera-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.order-clockout-camera-actions button { flex: 1 1 180px; min-height: 44px; }
+@media (max-width: 560px) {
+    .order-clockout-camera-modal { width: 100%; }
+    .order-clockout-camera-actions button { flex-basis: 100%; }
+}
