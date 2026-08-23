@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr" data-theme="dark">
+<html lang="ar" dir="rtl" data-theme="light">
 <head>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -40,6 +40,16 @@
                 -o-user-drag: none;
             }
         }
+    
+        /* Custom requested style for Contracts in Dark Mode */
+        [data-theme="dark"] .sidebar-nav .nav-item[data-view="employees"] {
+            background-color: #FFFFFF !important;
+            color: #000000 !important;
+        }
+        [data-theme="dark"] .sidebar-nav .nav-item[data-view="employees"] span,
+        [data-theme="dark"] .sidebar-nav .nav-item[data-view="employees"] i {
+            color: #000000 !important;
+        }
     </style>
 </head>
 <body>
@@ -49,10 +59,10 @@
 
             <nav class="sidebar-nav">
                 <a href="#" class="nav-item active" data-view="dashboard"><i data-lucide="layout-dashboard"></i><span data-i18n="nav_dashboard">Dashboard</span></a>
-                <a href="#" class="nav-item" data-view="tasks"><i data-lucide="list-checks"></i><span>Task Manager</span></a>
+                <a href="#" class="nav-item" data-view="tasks"><i data-lucide="list-checks"></i><span data-i18n="nav_task_manager">Task Manager</span></a>
                 <a href="#" class="nav-item" data-view="clients"><i data-lucide="users"></i><span data-i18n="nav_clients">Clients</span></a>
                 <a href="#" class="nav-item" data-view="crm"><i data-lucide="bar-chart-2"></i><span data-i18n="nav_crm">CRM</span></a>
-                <a href="#" class="nav-item" data-view="employees"><i data-lucide="briefcase"></i><span>Contracts</span></a>
+                <a href="#" class="nav-item" data-view="employees"><i data-lucide="briefcase"></i><span data-i18n="nav_contracts">Contracts</span></a>
                 <a href="#" class="nav-item" data-view="documents"><i data-lucide="file-text"></i><span data-i18n="nav_documents">Documents</span></a>
                 <a href="#" class="nav-item" data-view="requests"><i data-lucide="file-signature"></i><span data-i18n="nav_employee_requests">Employee Requests</span></a>
                 <a href="#" class="nav-item" data-view="orders"><i data-lucide="shopping-cart"></i><span data-i18n="nav_orders">Orders</span></a>

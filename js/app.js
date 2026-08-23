@@ -1,6 +1,6 @@
 // App State
-let currentLang = 'en';
-let currentTheme = 'dark';
+let currentLang = 'ar';
+let currentTheme = 'light';
 let currentView = 'login';
 let loginMode = 'login';
 let currentUser = null;
@@ -913,7 +913,14 @@ window.handleLogout = async function () {
         clearInterval(notificationsInterval);
         notificationsInterval = null;
     }
+    // Preserve custom translations and other important local preferences across logins
+    const customI18n = localStorage.getItem('custom_i18n');
+    const pwaPrompt = localStorage.getItem('pwaPromptDismissed');
+    
     localStorage.clear();
+    
+    if (customI18n) localStorage.setItem('custom_i18n', customI18n);
+    if (pwaPrompt) localStorage.setItem('pwaPromptDismissed', pwaPrompt);
     sessionStorage.clear();
     currentUser = null;
     currentUserRole = null;
@@ -1175,7 +1182,7 @@ function renderLogin() {
                 <div class="form-group" style="margin-bottom: 1.5rem; position: relative;">
                     <label class="form-label">${t('new_password_label')}</label>
                     <input type="password" autocomplete="new-password" id="new-password" class="form-control" placeholder="••••••••" required style="padding-right: 40px;">
-                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-password')" style="color: navy;">
+                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-password')" style="color: white;">
                         <i data-lucide="eye" id="new-password-eye-icon" style="width: 20px; height: 20px;"></i>
                     </button>
                 </div>
@@ -1199,7 +1206,7 @@ function renderLogin() {
                 <div class="form-group" style="margin-bottom: 0.5rem; position: relative;">
                     <label class="form-label">${t('password_label')}</label>
                     <input type="password" autocomplete="new-password" id="password" class="form-control" placeholder="••••••••" required style="padding-right: 40px;">
-                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('password')" style="color: navy;">
+                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('password')" style="color: white;">
                         <i data-lucide="eye" id="password-eye-icon" style="width: 20px; height: 20px;"></i>
                     </button>
                 </div>
@@ -1212,8 +1219,17 @@ function renderLogin() {
     }
 
     return `
+        <style>
+            .login-card-wrapper,
+            .login-card-wrapper h2,
+            .login-card-wrapper p,
+            .login-card-wrapper label,
+            .login-card-wrapper a {
+                color: #FFFFFF !important;
+            }
+        </style>
         <div style="display: flex; height: 100vh; align-items: center; justify-content: center; width: 100vw; position: fixed; top: 0; left: 0; background: url('images/login_bg.png') center/cover no-repeat; z-index: 9999;">
-            <div class="card" style="width: 100%; max-width: 400px; padding: 2.5rem 2rem; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 30px 60px rgba(0,0,0,0.3); color: white;">
+            <div class="card login-card-wrapper" style="width: 100%; max-width: 400px; padding: 2.5rem 2rem; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 30px 60px rgba(0,0,0,0.3); color: white;">
                 ${formHTML}
             </div>
             
@@ -5481,6 +5497,7 @@ window.handleSaveContract = async function (e) {
         department: departmentName,
         job_title_ar: jobTitle,
         job_title_en: jobTitle,
+        display_name_ar: document.getElementById('contractEmployeeNameAr')?.value || null,
         start_date: document.getElementById('contractStartDate').value,
         end_date: document.getElementById('contractEndDate').value || null,
         salary: document.getElementById('contractSalary').value || null,
@@ -5523,7 +5540,8 @@ window.handleSaveContract = async function (e) {
         }
         await db.updateUserProfile(currentContractEmployeeId, {
             nationality: contractData.nationality,
-            base_salary: contractData.salary
+            base_salary: contractData.salary,
+            display_name_ar: contractData.display_name_ar
         });
         delete window.viewHTMLCache.users;
         delete window.viewHTMLCache.employees;
@@ -5559,6 +5577,7 @@ async function renderContractPage() {
     const selectedDepartmentId = contract?.department_id || userProfile?.department_id || '';
     const selectedDepartment = departments.find(department => department.id === selectedDepartmentId);
     const jobTitle = contract?.job_title || contract?.job_title_en || userProfile?.job_title || '';
+    const displayNameAr = userProfile?.display_name_ar || '';
     const startDate = contract?.start_date || '';
     const endDate = contract?.end_date || '';
     const salary = contract?.salary || '';
@@ -5610,6 +5629,10 @@ async function renderContractPage() {
                         ${t('contract_basic_info') || 'Basic Information'}
                     </h3>
                     <div class="dashboard-grid">
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">Employee Name (Arabic)</label>
+                            <input type="text" id="contractEmployeeNameAr" class="form-control" value="${escapeHTML(displayNameAr)}" placeholder="الاسم بالعربي">
+                        </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">Department</label>
                             <select id="contractDepartment" class="form-control" required onchange="handleContractDepartmentChange(this.value)">${departmentOptions}</select>
@@ -5773,8 +5796,8 @@ async function renderEmployeesDirectory() {
             </div>
         </div>
         <div class="card fade-in-up" style="padding: .5rem; margin-bottom: 1rem; display: flex; gap: .5rem;">
-            <button class="btn-primary" type="button" aria-current="page"><i data-lucide="users"></i> Active Contracts</button>
-            ${canEditContracts ? `<button class="btn-secondary" type="button" onclick="renderView('archived_contracts')"><i data-lucide="archive"></i> Archived Contracts</button>` : ''}
+            <button class="btn-primary" type="button" aria-current="page"><i data-lucide="users"></i> ${t("active_contracts")}</button>
+            ${canEditContracts ? `<button class="btn-secondary" type="button" onclick="renderView('archived_contracts')"><i data-lucide="archive"></i> ${t("archived_contracts")}</button>` : ''}
         </div>
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-12">
@@ -5931,19 +5954,19 @@ window.handlePrintContract = async (employeeId) => {
 // ==========================================
 // TRANSLATION MANAGEMENT (ADMIN ONLY)
 // ==========================================
-window.initCustomTranslations = function() {
+window.initCustomTranslations = async function() {
     try {
-        const saved = localStorage.getItem('custom_i18n');
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            if (parsed.en && typeof i18n !== 'undefined' && i18n.en) Object.assign(i18n.en, parsed.en);
-            if (parsed.ar && typeof i18n !== 'undefined' && i18n.ar) Object.assign(i18n.ar, parsed.ar);
+        const saved = await db.fetchSystemTranslations();
+        if (saved && Array.isArray(saved)) {
+            saved.forEach(t => {
+                if (t.trans_en && typeof i18n !== 'undefined' && i18n.en) i18n.en[t.trans_key] = t.trans_en;
+                if (t.trans_ar && typeof i18n !== 'undefined' && i18n.ar) i18n.ar[t.trans_key] = t.trans_ar;
+            });
         }
     } catch(e) {
-        console.error("Error loading custom translations:", e);
+        console.error("Error loading system translations:", e);
     }
 };
-window.initCustomTranslations();
 
 window.filterTranslations = function() {
     const searchInput = document.getElementById('transSearchInput');
@@ -5979,32 +6002,54 @@ window.filterTranslations = function() {
     if (countEl) countEl.textContent = visibleCount;
 };
 
-window.saveSingleTranslation = function(key) {
-    const enVal = document.getElementById(`trans_en_${key}`)?.value || '';
-    const arVal = document.getElementById(`trans_ar_${key}`)?.value || '';
-
-    if (typeof i18n !== 'undefined') {
-        i18n.en[key] = enVal;
-        i18n.ar[key] = arVal;
+window.saveAllTranslations = async function() {
+    const rows = document.querySelectorAll('.trans-row');
+    const updates = [];
+    rows.forEach(row => {
+        const key = row.dataset.key;
+        const enVal = document.getElementById('trans_en_' + key)?.value || '';
+        const arVal = document.getElementById('trans_ar_' + key)?.value || '';
+        
+        if (typeof i18n !== 'undefined') {
+            if (i18n.en[key] !== enVal || i18n.ar[key] !== arVal) {
+                i18n.en[key] = enVal;
+                i18n.ar[key] = arVal;
+                updates.push({ trans_key: key, trans_en: enVal, trans_ar: arVal });
+            }
+        } else {
+            updates.push({ trans_key: key, trans_en: enVal, trans_ar: arVal });
+        }
+    });
+    
+    if (updates.length > 0) {
+        const res = await db.saveSystemTranslationsBatch(updates);
+        if(res.success) {
+            showToast('All translations saved successfully', 'success');
+        } else {
+            showToast('Failed to save translations to database', 'danger');
+        }
+    } else {
+        showToast('No translations to save', 'warning');
     }
-
-    window.persistCustomTranslations();
-    showToast(t('trans_saved') || 'Translation updated successfully', 'success');
 };
 
 window.deleteTranslationKey = function(key) {
-    window.showConfirmModal("Delete Translation Key", `Are you sure you want to delete "${key}"?`, () => {
+    window.showConfirmModal("Delete Translation Key", `Are you sure you want to delete "${key}"?`, async () => {
         if (typeof i18n !== 'undefined') {
             delete i18n.en[key];
             delete i18n.ar[key];
         }
-        window.persistCustomTranslations();
-        showToast("Translation key removed", "warning");
+        const res = await db.deleteSystemTranslation(key);
+        if(res.success) {
+            showToast("Translation key removed", "warning");
+        } else {
+            showToast("Failed to remove translation from database", "danger");
+        }
         renderView('translations');
     });
 };
 
-window.handleAddTranslationSubmit = function(e) {
+window.handleAddTranslationSubmit = async function(e) {
     e.preventDefault();
     const key = document.getElementById('newTransKey').value.trim().toLowerCase().replace(/\s+/g, '_');
     const enVal = document.getElementById('newTransEn').value.trim();
@@ -6020,34 +6065,17 @@ window.handleAddTranslationSubmit = function(e) {
         i18n.ar[key] = arVal || key;
     }
 
-    window.persistCustomTranslations();
-    showToast("Translation key added successfully!", "success");
+    const res = await db.saveSystemTranslationsBatch([{ trans_key: key, trans_en: enVal || key, trans_ar: arVal || key }]);
+    if(res.success) {
+        showToast("Translation key added successfully!", "success");
+    } else {
+        showToast("Failed to add translation to database", "danger");
+    }
     closeAddTranslationModal();
     renderView('translations');
 };
 
-window.persistCustomTranslations = function() {
-    try {
-        if (typeof i18n !== 'undefined') {
-            localStorage.setItem('custom_i18n', JSON.stringify({ en: i18n.en, ar: i18n.ar }));
-        }
-    } catch(e) {
-        console.error("Failed to save translations to localStorage", e);
-    }
-};
 
-window.resetTranslationsToDefault = function() {
-    window.showConfirmModal("Reset Translations", "Are you sure you want to reset all custom translations to defaults?", () => {
-        localStorage.removeItem('custom_i18n');
-        ['en', 'ar'].forEach(language => {
-            Object.keys(i18n[language] || {}).forEach(key => delete i18n[language][key]);
-            Object.assign(i18n[language], defaultTranslationsSnapshot[language] || {});
-        });
-        updateTranslations();
-        renderView('translations');
-        showToast('Translations reset to defaults.', 'success');
-    });
-};
 
 window.exportTranslationsJSON = function() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ en: i18n.en, ar: i18n.ar }, null, 2));
@@ -6069,7 +6097,6 @@ window.importTranslationsJSON = function(event) {
             const parsed = JSON.parse(e.target.result);
             if (parsed.en && typeof i18n !== 'undefined') Object.assign(i18n.en, parsed.en);
             if (parsed.ar && typeof i18n !== 'undefined') Object.assign(i18n.ar, parsed.ar);
-            window.persistCustomTranslations();
             showToast("Translations imported successfully!", "success");
             renderView('translations');
         } catch(err) {
@@ -6115,11 +6142,9 @@ async function renderTranslationsPage() {
                     <input type="text" id="trans_ar_${keyEscaped}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}">
                 </td>
                 <td>
-                    <div style="display: flex; gap: 0.4rem;">
-                        <button class="btn-primary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem;" onclick="saveSingleTranslation('${keyEscaped}')" title="Save">
-                            <i data-lucide="save" style="width:14px; height:14px;"></i>
-                        </button>
-                        <button class="btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; color: var(--color-danger);" onclick="deleteTranslationKey('${keyEscaped}')" title="Delete">
+                    <div style="display: flex; gap: 0.4rem; justify-content: center; flex-wrap: nowrap; min-width: 60px;">
+                        
+                        <button class="btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; color: var(--color-danger); flex-shrink: 0;" onclick="deleteTranslationKey('${keyEscaped}')" title="Delete">
                             <i data-lucide="trash-2" style="width:14px; height:14px;"></i>
                         </button>
                     </div>
@@ -6135,6 +6160,9 @@ async function renderTranslationsPage() {
                 <p class="page-subtitle">${t('trans_sub') || 'Customize English and Arabic display text for all system views.'}</p>
             </div>
             <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button class="btn-primary" onclick="saveAllTranslations()" style="background-color: var(--color-success); border-color: var(--color-success);">
+                    <i data-lucide="save" style="width:16px;height:16px;margin-right:4px;"></i> Save All Changes
+                </button>
                 <button class="btn-primary" onclick="showAddTranslationModal()">
                     <i data-lucide="plus" style="width:16px;height:16px;margin-right:4px;"></i> ${t('trans_add_key') || 'Add Translation Key'}
                 </button>
@@ -6145,9 +6173,7 @@ async function renderTranslationsPage() {
                     <i data-lucide="upload" style="width:16px;height:16px;margin-right:4px;"></i> Import JSON
                     <input type="file" accept=".json" onchange="importTranslationsJSON(event)" style="display:none;">
                 </label>
-                <button class="btn-secondary" style="color:var(--color-danger);" onclick="resetTranslationsToDefault()">
-                    <i data-lucide="rotate-ccw" style="width:16px;height:16px;margin-right:4px;"></i> Reset
-                </button>
+                
             </div>
         </div>
 
@@ -6174,10 +6200,10 @@ async function renderTranslationsPage() {
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th style="width: 25%;">${t('trans_key_name') || 'Key'}</th>
+                                <th style="width: 20%;">${t('trans_key_name') || 'Key'}</th>
                                 <th style="width: 35%;">${t('trans_en') || 'English'}</th>
                                 <th style="width: 35%;">${t('trans_ar') || 'Arabic'}</th>
-                                <th style="width: 5%;">Actions</th>
+                                <th style="width: 10%; min-width: 80px; text-align: center;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -6484,10 +6510,10 @@ async function renderArchivedContracts() {
     const contracts = await db.fetchArchivedContracts();
     const isAdmin = currentUserRole === 'ADMIN';
     return `
-        <div class="page-header fade-in-up"><div><h1 class="page-title">Archived Contracts</h1><p class="page-subtitle">Contracts retained after an employee account is removed.</p></div></div>
+        <div class="page-header fade-in-up"><div><h1 class="page-title">${t("archived_contracts")}</h1><p class="page-subtitle">Contracts retained after an employee account is removed.</p></div></div>
         <div class="card fade-in-up" style="padding:.5rem;margin-bottom:1rem;display:flex;gap:.5rem;">
-            <button class="btn-secondary" type="button" onclick="renderView('employees')"><i data-lucide="users"></i> Active Contracts</button>
-            <button class="btn-primary" type="button" aria-current="page"><i data-lucide="archive"></i> Archived Contracts</button>
+            <button class="btn-secondary" type="button" onclick="renderView('employees')"><i data-lucide="users"></i> ${t("active_contracts")}</button>
+            <button class="btn-primary" type="button" aria-current="page"><i data-lucide="archive"></i> ${t("archived_contracts")}</button>
         </div>
         <div class="card fade-in-up"><div class="table-responsive"><table class="data-table">
             <thead><tr><th>Former Employee</th><th>Employee No.</th><th>Contract Period</th><th>Status</th><th>Archived On</th><th>Actions</th></tr></thead>
@@ -7813,7 +7839,29 @@ window.handleDeleteWebhook = (id) => {
 
 // Init
 async function initApp() {
+    await window.initCustomTranslations();
     updateTranslations();
+    
+    // Subscribe to realtime updates for translations
+    if (typeof db !== 'undefined' && db.subscribeToTranslations) {
+        db.subscribeToTranslations(payload => {
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                const { trans_key, trans_en, trans_ar } = payload.new;
+                if (trans_en && typeof i18n !== 'undefined' && i18n.en) i18n.en[trans_key] = trans_en;
+                if (trans_ar && typeof i18n !== 'undefined' && i18n.ar) i18n.ar[trans_key] = trans_ar;
+            } else if (payload.eventType === 'DELETE') {
+                const { trans_key } = payload.old;
+                if (typeof i18n !== 'undefined') {
+                    delete i18n.en[trans_key];
+                    delete i18n.ar[trans_key];
+                }
+            }
+            updateTranslations();
+            if (currentView === 'translations') {
+                renderView('translations');
+            }
+        });
+    }
 
     // Check for existing session
     const { data: { session } } = await db.getSession();
