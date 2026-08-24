@@ -39,7 +39,7 @@ window.renderContractForm = async function() {
     <div class="contract-form-container">
         <div class="contract-header">
             <h2>Create Employment Contract</h2>
-            <p>Employee: ${escapeContractHTML(employee.full_name || 'Employee')}</p>
+            <p>Employee: ${escapeContractHTML(employee.full_name || 'Employee')} ${employee.display_name_ar ? `(${employee.display_name_ar})` : ''}</p>
         </div>
 
         <form id="saudiContractForm" class="saudi-contract-form">
@@ -68,7 +68,7 @@ window.renderContractForm = async function() {
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Employee Name</label>
-                        <input type="text" id="emp_name" value="${escapeContractHTML(employee.full_name)}" required>
+                        <input type="text" id="emp_name" value="${escapeContractHTML(employee.display_name_ar || employee.full_name)}" required>
                     </div>
                     <div class="form-group">
                         <label>Nationality</label>
@@ -364,7 +364,7 @@ window.renderContractPrintPreview = async function() {
                 <div style="margin-bottom: 20px;">
                     <h3 style="border-bottom: 1px solid #ccc; padding-bottom: 5px;">${isRTL ? 'الطرف الثاني (العامل)' : 'Second Party (Employee)'}</h3>
                     <table style="width: 100%; font-size: 14px;">
-                        <tr><td style="padding: 3px; font-weight:bold; width:30%;">${isRTL ? 'الاسم' : 'Name'}:</td><td>${employee.full_name}</td></tr>
+                        <tr><td style="padding: 3px; font-weight:bold; width:30%;">${isRTL ? 'الاسم' : 'Name'}:</td><td>${isRTL ? (employee.display_name_ar || employee.full_name) : employee.full_name}</td></tr>
                         <tr><td style="padding: 3px; font-weight:bold;">${isRTL ? 'الجنسية' : 'Nationality'}:</td><td>${employee.nationality || 'N/A'}</td></tr>
                         <tr><td style="padding: 3px; font-weight:bold;">${isRTL ? 'رقم الهوية/الإقامة' : 'ID/Iqama'}:</td><td>${iqamaNumber}</td></tr>
                         <tr><td style="padding: 3px; font-weight:bold;">${isRTL ? 'الرقم الوظيفي' : 'Employee ID'}:</td><td>${employee.id}</td></tr>

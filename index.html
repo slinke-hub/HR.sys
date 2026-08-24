@@ -51,6 +51,17 @@
             color: #000000 !important;
         }
     </style>
+
+    <!-- payroll-modal-color-fix -->
+    <style>
+        #successModal .modal-content *,
+        #payrollProcessingModal .modal-content *,
+        #payrollLogSalesModal .modal-content *,
+        #payrollLogAbsenceModal .modal-content *,
+        #payrollNewLoanModal .modal-content * {
+            color: #ffffff !important;
+        }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -80,7 +91,7 @@
                 <a href="#" class="nav-item" data-view="community" style="display:none !important"><i data-lucide="globe"></i><span data-i18n="nav_community">Community</span></a>
                 <a href="#" class="nav-item" data-view="expenses" style="display:none !important"><i data-lucide="receipt"></i><span>Expenses</span></a>
                 <a href="#" class="nav-item" data-view="leave" style="display:none !important"><i data-lucide="calendar-off"></i><span data-i18n="nav_leave">Leave</span></a>
-                <a href="#" class="nav-item" data-view="payroll" style="display:none !important"><i data-lucide="banknote"></i><span data-i18n="nav_payroll">Payroll</span></a>
+                <a href="#" class="nav-item" data-view="payroll" id="navPayroll"><i data-lucide="banknote"></i><span data-i18n="nav_payroll">Payroll</span></a>
                 <a href="#" class="nav-item" data-view="performance" style="display:none !important"><i data-lucide="target"></i><span data-i18n="nav_performance">Performance</span></a>
             </nav>
         </aside>
@@ -151,7 +162,7 @@
 
     <!-- CRM Client Modal -->
     <div class="modal" id="crmClientModal">
-        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2 id="crmClientModalTitle" data-i18n="html_new_client">New Client</h2>
                 <button class="btn btn-icon" onclick="closeCRMClientModal()"><i data-lucide="x"></i></button>
@@ -185,7 +196,7 @@
 
     <!-- CRM Deal Modal -->
     <div class="modal" id="crmDealModal">
-        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2 id="crmDealModalTitle" data-i18n="html_deal_details">Deal Details</h2>
                 <button class="btn btn-icon" onclick="closeCRMDealModal()"><i data-lucide="x"></i></button>
@@ -252,7 +263,7 @@
 
     <!-- Lost Reason Modal -->
     <div class="modal" id="lostReasonModal">
-        <div class="modal-content" style="max-width: 400px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 400px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2 data-i18n="html_deal_lost_reason">Deal Lost Reason</h2>
                 <button class="btn btn-icon" onclick="closeLostReasonModal()"><i data-lucide="x"></i></button>
@@ -271,7 +282,7 @@
 
     <!-- Deal Won Order Details Modal -->
     <div class="modal" id="crmOrderModal">
-        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2 data-i18n="html_order_details">Order Details</h2>
                 <button class="btn btn-icon" type="button" onclick="closeCRMOrderModal()"><i data-lucide="x"></i></button>
@@ -317,7 +328,7 @@
 
     <!-- Edit Order Modal -->
     <div class="modal" id="editOrderModal">
-        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2 data-i18n="html_edit_order">Edit Order</h2>
                 <button class="btn btn-icon" type="button" onclick="closeEditOrderModal()"><i data-lucide="x"></i></button>
@@ -363,7 +374,7 @@
 
     <!-- Confirm Delete Order Modal -->
     <div class="modal" id="confirmDeleteOrderModal">
-        <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header" style="justify-content: center; border-bottom: none; padding-bottom: 0;">
                 <div style="background: rgba(239, 68, 68, 0.1); width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: var(--color-danger);">
                     <i data-lucide="alert-triangle" style="width: 32px; height: 32px;"></i>
@@ -416,7 +427,7 @@
 
     <!-- Edit User Modal -->
     <div class="modal" id="editUserModal">
-        <div class="modal-content fade-in-up" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content fade-in-up" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2><i data-lucide="user-cog"></i> Edit User</h2>
                 <button class="icon-btn" onclick="document.getElementById('editUserModal').classList.remove('active')">
@@ -428,6 +439,10 @@
                 <div class="form-group">
                     <label class="form-label" data-i18n="users_fn">Full Name</label>
                     <input type="text" autocomplete="off" id="editFullName" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="users_fn_ar">Full Name (Arabic)</label>
+                    <input type="text" autocomplete="off" id="editFullNameAr" class="form-control">
                 </div>
                 <div class="form-group">
                     <label class="form-label" data-i18n="users_iqama">Iqama / ID Number</label>
@@ -478,9 +493,21 @@
         </div>
     </div>
 
+    
+    <!-- Payroll Processing Modal -->
+    <div class="modal" id="payrollProcessingModal">
+        <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+            <div class="modal-body" style="padding: 2.5rem 1.5rem;">
+                <div class="spinner" style="margin: 0 auto 1.5rem; border-left-color: var(--color-primary); width: 48px; height: 48px;"></div>
+                <h3 style="margin-bottom: 0.5rem; color: #ffffff;">Payroll Engine</h3>
+                <p style="color: rgba(255,255,255,0.8); font-size: 1.1rem;" id="payrollProcessingMessage">Running calculations...</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Delete User Modal -->
     <div class="modal" id="deleteUserModal">
-        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2 data-i18n="html_delete_user">Delete User</h2>
                 <button class="btn btn-icon" onclick="closeDeleteUserModal()"><i data-lucide="x"></i></button>
@@ -502,7 +529,7 @@
 
     <!-- Delete Project Modal -->
     <div class="modal" id="deleteProjectModal">
-        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2>Delete Project</h2>
                 <button class="btn btn-icon" onclick="closeDeleteProjectModal()"><i data-lucide="x"></i></button>
@@ -523,7 +550,7 @@
     </div>
     <!-- Request Modal -->
     <div class="modal" id="requestModal">
-        <div class="modal-content fade-in-up" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content fade-in-up" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2><i data-lucide="file-signature"></i> New Request</h2>
                 <button class="icon-btn" onclick="document.getElementById('requestModal').classList.remove('active')">
@@ -612,6 +639,10 @@
                     <input type="text" autocomplete="off" id="newFullName" class="form-control" placeholder="Enter full name" data-i18n-placeholder="ph_enter_full_name" required>
                 </div>
                 <div class="form-group">
+                    <label class="form-label" data-i18n="users_fn_ar">Full Name (Arabic)</label>
+                    <input type="text" autocomplete="off" id="newFullNameAr" class="form-control" placeholder="Enter full name in Arabic" data-i18n-placeholder="ph_enter_full_name_ar">
+                </div>
+                <div class="form-group">
                     <label class="form-label" for="newNationality">Nationality</label>
                     <select id="newNationality" class="form-control" required onchange="handleNewUserNationalityChange(this.value)">
                         <option value="Saudi">Saudi</option>
@@ -638,8 +669,8 @@
                     </button>
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
-                    <button type="button" class="btn-secondary" onclick="closeAddUserModal()" data-i18n="html_cancel">Cancel</button>
-                    <button type="submit" class="btn-primary" data-i18n="users_create_acc">Create Account</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeAddUserModal()" data-i18n="html_cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="users_create_acc">Create Account</button>
                 </div>
             </form>
         </div>
@@ -682,7 +713,7 @@
 
     <!-- New Project Modal -->
     <div class="modal" id="projectModal">
-        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2 data-i18n="html_new_project">New Project</h2>
                 <button class="btn btn-icon" type="button" onclick="document.getElementById('projectModal').classList.remove('active')"><i data-lucide="x"></i></button>
@@ -723,12 +754,12 @@
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label class="form-label"><i data-lucide="tags" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Tags</label>
                     <select id="newProjectTags" class="form-control" multiple style="min-height: 80px;">
-                        <option value="Urgent" data-i18n="html_urgent">Urgent</option>
-                        <option value="Frontend" data-i18n="html_frontend">Frontend</option>
-                        <option value="Backend" data-i18n="html_backend">Backend</option>
-                        <option value="UI/UX" data-i18n="html_ui_ux">UI/UX</option>
-                        <option value="Bug" data-i18n="html_bug">Bug</option>
-                        <option value="Feature" data-i18n="html_feature">Feature</option>
+                        <option value="Urgent" data-i18n="tag_urgent">Urgent</option>
+                        <option value="Frontend" data-i18n="tag_frontend">Frontend</option>
+                        <option value="Backend" data-i18n="tag_backend">Backend</option>
+                        <option value="UI/UX" data-i18n="tag_ui_ux">UI/UX</option>
+                        <option value="Bug" data-i18n="tag_bug">Bug</option>
+                        <option value="Feature" data-i18n="tag_feature">Feature</option>
                     </select>
                     <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple tags.</small>
                 </div>
@@ -746,7 +777,7 @@
 
     <!-- Edit Project Modal -->
     <div class="modal" id="editProjectModal">
-        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2 data-i18n="html_edit_project">Edit Project</h2>
                 <button class="btn btn-icon" type="button" onclick="document.getElementById('editProjectModal').classList.remove('active')"><i data-lucide="x"></i></button>
@@ -788,12 +819,12 @@
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label class="form-label"><i data-lucide="tags" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Tags</label>
                     <select id="editProjectTags" class="form-control" multiple style="min-height: 80px;">
-                        <option value="Urgent" data-i18n="html_urgent">Urgent</option>
-                        <option value="Frontend" data-i18n="html_frontend">Frontend</option>
-                        <option value="Backend" data-i18n="html_backend">Backend</option>
-                        <option value="UI/UX" data-i18n="html_ui_ux">UI/UX</option>
-                        <option value="Bug" data-i18n="html_bug">Bug</option>
-                        <option value="Feature" data-i18n="html_feature">Feature</option>
+                        <option value="Urgent" data-i18n="tag_urgent">Urgent</option>
+                        <option value="Frontend" data-i18n="tag_frontend">Frontend</option>
+                        <option value="Backend" data-i18n="tag_backend">Backend</option>
+                        <option value="UI/UX" data-i18n="tag_ui_ux">UI/UX</option>
+                        <option value="Bug" data-i18n="tag_bug">Bug</option>
+                        <option value="Feature" data-i18n="tag_feature">Feature</option>
                     </select>
                     <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple tags.</small>
                 </div>
@@ -811,7 +842,7 @@
 
     <!-- Confirm Modal -->
     <div class="modal" id="confirmModal" style="z-index: 100000;">
-        <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div style="margin-bottom: 1rem;">
                 <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: var(--color-warning);"></i>
             </div>
@@ -824,9 +855,24 @@
         </div>
     </div>
 
+    
+    <!-- Success Modal -->
+    <div class="modal" id="successModal" style="z-index: 100000;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+            <div style="margin-bottom: 1rem;">
+                <i data-lucide="check-circle" style="width: 48px; height: 48px; color: var(--color-success);"></i>
+            </div>
+            <h2 id="successModalTitle" style="margin-bottom: 0.5rem; color: #ffffff;">Success</h2>
+            <p id="successModalMessage" style="color: rgba(255,255,255,0.8); margin-bottom: 1.5rem;">Action completed successfully.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+                <button class="btn btn-primary" style="min-width: 120px;" onclick="document.getElementById('successModal').classList.remove('active', 'show')">OK</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Edit Task Modal -->
     <div class="modal slide-panel" id="editTaskModal">
-        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);">
+        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
                 <h2 data-i18n="html_edit_task">Edit Task</h2>
                 <button class="close-modal" onclick="document.getElementById('editTaskModal').classList.remove('active')">&times;</button>
@@ -1237,9 +1283,112 @@
     <!-- Supabase & JS & Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="js/db.js?v=49"></script>
     <script src="js/data.js?v=20"></script>
     <script src="js/contract.js?v=22"></script>
+    <script src="js/payroll.js"></script>
     <script src="js/app.js?v=96"></script>
+
+    <!-- Payroll Log Sales Modal -->
+    <div class="modal" id="payrollLogSalesModal">
+        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+            <div class="modal-header">
+                <h2 style="color: #ffffff;">Log Monthly Sales</h2>
+                <button class="btn btn-icon" onclick="closePayrollLogSalesModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="payrollLogSalesForm" onsubmit="submitPayrollLogSales(event)">
+                    <div class="form-group">
+                        <label style="color: #ffffff;">Employee</label>
+                        <select id="payrollSalesEmployeeId" required style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;"></select>
+                    </div>
+                    <div class="form-group">
+                        <label style="color: #ffffff;">Month / Year</label>
+                        <input type="month" id="payrollSalesMonthYear" required style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;">
+                    </div>
+                    <div class="form-group">
+                        <label style="color: #ffffff;">Actual Sales Amount (SAR)</label>
+                        <input type="number" step="0.01" min="0" id="payrollSalesAmount" required style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;">
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
+                        <button type="button" class="btn btn-secondary" onclick="closePayrollLogSalesModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="payrollSalesSubmitBtn">Save Sales</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    
+    <!-- Payroll: Log Absence Modal -->
+    <div class="modal fade" id="payrollLogAbsenceModal">
+        <div class="modal-content" style="max-width: 450px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+            <div class="modal-header">
+                <h3 style="color: #ffffff;">Log Absence</h3>
+                <button type="button" class="btn-icon" onclick="document.getElementById('payrollLogAbsenceModal').classList.remove('active', 'show')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="payrollLogAbsenceForm" onsubmit="submitPayrollLogAbsence(event)">
+                    <div class="form-group">
+                        <label for="payrollAbsenceEmployeeId" style="color: #ffffff;">Employee *</label>
+                        <select id="payrollAbsenceEmployeeId" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="payrollAbsenceDate" style="color: #ffffff;">Date of Absence *</label>
+                        <input type="date" id="payrollAbsenceDate" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" required>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                            <input type="checkbox" id="payrollAbsenceIsExcused" style="width:1.2rem; height:1.2rem;">
+                            <strong style="color: #ffffff;">Excused Absence</strong>
+                        </label>
+                        <p style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">
+                            Excused absences are typically not deducted from payroll.
+                        </p>
+                    </div>
+                    <div class="modal-actions" style="margin-top: 2rem;">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('payrollLogAbsenceModal').classList.remove('active', 'show')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Absence</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payroll: New Loan Modal -->
+    <div class="modal fade" id="payrollNewLoanModal">
+        <div class="modal-content" style="max-width: 450px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+            <div class="modal-header">
+                <h3 style="color: #ffffff;">Request/Add Employee Loan</h3>
+                <button type="button" class="btn-icon" onclick="document.getElementById('payrollNewLoanModal').classList.remove('active', 'show')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="payrollNewLoanForm" onsubmit="submitPayrollNewLoan(event)">
+                    <div class="form-group">
+                        <label for="payrollLoanEmployeeId" style="color: #ffffff;">Employee *</label>
+                        <select id="payrollLoanEmployeeId" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="payrollLoanAmount" style="color: #ffffff;">Total Loan Amount (SAR) *</label>
+                        <input type="number" step="0.01" id="payrollLoanAmount" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" placeholder="e.g. 5000" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="payrollLoanInstallment" style="color: #ffffff;">Monthly Installment (SAR) *</label>
+                        <input type="number" step="0.01" id="payrollLoanInstallment" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" placeholder="e.g. 500" required>
+                    </div>
+                    <div class="modal-actions" style="margin-top: 2rem;">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('payrollNewLoanModal').classList.remove('active', 'show')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Loan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

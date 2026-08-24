@@ -31,7 +31,7 @@ function getProfileDisplayName(profile) {
     return selectedName ? selectedName.trim() : '';
 }
 
-window.goBack = function() {
+window.goBack = function () {
     if (viewHistory.length > 1) {
         viewHistory.pop(); // remove current
         const prevView = viewHistory[viewHistory.length - 1];
@@ -44,7 +44,7 @@ window.goBack = function() {
     }
 };
 
-window.showSupervisorTooltip = function() {
+window.showSupervisorTooltip = function () {
     const tooltip = document.getElementById('supervisorTooltip');
     if (tooltip) {
         tooltip.style.display = 'block';
@@ -57,7 +57,7 @@ window.showSupervisorTooltip = function() {
     }
 };
 
-window.hideSupervisorTooltip = function() {
+window.hideSupervisorTooltip = function () {
     const tooltip = document.getElementById('supervisorTooltip');
     if (tooltip) {
         tooltip.style.display = 'none';
@@ -74,7 +74,7 @@ let currentContractEmployeeName = '';
 let recentLoginsChannel = null;
 let recentLoginsPollInterval = null;
 
-window.canCurrentUserEditContracts = function(profile = currentUserProfile) {
+window.canCurrentUserEditContracts = function (profile = currentUserProfile) {
     return String(currentUserRole || '').toUpperCase() === 'ADMIN' ||
         String(profile?.job_title || '').trim().toUpperCase() === 'HR MANAGER';
 };
@@ -129,7 +129,7 @@ if ('serviceWorker' in navigator) {
 
 function showInstallBanner() {
     if (localStorage.getItem('pwaPromptDismissed')) return;
-    
+
     // Don't show if already installed (standalone mode)
     if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
         return;
@@ -140,7 +140,7 @@ function showInstallBanner() {
         const banner = document.createElement('div');
         banner.id = 'pwaInstallBanner';
         banner.className = 'install-banner';
-        
+
         let contentHtml = `
             <div class="install-banner-content">
                 <h4>${t('ui_install_muqam_hr')}</h4>
@@ -205,6 +205,7 @@ window.showEditUserModal = async (userId) => {
     }
     document.getElementById('editUserId').value = user.id;
     document.getElementById('editFullName').value = user.full_name || '';
+    document.getElementById('editFullNameAr').value = user.display_name_ar || '';
     document.getElementById('editIqama').value = user.iqama_number || '';
     document.getElementById('editPhone').value = user.phone_number || '';
     const departments = await db.fetchDepartments();
@@ -222,7 +223,7 @@ window.showEditUserModal = async (userId) => {
     avatarPreview.src = currentAvatar;
     avatarPreview.hidden = !currentAvatar;
     document.getElementById('editRole').value = user.role || 'EMPLOYEE';
-    
+
     const mgrSelect = document.getElementById('editManagerId');
     mgrSelect.innerHTML = '<option value="">No Manager</option>';
     const users = await db.fetchUsers();
@@ -233,7 +234,7 @@ window.showEditUserModal = async (userId) => {
     document.getElementById('editUserModal').classList.add('active');
 };
 
-window.refreshUserRowInPlace = async function(userId, knownUpdates = null) {
+window.refreshUserRowInPlace = async function (userId, knownUpdates = null) {
     const cached = (window.currentAdminUsers || []).find(item => item.id === userId);
     const user = knownUpdates ? { ...cached, ...knownUpdates, id: userId } : await db.getUserProfile(userId);
     if (!user) return;
@@ -264,6 +265,7 @@ window.handleUpdateUser = async (e) => {
     const userId = document.getElementById('editUserId').value;
     const updates = {
         full_name: document.getElementById('editFullName').value,
+        display_name_ar: document.getElementById('editFullNameAr').value,
         iqama_number: document.getElementById('editIqama').value,
         phone_number: document.getElementById('editPhone').value,
         job_title: document.getElementById('editJobTitle').value,
@@ -388,28 +390,80 @@ window.closeDeleteUserModal = () => {
     const modal = document.getElementById('deleteUserModal');
     if (modal) modal.classList.remove('active');
 };
-window.executeDeleteUser = async () => {};
+window.executeDeleteUser = async () => { };
 
 // Requests Page Handlers
 window.renderRequests = async () => {
     const isEmployee = currentUserRole === 'EMPLOYEE';
     const requests = await db.fetchRequests(currentUser);
-    
-    let tableRows = requests.map(r => `
+
+    let tableRows = requests.map(r => {
+        let workflowHTML = '';
+        let canApprove = false;
+
+        if (r.workflow && r.workflow.steps) {
+            const steps = r.workflow.steps;
+            const currentStep = r.workflow.current_step;
+
+            // Check if current user is the approver for the active step
+            const activeStep = steps.find(s => s.step_order === currentStep);
+            if (activeStep && activeStep.approver_id === currentUser?.id && r.workflow.status === 'PENDING') {
+                canApprove = true;
+            }
+
+            // Build Progress Bar HTML
+            let stepsHTML = steps.map((s, idx) => {
+                const isActive = s.step_order === currentStep && r.workflow.status === 'PENDING';
+                const isPassed = s.step_order < currentStep || r.workflow.status === 'APPROVED';
+                const isRejected = r.workflow.status === 'REJECTED' && s.step_order === currentStep;
+
+                let stateClass = '';
+                if (isActive) stateClass = 'workflow-step-active';
+                if (isPassed) stateClass = 'workflow-step-passed';
+                if (isRejected) stateClass = 'workflow-step-rejected';
+
+                const stageName = (s.stage_key || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+                return `
+                    <div class="workflow-step ${stateClass}">
+                        <div class="workflow-step-indicator" title="${stageName}">
+                            ${isPassed ? '<i data-lucide="check" style="width:12px; height:12px;"></i>' : (isRejected ? '<i data-lucide="x" style="width:12px; height:12px;"></i>' : idx + 1)}
+                        </div>
+                        <div class="workflow-step-label">${stageName}</div>
+                    </div>
+                `;
+            }).join('');
+
+            workflowHTML = `
+                <div class="workflow-progress">
+                    ${stepsHTML}
+                </div>
+            `;
+        } else {
+            // Fallback for legacy requests without workflow
+            canApprove = !isEmployee && r.status === 'Pending' && r.employee_id !== currentUser?.id;
+        }
+
+        return `
         <tr>
             <td>${new Date(r.created_at).toLocaleDateString()}</td>
             <td>${r.profiles?.full_name || 'Unknown'}</td>
-            <td>${r.request_type}</td>
-            <td>${r.leave_type || '-'}</td>
-            <td><span class="status-badge ${r.status === 'Approved' ? 'success' : (r.status === 'Rejected' ? 'danger' : 'info')}">${r.status}</span></td>
             <td>
-                ${!isEmployee && r.status === 'Pending' && r.employee_id !== currentUser?.id ? `
+                ${r.request_type}
+                ${r.loan_amount ? `<br><small style="color:var(--color-text-secondary)">SAR ${r.loan_amount}</small>` : ''}
+                ${workflowHTML}
+            </td>
+            <td>${r.leave_type || '-'}</td>
+            <td><span class="status-badge ${r.status === 'Approved' || r.status === 'APPROVED' ? 'success' : (r.status === 'Rejected' || r.status === 'REJECTED' ? 'danger' : 'info')}">${r.status}</span></td>
+            <td>
+                ${canApprove ? `
                     <button class="btn-primary" style="padding: 0.2rem 0.5rem; font-size:0.8rem" onclick="updateRequestStatus('${r.id}', 'Approved')">${t('ui_approve')}</button>
                     <button class="btn-primary" style="background:var(--color-danger); padding: 0.2rem 0.5rem; font-size:0.8rem" onclick="updateRequestStatus('${r.id}', 'Rejected')">${t('ui_reject')}</button>
                 ` : ''}
             </td>
         </tr>
-    `).join('');
+        `;
+    }).join('');
 
     if (requests.length === 0) {
         tableRows = `<tr><td colspan="6" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('req_no_found') || 'No requests found.'}</td></tr>`;
@@ -452,7 +506,7 @@ window.renderRequests = async () => {
 window.showNewRequestModal = async () => {
     const isEmployee = currentUserRole === 'EMPLOYEE';
     const users = isEmployee ? [] : await db.fetchUsers();
-    
+
     const empSelect = document.getElementById('requestEmployeeId');
     if (isEmployee) {
         empSelect.innerHTML = `<option value="${currentUser.id}">${currentUser.email}</option>`;
@@ -461,7 +515,7 @@ window.showNewRequestModal = async () => {
         empSelect.innerHTML = users.map(u => `<option value="${u.id}" ${u.id === currentUser.id ? 'selected' : ''}>${u.full_name || u.email}</option>`).join('');
         empSelect.disabled = false;
     }
-    
+
 
     document.getElementById('requestType').value = 'Leave Request';
     document.getElementById('requestLoanAmount').value = '';
@@ -496,7 +550,7 @@ function compressProfileImage(file) {
     });
 }
 
-window.previewEditUserPhoto = function(input) {
+window.previewEditUserPhoto = function (input) {
     const file = input?.files?.[0];
     const preview = document.getElementById('editAvatarPreview');
     if (!file || !preview) return;
@@ -506,7 +560,7 @@ window.previewEditUserPhoto = function(input) {
     preview.onload = () => URL.revokeObjectURL(objectUrl);
 };
 
-window.handleNewRequestTypeChange = function(requestType) {
+window.handleNewRequestTypeChange = function (requestType) {
     const isLeave = requestType === 'Leave Request';
     const isLoan = requestType === 'Loan Request' || requestType === 'Loan';
     document.getElementById('leaveTypeGroup').style.display = isLeave ? 'block' : 'none';
@@ -523,7 +577,7 @@ window.handleNewRequestTypeChange = function(requestType) {
     handleRequestLeaveTypeChange(isLeave ? document.getElementById('requestLeaveType').value : '');
 };
 
-window.handleRequestLeaveTypeChange = function(leaveType) {
+window.handleRequestLeaveTypeChange = function (leaveType) {
     const isLeaveRequest = document.getElementById('requestType')?.value === 'Leave Request';
     const isShortLeave = isLeaveRequest && leaveType === 'Short Leave';
     const shortFields = document.getElementById('requestShortLeaveFields');
@@ -587,11 +641,52 @@ window.handleCreateRequest = async (e) => {
 window.updateRequestStatus = async (reqId, status) => {
     if (!supabaseClient) return;
     try {
-        const { error } = await supabaseClient.from('requests').update({ status }).eq('id', reqId);
-        if (error) throw error;
-        showToast(`Request ${status}`, "success");
+        const decision = status.toUpperCase();
+
+        // Attempt hierarchical workflow first
+        let finalStatus = status;
+        const res = await db.decideRequestApproval('requests', reqId, decision);
+
+        if (res.success) {
+            // Workflow exists and was processed
+            finalStatus = res.data.status; // 'PENDING', 'APPROVED', or 'REJECTED'
+        } else {
+            // Fallback for legacy / if migration isn't applied yet
+            const { error } = await supabaseClient.from('requests').update({ status }).eq('id', reqId);
+            if (error) throw error;
+        }
+
+        // Auto-log approved loan requests into the Payroll Loans system ONLY if it reached FINAL approval
+        if (finalStatus.toUpperCase() === 'APPROVED') {
+            const { data: request } = await supabaseClient.from('requests').select('*').eq('id', reqId).single();
+            if (request && (request.request_type === 'Loan' || request.request_type === 'Loan Request') && request.loan_amount > 0) {
+                // Check if loan already exists to avoid duplicates (naive check based on recent loans)
+                const { data: existing } = await supabaseClient.from('employee_loans').select('id')
+                    .eq('employee_id', request.employee_id)
+                    .eq('requested_amount', request.loan_amount)
+                    .order('created_at', { ascending: false }).limit(1);
+
+                if (!existing || existing.length === 0) {
+                    const loanPayload = {
+                        employee_id: request.employee_id,
+                        requested_amount: request.loan_amount,
+                        monthly_installment: request.loan_amount,
+                        remaining_balance: request.loan_amount,
+                        status: 'APPROVED'
+                    };
+                    if (typeof db !== 'undefined' && typeof db.saveEmployeeLoan === 'function') {
+                        await db.saveEmployeeLoan(loanPayload);
+                    } else {
+                        await supabaseClient.from('employee_loans').insert([loanPayload]);
+                    }
+                }
+            }
+        }
+
+        showToast(res.success && finalStatus === 'PENDING' ? `Approved and moved to next stage` : `Request ${finalStatus}`, "success");
         renderView('requests');
     } catch (e) {
+        console.error("updateRequestStatus Error:", e);
         showToast(t('toast_failed_to_update_status'), "danger");
     }
 };
@@ -648,7 +743,7 @@ window.toggleLanguage = function () {
 }
 
 function updateTranslations() {
-    
+
     const roleSpan = document.getElementById('currentUserRole');
     if (roleSpan && typeof currentUserRole !== 'undefined') {
         let displayRole = currentUserRole.charAt(0).toUpperCase() + currentUserRole.slice(1);
@@ -813,7 +908,7 @@ function showToast(message, type = 'info', detail = '') {
  * @param {string} fieldId - The ID of the input/select element
  * @param {string} message - The error message to display
  */
-window.showFieldError = function(fieldId, message) {
+window.showFieldError = function (fieldId, message) {
     const el = document.getElementById(fieldId);
     if (!el) return;
 
@@ -838,7 +933,7 @@ window.showFieldError = function(fieldId, message) {
     el.addEventListener('change', () => clearFieldError(fieldId), { once: true });
 };
 
-window.clearFieldError = function(fieldId) {
+window.clearFieldError = function (fieldId) {
     const el = document.getElementById(fieldId);
     if (el) {
         el.style.borderColor = '';
@@ -916,12 +1011,25 @@ window.handleLogout = async function () {
     // Preserve custom translations and other important local preferences across logins
     const customI18n = localStorage.getItem('custom_i18n');
     const pwaPrompt = localStorage.getItem('pwaPromptDismissed');
-    
+
     localStorage.clear();
-    
+
     if (customI18n) localStorage.setItem('custom_i18n', customI18n);
     if (pwaPrompt) localStorage.setItem('pwaPromptDismissed', pwaPrompt);
     sessionStorage.clear();
+    
+    // Clear Payroll Modals and Forms for security
+    const payrollForms = ['payrollLogSalesForm', 'payrollLogAbsenceForm', 'payrollNewLoanForm'];
+    payrollForms.forEach(id => {
+        const form = document.getElementById(id);
+        if (form) form.reset();
+    });
+    const payslipModal = document.getElementById('payslipModal');
+    if (payslipModal) {
+        const payslipContent = document.getElementById('payslipContent');
+        if (payslipContent) payslipContent.innerHTML = '';
+    }
+
     currentUser = null;
     currentUserRole = null;
     currentUserProfile = null;
@@ -936,7 +1044,7 @@ window.handleLeaveSubmit = async function (e) {
     e.preventDefault();
     const type = document.getElementById('leaveType').value;
     const isShortLeave = type === 'Short Leave';
-    const today = new Date().toISOString().slice(0,10);
+    const today = new Date().toISOString().slice(0, 10);
     const start = isShortLeave ? today : document.getElementById('leaveStart').value;
     const end = isShortLeave ? today : document.getElementById('leaveEnd').value;
     const shortReason = isShortLeave ? document.getElementById('leaveShortReason').value : null;
@@ -987,7 +1095,7 @@ async function canCurrentUserAccessView(viewId) {
     return true;
 }
 
-window.updateSidebarVisibility = async function() {
+window.updateSidebarVisibility = async function () {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const adminNav = document.querySelector('.nav-item[data-view=\'admin\']');
     const usersNav = document.querySelector('.nav-item[data-view=\'users\']');
@@ -996,6 +1104,7 @@ window.updateSidebarVisibility = async function() {
     const departmentsNav = document.querySelector('.nav-item[data-view=\'departments\']');
     const translationsNav = document.querySelector('.nav-item[data-view=\'translations\']');
     const approvalsNav = document.getElementById('navApprovals');
+    const payrollNav = document.getElementById('navPayroll');
     const ordersNav = document.querySelector('.nav-item[data-view="orders"]');
     const projectsNav = document.querySelector('.nav-item[data-view="projects"]');
 
@@ -1007,10 +1116,13 @@ window.updateSidebarVisibility = async function() {
     if (departmentsNav) departmentsNav.style.display = isAdmin ? 'flex' : 'none';
     if (translationsNav) translationsNav.style.display = isAdmin ? 'flex' : 'none';
 
+    const isAccountantManager = currentUserProfile && /accountant manager|finance manager/i.test(currentUserProfile.job_title || '');
+    if (payrollNav) payrollNav.style.display = (isAdmin || isAccountantManager) ? 'flex' : 'none';
+
     const canUseMarketingPages = normalizedRole === 'EMPLOYEE' && (await getCurrentDepartmentName()).trim().toLowerCase() === 'marketing & sales';
     if (ordersNav) ordersNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (projectsNav) projectsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
-    
+
     let isHussain = false;
     if (typeof currentUser !== 'undefined' && currentUser) {
         isHussain = (currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain')) || (currentUser.email && currentUser.email.toLowerCase().includes('hussain'));
@@ -1111,12 +1223,12 @@ window.togglePasswordVisibility = function (inputId) {
     lucide.createIcons();
 }
 
-window.setLoginMode = function(mode) {
+window.setLoginMode = function (mode) {
     loginMode = mode;
     renderView('login');
 }
 
-window.handleForgotPasswordSubmit = async function(e) {
+window.handleForgotPasswordSubmit = async function (e) {
     e.preventDefault();
     const email = document.getElementById('reset-email').value;
     const { error } = await db.sendPasswordResetEmail(email);
@@ -1128,7 +1240,7 @@ window.handleForgotPasswordSubmit = async function(e) {
     }
 }
 
-window.handleResetPasswordSubmit = async function(e) {
+window.handleResetPasswordSubmit = async function (e) {
     e.preventDefault();
     const newPassword = document.getElementById('new-password').value;
     const { data, error } = await db.updatePassword(newPassword);
@@ -1379,7 +1491,7 @@ async function translateSaudiNewsTitle(title) {
     return title;
 }
 
-window.openHierarchyEmployeeInfo = function(userId) {
+window.openHierarchyEmployeeInfo = function (userId) {
     if (!['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').toUpperCase())) return;
     const employee = window.hierarchyProfilesById?.[userId];
     if (!employee) return showToast('Employee information is unavailable.', 'danger');
@@ -1410,7 +1522,7 @@ window.openHierarchyEmployeeInfo = function(userId) {
     if (window.lucide) window.lucide.createIcons();
 };
 
-window.closeHierarchyEmployeeInfo = function() {
+window.closeHierarchyEmployeeInfo = function () {
     document.getElementById('hierarchyEmployeeInfoModal')?.remove();
 };
 
@@ -1446,7 +1558,7 @@ async function renderDashboard() {
         if (!request.start_date || !request.end_date) return 0;
         const start = new Date(`${request.start_date}T00:00:00`);
         const end = new Date(`${request.end_date}T00:00:00`);
-        return Math.max(0, Math.floor((end-start)/86400000)+1);
+        return Math.max(0, Math.floor((end - start) / 86400000) + 1);
     };
     const isAnnualLeaveType = value => ['annual leave', 'annual/vacation', 'annual vacation'].includes(String(value || '').trim().toLowerCase());
     const currentAnnualLeaves = (dashboardLeaves || []).filter(request => {
@@ -1476,7 +1588,7 @@ async function renderDashboard() {
     const accruedAnnualLeave = annualAllowance * (elapsedDays / daysInYear);
     const annualAvailable = Math.max(0, accruedAnnualLeave - annualUtilized - annualRequested);
     const annualAvailableByYearEnd = Math.max(0, annualAllowance - annualUtilized - annualRequested);
-    const annualBalanceAsOf = now.toLocaleDateString(undefined,{day:'2-digit',month:'short',year:'numeric'});
+    const annualBalanceAsOf = now.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
     const canUsePersonalLeaveWidgets = ['EMPLOYEE', 'MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').toUpperCase());
 
     let announcementsHTML = announcementsList.map(a => `
@@ -1515,25 +1627,25 @@ async function renderDashboard() {
 
     // Expiration Alerts
     let expirationAlerts = '';
-    
+
     // Fetch docs and contracts in parallel
     try {
         const fetchPromises = [
             window.supabaseClient.from('employee_documents').select('*').eq('employee_id', currentUser.id)
         ];
-        
+
         if (currentUserRole === 'ADMIN') {
             fetchPromises.push(window.supabaseClient.from('contracts').select('*'));
         }
 
         const results = await Promise.all(fetchPromises);
         const docs = results[0].data || [];
-        
+
         const expiringDocs = docs.filter(d => d.expiration_date && (new Date(d.expiration_date) - new Date()) / (1000 * 60 * 60 * 24) < 30);
         if (expiringDocs.length > 0) {
             expirationAlerts += `
                 <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--color-danger); padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
-                    <strong style="color: var(--color-danger);">${t('docs_expiring')}:</strong> ${expiringDocs.length} document(s) expire soon.
+                    <strong style="color: var(--color-danger);">${t('docs_expiring')}:</strong> ${expiringDocs.length}
                 </div>
             `;
         }
@@ -1544,7 +1656,7 @@ async function renderDashboard() {
             if (expiringContracts.length > 0) {
                 expirationAlerts += `
                     <div style="background: rgba(245, 158, 11, 0.1); border-left: 4px solid var(--color-warning); padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
-                        <strong style="color: var(--color-warning);">${t('contract_expiring')}:</strong> ${expiringContracts.length} contract(s) expire soon.
+                        <strong style="color: var(--color-warning);">${t('contract_expiring')}:</strong> ${expiringContracts.length}
                     </div>
                 `;
             }
@@ -1777,7 +1889,7 @@ function requestOrderClockOutPhoto() {
     });
 }
 
-window.captureOrderClockOutPhoto = function() {
+window.captureOrderClockOutPhoto = function () {
     const video = document.getElementById('orderClockOutCameraVideo');
     const canvas = document.getElementById('orderClockOutCameraCanvas');
     if (!video || !canvas || !video.videoWidth) {
@@ -1811,13 +1923,13 @@ function showOrderClockOutPhotoPreview(blob) {
     document.getElementById('orderClockOutCameraStatus').textContent = 'Review the photo before continuing.';
 }
 
-window.useOrderClockOutPhotoFile = function(file) {
+window.useOrderClockOutPhotoFile = function (file) {
     if (!file) return;
     if (!file.type.startsWith('image/')) return showToast('Please capture an image.', 'danger');
     showOrderClockOutPhotoPreview(file);
 };
 
-window.retakeOrderClockOutPhoto = function() {
+window.retakeOrderClockOutPhoto = function () {
     resetOrderClockOutPhotoUI();
     const deviceCamera = document.getElementById('orderClockOutDeviceCameraButton');
     if (deviceCamera) deviceCamera.hidden = false;
@@ -1826,7 +1938,7 @@ window.retakeOrderClockOutPhoto = function() {
     startOrderClockOutCamera();
 };
 
-window.confirmOrderClockOutPhoto = function() {
+window.confirmOrderClockOutPhoto = function () {
     if (!orderClockOutPhotoBlob) return showToast('Take a photo before continuing.', 'warning');
     const blob = orderClockOutPhotoBlob;
     stopOrderClockOutCamera();
@@ -1837,7 +1949,7 @@ window.confirmOrderClockOutPhoto = function() {
     resolve?.(blob);
 };
 
-window.cancelOrderClockOutPhoto = function() {
+window.cancelOrderClockOutPhoto = function () {
     stopOrderClockOutCamera();
     document.getElementById('orderClockOutCameraModal')?.classList.remove('show');
     if (orderClockOutPreviewUrl) URL.revokeObjectURL(orderClockOutPreviewUrl);
@@ -1952,8 +2064,8 @@ window.executeClockOut = async (type) => {
             const message = error?.message === 'Photo capture cancelled'
                 ? 'A current photo is required to clock out from an order location.'
                 : error?.code === 1
-                ? 'Location permission is required to clock out from an order location.'
-                : error?.message || 'Unable to get your current location or photo. Please check permissions and try again.';
+                    ? 'Location permission is required to clock out from an order location.'
+                    : error?.message || 'Unable to get your current location or photo. Please check permissions and try again.';
             showToast(message, 'danger');
             return;
         }
@@ -1972,13 +2084,15 @@ window.executeClockOut = async (type) => {
         button.setAttribute('aria-label', t('attendance_clock_in'));
     }
     currentAttendanceId = null;
-    window.currentTodayAttendance = { ...attendance, clock_out_time: new Date().toISOString(), clock_out_location: locationLabel, clock_out_type: type, ...(locationDetails ? {
-        order_location_latitude: locationDetails.latitude,
-        order_location_longitude: locationDetails.longitude,
-        order_location_accuracy: locationDetails.accuracy,
-        order_location_shared_at: locationDetails.capturedAt,
-        order_location_photo_path: orderPhotoPath
-    } : {}) };
+    window.currentTodayAttendance = {
+        ...attendance, clock_out_time: new Date().toISOString(), clock_out_location: locationLabel, clock_out_type: type, ...(locationDetails ? {
+            order_location_latitude: locationDetails.latitude,
+            order_location_longitude: locationDetails.longitude,
+            order_location_accuracy: locationDetails.accuracy,
+            order_location_shared_at: locationDetails.capturedAt,
+            order_location_photo_path: orderPhotoPath
+        } : {})
+    };
 
     const result = await db.clockOut(attendanceId, locationLabel, type, overtime, locationDetails);
     if (result.success) {
@@ -2070,10 +2184,10 @@ async function renderTime() {
     `;
 }
 
-window.openTaskDetailsModal = async function(id) {
+window.openTaskDetailsModal = async function (id) {
     const task = window.taskCache[id];
     if (!task) return;
-    
+
     document.getElementById('detailsTaskId').value = task.id;
     document.getElementById('detailsTaskTitle').textContent = task.displayTitle || task.title;
     document.getElementById('detailsTaskAssignee').textContent = task.assignee?.full_name || 'Unassigned';
@@ -2086,14 +2200,14 @@ window.openTaskDetailsModal = async function(id) {
     document.getElementById('detailsTaskEnd').textContent = task.end_date || 'Not set';
     document.getElementById('detailsTaskEstimate').textContent = task.estimated_time || 'Not set';
     prepareTeamworkTaskDetail(task);
-    
+
     const list = document.getElementById('taskCommentsList');
     list.innerHTML = '<div style="text-align: center; color: var(--color-text-secondary);">Loading comments...</div>';
-    
+
     document.getElementById('taskSidePanel').classList.add('active');
     document.getElementById('taskSidePanelOverlay').classList.add('active');
     document.getElementById('taskSidePanel').classList.toggle('task-v2-detail', currentView === 'tasks' || currentView === 'tasks_v2');
-    
+
     // Check permission to create tasks
     const canCreateTask = !!currentUser;
     const btnCreateSubTask = document.getElementById('btnCreateSubTask');
@@ -2105,14 +2219,14 @@ window.openTaskDetailsModal = async function(id) {
         btn.style.display = canCreateTask ? 'inline-block' : 'none';
     });
 
-    
+
     // Load Subtasks
     const subTasksList = document.getElementById('taskSubTasksList');
     if (subTasksList) {
         subTasksList.innerHTML = '<div style="text-align: center; color: var(--color-text-secondary);">Loading sub-tasks...</div>';
         const allTasks = Object.values(window.taskCache || {});
         const subTasks = allTasks.filter(t => t.parent_task_id === task.id);
-        
+
         if (subTasks.length === 0) {
             subTasksList.innerHTML = '<div style="color: var(--color-text-secondary); font-style: italic;">No sub-tasks yet.</div>';
         } else {
@@ -2126,7 +2240,7 @@ window.openTaskDetailsModal = async function(id) {
             `).join('');
         }
     }
-    
+
     const comments = await db.fetchTaskComments(task.id);
     if (comments.length === 0) {
         list.innerHTML = '<div style="color: var(--color-text-secondary); font-style: italic;">No comments yet.</div>';
@@ -2201,7 +2315,7 @@ function prepareTeamworkTaskDetail(task) {
     if (window.lucide) window.lucide.createIcons();
 }
 
-window.applyAttendanceFilters = function() {
+window.applyAttendanceFilters = function () {
     const date = document.getElementById('attendanceFilterDate')?.value || '';
     const name = document.getElementById('attendanceFilterName')?.value.trim().toLowerCase() || '';
     const id = document.getElementById('attendanceFilterId')?.value.trim().toLowerCase() || '';
@@ -2217,7 +2331,7 @@ window.applyAttendanceFilters = function() {
     if (empty) empty.hidden = visible !== 0;
 };
 
-window.clearAttendanceFilters = function() {
+window.clearAttendanceFilters = function () {
     ['attendanceFilterDate', 'attendanceFilterName', 'attendanceFilterId'].forEach(id => {
         const field = document.getElementById(id);
         if (field) field.value = '';
@@ -2225,7 +2339,7 @@ window.clearAttendanceFilters = function() {
     window.applyAttendanceFilters();
 };
 
-window.uploadTaskAttachment = async function(input) {
+window.uploadTaskAttachment = async function (input) {
     const file = input?.files?.[0];
     const task = window.activeTaskDetail;
     if (!file || !task || !currentUser?.id) return;
@@ -2297,7 +2411,7 @@ function startRecentLoginsRealtime() {
     recentLoginsPollInterval = setInterval(refreshRecentLoginsWidget, 15000);
 }
 
-window.handleLeaveTypeChange = function(type) {
+window.handleLeaveTypeChange = function (type) {
     const isShortLeave = type === 'Short Leave';
     document.getElementById('leaveStartGroup').style.display = isShortLeave ? 'none' : 'block';
     document.getElementById('leaveEndGroup').style.display = isShortLeave ? 'none' : 'block';
@@ -2310,21 +2424,21 @@ window.handleLeaveTypeChange = function(type) {
     document.getElementById('leaveShortDuration').required = isShortLeave;
 };
 
-window.submitDashboardShortLeave = async function(durationMinutes) {
+window.submitDashboardShortLeave = async function (durationMinutes) {
     const selectedReason = document.querySelector('input[name="dashboardShortLeaveReason"]:checked');
     if (!selectedReason) {
         showToast('Select a reason for the short leave.', 'danger');
         return;
     }
     const buttons = document.querySelectorAll('.short-leave-duration-button');
-    buttons.forEach(button => button.disabled=true);
-    const today = new Date().toISOString().slice(0,10);
-    const success = await db.submitLeaveRequest(currentUser.id,{
-        leave_type:'Short Leave',start_date:today,end_date:today,
-        reason:selectedReason.value,short_leave_reason:selectedReason.value,
-        short_leave_duration_minutes:durationMinutes
+    buttons.forEach(button => button.disabled = true);
+    const today = new Date().toISOString().slice(0, 10);
+    const success = await db.submitLeaveRequest(currentUser.id, {
+        leave_type: 'Short Leave', start_date: today, end_date: today,
+        reason: selectedReason.value, short_leave_reason: selectedReason.value,
+        short_leave_duration_minutes: durationMinutes
     });
-    buttons.forEach(button => button.disabled=false);
+    buttons.forEach(button => button.disabled = false);
     if (!success) return showToast('Failed to submit short leave request.', 'danger');
     showToast('Short leave request submitted successfully.', 'success');
     renderView('dashboard');
@@ -2349,7 +2463,7 @@ function companyJobTitleOptions(selected = '', departmentName = '') {
     ).join('');
 }
 
-window.syncJobTitlesWithDepartment = function(departmentSelectId,jobTitleSelectId) {
+window.syncJobTitlesWithDepartment = function (departmentSelectId, jobTitleSelectId) {
     const departmentSelect = document.getElementById(departmentSelectId);
     const titleSelect = document.getElementById(jobTitleSelectId);
     if (!departmentSelect || !titleSelect) return;
@@ -2362,11 +2476,11 @@ window.syncJobTitlesWithDepartment = function(departmentSelectId,jobTitleSelectI
         return;
     }
     titleSelect.disabled = false;
-    titleSelect.innerHTML = companyJobTitleOptions(previous,departmentName);
+    titleSelect.innerHTML = companyJobTitleOptions(previous, departmentName);
     if (![...titleSelect.options].some(option => option.value === previous)) titleSelect.value = '';
 };
 
-window.setTaskDetailInfoTab = function(tab) {
+window.setTaskDetailInfoTab = function (tab) {
     const task = window.activeTaskDetail;
     const panel = document.getElementById('taskDetailInfoPanel');
     if (!task || !panel) return;
@@ -2393,7 +2507,7 @@ window.setTaskDetailInfoTab = function(tab) {
     if (window.lucide) window.lucide.createIcons();
 };
 
-window.setTaskActivityTab = function(tab) {
+window.setTaskActivityTab = function (tab) {
     const task = window.activeTaskDetail;
     const panel = document.getElementById('taskSidePanel');
     const activityPanel = document.getElementById('taskActivityPanel');
@@ -2412,12 +2526,12 @@ window.setTaskActivityTab = function(tab) {
     if (window.lucide) window.lucide.createIcons();
 };
 
-window.closeTaskDetailsModal = function() {
+window.closeTaskDetailsModal = function () {
     document.getElementById('taskSidePanel')?.classList.remove('active');
     document.getElementById('taskSidePanelOverlay')?.classList.remove('active');
 };
 
-window.approveTaskCompletion = async function(taskId) {
+window.approveTaskCompletion = async function (taskId) {
     let task = window.taskCache?.[taskId];
     if (!task) task = (await db.fetchTasks()).find(item => item.id === taskId);
     if (!window.taskDepartmentManagerByName) {
@@ -2444,20 +2558,20 @@ window.approveTaskCompletion = async function(taskId) {
     }
 };
 
-window.handleTaskCommentSubmit = async function(e) {
+window.handleTaskCommentSubmit = async function (e) {
     e.preventDefault();
     const id = document.getElementById('detailsTaskId').value;
     const input = document.getElementById('taskCommentInput');
     const content = input.value;
     if (!content.trim() || !id) return;
-    
+
     input.disabled = true;
     const { success } = await db.addTaskComment(id, currentUser.id, content);
     input.disabled = false;
-    
+
     if (success) {
         input.value = '';
-        
+
         // In-app and email notifications are queued by the database trigger.
         const task = window.taskCache ? window.taskCache[id] : null;
         if (task) {
@@ -2477,17 +2591,17 @@ window.handleTaskCommentSubmit = async function(e) {
     }
 };
 
-window.handleCreateSubTaskClick = function() {
+window.handleCreateSubTaskClick = function () {
     const parentId = document.getElementById('detailsTaskId').value;
     if (!parentId) return;
-    
+
     document.getElementById('taskSidePanel').classList.remove('active');
     document.getElementById('taskSidePanelOverlay').classList.remove('active');
-    
+
     if (document.getElementById('taskParentId')) {
         document.getElementById('taskParentId').value = parentId;
     }
-    
+
     const form = document.getElementById('standardTaskForm');
     if (form) {
         form.scrollIntoView({ behavior: 'smooth' });
@@ -2496,7 +2610,7 @@ window.handleCreateSubTaskClick = function() {
         setTimeout(() => {
             form.style.boxShadow = 'none';
         }, 1500);
-        
+
         const titleInput = document.getElementById('taskTitle');
         if (titleInput) titleInput.focus();
     }
@@ -2877,80 +2991,16 @@ window.handleViewPayslip = function (month, netPay) {
 }
 
 // Render Payroll
-async function renderPayroll() {
-    const payrolls = await db.fetchPayroll(currentUser?.id);
-    let rowsHTML = payrolls.map(p => `
-        <tr style="cursor: pointer;" onclick="handleViewPayslip('${p.month_year}', ${p.net_pay})">
-            <td><strong>${p.month_year}</strong></td>
-            <td>$${p.net_pay.toFixed(2)}</td>
-            <td><span class="status-badge ${p.status === 'PAID' ? 'success' : 'info'}">${p.status}</span></td>
-            <td><button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">${t('pay_view_det')}</button></td>
-        </tr>
-    `).join('');
 
-    let totalNet = payrolls.length > 0 ? payrolls[0].net_pay.toFixed(2) : '0.00';
-    let extras = payrolls.length > 0 ? payrolls[0].overtime_pay.toFixed(2) : '0.00';
-    let base = payrolls.length > 0 ? (payrolls[0].net_pay - payrolls[0].overtime_pay).toFixed(2) : '0.00';
-
-    if (payrolls.length === 0) {
-        rowsHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('pay_no_slips')}</td></tr>`;
-    }
-
-    return `
-        <div class="page-header fade-in-up">
-            <div>
-                <h1 class="page-title">${t('nav_payroll')}</h1>
-                <p class="page-subtitle">${t('salary_sub')}</p>
-            </div>
-        </div>
-        <div class="dashboard-grid fade-in-up">
-            <div class="card col-span-4" style="background: linear-gradient(135deg, #0b192c, #1a365d); color: white; border: none;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                    <h3 style="color: rgba(255,255,255,0.8); margin: 0;">${t('pay_latest')}</h3>
-                    <i data-lucide="file-text" style="color: rgba(255,255,255,0.5);"></i>
-                </div>
-                <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">$${totalNet}</h1>
-                <div style="display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem; margin-top: 1rem;">
-                    <div>
-                        <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6);">${t('pay_base')}</div>
-                        <div>$${base}</div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6);">${t('pay_extras')}</div>
-                        <div style="color: var(--color-success);">+$${extras}</div>
-                    </div>
-                </div>
-            </div>
-            <div class="card col-span-8">
-                <div class="card-title">${t('recent_payslips')}</div>
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>${t('month')}</th>
-                                <th>${t('net_pay')}</th>
-                                <th>${t('req_status')}</th>
-                                <th>${t('pay_actions')}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rowsHTML}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    `;
-}
 
 // Render Admin Hub
-window.previewRole = function(role) {
+window.previewRole = function (role) {
     if (!window.originalUserRole) window.originalUserRole = currentUserRole;
     currentUserRole = role;
     window.updateSidebarVisibility();
     renderView('dashboard');
     showToast(t('toast_viewing_as') ? t('toast_viewing_as') + ' ' + role : 'Viewing as ' + role, 'info');
-    
+
     if (!document.getElementById('revertRoleBtn')) {
         const btn = document.createElement('button');
         btn.id = 'revertRoleBtn';
@@ -2968,8 +3018,8 @@ window.previewRole = function(role) {
         btn.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
         btn.style.display = 'flex';
         btn.style.alignItems = 'center';
-        
-        btn.onclick = function() {
+
+        btn.onclick = function () {
             currentUserRole = window.originalUserRole;
             window.originalUserRole = null;
             document.body.removeChild(btn);
@@ -2977,7 +3027,7 @@ window.previewRole = function(role) {
             renderView('admin');
         };
         document.body.appendChild(btn);
-        lucide.createIcons({root: btn});
+        lucide.createIcons({ root: btn });
     }
 };
 
@@ -3086,12 +3136,13 @@ window.handleCreateUser = async function (e) {
     const role = 'EMPLOYEE';
     const jobTitle = '';
     const fullName = document.getElementById('newFullName').value;
+    const fullNameAr = document.getElementById('newFullNameAr').value;
     const iqama = document.getElementById('newIqama').value;
     const phone = document.getElementById('newPhone').value;
     const departmentId = '';
     const nationality = document.getElementById('newNationality').value;
 
-    const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone, departmentId, nationality);
+    const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone, departmentId, nationality, fullNameAr);
     if (!error) {
         showToast(t('toast_user_created_successfully'), 'success');
         if (typeof closeAddUserModal === 'function') closeAddUserModal();
@@ -3125,7 +3176,7 @@ window.handleChangeJobTitle = async function (id, jobTitle, selectElement = null
     }
 }
 
-window.handleDirectoryDepartmentChange = async function(userId, departmentId, selectElement) {
+window.handleDirectoryDepartmentChange = async function (userId, departmentId, selectElement) {
     if (!departmentId) return;
     const departmentName = selectElement.options[selectElement.selectedIndex]?.text || '';
     const jobTitleSelect = selectElement.closest('tr')?.querySelector('[data-directory-job-title]');
@@ -3245,7 +3296,7 @@ async function renderUsers() {
 window.showAddUserModal = async () => {
     document.getElementById('addUserForm').reset();
     document.getElementById('addUserModal').classList.add('show');
-    
+
     handleNewUserNationalityChange('Saudi');
 
     if (window.lucide) window.lucide.createIcons();
@@ -3320,7 +3371,7 @@ async function renderPerformance() {
     `;
 }
 
-window.generatePerformanceReport = async function() {
+window.generatePerformanceReport = async function () {
     const btn = document.getElementById('generatePerfBtn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-sm" style="margin-right: 0.5rem;"></span> Generating...'; }
     if (window.lucide) window.lucide.createIcons();
@@ -3442,7 +3493,7 @@ window.printPerformanceReport = () => {
 
     // Clone the node to clean it up for print without affecting the DOM
     const printNode = reportBody.cloneNode(true);
-    
+
     // Remove lucide icons for cleaner print, or we can just rely on the print CSS to handle it
     const printContents = `
         <h2 style="color: #0000FF; margin-top: 0; text-align: center;">${t('ui_employee_performance_report')}</h2>
@@ -4170,10 +4221,10 @@ window.handleUpdateProfilePhoto = async function (e) {
     const reader = new FileReader();
     reader.onload = async function (event) {
         const rawUrl = event.target.result;
-        
+
         // Compress image using canvas to ensure lightweight base64 string
         const img = new Image();
-        img.onload = async function() {
+        img.onload = async function () {
             const canvas = document.createElement('canvas');
             const maxDim = 250;
             let width = img.width;
@@ -4204,7 +4255,7 @@ window.handleUpdateProfilePhoto = async function (e) {
                 showToast(t('toast_profile_photo_updated') || 'Profile photo updated successfully!', "success");
                 const topAvatar = document.getElementById('topbarAvatar');
                 if (topAvatar) topAvatar.src = compressedBase64;
-                
+
                 if (currentUser) currentUser.avatar_url = compressedBase64;
                 if (currentUserProfile) currentUserProfile.avatar_url = compressedBase64;
 
@@ -4270,7 +4321,7 @@ window.handleUpdateProfileDetails = async function (e) {
 async function renderTasks() {
     console.log("renderTasks: Starting...");
     const tasksPromise = db.fetchTasks();
-    
+
     console.log("renderTasks: Fetching users and tasks...");
     // Fetch users, tasks, and the signed-in user's department manager in parallel
     const [allUsers, fetchedTasks, departmentSupervisors, allDepartments] = await Promise.all([
@@ -4293,14 +4344,14 @@ async function renderTasks() {
     tasks = tasks.map(t => {
         const assignee = allUsers.find(u => u.id === t.assignee_id);
         const creator = allUsers.find(u => u.id === t.created_by);
-        
+
         let displayTitle = t.title;
         if (t.title_i18n && typeof t.title_i18n === 'object') {
-             displayTitle = t.title_i18n[currentLang] || t.title_i18n['en'] || t.title;
+            displayTitle = t.title_i18n[currentLang] || t.title_i18n['en'] || t.title;
         }
 
         const taskObj = {
-            ...t, 
+            ...t,
             displayTitle,
             status: t.status || 'todo',
             priority: t.priority || 'medium',
@@ -4332,7 +4383,7 @@ async function renderTasks() {
 
     let adminForm = '';
     let canCreateTask = !!currentUser;
-    
+
     let teamIds = [currentUser.id];
     if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
         const directReports = allUsers.filter(u => u.manager_id === currentUser.id).map(u => u.id);
@@ -4362,7 +4413,7 @@ async function renderTasks() {
 
     let departmentSelectHTML = '';
     let isMarketing = false;
-    
+
     if (isRegularEmployee) {
         const currentDeptObj = allDepartments.find(d => d.id === currentUser.department_id);
         const deptName = currentDeptObj ? escapeHTML(currentDeptObj.name) : '';
@@ -4483,7 +4534,7 @@ async function renderTasks() {
         if (task.priority === 'high') prioColor = 'var(--color-warning)';
         if (task.priority === 'critical') prioColor = 'var(--color-danger)';
         if (task.priority === 'urgent') prioColor = 'var(--color-danger)'; // legacy fallback
-        
+
         return `
             <div class="card task-item-card" id="task-card-${task.id}" data-status="${task.status}" draggable="true" ondragstart="handleTaskDragStart(event, '${task.id}')" onclick="openTaskDetailsModal('${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${prioColor}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: pointer; background: var(--color-surface); position: relative;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 2.5rem; gap: 0.5rem;">
@@ -4651,7 +4702,7 @@ async function renderTasksV2() {
         </section>`;
 }
 
-window.filterTasksV2 = function() {
+window.filterTasksV2 = function () {
     const query = (document.getElementById('taskV2Search')?.value || '').trim().toLowerCase();
     const status = document.getElementById('taskV2Status')?.value || '';
     const projectId = window.taskV2SelectedProject || 'all';
@@ -4677,7 +4728,7 @@ window.filterTasksV2 = function() {
     if (count) count.textContent = visibleCount;
 };
 
-window.handleNewUserNationalityChange = function(nationality) {
+window.handleNewUserNationalityChange = function (nationality) {
     const isSaudi = nationality === 'Saudi';
     const label = document.getElementById('newIdentityLabel');
     const input = document.getElementById('newIqama');
@@ -4685,7 +4736,7 @@ window.handleNewUserNationalityChange = function(nationality) {
     if (input) input.placeholder = isSaudi ? 'Enter National ID' : 'Enter Iqama Number';
 };
 
-window.openInlineSubtaskComposer = function() {
+window.openInlineSubtaskComposer = function () {
     const parentId = document.getElementById('detailsTaskId')?.value;
     const list = document.getElementById('taskDetailSubtaskHost') || document.getElementById('taskSubTasksList');
     if (!parentId || !list || document.getElementById('inlineSubtaskForm')) return;
@@ -4716,7 +4767,7 @@ window.openInlineSubtaskComposer = function() {
     lucide.createIcons();
 };
 
-window.handleInlineSubtaskSubmit = async function(event, parentId) {
+window.handleInlineSubtaskSubmit = async function (event, parentId) {
     event.preventDefault();
     const form = event.currentTarget;
     const submit = form.querySelector('button[type="submit"]');
@@ -4747,30 +4798,30 @@ window.handleInlineSubtaskSubmit = async function(event, parentId) {
     await openTaskDetailsModal(parentId);
 };
 
-window.selectTaskV2Project = function(projectId) {
+window.selectTaskV2Project = function (projectId) {
     window.taskV2SelectedProject = projectId;
     document.querySelectorAll('.task-v2-list-link').forEach(button => button.classList.toggle('active', button.getAttribute('onclick').includes(`'${projectId}'`)));
     window.filterTasksV2();
 };
 
-window.setTaskV2QuickFilter = function(filter) {
+window.setTaskV2QuickFilter = function (filter) {
     window.taskV2QuickFilter = window.taskV2QuickFilter === filter ? '' : filter;
     document.querySelectorAll('.task-v2-quick-filter').forEach(button => button.classList.toggle('active', button.dataset.filter === window.taskV2QuickFilter));
     window.filterTasksV2();
 };
 
-window.taskV2ToggleComplete = async function(taskId, status) {
+window.taskV2ToggleComplete = async function (taskId, status) {
     await window.handleUpdateTaskStatus(taskId, status);
     await renderView('tasks_v2');
 };
 
-window.setTaskV2Mode = function(mode) {
+window.setTaskV2Mode = function (mode) {
     document.querySelectorAll('[data-task-v2-mode]').forEach(button => button.classList.toggle('active', button.dataset.taskV2Mode === mode));
     document.querySelector('.task-v2-workspace')?.classList.toggle('hidden', mode !== 'list');
     document.querySelector('.task-v2-legacy-host')?.classList.toggle('v2-board-active', mode === 'board');
 };
 
-window.toggleTaskV2Create = function() {
+window.toggleTaskV2Create = function () {
     const host = document.querySelector('.task-v2-legacy-host');
     const form = document.getElementById('taskFormContainer');
     if (!host || !form) return;
@@ -4779,7 +4830,7 @@ window.toggleTaskV2Create = function() {
     if (host.classList.contains('show-form')) document.getElementById('taskTitle')?.focus();
 };
 
-window.clearTaskV2Filters = function() {
+window.clearTaskV2Filters = function () {
     const search = document.getElementById('taskV2Search');
     const status = document.getElementById('taskV2Status');
     if (search) search.value = '';
@@ -4791,7 +4842,7 @@ window.clearTaskV2Filters = function() {
     window.filterTasksV2();
 };
 
-window.toggleAITaskMode = function() {
+window.toggleAITaskMode = function () {
     const std = document.getElementById('standardTaskForm');
     const ai = document.getElementById('aiTaskForm');
     if (std.style.display === 'none') {
@@ -4803,7 +4854,7 @@ window.toggleAITaskMode = function() {
     }
 };
 
-window.handleAICreateTask = async function(e) {
+window.handleAICreateTask = async function (e) {
     e.preventDefault();
     const canCreateTask = !!currentUser;
     if (!canCreateTask) {
@@ -4812,13 +4863,13 @@ window.handleAICreateTask = async function(e) {
     }
     const input = document.getElementById('aiTaskInput').value;
     if (!input) return;
-    
+
     // Very basic heuristic parser (mock AI)
     let priority = 'medium';
     if (input.toLowerCase().includes('critical') || input.toLowerCase().includes('urgent')) priority = 'urgent';
     if (input.toLowerCase().includes('high priority')) priority = 'high';
     if (input.toLowerCase().includes('low priority')) priority = 'low';
-    
+
     let due = new Date();
     if (input.toLowerCase().includes('tomorrow')) due.setDate(due.getDate() + 1);
     else if (input.toLowerCase().includes('friday')) {
@@ -4829,7 +4880,7 @@ window.handleAICreateTask = async function(e) {
         due.setDate(due.getDate() + 3); // default 3 days
     }
     const dueStr = due.toISOString().split('T')[0];
-    
+
     // Try to find a user name match
     let assigneeId = currentUser.id;
     const users = await db.fetchUsers();
@@ -4839,9 +4890,9 @@ window.handleAICreateTask = async function(e) {
             break;
         }
     }
-    
+
     const supervisorId = window.taskDepartmentSupervisors?.[0]?.id || null;
-    const { success } = await db.createTask(input, '', assigneeId, dueStr, currentUser.id, priority, 'Auto-parsed', {'en': input, 'ar': input + ' (مترجم)'}, {}, null, null, null, 'public', null, [], [], null, null, null, 'todo', supervisorId);
+    const { success } = await db.createTask(input, '', assigneeId, dueStr, currentUser.id, priority, 'Auto-parsed', { 'en': input, 'ar': input + ' (مترجم)' }, {}, null, null, null, 'public', null, [], [], null, null, null, 'todo', supervisorId);
     if (success) {
         showToast(t('toast_ai_parsed_and_created_task'), "success");
         await db.triggerWebhooks('task_created', { title: input, assignee_id: assigneeId, due_date: dueStr, priority: priority, is_ai_parsed: true });
@@ -4859,7 +4910,7 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '', select
     updateTaskAssigneeOptions(prefix, value, selectedAssigneeId);
     const subTypeGroup = document.getElementById(prefix === 'new' ? 'taskSubTypeGroup' : 'editTaskSubTypeGroup');
     if (!subTypeGroup) return;
-    
+
     if (value === 'Marketing & Sales') {
         subTypeGroup.style.display = 'block';
         const select = document.getElementById(prefix === 'new' ? 'taskSubType' : 'editTaskSubType');
@@ -4898,7 +4949,7 @@ function renderTaskWatcherPicker(selectId, options = '') {
     </div>`;
 }
 
-window.populateTaskWatcherPicker = function(selectId, options, selectedIds = []) {
+window.populateTaskWatcherPicker = function (selectId, options, selectedIds = []) {
     const select = document.getElementById(selectId);
     if (!select) return;
     select.innerHTML = options || '';
@@ -4910,7 +4961,7 @@ window.populateTaskWatcherPicker = function(selectId, options, selectedIds = [])
     updateTaskWatcherLabel(selectId);
 };
 
-window.toggleTaskWatcherDropdown = function(selectId) {
+window.toggleTaskWatcherDropdown = function (selectId) {
     const select = document.getElementById(selectId);
     const picker = select?.closest('.task-watcher-picker');
     const dropdown = picker?.querySelector('.task-watcher-dropdown');
@@ -4921,7 +4972,7 @@ window.toggleTaskWatcherDropdown = function(selectId) {
     if (!dropdown.hidden) picker.querySelector('.task-watcher-search')?.focus();
 };
 
-window.filterTaskWatchers = function(selectId, query) {
+window.filterTaskWatchers = function (selectId, query) {
     const select = document.getElementById(selectId);
     const normalized = query.trim().toLowerCase();
     select?.closest('.task-watcher-picker')?.querySelectorAll('.task-watcher-option').forEach(option => {
@@ -4929,7 +4980,7 @@ window.filterTaskWatchers = function(selectId, query) {
     });
 };
 
-window.syncTaskWatcherSelection = function(selectId, checkbox) {
+window.syncTaskWatcherSelection = function (selectId, checkbox) {
     const select = document.getElementById(selectId);
     const option = Array.from(select?.options || []).find(item => item.value === checkbox.value);
     if (option) option.selected = checkbox.checked;
@@ -4958,7 +5009,7 @@ function renderMarketingDesignFields(prefix) {
         </div>`;
 }
 
-window.handleMarketingTaskTypeChange = function(prefix = 'new', value = '') {
+window.handleMarketingTaskTypeChange = function (prefix = 'new', value = '') {
     const container = document.getElementById(prefix === 'new' ? 'newMarketingDesignFields' : 'editMarketingDesignFields');
     if (!container) return;
     const active = value === 'Designing Task';
@@ -4968,7 +5019,7 @@ window.handleMarketingTaskTypeChange = function(prefix = 'new', value = '') {
     });
 };
 
-window.addMarketingLink = function(containerId, value = '') {
+window.addMarketingLink = function (containerId, value = '') {
     const container = document.getElementById(containerId);
     if (!container) return;
     const row = document.createElement('div');
@@ -4997,7 +5048,7 @@ window.handleTaskAssigneeChange = async function (prefix = 'new') {
     const assigneeId = document.getElementById(prefix === 'new' ? 'taskAssignee' : 'editTaskAssignee').value;
     const designFields = document.getElementById(prefix === 'new' ? 'newDesignFields' : 'editDesignFields');
     if (!designFields) return;
-    
+
     if (!assigneeId) {
         designFields.style.display = 'none';
         return;
@@ -5006,7 +5057,7 @@ window.handleTaskAssigneeChange = async function (prefix = 'new') {
     const allUsers = await db.fetchUsers();
     const assignee = allUsers.find(u => u.id === assigneeId);
     if (!assignee) return;
-    
+
     // Check if user is in Designing department
     const depts = await db.fetchDepartments();
     const userDept = depts.find(d => d.id === assignee.department_id);
@@ -5017,9 +5068,9 @@ window.handleTaskAssigneeChange = async function (prefix = 'new') {
     }
 };
 
-window.handleCreateTask = async function(e) {
+window.handleCreateTask = async function (e) {
     e.preventDefault();
-    
+
     const canCreateTask = !!currentUser;
     if (!canCreateTask) {
         showToast("You do not have permission to create tasks.", "danger");
@@ -5129,34 +5180,34 @@ window.handleUpdateTaskStatus = async function (id, status) {
     } else {
         showToast(`Task updated`, "success");
         await db.triggerWebhooks('task_status_updated', { task_id: id, status: actualStatus });
-        
+
         if (needsManagerApproval) {
             showToast('Task moved to Awaiting Approval. The department manager has been notified.', 'info');
         }
     }
 };
 
-window.handleTaskDragStart = function(e, id) {
+window.handleTaskDragStart = function (e, id) {
     e.dataTransfer.setData('text/plain', id);
     e.currentTarget.style.opacity = '0.5';
 };
 
-window.handleTaskDragOver = function(e) {
+window.handleTaskDragOver = function (e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 };
 
-window.handleTaskDrop = async function(e, status) {
+window.handleTaskDrop = async function (e, status) {
     e.preventDefault();
     const id = e.dataTransfer.getData('text/plain');
     if (!id) return;
-    
+
     const taskCard = document.getElementById(`task-card-${id}`);
     if (taskCard) {
         const currentStatus = taskCard.getAttribute('data-status');
         taskCard.style.opacity = '1';
         if (currentStatus === status) return; // No change
-        
+
         const task = window.taskCache ? window.taskCache[id] : null;
         const isTaskDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
         // Only the department manager (or system admin) can approve a pending task.
@@ -5179,7 +5230,7 @@ window.handleTaskDrop = async function(e, status) {
         if (targetCol) {
             targetCol.appendChild(taskCard);
             taskCard.setAttribute('data-status', actualStatus);
-            
+
             const currentStatusId = currentStatus === 'Pending Approval' ? 'pending' : currentStatus;
             const oldBadge = document.getElementById(`badge-${currentStatusId}`);
             const newBadge = document.getElementById(`badge-${statusId}`);
@@ -5187,39 +5238,39 @@ window.handleTaskDrop = async function(e, status) {
             if (newBadge) newBadge.textContent = parseInt(newBadge.textContent) + 1;
         }
     }
-    
+
     const finalStatus = taskCard ? taskCard.getAttribute('data-status') : status;
     await window.handleUpdateTaskStatus(id, finalStatus);
 };
 
-window.openEditTaskModal = async function(id) {
+window.openEditTaskModal = async function (id) {
     try {
         const task = window.taskCache[id];
         if (!task) {
             console.error('Task not found in cache for ID:', id);
             return;
         }
-        
+
         document.getElementById('editTaskId').value = task.id;
         document.getElementById('editTaskTitle').value = task.title || '';
         document.getElementById('editTaskDescription').value = task.description || '';
         document.getElementById('editTaskCategory').value = task.category || '';
 
         document.getElementById('editTaskPriority').value = task.priority || 'medium';
-        
+
         const formatDate = (dateStr) => {
             if (!dateStr) return '';
-            try { return new Date(dateStr).toISOString().split('T')[0]; } 
-            catch(e) { return ''; }
+            try { return new Date(dateStr).toISOString().split('T')[0]; }
+            catch (e) { return ''; }
         };
-        
+
         document.getElementById('editTaskDue').value = formatDate(task.due_date);
-        
+
         document.getElementById('editTaskVisibility').value = task.visibility || 'public';
         document.getElementById('editTaskStart').value = formatDate(task.start_date);
         document.getElementById('editTaskEnd').value = formatDate(task.end_date);
         document.getElementById('editTaskEstimate').value = task.estimated_time || '';
-        
+
         const assigneeSelect = document.getElementById('editTaskAssignee');
         if (assigneeSelect) {
             if (currentUserRole === 'EMPLOYEE') {
@@ -5250,7 +5301,7 @@ window.openEditTaskModal = async function(id) {
             deptSelect.value = task.department || '';
             window.handleTaskDepartmentChange('edit', task.department || '', task.assignee_id || '');
         }
-        
+
         const subTypeSelect = document.getElementById('editTaskSubType');
         if (subTypeSelect) {
             subTypeSelect.value = task.sub_type || '';
@@ -5282,7 +5333,7 @@ window.openEditTaskModal = async function(id) {
 
         // Trigger change to handle design fields display
         handleTaskAssigneeChange('edit');
-        
+
         const modal = document.getElementById('editTaskModal');
         if (modal) {
             prepareTeamworkEditModal(task);
@@ -5316,7 +5367,7 @@ function prepareTeamworkEditModal(task) {
     setEditTaskTab('details');
 }
 
-window.setEditTaskTab = function(tab) {
+window.setEditTaskTab = function (tab) {
     const modal = document.getElementById('editTaskModal');
     if (!modal) return;
     modal.dataset.editTab = tab;
@@ -5326,7 +5377,7 @@ window.setEditTaskTab = function(tab) {
     if (marketingFields && tab === 'advanced') handleMarketingTaskTypeChange('edit', document.getElementById('editTaskSubType')?.value || '');
 };
 
-window.handleEditTaskSubmit = async function(e) {
+window.handleEditTaskSubmit = async function (e) {
     e.preventDefault();
     const id = document.getElementById('editTaskId').value;
     const title = document.getElementById('editTaskTitle').value;
@@ -5335,13 +5386,13 @@ window.handleEditTaskSubmit = async function(e) {
     const priority = document.getElementById('editTaskPriority').value;
     const assigneeId = document.getElementById('editTaskAssignee').value;
     const dueDate = document.getElementById('editTaskDue').value;
-    
+
     const visibility = document.getElementById('editTaskVisibility').value;
     const startDate = document.getElementById('editTaskStart').value;
     const endDate = document.getElementById('editTaskEnd').value;
     const estimate = document.getElementById('editTaskEstimate').value;
     const projectId = document.getElementById('editTaskProject').value || null;
-    
+
     // Check Designer status
     const allUsers = await db.fetchUsers();
     const assigneeObj = allUsers.find(u => u.id === assigneeId);
@@ -5374,11 +5425,11 @@ window.handleEditTaskSubmit = async function(e) {
             updates.visible_to = proj.visible_to;
         }
     }
-    
+
     // Get department, sub-type, and watchers
     const departmentEl = document.getElementById('editTaskDepartment');
     if (departmentEl) updates.department = departmentEl.value || null;
-    
+
     const subTypeEl = document.getElementById('editTaskSubType');
     if (subTypeEl && document.getElementById('editTaskSubTypeGroup').style.display !== 'none') {
         updates.sub_type = subTypeEl.value || null;
@@ -5411,17 +5462,17 @@ window.handleEditTaskSubmit = async function(e) {
     } else {
         updates.watchers = [];
     }
-    
+
     const task = window.taskCache[id];
     let titleI18n = task.title_i18n || {};
-    titleI18n['en'] = title; 
+    titleI18n['en'] = title;
     if (currentLang !== 'en') {
         titleI18n[currentLang] = title;
     }
     updates.title_i18n = titleI18n;
 
     const { error } = await db.updateTask(id, updates);
-    
+
     if (error) {
         showToast(t('toast_failed_to_update_task_details'), "danger");
     } else {
@@ -5433,7 +5484,7 @@ window.handleEditTaskSubmit = async function(e) {
     }
 };
 
-window.handleDeleteTask = async function(id) {
+window.handleDeleteTask = async function (id) {
     window.showConfirmModal("Delete Task", t('confirm_delete') || "Are you sure you want to delete this task?", async () => {
         const { error } = await db.deleteTask(id);
         if (error) {
@@ -5447,7 +5498,7 @@ window.handleDeleteTask = async function(id) {
     });
 };
 
-document.addEventListener('dragend', function(e) {
+document.addEventListener('dragend', function (e) {
     if (e.target && e.target.classList && e.target.classList.contains('task-item-card')) {
         e.target.style.opacity = '1';
     }
@@ -5597,7 +5648,7 @@ async function renderContractPage() {
     const addContractDocument = (url, label) => {
         if (!url || contractDocuments.some(document => document.url === url)) return;
         let fileName = label;
-        try { fileName = decodeURIComponent(new URL(url).pathname.split('/').pop() || label).replace(/^\d+-/, ''); } catch (_) {}
+        try { fileName = decodeURIComponent(new URL(url).pathname.split('/').pop() || label).replace(/^\d+-/, ''); } catch (_) { }
         const separator = String(url).includes('?') ? '&' : '?';
         contractDocuments.push({ url, fileName, downloadUrl: `${url}${separator}download=${encodeURIComponent(fileName)}` });
     };
@@ -5781,9 +5832,9 @@ async function renderEmployeesDirectory() {
         visibleUsers = users.filter(u => u.manager_id === currentUser.id || u.id === currentUser.id);
     } else {
         // Employees see themselves, their team members, and their manager
-        visibleUsers = users.filter(u => 
-            u.id === currentUser.id || 
-            (currentUser.manager_id && u.manager_id === currentUser.manager_id) || 
+        visibleUsers = users.filter(u =>
+            u.id === currentUser.id ||
+            (currentUser.manager_id && u.manager_id === currentUser.manager_id) ||
             u.id === currentUser.manager_id
         );
     }
@@ -5863,7 +5914,7 @@ window.filterEmployees = () => {
     const table = document.getElementById('employeeDirectoryTable');
     if (!table) return;
     const tr = table.getElementsByTagName('tr');
-    
+
     for (let i = 1; i < tr.length; i++) {
         const textContent = tr[i].textContent || tr[i].innerText;
         if (textContent.toLowerCase().indexOf(filter) > -1) {
@@ -5878,13 +5929,13 @@ window.handlePrintContract = async (employeeId) => {
     // 0. Permission check
     const employee = await db.getUserProfile(employeeId);
     if (!employee) return;
-    
+
     const isSelf = employee.id === currentUser?.id;
     const isManager = currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
     const isUnderManagement = employee.manager_id === currentUser?.id;
     const isAdmin = currentUserRole === 'ADMIN';
     window.canViewFullContractIdentity = isAdmin;
-    
+
     if (!isAdmin && !isSelf && !(isManager && isUnderManagement)) {
         showToast("Unauthorized: You do not have permission to view this contract.", "error");
         return;
@@ -5898,7 +5949,7 @@ window.handlePrintContract = async (employeeId) => {
     }
 
     const activeContract = contracts.find(c => c.status === 'Active' || c.status === 'active');
-    
+
     if (contracts.length === 1) {
         if (activeContract) {
             // One active contract, print directly
@@ -5925,7 +5976,7 @@ window.handlePrintContract = async (employeeId) => {
             let optionsHTML = contracts.map(c => `
                 <div style="padding: 10px; border: 1px solid var(--border-color); margin-bottom: 5px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <strong>ID:</strong> ${c.id.substring(0,8)}... | <strong>Status:</strong> ${c.status}<br/>
+                        <strong>ID:</strong> ${c.id.substring(0, 8)}... | <strong>Status:</strong> ${c.status}<br/>
                         <strong>Dates:</strong> ${c.start_date || 'N/A'} to ${c.end_date || 'N/A'}<br/>
                         <strong>Title:</strong> ${c.job_title || 'N/A'}
                     </div>
@@ -5954,7 +6005,7 @@ window.handlePrintContract = async (employeeId) => {
 // ==========================================
 // TRANSLATION MANAGEMENT (ADMIN ONLY)
 // ==========================================
-window.initCustomTranslations = async function() {
+window.initCustomTranslations = async function () {
     try {
         const saved = await db.fetchSystemTranslations();
         if (saved && Array.isArray(saved)) {
@@ -5963,33 +6014,33 @@ window.initCustomTranslations = async function() {
                 if (t.trans_ar && typeof i18n !== 'undefined' && i18n.ar) i18n.ar[t.trans_key] = t.trans_ar;
             });
         }
-    } catch(e) {
+    } catch (e) {
         console.error("Error loading system translations:", e);
     }
 };
 
-window.filterTranslations = function() {
+window.filterTranslations = function () {
     const searchInput = document.getElementById('transSearchInput');
     const statusFilter = document.getElementById('transStatusFilter');
     const q = searchInput ? (searchInput.value || '').toLowerCase().trim() : '';
     const status = statusFilter ? statusFilter.value : 'all';
-    
+
     const rows = document.querySelectorAll('.trans-row');
     let visibleCount = 0;
     rows.forEach(row => {
         const key = row.dataset.key || '';
         const en = row.dataset.en || '';
         const ar = row.dataset.ar || '';
-        
+
         let matchesSearch = !q || key.includes(q) || en.includes(q) || ar.includes(q);
-        
+
         let matchesStatus = true;
         if (status === 'translated') {
             matchesStatus = en.trim() !== '' && ar.trim() !== '';
         } else if (status === 'untranslated') {
             matchesStatus = en.trim() === '' || ar.trim() === '';
         }
-        
+
         if (matchesSearch && matchesStatus) {
             row.style.display = '';
             visibleCount++;
@@ -6002,14 +6053,20 @@ window.filterTranslations = function() {
     if (countEl) countEl.textContent = visibleCount;
 };
 
-window.saveAllTranslations = async function() {
-    const rows = document.querySelectorAll('.trans-row');
+window.saveAllTranslations = async function () {
     const updates = [];
-    rows.forEach(row => {
+    const btn = document.querySelector('button[onclick="saveAllTranslations()"]');
+    if(btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 4px;"></div> Saving...';
+    }
+
+    // 1. UI Strings
+    document.querySelectorAll('.trans-row').forEach(row => {
         const key = row.dataset.key;
         const enVal = document.getElementById('trans_en_' + key)?.value || '';
         const arVal = document.getElementById('trans_ar_' + key)?.value || '';
-        
+
         if (typeof i18n !== 'undefined') {
             if (i18n.en[key] !== enVal || i18n.ar[key] !== arVal) {
                 i18n.en[key] = enVal;
@@ -6020,27 +6077,69 @@ window.saveAllTranslations = async function() {
             updates.push({ trans_key: key, trans_en: enVal, trans_ar: arVal });
         }
     });
-    
+
+    // 2. Tags
+    document.querySelectorAll('.trans-tag-row').forEach(row => {
+        const key = row.dataset.key;
+        const enVal = document.getElementById('tag_en_' + key)?.value || '';
+        const arVal = document.getElementById('tag_ar_' + key)?.value || '';
+
+        if (typeof i18n !== 'undefined') {
+            if (i18n.en[key] !== enVal || i18n.ar[key] !== arVal) {
+                i18n.en[key] = enVal;
+                i18n.ar[key] = arVal;
+                updates.push({ trans_key: key, trans_en: enVal, trans_ar: arVal });
+            }
+        } else {
+            updates.push({ trans_key: key, trans_en: enVal, trans_ar: arVal });
+        }
+    });
+
+    // Save UI strings and Tags to translations table
     if (updates.length > 0) {
         const res = await db.saveSystemTranslationsBatch(updates);
-        if(res.success) {
-            showToast('All translations saved successfully', 'success');
-        } else {
-            showToast('Failed to save translations to database', 'danger');
+        if (!res.success) {
+            showToast('Failed to save UI/Tag translations', 'danger');
         }
-    } else {
-        showToast('No translations to save', 'warning');
+    }
+
+    // 3. Departments
+    let deptPromises = [];
+    document.querySelectorAll('.trans-dept-row').forEach(row => {
+        const deptId = row.dataset.id;
+        const arVal = document.getElementById('dept_ar_' + deptId)?.value || null;
+        deptPromises.push(db.updateDepartmentTranslation(deptId, arVal));
+    });
+
+    // 4. Employees / Job Titles
+    let profilePromises = [];
+    document.querySelectorAll('.trans-profile-row').forEach(row => {
+        const profId = row.dataset.id;
+        const nameAr = document.getElementById('profile_name_ar_' + profId)?.value || null;
+        const jobAr = document.getElementById('profile_job_ar_' + profId)?.value || null;
+        profilePromises.push(db.updateProfileTranslations(profId, nameAr, jobAr));
+    });
+
+    // Await all DB updates for departments and profiles
+    await Promise.all([...deptPromises, ...profilePromises]);
+    
+    showToast('All translations saved successfully', 'success');
+    
+    if(btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="save" style="width:16px;height:16px;margin-right:4px;"></i> Save All Changes';
+        lucide.createIcons();
     }
 };
 
-window.deleteTranslationKey = function(key) {
+window.deleteTranslationKey = function (key) {
     window.showConfirmModal("Delete Translation Key", `Are you sure you want to delete "${key}"?`, async () => {
         if (typeof i18n !== 'undefined') {
             delete i18n.en[key];
             delete i18n.ar[key];
         }
         const res = await db.deleteSystemTranslation(key);
-        if(res.success) {
+        if (res.success) {
             showToast("Translation key removed", "warning");
         } else {
             showToast("Failed to remove translation from database", "danger");
@@ -6049,7 +6148,7 @@ window.deleteTranslationKey = function(key) {
     });
 };
 
-window.handleAddTranslationSubmit = async function(e) {
+window.handleAddTranslationSubmit = async function (e) {
     e.preventDefault();
     const key = document.getElementById('newTransKey').value.trim().toLowerCase().replace(/\s+/g, '_');
     const enVal = document.getElementById('newTransEn').value.trim();
@@ -6066,7 +6165,7 @@ window.handleAddTranslationSubmit = async function(e) {
     }
 
     const res = await db.saveSystemTranslationsBatch([{ trans_key: key, trans_en: enVal || key, trans_ar: arVal || key }]);
-    if(res.success) {
+    if (res.success) {
         showToast("Translation key added successfully!", "success");
     } else {
         showToast("Failed to add translation to database", "danger");
@@ -6077,7 +6176,7 @@ window.handleAddTranslationSubmit = async function(e) {
 
 
 
-window.exportTranslationsJSON = function() {
+window.exportTranslationsJSON = function () {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ en: i18n.en, ar: i18n.ar }, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
@@ -6087,31 +6186,31 @@ window.exportTranslationsJSON = function() {
     downloadAnchor.remove();
 };
 
-window.importTranslationsJSON = function(event) {
+window.importTranslationsJSON = function (event) {
     const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         try {
             const parsed = JSON.parse(e.target.result);
             if (parsed.en && typeof i18n !== 'undefined') Object.assign(i18n.en, parsed.en);
             if (parsed.ar && typeof i18n !== 'undefined') Object.assign(i18n.ar, parsed.ar);
             showToast("Translations imported successfully!", "success");
             renderView('translations');
-        } catch(err) {
+        } catch (err) {
             showToast("Failed to parse JSON file", "danger");
         }
     };
     reader.readAsText(file);
 };
 
-window.showAddTranslationModal = function() {
+window.showAddTranslationModal = function () {
     document.getElementById('addTranslationForm').reset();
     document.getElementById('addTranslationModal').classList.add('show');
 };
 
-window.closeAddTranslationModal = function() {
+window.closeAddTranslationModal = function () {
     document.getElementById('addTranslationModal').classList.remove('show');
 };
 
@@ -6120,9 +6219,15 @@ async function renderTranslationsPage() {
         return `<div class="card" style="padding: 2rem; color: var(--color-danger); font-weight: bold;">Unauthorized. System Admin access required.</div>`;
     }
 
+    const [departments, profiles] = await Promise.all([
+        db.fetchDepartments(),
+        db.fetchAllProfiles()
+    ]);
+
     const allKeys = Array.from(new Set([...Object.keys(i18n.en || {}), ...Object.keys(i18n.ar || {})])).sort();
 
-    const rowsHTML = allKeys.map(key => {
+    // UI Strings Table
+    const uiRowsHTML = allKeys.filter(k => !k.startsWith('tag_')).map(key => {
         const enVal = escapeHTML(i18n.en[key] || '');
         const arVal = escapeHTML(i18n.ar[key] || '');
         const keyEscaped = escapeHTML(key);
@@ -6143,7 +6248,6 @@ async function renderTranslationsPage() {
                 </td>
                 <td>
                     <div style="display: flex; gap: 0.4rem; justify-content: center; flex-wrap: nowrap; min-width: 60px;">
-                        
                         <button class="btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; color: var(--color-danger); flex-shrink: 0;" onclick="deleteTranslationKey('${keyEscaped}')" title="Delete">
                             <i data-lucide="trash-2" style="width:14px; height:14px;"></i>
                         </button>
@@ -6153,11 +6257,48 @@ async function renderTranslationsPage() {
         `;
     }).join('');
 
+    // Tags Table
+    const tagsList = ['Urgent', 'Frontend', 'Backend', 'UI/UX', 'Bug', 'Feature'];
+    const tagsRowsHTML = tagsList.map(tag => {
+        const key = 'tag_' + tag.toLowerCase().replace(/[/\s-]/g, '_');
+        const enVal = escapeHTML(i18n.en[key] || tag);
+        const arVal = escapeHTML(i18n.ar[key] || tag);
+        return `
+            <tr class="trans-tag-row" data-key="${key}">
+                <td style="font-weight: 600; font-size: 0.85rem;">${tag}</td>
+                <td><input type="text" id="tag_en_${key}" class="form-control" style="font-size:0.85rem;" value="${enVal}"></td>
+                <td><input type="text" id="tag_ar_${key}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}"></td>
+            </tr>
+        `;
+    }).join('');
+
+    // Departments Table
+    const deptsRowsHTML = (departments || []).map(d => {
+        return `
+            <tr class="trans-dept-row" data-id="${d.id}">
+                <td style="font-weight: 600; font-size: 0.85rem;">${escapeHTML(d.name)}</td>
+                <td><input type="text" class="form-control" style="font-size:0.85rem;" value="${escapeHTML(d.name)}" readonly disabled></td>
+                <td><input type="text" id="dept_ar_${d.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(d.name_ar || '')}" placeholder="Arabic Name"></td>
+            </tr>
+        `;
+    }).join('');
+
+    // Employees Table
+    const profilesRowsHTML = (profiles || []).map(p => {
+        return `
+            <tr class="trans-profile-row" data-id="${p.id}">
+                <td style="font-weight: 600; font-size: 0.85rem; white-space: nowrap;">${escapeHTML(p.full_name || '')} <br> <small style="color: var(--color-text-secondary); font-weight: normal;">${escapeHTML(p.job_title || '')}</small></td>
+                <td><input type="text" id="profile_name_ar_${p.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(p.display_name_ar || '')}" placeholder="Arabic Name"></td>
+                <td><input type="text" id="profile_job_ar_${p.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(p.job_title_ar || '')}" placeholder="Arabic Job Title"></td>
+            </tr>
+        `;
+    }).join('');
+
     return `
         <div class="page-header fade-in-up">
             <div>
                 <h1 class="page-title">${t('trans_title') || 'System Translations'}</h1>
-                <p class="page-subtitle">${t('trans_sub') || 'Customize English and Arabic display text for all system views.'}</p>
+                <p class="page-subtitle">${t('trans_sub') || 'Customize English and Arabic display text for all system views and entities.'}</p>
             </div>
             <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                 <button class="btn-primary" onclick="saveAllTranslations()" style="background-color: var(--color-success); border-color: var(--color-success);">
@@ -6173,43 +6314,93 @@ async function renderTranslationsPage() {
                     <i data-lucide="upload" style="width:16px;height:16px;margin-right:4px;"></i> Import JSON
                     <input type="file" accept=".json" onchange="importTranslationsJSON(event)" style="display:none;">
                 </label>
-                
             </div>
         </div>
 
         <div class="dashboard-grid fade-in-up">
-            <div class="card col-span-12">
-                <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
-                    <div style="display: flex; gap: 0.5rem; flex: 1; min-width: 300px;">
-                        <div style="position: relative; flex: 1;">
-                            <input type="text" id="transSearchInput" class="form-control" placeholder="Search by key, English, or Arabic text..." oninput="filterTranslations()" style="padding-left: 2.2rem;">
-                            <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+            <div class="card col-span-12" style="display: flex; flex-direction: column;">
+                <div class="task-v2-tabs" style="margin-bottom: 1rem; border-bottom: 1px solid var(--color-border); overflow-x: auto; white-space: nowrap;">
+                    <button type="button" class="active" onclick="switchTransTab('ui', this)">UI Strings</button>
+                    <button type="button" onclick="switchTransTab('tags', this)">Tags</button>
+                    <button type="button" onclick="switchTransTab('departments', this)">Departments</button>
+                    <button type="button" onclick="switchTransTab('profiles', this)">Employees & Job Titles</button>
+                </div>
+
+                <div id="trans-tab-ui" class="trans-tab-content">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 0.5rem; flex: 1; min-width: 300px;">
+                            <div style="position: relative; flex: 1;">
+                                <input type="text" id="transSearchInput" class="form-control" placeholder="Search by key, English, or Arabic text..." oninput="filterTranslations()" style="padding-left: 2.2rem;">
+                                <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+                            </div>
+                            <select id="transStatusFilter" class="form-control" onchange="filterTranslations()" style="width: auto; min-width: 150px;">
+                                <option value="all">All Fields</option>
+                                <option value="translated">Translated</option>
+                                <option value="untranslated">Not Translated</option>
+                            </select>
                         </div>
-                        <select id="transStatusFilter" class="form-control" onchange="filterTranslations()" style="width: auto; min-width: 150px;">
-                            <option value="all">All Fields</option>
-                            <option value="translated">Translated</option>
-                            <option value="untranslated">Not Translated</option>
-                        </select>
+                        <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
+                            Total Keys: <strong id="transTotalCount">${allKeys.length}</strong>
+                        </div>
                     </div>
-                    <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
-                        Total Keys: <strong id="transTotalCount">${allKeys.length}</strong>
+                    <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 20%;">${t('trans_key_name') || 'Key'}</th>
+                                    <th style="width: 35%;">${t('trans_en') || 'English'}</th>
+                                    <th style="width: 35%;">${t('trans_ar') || 'Arabic'}</th>
+                                    <th style="width: 10%; min-width: 80px; text-align: center;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>${uiRowsHTML}</tbody>
+                        </table>
                     </div>
                 </div>
 
-                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 20%;">${t('trans_key_name') || 'Key'}</th>
-                                <th style="width: 35%;">${t('trans_en') || 'English'}</th>
-                                <th style="width: 35%;">${t('trans_ar') || 'Arabic'}</th>
-                                <th style="width: 10%; min-width: 80px; text-align: center;">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rowsHTML}
-                        </tbody>
-                    </table>
+                <div id="trans-tab-tags" class="trans-tab-content" style="display: none;">
+                    <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 20%;">Tag Value</th>
+                                    <th style="width: 40%;">English</th>
+                                    <th style="width: 40%;">Arabic</th>
+                                </tr>
+                            </thead>
+                            <tbody>${tagsRowsHTML}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="trans-tab-departments" class="trans-tab-content" style="display: none;">
+                    <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Department (English)</th>
+                                    <th style="width: 35%;">English (Read-only)</th>
+                                    <th style="width: 35%;">Arabic</th>
+                                </tr>
+                            </thead>
+                            <tbody>${deptsRowsHTML}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="trans-tab-profiles" class="trans-tab-content" style="display: none;">
+                    <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Employee (English)</th>
+                                    <th style="width: 35%;">Name (Arabic)</th>
+                                    <th style="width: 35%;">Job Title (Arabic)</th>
+                                </tr>
+                            </thead>
+                            <tbody>${profilesRowsHTML}</tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -6244,9 +6435,17 @@ async function renderTranslationsPage() {
     `;
 }
 
+window.switchTransTab = function(tabId, btn) {
+    document.querySelectorAll('.trans-tab-content').forEach(c => c.style.display = 'none');
+    document.getElementById('trans-tab-' + tabId).style.display = 'block';
+    if(btn) {
+        document.querySelectorAll('.task-v2-tabs button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+};
 window.viewHTMLCache = window.viewHTMLCache || {};
 
-window.renderView = async function(viewId, isBack = false) {
+window.renderView = async function (viewId, isBack = false) {
     if (!viewId) return;
     if (viewId === 'null') {
         viewId = 'dashboard';
@@ -6255,7 +6454,7 @@ window.renderView = async function(viewId, isBack = false) {
     // the single canonical destination.
     if (viewId === 'tasks_v2') viewId = 'tasks';
     currentView = viewId;
-    
+
     if (!currentUser && viewId !== 'login') {
         viewId = 'login';
         currentView = 'login';
@@ -6307,7 +6506,7 @@ window.renderView = async function(viewId, isBack = false) {
             case 'leave': content = await renderLeave(); break;
             case 'requests': content = String(currentUserRole || '').toUpperCase() === 'EMPLOYEE' ? await renderMyRequestStatuses() : await renderRequests(); break;
             case 'archived': content = await renderArchivedRequests(); break;
-            case 'payroll': content = await renderPayroll(); break;
+            case 'payroll': content = await renderPayrollModule(); break;
             case 'expenses': content = await renderExpenses(); break;
             case 'analytics': content = await renderAnalytics(); break;
             case 'admin': content = await renderAdmin(); break;
@@ -6349,7 +6548,7 @@ window.renderView = async function(viewId, isBack = false) {
         console.error("renderView error:", err);
         content = `<div class="card" style="color:red; padding: 2rem;"><h3>${t('ui_error_loading_page')}</h3><p>${err.message}</p><pre>${err.stack}</pre></div>`;
     }
-    
+
     console.log("renderView: finished switch for", viewId, "currentView:", currentView, "content length:", content.length);
 
     if (currentView === viewId || viewId === 'login') {
@@ -6370,7 +6569,7 @@ window.renderView = async function(viewId, isBack = false) {
         console.log("renderView: skipped DOM update because currentView changed.");
         window.viewHTMLCache[viewId] = content;
     }
-    
+
     // Toggle global back button
     const backBtn = document.getElementById('globalBackButton');
     if (backBtn) {
@@ -6458,10 +6657,10 @@ function renderNotificationDetails(notification, compact = false) {
     return `<div class="notification-details ${compact ? 'compact' : ''}" onclick="event.stopPropagation()">
         ${comment ? `<div class="notification-comment"><strong>Comment:</strong><span>${escapeHTML(comment)}</span></div>` : ''}
         ${attachments.length ? `<div class="notification-attachments"><strong>Files:</strong>${attachments.map((url, index) => {
-            let name = `Attachment ${index + 1}`;
-            try { name = decodeURIComponent(new URL(url).pathname.split('/').pop() || name).replace(/^\d+-/, ''); } catch (_) {}
-            return `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" download><i data-lucide="download"></i>${escapeHTML(name)}</a>`;
-        }).join('')}</div>` : ''}
+        let name = `Attachment ${index + 1}`;
+        try { name = decodeURIComponent(new URL(url).pathname.split('/').pop() || name).replace(/^\d+-/, ''); } catch (_) { }
+        return `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" download><i data-lucide="download"></i>${escapeHTML(name)}</a>`;
+    }).join('')}</div>` : ''}
     </div>`;
 }
 
@@ -6545,14 +6744,14 @@ window.handleDeleteArchivedContract = contractId => {
     });
 };
 
-window.handleContractDepartmentChange = function(departmentId) {
+window.handleContractDepartmentChange = function (departmentId) {
     const jobTitleSelect = document.getElementById('contractJobTitle');
     if (!jobTitleSelect) return;
     const titles = (window.contractJobTitlesCache || []).filter(title => title.department_id === departmentId);
     jobTitleSelect.innerHTML = `<option value="">Select Job Title</option>${titles.map(title => `<option value="${escapeHTML(title.name)}">${escapeHTML(title.name)}</option>`).join('')}`;
 };
 
-window.openTaskNotification = async function(taskId) {
+window.openTaskNotification = async function (taskId) {
     const dropdown = document.getElementById('notificationsDropdown');
     if (dropdown) dropdown.classList.remove('show');
     await renderView('tasks');
@@ -6624,7 +6823,7 @@ window.addEventListener('click', function (e) {
 async function renderDepartments() {
     const departments = await db.fetchDepartments();
     const profiles = await db.fetchAllProfiles();
-    
+
     let tableRows = departments.length ? departments.map(d => {
         const empCount = profiles.filter(p => p.department_id === d.id).length;
         return `
@@ -6675,7 +6874,7 @@ async function renderDepartments() {
 // ==========================================
 async function renderClients() {
     const clients = await db.fetchClients();
-    
+
     let tableRows = clients.length ? clients.map(c => `
         <tr id="client-row-${c.id}">
             <td>${c.name}</td>
@@ -6722,18 +6921,18 @@ async function renderClients() {
 async function renderOrders() {
     const orders = await db.fetchOrders();
     window.currentOrdersList = orders;
-    
+
     const tableRows = orders.map(o => {
         let badgeColor = 'gray';
         if (o.project_status === 'In Progress') badgeColor = 'primary';
         if (o.project_status === 'Completed') badgeColor = 'success';
-        
+
         const dealTitle = (o.crm_deals && o.crm_deals.title) ? escapeHTML(o.crm_deals.title) : 'Unknown Deal';
         const clientName = (o.crm_deals && o.crm_deals.crm_clients && o.crm_deals.crm_clients.name) ? escapeHTML(o.crm_deals.crm_clients.name) : 'Unknown Client';
-        
+
         const locationStr = o.event_location || '-';
-        const locationHtml = locationStr.startsWith('http') 
-            ? `<a href="${escapeHTML(locationStr)}" target="_blank" style="color: var(--color-primary); text-decoration: underline;"><i data-lucide="map" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>View Map</a>` 
+        const locationHtml = locationStr.startsWith('http')
+            ? `<a href="${escapeHTML(locationStr)}" target="_blank" style="color: var(--color-primary); text-decoration: underline;"><i data-lucide="map" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>View Map</a>`
             : escapeHTML(locationStr);
 
         return `
@@ -6792,7 +6991,7 @@ async function renderCRM() {
     const users = await db.fetchUsers();
 
     const stages = ['LEAD', 'PITCH', 'NEGOTIATION', 'WON', 'LOST'];
-    
+
     let boardHtml = '';
     stages.forEach(stage => {
         const stageDeals = deals.filter(d => d.stage === stage);
@@ -6877,28 +7076,28 @@ async function renderCRM() {
 }
 
 // Drag & Drop Deal Logic
-window.allowDrop = function(ev) {
+window.allowDrop = function (ev) {
     ev.preventDefault();
 }
 
-window.dragDeal = function(ev, dealId) {
+window.dragDeal = function (ev, dealId) {
     ev.dataTransfer.setData("dealId", dealId);
 }
 
-window.moveDealCard = function(dealId, newStage) {
+window.moveDealCard = function (dealId, newStage) {
     const card = document.getElementById(`deal-card-${dealId}`);
     if (card) {
         const oldStage = card.getAttribute('data-stage');
         if (oldStage === newStage) return;
-        
+
         const targetCol = document.getElementById(`crm-col-${newStage}`);
         if (targetCol) {
             targetCol.appendChild(card);
             card.setAttribute('data-stage', newStage);
-            
+
             const oldHeader = document.getElementById(`crm-header-${oldStage}`);
             const newHeader = document.getElementById(`crm-header-${newStage}`);
-            
+
             if (oldHeader) {
                 const oldText = oldHeader.innerText;
                 const match = oldText.match(/\((\d+)\)/);
@@ -6929,7 +7128,7 @@ window.dropDeal = async (ev, newStage) => {
         document.getElementById('lostReasonModal').classList.add('show');
         return;
     }
-    
+
     if (newStage === 'WON') {
         document.getElementById('orderDealId').value = dealId;
         document.getElementById('orderStartDate').value = '';
@@ -6944,9 +7143,9 @@ window.dropDeal = async (ev, newStage) => {
     }
 
     window.moveDealCard(dealId, newStage);
-    
+
     const res = await db.updateDealStage(dealId, newStage);
-    if(res.success) {
+    if (res.success) {
         if (oldStage === 'WON') {
             await db.deleteOrderByDealId(dealId);
         }
@@ -6965,13 +7164,13 @@ window.handleLostReasonSubmit = async (e) => {
     const dealId = document.getElementById('lostDealId').value;
     const reason = document.getElementById('lostReasonText').value;
     const oldStage = document.getElementById('lostOldStage').value;
-    
+
     closeLostReasonModal();
     window.moveDealCard(dealId, 'LOST');
-    
+
     // Instead of updateDealStage, we update the full deal or updateDeal with reason
     const res = await db.updateDeal(dealId, { stage: 'LOST', lost_reason: reason });
-    if(res.success) {
+    if (res.success) {
         if (oldStage === 'WON') {
             await db.deleteOrderByDealId(dealId);
             showToast(t('toast_deal_marked_as_lost_order_removed'), "success");
@@ -6990,7 +7189,7 @@ window.closeCRMOrderModal = () => {
 window.handleOrderSubmit = async (e) => {
     e.preventDefault();
     const dealId = document.getElementById('orderDealId').value;
-    
+
     const orderData = {
         start_date: document.getElementById('orderStartDate').value || null,
         end_date: document.getElementById('orderEndDate').value || null,
@@ -6999,10 +7198,10 @@ window.handleOrderSubmit = async (e) => {
         project_status: document.getElementById('orderProjectStatus').value || 'Not Confirmed',
         notes: document.getElementById('orderNotes').value || null,
     };
-    
+
     closeCRMOrderModal();
     window.moveDealCard(dealId, 'WON');
-    
+
     const res = await db.createOrder(orderData, dealId);
     if (res.success) {
         showToast(t('toast_order_saved_and_deal_won'), "success");
@@ -7016,7 +7215,7 @@ window.showEditOrderModal = async (id) => {
     const orders = await db.fetchOrders();
     const order = orders.find(o => o.id === id);
     if (!order) return showToast(t('toast_order_not_found'), "danger");
-    
+
     document.getElementById('editOrderId').value = id;
     document.getElementById('editOrderStartDate').value = order.start_date || '';
     document.getElementById('editOrderEndDate').value = order.end_date || '';
@@ -7024,7 +7223,7 @@ window.showEditOrderModal = async (id) => {
     document.getElementById('editOrderInvoiceAmount').value = order.invoice_amount || '';
     document.getElementById('editOrderProjectStatus').value = order.project_status || 'Not Confirmed';
     document.getElementById('editOrderNotes').value = order.notes || '';
-    
+
     document.getElementById('editOrderModal').classList.add('show');
     if (window.lucide) window.lucide.createIcons();
 };
@@ -7036,7 +7235,7 @@ window.closeEditOrderModal = () => {
 window.handleEditOrderSubmit = async (e) => {
     e.preventDefault();
     const id = document.getElementById('editOrderId').value;
-    
+
     const orderData = {
         start_date: document.getElementById('editOrderStartDate').value || null,
         end_date: document.getElementById('editOrderEndDate').value || null,
@@ -7045,7 +7244,7 @@ window.handleEditOrderSubmit = async (e) => {
         project_status: document.getElementById('editOrderProjectStatus').value || 'Not Confirmed',
         notes: document.getElementById('editOrderNotes').value || null,
     };
-    
+
     const res = await db.updateOrder(id, orderData);
     if (res.success) {
         showToast(t('toast_order_updated_successfully'), "success");
@@ -7070,7 +7269,7 @@ window.closeConfirmDeleteOrderModal = () => {
 window.executeDeleteOrder = async () => {
     const orderId = document.getElementById('deleteOrderIdInput').value;
     if (!orderId) return;
-    
+
     const res = await db.deleteOrder(orderId);
     if (res.success) {
         showToast(t('toast_order_deleted_successfully'), "success");
@@ -7365,13 +7564,13 @@ window.printOrder = async (orderId) => {
 window.showDepartmentModal = async (dept = null) => {
     // Populate head dropdown
     try {
-        if(db.fetchAllProfiles) {
+        if (db.fetchAllProfiles) {
             const profiles = await db.fetchAllProfiles();
             window.departmentProfilesCache = profiles;
             const headSelect = document.getElementById('departmentHead');
-            headSelect.innerHTML = '<option value="">Select a head...</option>' + 
+            headSelect.innerHTML = '<option value="">Select a head...</option>' +
                 profiles.map(p => `<option value="${p.id}">${escapeHTML(p.full_name || 'Employee')} — ${escapeHTML(p.job_title || 'No job title')}</option>`).join('');
-                
+
             const empSelect = document.getElementById('departmentEmployees');
             empSelect.classList.add('department-employee-select');
             empSelect.innerHTML = profiles.map(p => {
@@ -7406,7 +7605,7 @@ window.showDepartmentModal = async (dept = null) => {
         document.getElementById('departmentName').value = '';
         document.getElementById('departmentDescription').value = '';
         document.getElementById('departmentHead').value = '';
-        
+
         // Clear multi-select manually
         const empSelect = document.getElementById('departmentEmployees');
         for (let i = 0; i < empSelect.options.length; i++) {
@@ -7425,14 +7624,14 @@ window.closeDepartmentModal = () => {
 window.showConfirmModal = (title, message, onConfirm) => {
     const modal = document.getElementById('confirmModal');
     if (!modal) return;
-    
+
     document.getElementById('confirmModalTitle').innerText = title;
     document.getElementById('confirmModalMessage').innerText = message;
-    
+
     const confirmBtn = document.getElementById('confirmModalBtn');
     const newConfirmBtn = confirmBtn.cloneNode(true);
     confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-    
+
     newConfirmBtn.onclick = async () => {
         newConfirmBtn.disabled = true;
         newConfirmBtn.innerHTML = 'Confirming...';
@@ -7441,7 +7640,7 @@ window.showConfirmModal = (title, message, onConfirm) => {
         newConfirmBtn.innerHTML = 'Confirm';
         closeConfirmModal();
     };
-    
+
     modal.classList.add('show');
 };
 
@@ -7488,7 +7687,7 @@ window.handleCreateDepartment = async (e) => {
         description: document.getElementById('departmentDescription').value,
         head_id: document.getElementById('departmentHead').value || null
     };
-    
+
     const empSelect = document.getElementById('departmentEmployees');
     const selectedEmployeeIds = Array.from(empSelect.selectedOptions).map(opt => opt.value);
     const allowedTitles = COMPANY_JOB_TITLES[data.name] || null;
@@ -7504,7 +7703,7 @@ window.handleCreateDepartment = async (e) => {
         showToast(`${selectedHead.full_name || 'The selected head'} has the job title “${selectedHead.job_title || 'Not set'}”, which does not belong to ${data.name}.`, 'danger');
         return;
     }
-    
+
     let res;
     if (id) {
         res = await db.updateDepartment(id, data, selectedEmployeeIds);
@@ -7514,12 +7713,12 @@ window.handleCreateDepartment = async (e) => {
             ? await db.updateDepartment(existingDepartment.id, data, selectedEmployeeIds)
             : await db.createDepartment(data, selectedEmployeeIds);
     }
-    
+
     if (res.success) {
         showToast(id ? "Department updated" : "Department created", "success");
         closeDepartmentModal();
         e.target.reset();
-        if(currentView === 'departments') renderView('departments');
+        if (currentView === 'departments') renderView('departments');
     } else {
         showToast(res.error?.message || t('toast_error_saving_department'), "danger");
     }
@@ -7585,14 +7784,14 @@ window.handleCreateClient = async (e) => {
         email: document.getElementById('crmClientEmail').value,
         phone: document.getElementById('crmClientPhone').value
     };
-    
+
     let res;
     if (id) {
         res = await db.updateClient(id, data);
     } else {
         res = await db.createClient(data);
     }
-    
+
     if (res.success) {
         showToast(id ? "Client updated" : "Client added", "success");
         closeCRMClientModal();
@@ -7600,25 +7799,25 @@ window.handleCreateClient = async (e) => {
         if (!id) {
             await db.triggerWebhooks('new_client', data);
         }
-        if(currentView === 'crm' || currentView === 'clients') renderView(currentView);
+        if (currentView === 'crm' || currentView === 'clients') renderView(currentView);
     }
 };
 
 window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     const clients = await db.fetchClients();
     const select = document.getElementById('crmDealClient');
-    select.innerHTML = '<option value="">Select a client...</option>' + 
+    select.innerHTML = '<option value="">Select a client...</option>' +
         clients.map(c => `<option value="${c.id}">${c.name} (${c.company})</option>`).join('');
-        
+
     const users = await db.fetchUsers();
     const assigneeSelect = document.getElementById('crmDealAssignee');
     if (assigneeSelect) {
-        assigneeSelect.innerHTML = '<option value="">Unassigned</option>' + 
+        assigneeSelect.innerHTML = '<option value="">Unassigned</option>' +
             users.map(u => `<option value="${u.id}">${u.full_name} (${u.role})</option>`).join('');
     }
-    
+
     document.getElementById('crmDealId').value = id || '';
-    
+
     const titleEl = document.getElementById('crmDealModalTitle');
     const submitBtn = document.getElementById('crmDealSubmitBtn');
     if (isViewOnly) {
@@ -7649,14 +7848,14 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
             document.getElementById('crmDealClient').value = deal.client_id || '';
             document.getElementById('crmDealAmount').value = deal.amount || 0;
             document.getElementById('crmDealClosingDate').value = deal.closing_date || '';
-            
+
             if (document.getElementById('crmDealEventType')) document.getElementById('crmDealEventType').value = deal.event_type || '';
             if (document.getElementById('crmDealFirstContactDate')) document.getElementById('crmDealFirstContactDate').value = deal.first_contact_date || '';
             if (document.getElementById('crmDealContactMethod')) document.getElementById('crmDealContactMethod').value = deal.contact_method || '';
             if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = deal.lead_source || '';
-            
+
             if (assigneeSelect) assigneeSelect.value = deal.assigned_to || '';
-            
+
             if (deal.stage === 'LOST') {
                 document.getElementById('crmDealLostReasonGroup').style.display = 'block';
                 document.getElementById('crmDealLostReason').value = deal.lost_reason || '';
@@ -7676,7 +7875,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
         if (assigneeSelect) assigneeSelect.value = '';
         document.getElementById('crmDealLostReasonGroup').style.display = 'none';
     }
-    
+
     document.getElementById('crmDealModal').classList.add('show');
     if (window.lucide) window.lucide.createIcons();
 };
@@ -7689,12 +7888,12 @@ window.handleCreateDeal = async (e) => {
     const assigneeEl = document.getElementById('crmDealAssignee');
     const assigneeVal = assigneeEl ? assigneeEl.value : null;
     const closingDateEl = document.getElementById('crmDealClosingDate');
-    
+
     const eventTypeEl = document.getElementById('crmDealEventType');
     const firstContactDateEl = document.getElementById('crmDealFirstContactDate');
     const contactMethodEl = document.getElementById('crmDealContactMethod');
     const leadSourceEl = document.getElementById('crmDealLeadSource');
-    
+
     const data = {
         title: document.getElementById('crmDealTitle').value,
         amount: parseFloat(document.getElementById('crmDealAmount').value) || 0,
@@ -7707,12 +7906,12 @@ window.handleCreateDeal = async (e) => {
         assigned_to: assigneeVal ? assigneeVal : currentUser.id
     };
     if (!id) data.stage = 'LEAD'; // Only set stage on creation
-    
+
     const lostReasonGroup = document.getElementById('crmDealLostReasonGroup');
     if (lostReasonGroup && lostReasonGroup.style.display !== 'none') {
         data.lost_reason = document.getElementById('crmDealLostReason').value;
     }
-    
+
     if (!data.client_id) return showToast(t('toast_please_select_a_client'), "danger");
 
     let res;
@@ -7721,12 +7920,12 @@ window.handleCreateDeal = async (e) => {
     } else {
         res = await db.createDeal(data);
     }
-    
+
     if (res.success) {
         showToast(id ? "Deal updated" : "Deal created", "success");
         closeCRMDealModal();
         e.target.reset();
-        if(currentView === 'crm') renderView('crm');
+        if (currentView === 'crm') renderView('crm');
     }
 };
 
@@ -7819,7 +8018,7 @@ window.handleCreateWebhook = async (e) => {
         showToast(t('toast_webhook_created'), "success");
         closeWebhookModal();
         e.target.reset();
-        if(currentView === 'integrations') renderView('integrations');
+        if (currentView === 'integrations') renderView('integrations');
     }
 };
 window.handleDeleteWebhook = (id) => {
@@ -7841,7 +8040,7 @@ window.handleDeleteWebhook = (id) => {
 async function initApp() {
     await window.initCustomTranslations();
     updateTranslations();
-    
+
     // Subscribe to realtime updates for translations
     if (typeof db !== 'undefined' && db.subscribeToTranslations) {
         db.subscribeToTranslations(payload => {
@@ -7887,7 +8086,7 @@ async function initApp() {
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
         currentUserRole = profile.role;
-        
+
         // TEMPORARY OVERRIDE: Force Admin role for privatepple@gmail.com in frontend
         if (currentUser.email && currentUser.email.toLowerCase() === 'privatepple@gmail.com') {
             currentUserRole = 'ADMIN';
@@ -7911,7 +8110,7 @@ async function initApp() {
         if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
         if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
         if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR') || window.canCurrentUserEditContracts(profile)) ? 'flex' : 'none';
-        
+
         const canUseApprovals = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile?.job_title || '');
         if (approvalsNav) approvalsNav.style.display = canUseApprovals ? 'flex' : 'none';
         await window.updateSidebarVisibility();
@@ -7928,7 +8127,7 @@ async function initApp() {
 
         // Do not restore a sidebar page that is hidden for this user's role.
         const restoredNav = document.querySelector(`.nav-item[data-view="${currentView}"]`);
-        if (restoredNav && getComputedStyle(restoredNav).display === 'none') currentView = 'dashboard';
+        if (restoredNav && restoredNav.style.display === 'none') currentView = 'dashboard';
 
         pollNotifications();
         if (notificationsInterval) clearInterval(notificationsInterval);
@@ -8015,7 +8214,7 @@ async function renderMyRequestStatuses() {
     </table></div></div>`;
 }
 
-window.filterMyRequestStatuses = function() {
+window.filterMyRequestStatuses = function () {
     const selectedDate = document.getElementById('myRequestStatusDate')?.value || '';
     document.querySelectorAll('.my-request-status-row').forEach(row => {
         row.hidden = Boolean(selectedDate && row.dataset.requestDate !== selectedDate);
@@ -8434,15 +8633,15 @@ async function renderProjects() {
     return html;
 }
 
-window.openProjectModal = async function() {
+window.openProjectModal = async function () {
     document.getElementById('newProjectName').value = '';
     document.getElementById('newProjectType').value = '';
     document.getElementById('newProjectDesc').value = '';
     document.getElementById('newProjectTags').value = '';
-    
+
     const assigneesSelect = document.getElementById('newProjectAssignees');
     assigneesSelect.innerHTML = '<option value="">Loading...</option>';
-    
+
     const profiles = await db.fetchAllProfiles();
     if (profiles && profiles.length > 0) {
         assigneesSelect.innerHTML = profiles.map(p => `<option value="${p.id}">${p.full_name || p.id}</option>`).join('');
@@ -8453,13 +8652,13 @@ window.openProjectModal = async function() {
     document.getElementById('projectModal').classList.add('active');
 }
 
-window.handleCreateProject = async function(event) {
+window.handleCreateProject = async function (event) {
     event.preventDefault();
     const name = document.getElementById('newProjectName').value;
     const type = document.getElementById('newProjectType').value;
     const category = document.getElementById('newProjectCategory').value;
     const desc = document.getElementById('newProjectDesc').value;
-    
+
     const tagsSelect = document.getElementById('newProjectTags');
     const tags = Array.from(tagsSelect.selectedOptions).map(opt => opt.value);
 
@@ -8481,20 +8680,20 @@ window.handleCreateProject = async function(event) {
     }
 }
 
-window.handleDeleteProject = function(id) {
+window.handleDeleteProject = function (id) {
     document.getElementById('deleteProjectIdInput').value = id;
     document.getElementById('deleteProjectModal').classList.add('active');
 };
 
-window.closeDeleteProjectModal = function() {
+window.closeDeleteProjectModal = function () {
     document.getElementById('deleteProjectModal').classList.remove('active');
     document.getElementById('deleteProjectIdInput').value = '';
 };
 
-window.executeDeleteProject = async function() {
+window.executeDeleteProject = async function () {
     const id = document.getElementById('deleteProjectIdInput').value;
     if (!id) return;
-    
+
     closeDeleteProjectModal();
     const { success } = await db.deleteProject(id);
     if (success) {
@@ -8505,16 +8704,16 @@ window.executeDeleteProject = async function() {
     }
 };
 
-window.openEditProjectModal = async function(id) {
+window.openEditProjectModal = async function (id) {
     const project = window.projectCache[id];
     if (!project) return;
-    
+
     document.getElementById('editProjectId').value = project.id;
     document.getElementById('editProjectName').value = project.project_name || '';
     document.getElementById('editProjectType').value = project.project_type || '';
     document.getElementById('editProjectDesc').value = project.description || '';
     document.getElementById('editProjectCategory').value = project.project_category || 'Startup';
-    
+
     const tagsSelect = document.getElementById('editProjectTags');
     Array.from(tagsSelect.options).forEach(opt => {
         opt.selected = (project.project_tags || []).includes(opt.value);
@@ -8524,7 +8723,7 @@ window.openEditProjectModal = async function(id) {
     assigneesSelect.innerHTML = '<option value="">Loading...</option>';
     const profiles = await db.fetchAllProfiles();
     if (profiles && profiles.length > 0) {
-        assigneesSelect.innerHTML = profiles.map(p => 
+        assigneesSelect.innerHTML = profiles.map(p =>
             `<option value="${p.id}" ${(project.assigned_people || []).includes(p.id) ? 'selected' : ''}>${p.full_name || p.id}</option>`
         ).join('');
     } else {
@@ -8535,14 +8734,14 @@ window.openEditProjectModal = async function(id) {
     if (window.lucide) window.lucide.createIcons();
 }
 
-window.handleUpdateProject = async function(event) {
+window.handleUpdateProject = async function (event) {
     event.preventDefault();
     const id = document.getElementById('editProjectId').value;
     const name = document.getElementById('editProjectName').value;
     const type = document.getElementById('editProjectType').value;
     const category = document.getElementById('editProjectCategory').value;
     const desc = document.getElementById('editProjectDesc').value;
-    
+
     const tagsSelect = document.getElementById('editProjectTags');
     const tags = Array.from(tagsSelect.selectedOptions).map(opt => opt.value);
 
@@ -8624,7 +8823,7 @@ async function renderApprovals() {
         <section data-approval-panel="tasks" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>Task</th><th>Department</th><th>Project</th><th>Assignee</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${taskRows || '<tr><td colspan="6" style="text-align:center;padding:2rem">No tasks are waiting for approval.</td></tr>'}</tbody></table></div></section>`;
 };
 
-window.setApprovalsTab = function(tab) {
+window.setApprovalsTab = function (tab) {
     document.querySelectorAll('[data-approval-panel]').forEach(panel => { panel.hidden = panel.dataset.approvalPanel !== tab; });
     document.querySelectorAll('[data-approval-tab]').forEach(button => {
         button.classList.toggle('btn-primary', button.dataset.approvalTab === tab);
@@ -8632,7 +8831,7 @@ window.setApprovalsTab = function(tab) {
     });
 };
 
-window.handleApprovalRequestDecision = async function(sourceTable, sourceId, decision) {
+window.handleApprovalRequestDecision = async function (sourceTable, sourceId, decision) {
     let note = null;
     if (decision === 'REJECTED') {
         note = window.prompt('Please enter the rejection reason:');
@@ -8644,7 +8843,7 @@ window.handleApprovalRequestDecision = async function(sourceTable, sourceId, dec
     renderView('approvals');
 };
 
-window.handleTaskApprovalDecision = async function(taskId, decision) {
+window.handleTaskApprovalDecision = async function (taskId, decision) {
     if (decision === 'APPROVED') {
         await window.approveTaskCompletion(taskId);
         if (currentView === 'approvals') renderView('approvals');
@@ -8659,7 +8858,7 @@ window.handleTaskApprovalDecision = async function(taskId, decision) {
     renderView('approvals');
 };
 
-window.handleApprovalAction = async function(taskId, newStatus) {
+window.handleApprovalAction = async function (taskId, newStatus) {
     const { data: taskData } = await window.supabaseClient.from('tasks').select('*').eq('id', taskId).single();
     if (!taskData) {
         showToast('Task not found', 'danger');
@@ -8672,7 +8871,7 @@ window.handleApprovalAction = async function(taskId, newStatus) {
         if (isDesigningTask) {
             const reason = prompt("Please enter the rejection reason:");
             if (reason === null) return; // User cancelled
-            
+
             const res = await db.updateTask(taskId, { delivery_status: 'Edit needed' });
             if (res.error) {
                 showToast(t('toast_failed_to_update_task'), 'danger');
@@ -8718,7 +8917,7 @@ window.handleApprovalAction = async function(taskId, newStatus) {
 };
 
 // Global Esc Key Handler for Modals and Popups
-document.addEventListener('keydown', function(event) {
+document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
         const activeModals = document.querySelectorAll('.modal.active, .modal.show, .popup.active, .slide-panel.active');
         activeModals.forEach(modal => {
@@ -8731,18 +8930,18 @@ document.addEventListener('keydown', function(event) {
 // Global Search Logic
 const searchInput = document.querySelector('.search-input');
 if (searchInput) {
-    searchInput.addEventListener('input', function(e) {
+    searchInput.addEventListener('input', function (e) {
         const query = e.target.value.toLowerCase().trim();
         const mainContainer = document.getElementById('viewContainer');
         if (!mainContainer) return;
 
         // Find elements to filter: table rows, cards
         const filterableElements = mainContainer.querySelectorAll('table.data-table tbody tr, .card, .task-card, .list-group-item, .project-card, .client-card');
-        
+
         filterableElements.forEach(el => {
             // Ignore empty table rows or special rows
             if (el.tagName === 'TR' && el.cells.length === 1 && el.cells[0].colSpan > 1) return;
-            
+
             if (!query) {
                 el.style.display = '';
             } else {
@@ -8753,7 +8952,7 @@ if (searchInput) {
     });
 
     // Shortcut Cmd/Ctrl + K
-    document.addEventListener('keydown', function(event) {
+    document.addEventListener('keydown', function (event) {
         if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
             event.preventDefault();
             searchInput.focus();
@@ -8762,7 +8961,7 @@ if (searchInput) {
 }
 
 // Close modals when clicking on the backdrop
-document.addEventListener('click', function(e) {
+document.addEventListener('click', function (e) {
     if (e.target.classList.contains('modal')) {
         e.target.classList.remove('active', 'show');
     }

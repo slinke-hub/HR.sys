@@ -24,7 +24,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.from('system_translations').select('*');
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("Error fetching system translations:", error);
             return [];
@@ -156,17 +156,60 @@ const db = {
 
             const { data, error } = await query;
             if (error) throw error;
+            
+            // Try to fetch workflow data if the new hierarchy migration is applied
+            try {
+                if (data && data.length > 0) {
+                    const { data: workflows } = await supabaseClient
+                        .from('request_approval_workflows')
+                        .select('*, steps:request_approval_steps(*)');
+                    
+                    if (workflows && workflows.length > 0) {
+                        data.forEach(req => {
+                            const wf = workflows.find(w => w.source_table === 'requests' && w.source_id === req.id);
+                            if (wf) {
+                                // Sort steps by step_order
+                                if (wf.steps) {
+                                    wf.steps.sort((a, b) => a.step_order - b.step_order);
+                                }
+                                req.workflow = wf;
+                            }
+                        });
+                    }
+                }
+            } catch (err) {
+                console.warn("Workflow migration may not be applied yet:", err);
+            }
 
+            // Fallback filtering if migration hasn't enforced RLS yet
             if (role === 'MANAGER' && userId) {
                 return data.filter(req => req.employee_id === userId || (req.profiles && req.profiles.manager_id === userId));
             }
 
-            return data;
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
-            console.error("Error fetching requests:", error);
+            console.error("fetchRequests Error:", error);
             return [];
         }
     },
+
+    async decideRequestApproval(sourceTable, sourceId, decision, note = '') {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase is not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('decide_request_approval', {
+                p_source_table: sourceTable,
+                p_source_id: sourceId,
+                p_decision: decision,
+                p_note: note
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error("decideRequestApproval Error:", error);
+            return { success: false, error };
+        }
+    },
+
     async createRequest(employeeId, requestType, leaveType, loanAmount = null, numberOfDays = null, notes = null) {
         if (!supabaseClient) return { success: false, error: new Error('Supabase is not initialized') };
         try {
@@ -204,7 +247,7 @@ const db = {
             else if (Array.isArray(employeeIds)) return [];
             const { data, error } = await query;
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error('fetchGenericRequests Error:', error);
             return [];
@@ -236,7 +279,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.rpc('get_request_filter_directory');
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.warn('Request directory is unavailable; using profile names without email.', error);
             const profiles = await this.fetchAllProfiles();
@@ -254,7 +297,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.rpc('get_my_request_statuses');
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error('fetchMyRequestStatuses Error:', error);
             return [];
@@ -285,7 +328,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.from('login_attempts').select('*').eq('email', email).maybeSingle();
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("Error checking login lockout:", error);
             return null;
@@ -362,7 +405,7 @@ const db = {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("Error fetching announcements:", error.message);
             return null;
@@ -421,7 +464,7 @@ const db = {
                     .single();
                 
                 if (error) throw error;
-                return data;
+                return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
             } catch (error) {
                 if (error.message && error.message.includes("JWT issued at future") && attempt < 3) {
                     console.warn(`JWT time drift, retrying in 1s (attempt ${attempt})...`);
@@ -459,7 +502,7 @@ const db = {
             else if (Array.isArray(userId)) return [];
             const { data, error } = await query;
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("Error fetching leave requests:", error.message);
             return [];
@@ -492,7 +535,7 @@ const db = {
             }
             const { data, error } = await query;
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("Error fetching payroll:", error.message);
             return [];
@@ -511,7 +554,7 @@ const db = {
                 .select('*')
                 .eq('is_active', true);
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch(e) {
             return [];
         }
@@ -526,7 +569,7 @@ const db = {
                 .eq('status', 'PENDING')
                 .order('created_at', { ascending: true });
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch(e) {
             return [];
         }
@@ -540,17 +583,17 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('id, emp_index, full_name, nationality, iqama_number, phone_number, role, created_at, manager_id, base_salary, department_id, job_title, avatar_url, last_login')
+                .select('id, emp_index, full_name, display_name_ar, nationality, iqama_number, phone_number, role, created_at, manager_id, base_salary, department_id, job_title, job_title_ar, avatar_url, last_login')
                 .eq('is_active', true)
                 .order('emp_index', { ascending: true });
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchUsers Error:", error);
             return [];
         }
     },
-    async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '', departmentId = '', nationality = 'Saudi') {
+    async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '', departmentId = '', nationality = 'Saudi', fullNameAr = '') {
         if (!supabaseClient) {
             console.warn("Mock createUser");
             return { data: 'mock-user-id-1234', error: null };
@@ -574,6 +617,10 @@ const db = {
             }
             
             const userId = data;
+            
+            if (data && fullNameAr) {
+                await supabaseClient.from('profiles').update({ display_name_ar: fullNameAr }).eq('id', data);
+            }
             
             if (departmentId || nationality) {
                 const { error: updateError } = await supabaseClient
@@ -658,7 +705,7 @@ const db = {
             }
             const { data, error } = await query;
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchGoals Error:", error);
             return [];
@@ -689,7 +736,7 @@ const db = {
             else if (Array.isArray(employeeId)) return [];
             const { data, error } = await query;
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchDocuments Error:", error);
             return [];
@@ -798,7 +845,7 @@ const db = {
             // if (userId) { ... }
             const { data, error } = await query;
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchProjects Error:", error);
             return [];
@@ -871,7 +918,7 @@ const db = {
             const { data, error } = await supabaseClient
                 .from('tasks').select('*').order('created_at', { ascending: false });
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchTasks Error:", error);
             return [];
@@ -885,7 +932,7 @@ const db = {
                 .select('*, profiles:assignee_id(id, full_name, role), projects(project_name)')
                 .order('created_at', { ascending: false });
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchTasksWithProfiles Error:", error);
             return [];
@@ -1075,7 +1122,7 @@ const db = {
                 .eq('task_id', taskId)
                 .order('created_at', { ascending: true });
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchTaskComments Error:", error);
             return [];
@@ -1115,7 +1162,7 @@ const db = {
             }
             const { data, error } = await query;
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchEmployeeDocuments Error:", error);
             return [];
@@ -1228,7 +1275,7 @@ const db = {
             else if (Array.isArray(employeeId)) return [];
             const { data, error } = await query;
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchExpenses Error:", error);
             return [];
@@ -1277,7 +1324,7 @@ const db = {
                 .order('created_at', { ascending: false })
                 .limit(20);
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchNotifications Error:", error);
             return [];
@@ -1406,7 +1453,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.from('contract_documents').select('*').eq('contract_id', contractId).order('created_at', { ascending: false });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error('fetchContractDocuments Error:', error);
             return [];
@@ -1441,7 +1488,7 @@ const db = {
                 .select('id, full_name, role, avatar_url, job_title, department_id, manager_id, last_login')
                 .eq('is_active', true);
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchAllProfiles Error:", error);
             return [];
@@ -1456,7 +1503,7 @@ const db = {
                 .or(`and(sender_id.eq.${userId1},receiver_id.eq.${userId2}),and(sender_id.eq.${userId2},receiver_id.eq.${userId1})`)
                 .order('created_at', { ascending: true });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchMessageHistory Error:", error);
             return [];
@@ -1516,7 +1563,7 @@ const db = {
                 .eq('employee_id', employeeId)
                 .order('date', { ascending: false });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchAttendanceByEmployee Error:", error);
             return [];
@@ -1530,7 +1577,7 @@ const db = {
                 .select('*')
                 .order('date', { ascending: false });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchAllAttendance Error:", error);
             return [];
@@ -1638,7 +1685,7 @@ const db = {
                 `)
                 .order('created_at', { ascending: false });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchCommunityChat Error:", error);
             return [];
@@ -1681,7 +1728,7 @@ const db = {
                 }
                 throw error;
             }
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchMyDepartmentSupervisors Error:", error);
             return [];
@@ -1695,7 +1742,7 @@ const db = {
                 ({ data, error } = await supabaseClient.from('departments').select('*').order('name'));
             }
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchDepartments Error:", error);
             return [];
@@ -1706,7 +1753,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.from('job_titles').select('id,name,department_id,is_active').eq('is_active', true).order('name');
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error('fetchJobTitles Error:', error);
             return [];
@@ -1780,7 +1827,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.from('crm_clients').select('*').order('created_at', { ascending: false });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchClients Error:", error);
             return [];
@@ -1827,7 +1874,7 @@ const db = {
                 .select('*, crm_clients(name)')
                 .order('created_at', { ascending: false });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchDeals Error:", error);
             return [];
@@ -1890,7 +1937,7 @@ const db = {
                 .select('*, crm_deals(title, crm_clients(name))')
                 .order('created_at', { ascending: false });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchOrders Error:", error);
             return [];
@@ -1938,7 +1985,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.from('webhooks').select('*').order('created_at', { ascending: false });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchWebhooks Error:", error);
             return [];
@@ -2003,7 +2050,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.from('establishment_settings').select('*').limit(1).maybeSingle();
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchEstablishmentSettings Error:", error);
             return null;
@@ -2014,7 +2061,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient.from('contract_settings').select('*').limit(1).maybeSingle();
             if (error) throw error;
-            return data;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchContractSettings Error:", error);
             return null;
@@ -2029,7 +2076,7 @@ const db = {
             }
             const { data, error } = await query;
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchContracts Error:", error);
             return [];
@@ -2041,7 +2088,7 @@ const db = {
             const { data, error } = await supabaseClient.from('contracts').select('*')
                 .eq('is_archived', true).order('archived_at', { ascending: false });
             if (error) throw error;
-            return data || [];
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error('fetchArchivedContracts Error:', error);
             return [];
@@ -2101,4 +2148,200 @@ const db = {
             console.error("logAudit Error:", error);
         }
     }
+,
+    // --- Payroll Manager API Wrappers ---
+    async fetchPayrollSettings() {
+        if (!supabaseClient) return { is_overtime_enabled: true };
+        try {
+            const { data, error } = await supabaseClient.from('payroll_settings').select('*').single();
+            if (error && error.code !== 'PGRST116') throw error;
+            return data || { is_overtime_enabled: true };
+        } catch (error) {
+            console.error("fetchPayrollSettings Error:", error);
+            return { is_overtime_enabled: true };
+        }
+    },
+    async updatePayrollSettings(settings) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('payroll_settings').upsert([{ id: 1, ...settings }]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updatePayrollSettings Error:", error);
+            return { success: false, error };
+        }
+    },
+    async fetchCommissionTiers() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('commission_tiers').select('*').order('min_target_percentage', { ascending: true });
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.error("fetchCommissionTiers Error:", error);
+            return [];
+        }
+    },
+    async fetchMonthlySales(monthYear) {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('monthly_sales').select('*, profiles!inner(full_name, display_name_ar)').eq('month_year', monthYear);
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.error("fetchMonthlySales Error:", error);
+            return [];
+        }
+    },
+    async saveMonthlySales(salesData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('monthly_sales').upsert(salesData, { onConflict: 'employee_id, month_year' });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("saveMonthlySales Error:", error);
+            return { success: false, error };
+        }
+    },
+    async fetchAbsences(monthYear) {
+        if (!supabaseClient) return [];
+        try {
+            const startDate = `${monthYear}-01`;
+            const year = parseInt(monthYear.split('-')[0]);
+            const month = parseInt(monthYear.split('-')[1]);
+            const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+            
+            const { data, error } = await supabaseClient.from('absences').select('*')
+                .gte('date_of_absence', startDate)
+                .lte('date_of_absence', endDate);
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.error("fetchAbsences Error:", error);
+            return [];
+        }
+    },
+    async saveAbsence(absenceData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('absences').insert([absenceData]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("saveAbsence Error:", error);
+            return { success: false, error };
+        }
+    },
+    async fetchEmployeeLoans() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('employee_loans').select('*, profiles!inner(full_name, display_name_ar)').neq('status', 'PAID');
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.error("fetchEmployeeLoans Error:", error);
+            return [];
+        }
+    },
+    async saveEmployeeLoan(loanData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('employee_loans').insert([loanData]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("saveEmployeeLoan Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateEmployeeLoan(id, loanData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('employee_loans').update(loanData).eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateEmployeeLoan Error:", error);
+            return { success: false, error };
+        }
+    },
+    
+    async fetchReleasedPayslips(monthYear) {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('released_payslips').select('*').eq('month_year', monthYear).order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchReleasedPayslips Error:", error);
+            return [];
+        }
+    },
+    async saveReleasedPayslips(payslipsArray) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('released_payslips').insert(payslipsArray);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("saveReleasedPayslips Error:", error);
+            return { success: false, error };
+        }
+    },
+    async fetchPayrollAdjustments(monthYear) {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.from('payroll_adjustments').select('*').eq('month_year', monthYear);
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.error("fetchPayrollAdjustments Error:", error);
+            return [];
+        }
+    },
+    async savePayrollAdjustment(adjustmentData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('payroll_adjustments').insert([adjustmentData]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("savePayrollAdjustment Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateProfileTranslations(userId, displayNameAr, jobTitleAr) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('profiles')
+                .update({ 
+                    display_name_ar: displayNameAr,
+                    job_title_ar: jobTitleAr
+                })
+                .eq('id', userId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateProfileTranslations Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateDepartmentTranslation(deptId, nameAr) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('departments')
+                .update({ name_ar: nameAr })
+                .eq('id', deptId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateDepartmentTranslation Error:", error);
+            return { success: false, error };
+        }
+    }
 };
+
