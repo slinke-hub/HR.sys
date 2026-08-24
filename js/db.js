@@ -14,6 +14,34 @@ if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE
     console.warn("Supabase credentials not configured. Using mocked data/actions.");
 }
 
+function applyI18nGetters(obj) {
+    if (!obj) return obj;
+    const origFullName = obj.full_name;
+    const origJobTitle = obj.job_title;
+    
+    if (origFullName !== undefined) {
+        Object.defineProperty(obj, 'full_name', {
+            get: function() { return (window.currentLang === 'ar' && this.display_name_ar) ? this.display_name_ar : origFullName; },
+            enumerable: true
+        });
+    }
+    if (origJobTitle !== undefined) {
+        Object.defineProperty(obj, 'job_title', {
+            get: function() { return (window.currentLang === 'ar' && this.job_title_ar) ? this.job_title_ar : origJobTitle; },
+            enumerable: true
+        });
+    }
+    
+    const origName = obj.name;
+    if (origName !== undefined && obj.name_ar !== undefined) {
+        Object.defineProperty(obj, 'name', {
+            get: function() { return (window.currentLang === 'ar' && this.name_ar) ? this.name_ar : origName; },
+            enumerable: true
+        });
+    }
+    return obj;
+}
+
 // Global DB helper functions for the prototype
 const db = {
 
@@ -1404,6 +1432,7 @@ const db = {
                 .from('contracts')
                 .select('*')
                 .eq('employee_id', employeeId)
+                .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
             if (error) throw error;

@@ -2246,7 +2246,7 @@ window.openTaskDetailsModal = async function (id) {
         list.innerHTML = '<div style="color: var(--color-text-secondary); font-style: italic;">No comments yet.</div>';
     } else {
         list.innerHTML = comments.map(c => `
-            <div style="background: rgba(0,0,0,0.1); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--color-border);">
+            <div style="background: var(--color-bg-base); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--color-border); margin-bottom: 0.5rem; box-shadow: var(--shadow-sm);">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
                     <strong>${escapeHTML(c.user?.full_name || 'Unknown User')}</strong>
                     <span style="font-size: 0.75rem; color: var(--color-text-secondary);">${new Date(c.created_at).toLocaleString()}</span>
@@ -2987,7 +2987,19 @@ function initCharts() {
 // PAYROLL
 // ==========================================
 window.handleViewPayslip = function (month, netPay) {
-    alert(`SAP Detailed Payslip for ${month}\n------------------------\nBase Salary: $${(netPay * 0.8).toFixed(2)}\nAllowances: $${(netPay * 0.2).toFixed(2)}\n\nNet Pay: $${netPay.toFixed(2)}`);
+    const modal = document.getElementById('viewPayslipModal');
+    if (!modal) {
+        alert(`SAP Detailed Payslip for ${month}\n------------------------\nBase Salary: $${(netPay * 0.8).toFixed(2)}\nAllowances: $${(netPay * 0.2).toFixed(2)}\n\nNet Pay: $${netPay.toFixed(2)}`);
+        return;
+    }
+    
+    document.getElementById('payslipModalMonth').textContent = `SAP Detailed Payslip for ${month}`;
+    document.getElementById('payslipModalBase').textContent = `$${(netPay * 0.8).toFixed(2)}`;
+    document.getElementById('payslipModalAllowances').textContent = `$${(netPay * 0.2).toFixed(2)}`;
+    document.getElementById('payslipModalNet').textContent = `$${netPay.toFixed(2)}`;
+    
+    modal.classList.add('active');
+    if (window.lucide) window.lucide.createIcons();
 }
 
 // Render Payroll
@@ -3243,16 +3255,16 @@ async function renderUsers() {
                                     </td>
                                     <td><span data-user-role-badge class="status-badge ${u.role === 'ADMIN' ? 'success' : 'info'}">${u.role}</span></td>
                                     <td>
-                                        <select data-directory-job-title class="form-control" style="width: 210px; padding: 0.25rem; font-size: 0.8rem;" onchange="handleChangeJobTitle('${u.id}', this.value, this)">${companyJobTitleOptions(u.job_title || '', departments.find(department => department.id === u.department_id)?.name || '')}</select>
+                                        <select data-directory-job-title class="form-control" style="width: 100%; min-width: 130px; max-width: 200px; padding: 0.25rem; font-size: 0.8rem;" onchange="handleChangeJobTitle('${u.id}', this.value, this)">${companyJobTitleOptions(u.job_title || '', departments.find(department => department.id === u.department_id)?.name || '')}</select>
                                     </td>
                                     <td>
-                                        <select data-directory-department class="form-control" style="width: 230px; padding: 0.25rem;" onchange="handleDirectoryDepartmentChange('${u.id}', this.value, this)">
+                                        <select data-directory-department class="form-control" style="width: 100%; min-width: 130px; max-width: 200px; padding: 0.25rem;" onchange="handleDirectoryDepartmentChange('${u.id}', this.value, this)">
                                             <option value="">Select Department</option>
                                             ${departments.map(department => `<option value="${department.id}" ${u.department_id === department.id ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('')}
                                         </select>
                                     </td>
                                     <td>
-                                        <select data-user-role-select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
+                                        <select data-user-role-select class="form-control" style="width: 100%; min-width: 100px; max-width: 150px; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
                                             <option value="EMPLOYEE" ${u.role === 'EMPLOYEE' ? 'selected' : ''}>${t('users_role_emp')}</option>
                                             <option value="SUPERVISOR" ${u.role === 'SUPERVISOR' ? 'selected' : ''}>Supervisor</option>
                                             <option value="MANAGER" ${u.role === 'MANAGER' ? 'selected' : ''}>${t('users_role_mgr')}</option>
@@ -3260,18 +3272,18 @@ async function renderUsers() {
                                         </select>
                                     </td>
                                     <td>
-                                        <select data-user-manager-select class="form-control" style="width: auto; padding: 0.25rem;" onchange="handleAssignManager('${u.id}', this.value)">
+                                        <select data-user-manager-select class="form-control" style="width: 100%; min-width: 120px; max-width: 180px; padding: 0.25rem;" onchange="handleAssignManager('${u.id}', this.value)">
                                             <option value="">${t('users_no_mgr')}</option>
                                             ${users.filter(m => (m.role === 'MANAGER' || m.role === 'ADMIN' || m.role === 'SUPERVISOR') && m.id !== u.id).map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${escapeHTML(m.full_name || 'User')} (${m.role})</option>`).join('')}
                                         </select>
                                     </td>
                                     <td>
-                                        <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="navigateToContract('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')">
+                                        <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap;" onclick="navigateToContract('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')">
                                             <i data-lucide="file-signature" style="width:14px;height:14px;margin-right:4px;"></i> ${t('users_contract')}
                                         </button>
                                     </td>
                                     <td>
-                                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                        <div style="display: flex; gap: 0.5rem; flex-wrap: nowrap;">
                                             <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem;" onclick="showEditUserModal('${u.id}')" title="Edit User">
                                                 <i data-lucide="edit" style="width:14px;height:14px;"></i>
                                             </button>
@@ -4517,7 +4529,7 @@ async function renderTasks() {
                     </div>
 
                     <div style="text-align: right; margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('taskFormContainer').style.display='none'; document.getElementById('btnToggleCreateTaskForm').style.display='inline-block';">Cancel</button>
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('taskFormContainer').style.display='none'; const btnToggle = document.getElementById('btnToggleCreateTaskForm'); if(btnToggle) btnToggle.style.display='inline-block'; document.querySelector('.task-v2-legacy-host')?.classList.remove('show-form');">Cancel</button>
                         <button type="submit" class="btn btn-primary">${t('task_assign_btn') || 'Create Task'}</button>
                     </div>
                 </form>
@@ -5357,7 +5369,7 @@ function prepareTeamworkEditModal(task) {
     if (!context) {
         context = document.createElement('div');
         context.className = 'teamwork-edit-context';
-        context.innerHTML = `<div class="teamwork-edit-list">Task list <strong>Inbox</strong></div><div class="teamwork-edit-tabs"><button type="button" class="active" onclick="setEditTaskTab('details')">Details</button><button type="button" onclick="setEditTaskTab('advanced')">Advanced options</button></div>`;
+        context.innerHTML = `<div class="teamwork-edit-list"><span data-i18n="html_task_list">Task list</span> <strong><span data-i18n="html_inbox">Inbox</span></strong></div><div class="teamwork-edit-tabs"><button type="button" class="active" onclick="setEditTaskTab('details')" data-i18n="html_details">Details</button><button type="button" onclick="setEditTaskTab('advanced')" data-i18n="html_advanced_options">Advanced options</button></div>`;
         form.querySelector('#editTaskId').insertAdjacentElement('afterend', context);
     }
     const advancedIds = ['editTaskCategory', 'editTaskProject', 'editTaskDepartment', 'editTaskSubType', 'editEnableWatchers'];
@@ -5548,7 +5560,7 @@ window.handleSaveContract = async function (e) {
         department: departmentName,
         job_title_ar: jobTitle,
         job_title_en: jobTitle,
-        display_name_ar: document.getElementById('contractEmployeeNameAr')?.value || null,
+        
         start_date: document.getElementById('contractStartDate').value,
         end_date: document.getElementById('contractEndDate').value || null,
         salary: document.getElementById('contractSalary').value || null,
@@ -5592,7 +5604,7 @@ window.handleSaveContract = async function (e) {
         await db.updateUserProfile(currentContractEmployeeId, {
             nationality: contractData.nationality,
             base_salary: contractData.salary,
-            display_name_ar: contractData.display_name_ar
+            display_name_ar: document.getElementById('contractEmployeeNameAr')?.value || null
         });
         delete window.viewHTMLCache.users;
         delete window.viewHTMLCache.employees;

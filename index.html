@@ -162,14 +162,14 @@
 
     <!-- CRM Client Modal -->
     <div class="modal" id="crmClientModal">
-        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+        <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
                 <h2 id="crmClientModalTitle" data-i18n="html_new_client">New Client</h2>
-                <button class="btn btn-icon" onclick="closeCRMClientModal()"><i data-lucide="x"></i></button>
+                <button class="close-modal" onclick="closeCRMClientModal()">&times;</button>
             </div>
             <form onsubmit="handleCreateClient(event)">
                 <input type="hidden" id="crmClientId">
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Client Name *</label>
                         <input type="text" id="crmClientName" class="form-control" required>
@@ -179,7 +179,7 @@
                         <input type="text" id="crmClientCompany" class="form-control">
                     </div>
                 </div>
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="mail" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Email</label>
                         <input type="email" id="crmClientEmail" class="form-control">
@@ -196,14 +196,14 @@
 
     <!-- CRM Deal Modal -->
     <div class="modal" id="crmDealModal">
-        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+        <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
                 <h2 id="crmDealModalTitle" data-i18n="html_deal_details">Deal Details</h2>
-                <button class="btn btn-icon" onclick="closeCRMDealModal()"><i data-lucide="x"></i></button>
+                <button class="close-modal" onclick="closeCRMDealModal()">&times;</button>
             </div>
             <form onsubmit="handleCreateDeal(event)">
                 <input type="hidden" id="crmDealId">
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="file-text" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Deal Title *</label>
                         <input type="text" id="crmDealTitle" class="form-control" required>
@@ -213,7 +213,7 @@
                         <select id="crmDealClient" class="form-control" required></select>
                     </div>
                 </div>
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="dollar-sign" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Amount (SAR) *</label>
                         <input type="number" id="crmDealAmount" class="form-control" required>
@@ -223,7 +223,7 @@
                         <input type="date" id="crmDealClosingDate" class="form-control">
                     </div>
                 </div>
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="tag" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Event Type</label>
                         <input type="text" id="crmDealEventType" class="form-control">
@@ -233,7 +233,7 @@
                         <input type="date" id="crmDealFirstContactDate" class="form-control">
                     </div>
                 </div>
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="message-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Contacted Via</label>
                         <select id="crmDealContactMethod" class="form-control">
@@ -289,7 +289,7 @@
             </div>
             <form onsubmit="handleOrderSubmit(event)">
                 <input type="hidden" id="orderDealId">
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="calendar" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Starting Date *</label>
                         <input type="date" id="orderStartDate" class="form-control" required>
@@ -299,7 +299,7 @@
                         <input type="date" id="orderEndDate" class="form-control">
                     </div>
                 </div>
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="map-pin" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Event's Location (Google Maps URL)</label>
                         <input type="url" id="orderLocation" class="form-control" placeholder="https://maps.google.com/..." data-i18n-placeholder="ph_https_maps_google_com">
@@ -335,7 +335,7 @@
             </div>
             <form onsubmit="handleEditOrderSubmit(event)">
                 <input type="hidden" id="editOrderId">
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="calendar" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Starting Date</label>
                         <input type="date" id="editOrderStartDate" class="form-control">
@@ -345,7 +345,7 @@
                         <input type="date" id="editOrderEndDate" class="form-control">
                     </div>
                 </div>
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="map-pin" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Event's Location (Google Maps URL)</label>
                         <input type="url" id="editOrderLocation" class="form-control" placeholder="https://maps.google.com/..." data-i18n-placeholder="ph_https_maps_google_com">
@@ -507,7 +507,7 @@
 
     <!-- Delete User Modal -->
     <div class="modal" id="deleteUserModal">
-        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+        <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header">
                 <h2 data-i18n="html_delete_user">Delete User</h2>
                 <button class="btn btn-icon" onclick="closeDeleteUserModal()"><i data-lucide="x"></i></button>
@@ -719,7 +719,7 @@
                 <button class="btn btn-icon" type="button" onclick="document.getElementById('projectModal').classList.remove('active')"><i data-lucide="x"></i></button>
             </div>
             <form onsubmit="handleCreateProject(event)">
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="folder" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Name *</label>
                         <input type="text" id="newProjectName" class="form-control" required>
@@ -735,7 +735,7 @@
                         </select>
                     </div>
                 </div>
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="layers" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Category</label>
                         <select id="newProjectCategory" class="form-control">
@@ -784,7 +784,7 @@
             </div>
             <form onsubmit="handleUpdateProject(event)">
                 <input type="hidden" id="editProjectId">
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="folder" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Name *</label>
                         <input type="text" id="editProjectName" class="form-control" required>
@@ -800,7 +800,7 @@
                         </select>
                     </div>
                 </div>
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="layers" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Category</label>
                         <select id="editProjectCategory" class="form-control">
@@ -846,11 +846,11 @@
             <div style="margin-bottom: 1rem;">
                 <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: var(--color-warning);"></i>
             </div>
-            <h2 id="confirmModalTitle" style="margin-bottom: 0.5rem;" data-i18n="html_confirm_action">Confirm Action</h2>
-            <p id="confirmModalMessage" style="color: var(--color-text-secondary); margin-bottom: 1.5rem;" data-i18n="html_are_you_sure">Are you sure?</p>
+            <h2 id="confirmModalTitle" style="margin-bottom: 0.5rem; color: #ffffff !important;" data-i18n="html_confirm_action">Confirm Action</h2>
+            <p id="confirmModalMessage" style="color: rgba(255, 255, 255, 0.8) !important; margin-bottom: 1.5rem;" data-i18n="html_are_you_sure">Are you sure?</p>
             <div style="display: flex; gap: 1rem; justify-content: center;">
-                <button class="btn btn-secondary" onclick="closeConfirmModal()" data-i18n="html_cancel">Cancel</button>
-                <button class="btn btn-primary" id="confirmModalBtn" style="background-color: var(--color-danger);" data-i18n="html_confirm">Confirm</button>
+                <button class="btn btn-secondary" onclick="closeConfirmModal()" style="background: rgba(255, 255, 255, 0.1) !important; color: #ffffff !important; border-color: rgba(255, 255, 255, 0.2) !important;" data-i18n="html_cancel">Cancel</button>
+                <button class="btn btn-primary" id="confirmModalBtn" style="background: var(--color-danger) !important; background-image: none !important; border-color: var(--color-danger) !important; color: #ffffff !important;" data-i18n="html_confirm">Confirm</button>
             </div>
         </div>
     </div>
@@ -858,12 +858,207 @@
     
     <!-- Success Modal -->
     <div class="modal" id="successModal" style="z-index: 100000;">
-        <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
             <div style="margin-bottom: 1rem;">
                 <i data-lucide="check-circle" style="width: 48px; height: 48px; color: var(--color-success);"></i>
             </div>
-            <h2 id="successModalTitle" style="margin-bottom: 0.5rem; color: #ffffff;">Success</h2>
-            <p id="successModalMessage" style="color: rgba(255,255,255,0.8); margin-bottom: 1.5rem;">Action completed successfully.</p>
+            <h2 id="successModalTitle" style="margin-bottom: 0.5rem;">Success</h2>
+            <p id="successModalMessage" style="color: var(--color-text-secondary); margin-bottom: 1.5rem;">Action completed successfully.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+                <button class="btn btn-primary" style="min-width: 120px;" onclick="document.getElementById('successModal').classList.remove('active', 'show')">OK</button>
+            </div>
+        </div>
+        </div>
+    </div>
+
+    <!-- Department Modal -->
+    <div class="modal" id="departmentModal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 id="departmentModalTitle" data-i18n="html_new_department">New Department</h2>
+                <button class="btn btn-icon" onclick="closeDepartmentModal()"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleCreateDepartment(event)">
+                <input type="hidden" id="departmentId">
+                <div class="form-group">
+                    <label class="form-label" data-i18n="html_department_name">Department Name *</label>
+                    <input type="text" id="departmentName" class="form-control" maxlength="120" placeholder="Enter department name" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="html_description">Description</label>
+                    <textarea id="departmentDescription" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="html_department_head">Department Head</label>
+                    <select id="departmentHead" class="form-control">
+                        <!-- Loaded dynamically -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="html_department_employees">Department Employees</label>
+                    <select id="departmentEmployees" class="form-control" multiple style="min-height: 100px;">
+                        <!-- Loaded dynamically -->
+                    </select>
+                    <small style="color:var(--text-secondary); display:block; margin-top:0.25rem;">Click an employee to select or deselect them.</small>
+                </div>
+                <button type="submit" id="departmentSubmitBtn" class="btn btn-primary" style="width:100%;" data-i18n="html_create_department">Create Department</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- New Project Modal -->
+    <div class="modal" id="projectModal">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+            <div class="modal-header">
+                <h2 data-i18n="html_new_project">New Project</h2>
+                <button class="btn btn-icon" type="button" onclick="document.getElementById('projectModal').classList.remove('active')"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleCreateProject(event)">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="folder" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Name *</label>
+                        <input type="text" id="newProjectName" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="tag" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Type *</label>
+                        <select id="newProjectType" class="form-control" required>
+                            <option value="" data-i18n="html_select_type">Select Type...</option>
+                            <option value="Internal" data-i18n="html_internal">Internal</option>
+                            <option value="Client" data-i18n="html_client">Client</option>
+                            <option value="Product" data-i18n="html_product">Product</option>
+                            <option value="Maintenance" data-i18n="html_maintenance">Maintenance</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="layers" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Category</label>
+                        <select id="newProjectCategory" class="form-control">
+                            <option value="Startup" data-i18n="html_startup">Startup</option>
+                            <option value="Enterprise" data-i18n="html_enterprise">Enterprise</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="users" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Assign People *</label>
+                        <select id="newProjectAssignees" class="form-control" multiple style="min-height: 80px;" required>
+                            <!-- Loaded dynamically -->
+                        </select>
+                        <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple.</small>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label"><i data-lucide="tags" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Tags</label>
+                    <select id="newProjectTags" class="form-control" multiple style="min-height: 80px;">
+                        <option value="Urgent" data-i18n="tag_urgent">Urgent</option>
+                        <option value="Frontend" data-i18n="tag_frontend">Frontend</option>
+                        <option value="Backend" data-i18n="tag_backend">Backend</option>
+                        <option value="UI/UX" data-i18n="tag_ui_ux">UI/UX</option>
+                        <option value="Bug" data-i18n="tag_bug">Bug</option>
+                        <option value="Feature" data-i18n="tag_feature">Feature</option>
+                    </select>
+                    <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple tags.</small>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label"><i data-lucide="align-left" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Description</label>
+                    <textarea id="newProjectDesc" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('projectModal').classList.remove('active')" data-i18n="html_cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="html_create_project">Create Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Project Modal -->
+    <div class="modal" id="editProjectModal">
+        <div class="modal-content" style="max-width: 600px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+            <div class="modal-header">
+                <h2 data-i18n="html_edit_project">Edit Project</h2>
+                <button class="btn btn-icon" type="button" onclick="document.getElementById('editProjectModal').classList.remove('active')"><i data-lucide="x"></i></button>
+            </div>
+            <form onsubmit="handleUpdateProject(event)">
+                <input type="hidden" id="editProjectId">
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="folder" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Name *</label>
+                        <input type="text" id="editProjectName" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="tag" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Type *</label>
+                        <select id="editProjectType" class="form-control" required>
+                            <option value="" data-i18n="html_select_type">Select Type...</option>
+                            <option value="Internal" data-i18n="html_internal">Internal</option>
+                            <option value="Client" data-i18n="html_client">Client</option>
+                            <option value="Product" data-i18n="html_product">Product</option>
+                            <option value="Maintenance" data-i18n="html_maintenance">Maintenance</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="layers" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Category</label>
+                        <select id="editProjectCategory" class="form-control">
+                            <option value="Startup" data-i18n="html_startup">Startup</option>
+                            <option value="Enterprise" data-i18n="html_enterprise">Enterprise</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label"><i data-lucide="users" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Assign People *</label>
+                        <select id="editProjectAssignees" class="form-control" multiple style="min-height: 80px;" required>
+                            <!-- Loaded dynamically -->
+                        </select>
+                        <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple.</small>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label"><i data-lucide="tags" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Project Tags</label>
+                    <select id="editProjectTags" class="form-control" multiple style="min-height: 80px;">
+                        <option value="Urgent" data-i18n="tag_urgent">Urgent</option>
+                        <option value="Frontend" data-i18n="tag_frontend">Frontend</option>
+                        <option value="Backend" data-i18n="tag_backend">Backend</option>
+                        <option value="UI/UX" data-i18n="tag_ui_ux">UI/UX</option>
+                        <option value="Bug" data-i18n="tag_bug">Bug</option>
+                        <option value="Feature" data-i18n="tag_feature">Feature</option>
+                    </select>
+                    <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple tags.</small>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label"><i data-lucide="align-left" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Description</label>
+                    <textarea id="editProjectDesc" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('editProjectModal').classList.remove('active')" data-i18n="html_cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="html_save_changes">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal" id="confirmModal" style="z-index: 100000;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+            <div style="margin-bottom: 1rem;">
+                <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: var(--color-warning);"></i>
+            </div>
+            <h2 id="confirmModalTitle" style="margin-bottom: 0.5rem; color: #ffffff !important;" data-i18n="html_confirm_action">Confirm Action</h2>
+            <p id="confirmModalMessage" style="color: rgba(255, 255, 255, 0.8) !important; margin-bottom: 1.5rem;" data-i18n="html_are_you_sure">Are you sure?</p>
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+                <button class="btn btn-secondary" onclick="closeConfirmModal()" style="background: rgba(255, 255, 255, 0.1) !important; color: #ffffff !important; border-color: rgba(255, 255, 255, 0.2) !important;" data-i18n="html_cancel">Cancel</button>
+                <button class="btn btn-primary" id="confirmModalBtn" style="background: var(--color-danger) !important; background-image: none !important; border-color: var(--color-danger) !important; color: #ffffff !important;" data-i18n="html_confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    
+    <!-- Success Modal -->
+    <div class="modal" id="successModal" style="z-index: 100000;">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <div style="margin-bottom: 1rem;">
+                <i data-lucide="check-circle" style="width: 48px; height: 48px; color: var(--color-success);"></i>
+            </div>
+            <h2 id="successModalTitle" style="margin-bottom: 0.5rem;">Success</h2>
+            <p id="successModalMessage" style="color: var(--color-text-secondary); margin-bottom: 1.5rem;">Action completed successfully.</p>
             <div style="display: flex; gap: 1rem; justify-content: center;">
                 <button class="btn btn-primary" style="min-width: 120px;" onclick="document.getElementById('successModal').classList.remove('active', 'show')">OK</button>
             </div>
@@ -871,11 +1066,13 @@
     </div>
 
     <!-- Edit Task Modal -->
-    <div class="modal slide-panel" id="editTaskModal">
-        <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+    <div class="modal" id="editTaskModal">
+        <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header">
-                <h2 data-i18n="html_edit_task">Edit Task</h2>
-                <button class="close-modal" onclick="document.getElementById('editTaskModal').classList.remove('active')">&times;</button>
+                <h2><i data-lucide="edit"></i> <span data-i18n="html_edit_task">Edit Task</span></h2>
+                <button type="button" class="icon-btn" onclick="document.getElementById('editTaskModal').classList.remove('active')">
+                    <i data-lucide="x"></i>
+                </button>
             </div>
             <form id="editTaskForm" onsubmit="handleEditTaskSubmit(event)" style="display: flex; flex-direction: column; gap: 1rem;">
                 <input type="hidden" id="editTaskId">
@@ -884,8 +1081,8 @@
                     <input type="text" id="editTaskTitle" class="form-control" required>
                 </div>
                 <div class="form-group edit-task-description" style="margin-bottom: 0;">
-                    <label class="form-label">Description</label>
-                    <textarea id="editTaskDescription" class="form-control" rows="4" placeholder="Add a description"></textarea>
+                    <label class="form-label" data-i18n="html_description">Description</label>
+                    <textarea id="editTaskDescription" class="form-control" rows="4" placeholder="Add a description" data-i18n-placeholder="ph_add_a_description"></textarea>
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" data-i18n="html_category">Category</label>
@@ -936,37 +1133,33 @@
                         <option value="private" data-i18n="html_private">Private</option>
                     </select>
                 </div>
-                <div style="display: flex; gap: 1rem;">
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_start_date">Start Date</label>
-                        <input type="date" id="editTaskStart" class="form-control">
-                    </div>
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_due_date">Due Date</label>
-                        <input type="date" id="editTaskDue" class="form-control">
-                    </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" data-i18n="html_start_date">Start Date</label>
+                    <input type="date" id="editTaskStart" class="form-control">
                 </div>
-                <div style="display: flex; gap: 1rem;">
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_end_date">End Date</label>
-                        <input type="date" id="editTaskEnd" class="form-control">
-                    </div>
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label class="form-label" data-i18n="html_est_time">Est. Time</label>
-                        <input type="text" id="editTaskEstimate" class="form-control" placeholder="e.g. 5 hours" data-i18n-placeholder="ph_e_g_5_hours">
-                    </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" data-i18n="html_due_date">Due Date</label>
+                    <input type="date" id="editTaskDue" class="form-control">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" data-i18n="html_end_date">End Date</label>
+                    <input type="date" id="editTaskEnd" class="form-control">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" data-i18n="html_est_time">Est. Time</label>
+                    <input type="text" id="editTaskEstimate" class="form-control" placeholder="e.g. 5 hours" data-i18n-placeholder="ph_e_g_5_hours">
                 </div>
                 <!-- Watchers -->
                 <div class="form-group edit-task-watchers" style="margin-top: 0.5rem; margin-bottom: 0;">
                     <label class="form-label">
                         <input type="checkbox" id="editEnableWatchers" onchange="document.getElementById('editTaskWatchersGroup').style.display = this.checked ? 'block' : 'none'">
-                        Add Watcher
+                        <span data-i18n="ui_add_watcher">Add Watcher</span>
                     </label>
                     <div id="editTaskWatchersGroup" style="display: none; margin-top: 0.5rem;">
                         <div class="task-watcher-picker" data-watcher-picker="editTaskWatchers">
-                            <button type="button" class="form-control task-watcher-toggle" onclick="toggleTaskWatcherDropdown('editTaskWatchers')" aria-expanded="false">Select watchers</button>
+                            <button type="button" class="form-control task-watcher-toggle" onclick="toggleTaskWatcherDropdown('editTaskWatchers')" aria-expanded="false" data-i18n="ui_select_watchers">Select watchers</button>
                             <div class="task-watcher-dropdown" hidden>
-                                <input type="search" class="form-control task-watcher-search" placeholder="Search employees..." aria-label="Search employees" oninput="filterTaskWatchers('editTaskWatchers', this.value)">
+                                <input type="search" class="form-control task-watcher-search" placeholder="Search employees..." data-i18n-placeholder="ph_search_employees" aria-label="Search employees" oninput="filterTaskWatchers('editTaskWatchers', this.value)">
                                 <div class="task-watcher-options"></div>
                             </div>
                             <select id="editTaskWatchers" multiple hidden></select>
@@ -974,7 +1167,7 @@
                     </div>
                 </div>
                 <div class="form-group task-assign-btn-group" style="margin-bottom: 0; margin-top: 1rem; display: flex; gap: 1rem;">
-                    <button type="button" class="btn btn-secondary" style="color: var(--color-danger); border-color: var(--color-danger);" onclick="handleDeleteTask(document.getElementById('editTaskId').value)" data-i18n="html_delete">Delete</button>
+                    <button type="button" class="btn btn-danger" onclick="handleDeleteTask(document.getElementById('editTaskId').value)" data-i18n="html_delete">Delete</button>
                     <button type="submit" class="btn btn-primary" style="flex: 1;" data-i18n="html_save_changes">Save Changes</button>
                 </div>
             </form>
@@ -990,16 +1183,16 @@
         </div>
         <div class="side-panel-body">
             <div class="task-details-grid">
-                <div><strong>Assignee:</strong> <span id="detailsTaskAssignee"></span></div>
-                <div><strong>Creator:</strong> <span id="detailsTaskCreator"></span></div>
-                <div><strong>Status:</strong> <span id="detailsTaskStatus" class="badge"></span></div>
-                <div><strong>Priority:</strong> <span id="detailsTaskPriority" class="badge"></span></div>
-                <div><strong>Visibility:</strong> <span id="detailsTaskVisibility"></span></div>
+                <div><strong data-i18n="html_assignee">Assignee</strong> <span id="detailsTaskAssignee"></span></div>
+                <div><strong data-i18n="html_creator">Creator</strong> <span id="detailsTaskCreator"></span></div>
+                <div><strong data-i18n="html_status">Status</strong> <span id="detailsTaskStatus" class="badge"></span></div>
+                <div><strong data-i18n="html_priority">Priority</strong> <span id="detailsTaskPriority" class="badge"></span></div>
+                <div><strong data-i18n="html_visibility">Visibility</strong> <span id="detailsTaskVisibility"></span></div>
 
-                <div><strong>Start Date:</strong> <span id="detailsTaskStart"></span></div>
-                <div><strong>Due Date:</strong> <span id="detailsTaskDue"></span></div>
-                <div><strong>End Date:</strong> <span id="detailsTaskEnd"></span></div>
-                <div><strong>Est. Time:</strong> <span id="detailsTaskEstimate"></span></div>
+                <div><strong data-i18n="html_start_date">Start Date</strong> <span id="detailsTaskStart"></span></div>
+                <div><strong data-i18n="html_due_date">Due Date</strong> <span id="detailsTaskDue"></span></div>
+                <div><strong data-i18n="html_end_date">End Date</strong> <span id="detailsTaskEnd"></span></div>
+                <div><strong data-i18n="html_est_time">Est. Time</strong> <span id="detailsTaskEstimate"></span></div>
             </div>
             
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
@@ -1131,48 +1324,6 @@
         </div>
     </div>
 
-    <!-- Task Details & Comments Side Panel -->
-    <div class="side-panel-overlay" id="taskSidePanelOverlay" onclick="document.getElementById('taskSidePanel').classList.remove('active'); document.getElementById('taskSidePanelOverlay').classList.remove('active');"></div>
-    <div class="side-panel" id="taskSidePanel">
-        <div class="side-panel-header">
-            <h2 id="detailsTaskTitle" style="margin:0; font-size: 1.25rem;" data-i18n="html_task_details">Task Details</h2>
-            <button class="close-modal" onclick="document.getElementById('taskSidePanel').classList.remove('active'); document.getElementById('taskSidePanelOverlay').classList.remove('active');" style="background:none; border:none; color:var(--color-text); font-size:1.5rem; cursor:pointer;">&times;</button>
-        </div>
-        <div class="side-panel-body">
-            <div class="task-details-grid">
-                <div><strong>Assignee:</strong> <span id="detailsTaskAssignee"></span></div>
-                <div><strong>Creator:</strong> <span id="detailsTaskCreator"></span></div>
-                <div><strong>Status:</strong> <span id="detailsTaskStatus" class="badge"></span></div>
-                <div><strong>Priority:</strong> <span id="detailsTaskPriority" class="badge"></span></div>
-                <div><strong>Visibility:</strong> <span id="detailsTaskVisibility"></span></div>
-                <div><strong>Start Date:</strong> <span id="detailsTaskStart"></span></div>
-                <div><strong>Due Date:</strong> <span id="detailsTaskDue"></span></div>
-                <div><strong>End Date:</strong> <span id="detailsTaskEnd"></span></div>
-                <div><strong>Est. Time:</strong> <span id="detailsTaskEstimate"></span></div>
-            </div>
-            
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
-                <h3 style="margin: 0;" data-i18n="html_sub_tasks">Sub-Tasks</h3>
-                <button id="btnCreateSubTask" class="btn btn-secondary btn-sm" onclick="openInlineSubtaskComposer()" data-i18n="html_create_sub_task">+ Create Sub-Task</button>
-            </div>
-            <div id="taskSubTasksList" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
-                <!-- Subtasks injected here -->
-            </div>
-
-            <h3 data-i18n="html_activity_comments">Activity & Comments</h3>
-            <div id="taskCommentsList" style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem; min-height: 100px;">
-                <!-- Comments injected here -->
-            </div>
-        </div>
-        <div class="side-panel-footer">
-            <form onsubmit="handleTaskCommentSubmit(event)" style="display: flex; gap: 0.5rem;">
-                <input type="hidden" id="detailsTaskId">
-                <input type="text" id="taskCommentInput" class="form-control" placeholder="Add a comment..." data-i18n-placeholder="ph_add_a_comment" required style="flex-grow: 1;">
-                <button type="submit" class="btn btn-primary" data-i18n="html_send">Send</button>
-            </form>
-        </div>
-    </div>
-
     <!-- Document View / Edit Modal -->
     <div class="modal" id="employeeDocumentModal" role="dialog" aria-modal="true" aria-labelledby="employeeDocumentModalTitle">
         <div class="modal-content fade-in-up" style="max-width: 860px;">
@@ -1294,22 +1445,22 @@
     <div class="modal" id="payrollLogSalesModal">
         <div class="modal-content" style="max-width: 500px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
             <div class="modal-header">
-                <h2 style="color: #ffffff;">Log Monthly Sales</h2>
+                <h2>Log Monthly Sales</h2>
                 <button class="btn btn-icon" onclick="closePayrollLogSalesModal()"><i data-lucide="x"></i></button>
             </div>
             <div class="modal-body">
                 <form id="payrollLogSalesForm" onsubmit="submitPayrollLogSales(event)">
                     <div class="form-group">
-                        <label style="color: #ffffff;">Employee</label>
-                        <select id="payrollSalesEmployeeId" required style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;"></select>
+                        <label class="form-label">Employee</label>
+                        <select id="payrollSalesEmployeeId" class="form-control" required></select>
                     </div>
                     <div class="form-group">
-                        <label style="color: #ffffff;">Month / Year</label>
-                        <input type="month" id="payrollSalesMonthYear" required style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;">
+                        <label class="form-label">Month / Year</label>
+                        <input type="month" id="payrollSalesMonthYear" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label style="color: #ffffff;">Actual Sales Amount (SAR)</label>
-                        <input type="number" step="0.01" min="0" id="payrollSalesAmount" required style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;">
+                        <label class="form-label">Actual Sales Amount (SAR)</label>
+                        <input type="number" step="0.01" min="0" id="payrollSalesAmount" class="form-control" required>
                     </div>
                     <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
                         <button type="button" class="btn btn-secondary" onclick="closePayrollLogSalesModal()">Cancel</button>
@@ -1323,9 +1474,9 @@
     
     <!-- Payroll: Log Absence Modal -->
     <div class="modal fade" id="payrollLogAbsenceModal">
-        <div class="modal-content" style="max-width: 450px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+        <div class="modal-content" style="max-width: 450px;">
             <div class="modal-header">
-                <h3 style="color: #ffffff;">Log Absence</h3>
+                <h3>Log Absence</h3>
                 <button type="button" class="btn-icon" onclick="document.getElementById('payrollLogAbsenceModal').classList.remove('active', 'show')">
                     <i data-lucide="x"></i>
                 </button>
@@ -1333,17 +1484,17 @@
             <div class="modal-body">
                 <form id="payrollLogAbsenceForm" onsubmit="submitPayrollLogAbsence(event)">
                     <div class="form-group">
-                        <label for="payrollAbsenceEmployeeId" style="color: #ffffff;">Employee *</label>
-                        <select id="payrollAbsenceEmployeeId" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" required></select>
+                        <label for="payrollAbsenceEmployeeId" class="form-label">Employee *</label>
+                        <select id="payrollAbsenceEmployeeId" class="form-control" required></select>
                     </div>
                     <div class="form-group">
-                        <label for="payrollAbsenceDate" style="color: #ffffff;">Date of Absence *</label>
-                        <input type="date" id="payrollAbsenceDate" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" required>
+                        <label for="payrollAbsenceDate" class="form-label">Date of Absence *</label>
+                        <input type="date" id="payrollAbsenceDate" class="form-control" required>
                     </div>
                     <div class="form-group">
                         <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
                             <input type="checkbox" id="payrollAbsenceIsExcused" style="width:1.2rem; height:1.2rem;">
-                            <strong style="color: #ffffff;">Excused Absence</strong>
+                            <strong>Excused Absence</strong>
                         </label>
                         <p style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">
                             Excused absences are typically not deducted from payroll.
@@ -1360,9 +1511,9 @@
 
     <!-- Payroll: New Loan Modal -->
     <div class="modal fade" id="payrollNewLoanModal">
-        <div class="modal-content" style="max-width: 450px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); color: #ffffff;">
+        <div class="modal-content" style="max-width: 450px;">
             <div class="modal-header">
-                <h3 style="color: #ffffff;">Request/Add Employee Loan</h3>
+                <h3>Request/Add Employee Loan</h3>
                 <button type="button" class="btn-icon" onclick="document.getElementById('payrollNewLoanModal').classList.remove('active', 'show')">
                     <i data-lucide="x"></i>
                 </button>
@@ -1370,16 +1521,16 @@
             <div class="modal-body">
                 <form id="payrollNewLoanForm" onsubmit="submitPayrollNewLoan(event)">
                     <div class="form-group">
-                        <label for="payrollLoanEmployeeId" style="color: #ffffff;">Employee *</label>
-                        <select id="payrollLoanEmployeeId" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" required></select>
+                        <label for="payrollLoanEmployeeId" class="form-label">Employee *</label>
+                        <select id="payrollLoanEmployeeId" class="form-control" required></select>
                     </div>
                     <div class="form-group">
-                        <label for="payrollLoanAmount" style="color: #ffffff;">Total Loan Amount (SAR) *</label>
-                        <input type="number" step="0.01" id="payrollLoanAmount" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" placeholder="e.g. 5000" required>
+                        <label for="payrollLoanAmount" class="form-label">Total Loan Amount (SAR) *</label>
+                        <input type="number" step="0.01" id="payrollLoanAmount" class="form-control" placeholder="e.g. 5000" required>
                     </div>
                     <div class="form-group">
-                        <label for="payrollLoanInstallment" style="color: #ffffff;">Monthly Installment (SAR) *</label>
-                        <input type="number" step="0.01" id="payrollLoanInstallment" style="width: 100%; background: rgba(255,255,255,0.1); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem; border-radius: 4px;" placeholder="e.g. 500" required>
+                        <label for="payrollLoanInstallment" class="form-label">Monthly Installment (SAR) *</label>
+                        <input type="number" step="0.01" id="payrollLoanInstallment" class="form-control" placeholder="e.g. 500" required>
                     </div>
                     <div class="modal-actions" style="margin-top: 2rem;">
                         <button type="button" class="btn btn-secondary" onclick="document.getElementById('payrollNewLoanModal').classList.remove('active', 'show')">Cancel</button>
@@ -1392,3 +1543,4 @@
 
 </body>
 </html>
+

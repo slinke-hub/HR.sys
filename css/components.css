@@ -289,6 +289,54 @@ h4 {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 }
 
+.btn-danger {
+  background-color: var(--color-danger);
+  background-image: linear-gradient(135deg, #ef4444, #dc2626 52%, #b91c1c);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .18);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 7px 15px rgba(239, 68, 68, .3);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-danger:hover {
+  background-image: linear-gradient(135deg, #f87171, #ef4444 52%, #dc2626);
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 22px rgba(239, 68, 68, .4);
+}
+
+.btn-danger::after {
+  content: "";
+  background: rgba(255, 255, 255, 0.2);
+  display: block;
+  position: absolute;
+  border-radius: 50%;
+  padding-top: 120%;
+  padding-left: 120%;
+  margin-top: -60%;
+  margin-left: -60%;
+  opacity: 0;
+  transition: all 0.8s;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+}
+
+.btn-danger:active::after {
+  padding-top: 0;
+  padding-left: 0;
+  margin-top: 0;
+  margin-left: 0;
+  opacity: 1;
+  transition: 0s;
+  transform: translate(-50%, -50%) scale(1);
+}
+
 .card {
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -723,7 +771,234 @@ textarea.form-control {
 }
 
 .kanban-col {
-  background: var(--color-surface-hover);
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  min-width: 280px;
+  flex: 0 0 280px;
+  min-height: 200px;
+}
+
+.kanban-col h3 {
+  font-size: 0.875rem;
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::after {
+  content: "";
+  background: rgba(255, 255, 255, 0.2);
+  display: block;
+  position: absolute;
+  border-radius: 50%;
+  padding-top: 120%;
+  padding-left: 120%;
+  margin-top: -60%;
+  margin-left: -60%;
+  opacity: 0;
+  transition: all 0.8s;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+}
+
+.btn-primary:active::after {
+  padding-top: 0;
+  padding-left: 0;
+  margin-top: 0;
+  margin-left: 0;
+  opacity: 1;
+  transition: 0s;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.btn-danger {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-danger::after {
+  content: "";
+  background: rgba(239, 68, 68, 0.2);
+  display: block;
+  position: absolute;
+  border-radius: 50%;
+  padding-top: 120%;
+  padding-left: 120%;
+  margin-top: -60%;
+  margin-left: -60%;
+  opacity: 0;
+  transition: all 0.8s;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+}
+
+.btn-danger:active::after {
+  padding-top: 0;
+  padding-left: 0;
+  margin-top: 0;
+  margin-left: 0;
+  opacity: 1;
+  transition: 0s;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Notifications Dropdown */
+.notification-item {
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color var(--transition-fast);
+  cursor: pointer;
+}
+
+.notification-item:hover {
+  background-color: var(--color-bg-base);
+}
+
+.notification-item.unread {
+  background-color: rgba(0, 122, 255, 0.05);
+}
+
+.notification-item .time {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.25rem;
+}
+
+/* ==========================================
+   Responsive Grid Overrides
+   ========================================== */
+
+/* Tablets / iPads */
+@media (max-width: 1024px) {
+
+  .col-span-3,
+  .col-span-4,
+  .col-span-5,
+  .col-span-6,
+  .col-span-7,
+  .col-span-8 {
+    grid-column: span 6;
+    /* Most cards become 2 columns */
+  }
+
+  .quick-action-grid {
+    grid-template-columns: repeat(2, 1fr);
+    /* 2x2 grid instead of 4x1 */
+  }
+}
+
+/* Mobile */
+@media (max-width: 767px) {
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .col-span-3,
+  .col-span-4,
+  .col-span-5,
+  .col-span-6,
+  .col-span-7,
+  .col-span-8,
+  .col-span-12 {
+    grid-column: span 12;
+    width: 100%;
+  }
+
+  .quick-action-grid {
+    grid-template-columns: 1fr;
+    /* Stack actions vertically */
+  }
+
+  .task-assign-form {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .task-assign-form .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .task-assign-btn-group button {
+    width: 100%;
+  }
+
+  .task-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Profile Dropdown Base Styles */
+.profile-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  background: var(--color-bg-elevated) !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  width: 250px;
+  max-width: calc(100vw - 20px);
+  z-index: 10000;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  transition: background-color var(--transition-normal), color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.profile-dropdown-menu .dropdown-item {
+  background: transparent;
+  color: var(--color-text-primary) !important;
+  border-color: var(--color-border) !important;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.profile-dropdown-menu .dropdown-item span,
+.profile-dropdown-menu .dropdown-item strong,
+.profile-dropdown-menu .dropdown-item svg {
+  color: inherit !important;
+  stroke: currentColor;
+}
+
+.profile-dropdown-menu .dropdown-item:hover,
+.profile-dropdown-menu .dropdown-item:focus-visible {
+  background: var(--sidebar-item-hover) !important;
+  color: var(--color-theme-highlight) !important;
+  outline: none;
+}
+
+.profile-dropdown-menu .dropdown-item:active,
+.profile-dropdown-menu .dropdown-item.active,
+.profile-dropdown-menu .dropdown-item[aria-current="page"] {
+  background: var(--sidebar-item-active) !important;
+  color: var(--color-theme-highlight) !important;
+}
+
+/* Kanban Board */
+.kanban-board {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  align-items: flex-start;
+}
+
+.kanban-col {
+  background: var(--color-bg-elevated);
   border-radius: var(--radius-md);
   padding: 1rem;
   min-width: 280px;
@@ -773,7 +1048,7 @@ textarea.form-control {
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 30000;
+  z-index: 100050;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(2px);
@@ -1723,13 +1998,20 @@ textarea.form-control {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   background: var(--color-bg-surface);
+  flex-wrap: nowrap;
 }
 
 .side-panel-header h2 {
   font-size: 1.5rem;
   font-weight: 600;
   color: var(--color-text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .side-panel-body {
@@ -2048,7 +2330,7 @@ textarea {
   padding: .7rem .8rem;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-bg-surface));
 }
 
 .hierarchy-employee-details dt {
@@ -2114,7 +2396,7 @@ textarea {
   padding: 1rem;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--color-primary) 4%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary) 4%, var(--color-bg-surface));
 }
 
 .marketing-design-grid {
@@ -2164,7 +2446,7 @@ textarea {
 .side-panel.teamwork-task-detail {
   width: min(1040px, calc(100vw - 250px));
   right: -1100px;
-  background: var(--color-surface);
+  background: var(--color-bg-surface);
   color: var(--color-text);
 }
 
@@ -2174,42 +2456,29 @@ textarea {
 
 .side-panel.task-v2-detail.teamwork-task-detail {
   width: min(1040px, calc(100vw - 250px));
-  background: var(--color-surface);
+  background: var(--color-bg-surface);
 }
 
 .teamwork-task-detail .side-panel-header {
   min-height: 66px;
   padding: .8rem 1.5rem;
   border-bottom: 1px solid var(--color-border);
+  display: flex;
+  gap: 1rem;
 }
 
 .teamwork-task-detail .side-panel-header h2 {
   font-size: 1.35rem !important;
   font-weight: 700;
+  flex: 1;
+  word-break: break-word;
 }
 
 .task-detail-actions {
   display: flex;
   align-items: center;
   gap: .75rem;
-}
-
-.task-detail-edit {
-  border-radius: 999px;
-  padding: .55rem 1rem;
-}
-
-.task-detail-close {
-  border: 0;
-  background: transparent;
-  color: var(--color-text);
-  font-size: 1.7rem;
-  cursor: pointer;
-}
-
-.teamwork-task-detail .side-panel-body {
-  padding: 2rem 2.75rem 7rem;
-}
+  flex-shrink: 0;
 
 .side-panel.task-v2-detail.teamwork-task-detail .side-panel-body {
   padding: 2rem 2.75rem 7rem;
@@ -2219,7 +2488,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.05rem 3rem;
-  padding: 1rem 0 1.5rem;
+  padding: 1rem 1.5rem 1.5rem;
 }
 
 .teamwork-task-detail .task-details-grid>div {
@@ -2236,6 +2505,7 @@ textarea {
   min-height: 82px;
   padding: 1.25rem 0;
   color: var(--color-text);
+  word-break: break-word;
 }
 
 .task-detail-description span {
@@ -2419,7 +2689,7 @@ textarea {
   border: 1px solid var(--color-border);
   border-radius: 6px;
   color: var(--color-text);
-  background: var(--color-surface);
+  background: var(--color-bg-surface);
   text-decoration: none;
 }
 
@@ -2442,7 +2712,7 @@ textarea {
   padding: 1rem;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-bg-surface));
 }
 
 .attendance-filters .form-group {
@@ -2490,7 +2760,7 @@ textarea {
   padding: .9rem 1rem;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-bg-surface));
 }
 
 .contract-document-info {
@@ -2617,7 +2887,7 @@ textarea {
 
 .teamwork-task-detail .side-panel-footer {
   padding: 1rem 2.75rem;
-  background: var(--color-surface);
+  background: var(--color-bg-surface);
 }
 
 .modal.slide-panel.teamwork-edit-task {
@@ -2639,7 +2909,7 @@ textarea {
   max-height: min(90vh, 820px);
   padding: 0;
   border-radius: 10px;
-  background: var(--color-surface) !important;
+  background: var(--color-bg-surface) !important;
   backdrop-filter: none !important;
   color: var(--color-text);
   box-shadow: 0 24px 70px rgba(0, 0, 0, .3) !important;
@@ -2669,7 +2939,7 @@ textarea {
 .teamwork-edit-list {
   padding: .65rem .8rem;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--color-text) 4%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-text) 4%, var(--color-bg-surface));
   color: var(--color-text-secondary);
   font-size: .85rem;
 }
@@ -2687,7 +2957,7 @@ textarea {
   padding: 4px;
   border: 1px solid color-mix(in srgb, var(--color-theme-highlight) 42%, var(--color-border));
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-text) 7%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-text) 7%, var(--color-bg-surface));
 }
 
 .teamwork-edit-tabs button {
@@ -2702,7 +2972,7 @@ textarea {
 
 .teamwork-edit-tabs button:hover {
   border-color: var(--color-theme-highlight);
-  background: color-mix(in srgb, var(--color-theme-highlight) 10%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-theme-highlight) 10%, var(--color-bg-surface));
 }
 
 .teamwork-edit-tabs button.active {
@@ -2714,7 +2984,7 @@ textarea {
 }
 
 .teamwork-edit-tabs button:not(.active) {
-  background: var(--color-surface);
+  background: var(--color-bg-surface);
   opacity: .82;
 }
 
@@ -2745,7 +3015,7 @@ textarea {
   justify-content: space-between;
   position: sticky;
   bottom: 0;
-  background: var(--color-surface);
+  background: var(--color-bg-surface);
   padding-top: .75rem;
 }
 
@@ -3217,7 +3487,7 @@ body {
   border: 1px solid var(--color-border);
   border-radius: 999px;
   color: var(--color-text-secondary);
-  background: var(--color-surface);
+  background: var(--color-bg-surface);
   font-size: 0.72rem;
   font-weight: 700;
 }
@@ -3236,7 +3506,7 @@ body {
 .request-workflow-step.active {
   color: var(--color-primary);
   border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg-surface));
   animation: request-stage-pulse 1.8s ease-in-out infinite;
 }
 
@@ -3261,7 +3531,7 @@ body {
 .request-workflow-step.completed {
   color: var(--color-success);
   border-color: var(--color-success);
-  background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-success) 12%, var(--color-bg-surface));
 }
 
 .request-workflow-step.rejected {
@@ -3287,7 +3557,7 @@ body {
   padding: 0.55rem 0.7rem;
   border: 1px solid color-mix(in srgb, var(--color-primary) 55%, var(--color-border));
   border-radius: 12px;
-  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-surface));
 }
 
 .my-request-current-stage small {
@@ -3607,7 +3877,7 @@ button:disabled> :is([data-lucide="edit"], [data-lucide="edit-2"], [data-lucide=
   padding: 0.6rem;
   border: 1px solid var(--color-border);
   border-radius: 0.65rem;
-  background: var(--color-surface, #0c1b2e);
+  background: var(--color-bg-surface, #0c1b2e);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
 }
 
@@ -3667,6 +3937,8 @@ textarea {
 .table-responsive {
   max-width: 100%;
   overscroll-behavior-inline: contain;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
@@ -4079,14 +4351,14 @@ textarea {
 }
 
 /* 2. Multi-language text overflow protection */
-h1, h2, h3, h4, h5, h6, p, span, .nav-item span, td, th, label {
+h1, h2, h3, h4, h5, h6, p, span, .nav-item span, label {
     word-break: break-word;
     overflow-wrap: break-word;
     white-space: normal;
 }
 
 /* Disable wrap for specific UI elements */
-.badge, .status-badge, .btn, button {
+.badge, .status-badge, .btn, button, .user-name, .user-role {
     white-space: nowrap !important;
 }
 
@@ -4113,7 +4385,7 @@ h1, h2, h3, h4, h5, h6, p, span, .nav-item span, td, th, label {
     }
 
     /* Kanban & Task Boards - Horizontal Scroll */
-    .kanban-board, .task-board, .task-v2-workspace, .kanban-columns {
+    .kanban-board, .task-board, .kanban-columns {
         display: flex !important;
         flex-direction: row !important;
         overflow-x: auto !important;
@@ -4188,4 +4460,29 @@ h1, h2, h3, h4, h5, h6, p, span, .nav-item span, td, th, label {
     .sidebar {
         z-index: 1000; /* Ensure sidebar is over content when open */
     }
+}
+
+/* Fix text and icon buttons in hardcoded dark glassy modals for light mode */
+.modal-content[style*="rgba(30, 41, 59"] h1,
+.modal-content[style*="rgba(30, 41, 59"] h2,
+.modal-content[style*="rgba(30, 41, 59"] h3,
+.modal-content[style*="rgba(30, 41, 59"] h4,
+.modal-content[style*="rgba(30, 41, 59"] h5,
+.modal-content[style*="rgba(30, 41, 59"] h6,
+.modal-content[style*="rgba(30, 41, 59"] .form-label,
+.modal-content[style*="rgba(30, 41, 59"] label,
+.modal-content[style*="rgba(30, 41, 59"] p,
+.modal-content[style*="rgba(30, 41, 59"] span:not(.lucide) {
+    color: #ffffff !important;
+}
+
+.modal-content[style*="rgba(30, 41, 59"] .btn-icon {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+}
+
+.modal-content[style*="rgba(30, 41, 59"] .btn-icon:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
 }
