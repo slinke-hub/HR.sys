@@ -512,8 +512,15 @@ h4 {
 }
 
 textarea.form-control {
-  resize: vertical;
   min-height: 100px;
+  resize: vertical;
+}
+
+.task-v2-complete.pending-approval,
+.task-v2-complete.pending-approval:hover {
+  border-color: #f59e0b;
+  background: #f59e0b;
+  color: white;
 }
 
 .task-assign-form {
@@ -4060,12 +4067,6 @@ textarea {
 [data-theme=dark] .modal-content label,
 [data-theme=dark] .modal-content .form-control {
     color: #ffffff !important;
-}
-
-.modal-content .btn-secondary {
-    background: var(--color-primary);
-    color: #ffffff;
-    border-color: var(--color-primary);
 }
 
 /* =========================================================

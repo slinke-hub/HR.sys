@@ -28,12 +28,12 @@ async function renderPayrollModule() {
         </div>
         
         <div style="display:flex;gap:.5rem;margin-bottom:2rem;flex-wrap:wrap;">
-            <button class="btn btn-primary" data-payroll-tab="dashboard" onclick="switchPayrollTab('dashboard')">Dashboard</button>
-            <button class="btn btn-secondary" data-payroll-tab="attendance" onclick="switchPayrollTab('attendance')">Attendance & Overtime</button>
-            <button class="btn btn-secondary" data-payroll-tab="commissions" onclick="switchPayrollTab('commissions')">Sales & Commissions</button>
-            <button class="btn btn-secondary" data-payroll-tab="loans" onclick="switchPayrollTab('loans')">Loans & Adjustments</button>
-            <button class="btn btn-secondary" data-payroll-tab="settings" onclick="switchPayrollTab('settings')">Settings</button>
-            <button class="btn btn-secondary" data-payroll-tab="eos" onclick="switchPayrollTab('eos')" style="background-color: #fee2e2; color: #991b1b; border-color: #fca5a5;">EOS Calculator</button>
+            <button class="btn btn-primary" data-payroll-tab="dashboard" onclick="switchPayrollTab('dashboard')"><span data-i18n="btn_payroll_dashboard">${t('btn_payroll_dashboard') || 'Dashboard'}</span></button>
+            <button class="btn btn-secondary" data-payroll-tab="attendance" onclick="switchPayrollTab('attendance')"><span data-i18n="btn_payroll_attendance">${t('btn_payroll_attendance') || 'Attendance & Overtime'}</span></button>
+            <button class="btn btn-secondary" data-payroll-tab="commissions" onclick="switchPayrollTab('commissions')"><span data-i18n="btn_payroll_commissions">${t('btn_payroll_commissions') || 'Sales & Commissions'}</span></button>
+            <button class="btn btn-secondary" data-payroll-tab="loans" onclick="switchPayrollTab('loans')"><span data-i18n="btn_payroll_loans">${t('btn_payroll_loans') || 'Loans & Adjustments'}</span></button>
+            <button class="btn btn-secondary" data-payroll-tab="settings" onclick="switchPayrollTab('settings')"><span data-i18n="btn_payroll_settings">${t('btn_payroll_settings') || 'Settings'}</span></button>
+            <button class="btn btn-secondary" data-payroll-tab="eos" onclick="switchPayrollTab('eos')" style="background-color: #fee2e2; color: #991b1b; border-color: #fca5a5;"><span data-i18n="btn_payroll_eos">${t('btn_payroll_eos') || 'EOS Calculator'}</span></button>
         </div>
 
         <div id="payroll-tab-content">
@@ -259,7 +259,7 @@ async function renderAttendanceTab() {
         <div class="card fade-in-up">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <h3>Attendance & Absences Ledger</h3>
-                <button class="btn btn-primary" onclick="openPayrollLogAbsenceModal()"><i data-lucide="plus"></i> Log Absence</button>
+                <button class="btn btn-primary" onclick="openPayrollLogAbsenceModal()"><i data-lucide="plus"></i> <span data-i18n="btn_payroll_log_absence">${t('btn_payroll_log_absence') || 'Log Absence'}</span></button>
             </div>
             <p>Track unexcused absences for deductions.</p>
             
@@ -317,7 +317,7 @@ async function renderCommissionsTab() {
             <div class="card fade-in-up">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <h3>Monthly Sales Tracker (${currentMonth})</h3>
-                    <button class="btn btn-primary" onclick="openPayrollLogSalesModal()"><i data-lucide="plus"></i> Log Sales</button>
+                    <button class="btn btn-primary" onclick="openPayrollLogSalesModal()"><i data-lucide="plus"></i> <span data-i18n="btn_payroll_log_sales">${t('btn_payroll_log_sales') || 'Log Sales'}</span></button>
                 </div>
                 <table class="data-table">
                     <thead>
@@ -346,7 +346,7 @@ async function renderLoansTab() {
         <div class="card fade-in-up">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <h3>Active Employee Loans</h3>
-                <button class="btn btn-primary" onclick="openPayrollNewLoanModal()"><i data-lucide="plus"></i> New Loan</button>
+                <button class="btn btn-primary" onclick="openPayrollNewLoanModal()"><i data-lucide="plus"></i> <span data-i18n="btn_payroll_new_loan">${t('btn_payroll_new_loan') || 'New Loan'}</span></button>
             </div>
             <table class="data-table">
                 <thead>
@@ -428,7 +428,7 @@ async function renderEOSTab() {
                     </select>
                 </div>
             </div>
-            <button class="btn btn-primary" onclick="calculateAndShowEOS()" style="margin-top: 1rem;">Calculate EOS</button>
+            <button class="btn btn-primary" onclick="calculateAndShowEOS()" style="margin-top: 1rem;"><span data-i18n="btn_payroll_calculate_eos">${t('btn_payroll_calculate_eos') || 'Calculate EOS'}</span></button>
             
             <div id="eos-result" style="margin-top: 2rem; padding: 1.5rem; background: var(--color-bg-alt); border-radius: 8px; display: none;">
                 <!-- Results shown here -->

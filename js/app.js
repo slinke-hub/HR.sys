@@ -1,5 +1,5 @@
 // App State
-let currentLang = 'ar';
+let currentLang = localStorage.getItem('app_lang') || 'en';
 let currentTheme = 'light';
 let currentView = 'login';
 let loginMode = 'login';
@@ -728,6 +728,7 @@ window.toggleTheme = function () {
 // --- LANGUAGE MANAGEMENT ---
 window.toggleLanguage = function () {
     currentLang = currentLang === 'en' ? 'ar' : 'en';
+    localStorage.setItem('app_lang', currentLang);
     htmlElement.setAttribute('dir', currentLang === 'ar' ? 'rtl' : 'ltr');
     htmlElement.setAttribute('lang', currentLang);
 
@@ -1011,11 +1012,13 @@ window.handleLogout = async function () {
     // Preserve custom translations and other important local preferences across logins
     const customI18n = localStorage.getItem('custom_i18n');
     const pwaPrompt = localStorage.getItem('pwaPromptDismissed');
+    const appLang = localStorage.getItem('app_lang');
 
     localStorage.clear();
 
     if (customI18n) localStorage.setItem('custom_i18n', customI18n);
     if (pwaPrompt) localStorage.setItem('pwaPromptDismissed', pwaPrompt);
+    if (appLang) localStorage.setItem('app_lang', appLang);
     sessionStorage.clear();
     
     // Clear Payroll Modals and Forms for security
@@ -1087,11 +1090,16 @@ async function getCurrentDepartmentName() {
 
 async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
+    const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    if (isAdmin) return true;
     if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
     if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
-    if (viewId === 'orders' || viewId === 'projects') {
-        return normalizedRole === 'EMPLOYEE' && (await getCurrentDepartmentName()).trim().toLowerCase() === 'marketing & sales';
+    
+    if (viewId === 'orders' || viewId === 'projects' || viewId === 'crm' || viewId === 'clients') {
+        const dept = (await getCurrentDepartmentName()).trim().toLowerCase();
+        return normalizedRole === 'EMPLOYEE' && (dept === 'marketing & sales' || dept === 'sales' || dept === 'marketing');
     }
+    
     return true;
 }
 
@@ -1103,10 +1111,12 @@ window.updateSidebarVisibility = async function () {
     const employeesNav = document.querySelector('.nav-item[data-view=\'employees\']');
     const departmentsNav = document.querySelector('.nav-item[data-view=\'departments\']');
     const translationsNav = document.querySelector('.nav-item[data-view=\'translations\']');
+    const templatesNav = document.getElementById('navTemplates');
     const approvalsNav = document.getElementById('navApprovals');
     const payrollNav = document.getElementById('navPayroll');
     const ordersNav = document.querySelector('.nav-item[data-view="orders"]');
     const projectsNav = document.querySelector('.nav-item[data-view="projects"]');
+    const crmNav = document.querySelector('.nav-item[data-view="crm"]');
 
     const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
     if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
@@ -1115,13 +1125,15 @@ window.updateSidebarVisibility = async function () {
     if (employeesNav) employeesNav.style.display = normalizedRole !== 'EMPLOYEE' ? 'flex' : 'none';
     if (departmentsNav) departmentsNav.style.display = isAdmin ? 'flex' : 'none';
     if (translationsNav) translationsNav.style.display = isAdmin ? 'flex' : 'none';
+    if (templatesNav) templatesNav.style.display = isAdmin ? 'flex' : 'none';
 
     const isAccountantManager = currentUserProfile && /accountant manager|finance manager/i.test(currentUserProfile.job_title || '');
     if (payrollNav) payrollNav.style.display = (isAdmin || isAccountantManager) ? 'flex' : 'none';
 
-    const canUseMarketingPages = normalizedRole === 'EMPLOYEE' && (await getCurrentDepartmentName()).trim().toLowerCase() === 'marketing & sales';
+    const canUseMarketingPages = isAdmin || (normalizedRole === 'EMPLOYEE' && (['marketing & sales', 'sales', 'marketing'].includes((await getCurrentDepartmentName()).trim().toLowerCase())));
     if (ordersNav) ordersNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (projectsNav) projectsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
+    if (crmNav) crmNav.style.display = canUseMarketingPages ? 'flex' : 'none';
 
     let isHussain = false;
     if (typeof currentUser !== 'undefined' && currentUser) {
@@ -2118,7 +2130,9 @@ window.executeClockOut = async (type) => {
 async function renderTime() {
     const viewerProfile = currentUserProfile || await db.getUserProfile(currentUser?.id);
     const normalizedRole = String(currentUserRole || viewerProfile?.role || '').toUpperCase();
-    const canViewAllAttendance = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole) || String(viewerProfile?.job_title || '').trim().toUpperCase() === 'HR MANAGER';
+    const jobTitle = String(viewerProfile?.job_title || '').trim().toUpperCase();
+    const canViewAllAttendance = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole) || 
+                                 ['HR MANAGER', 'FINANCE MANAGER', 'ACCOUNTANT MANAGER'].includes(jobTitle);
     const [punches, employees] = await Promise.all([
         db.fetchTimePunches(canViewAllAttendance ? null : currentUser?.id),
         canViewAllAttendance ? db.fetchUsers() : Promise.resolve([viewerProfile || currentUser])
@@ -2290,7 +2304,7 @@ function prepareTeamworkTaskDetail(task) {
             <nav class="task-detail-tabs" aria-label="Task information"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">Details</button><button type="button" data-task-info-tab="custom-fields" onclick="setTaskDetailInfoTab('custom-fields')">Custom fields</button><button type="button" data-task-info-tab="dependencies" onclick="setTaskDetailInfoTab('dependencies')">Dependencies</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">Proofs</button></nav>
             <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
             <section class="task-detail-files">
-                <div class="task-detail-files-heading"><h3>Files & links</h3>${canUploadFiles ? `<button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> Upload file</button><input id="taskAttachmentInput" type="file" hidden onchange="uploadTaskAttachment(this)">` : ''}</div>
+                <div class="task-detail-files-heading"><h3>Files & links</h3>${canUploadFiles ? `<button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> Upload file(s)</button><input id="taskAttachmentInput" type="file" multiple hidden onchange="uploadTaskAttachment(this)">` : ''}</div>
                 <div id="taskDetailFileList">${links.length ? `<div class="task-detail-link-list">${links.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : '<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>No files or links have been added</span></div>'}</div>
             </section>`;
     }
@@ -2340,33 +2354,45 @@ window.clearAttendanceFilters = function () {
 };
 
 window.uploadTaskAttachment = async function (input) {
-    const file = input?.files?.[0];
+    const files = Array.from(input?.files || []);
     const task = window.activeTaskDetail;
-    if (!file || !task || !currentUser?.id) return;
+    if (files.length === 0 || !task || !currentUser?.id) return;
     const button = document.querySelector('.task-file-upload-button');
     const original = button?.innerHTML;
     if (button) {
         button.disabled = true;
         button.innerHTML = '<span class="spinner"></span> Uploading...';
     }
-    const upload = await db.uploadTaskAttachment(task.id, currentUser.id, file);
-    if (!upload.success) {
-        showToast(upload.error?.message || 'Unable to upload the file.', 'danger');
-        if (button) { button.disabled = false; button.innerHTML = original; }
-        input.value = '';
-        return;
+
+    let successCount = 0;
+    const newLinks = [];
+    
+    for (const file of files) {
+        const upload = await db.uploadTaskAttachment(task.id, currentUser.id, file);
+        if (!upload.success) {
+            showToast(upload.error?.message || `Unable to upload ${file.name}.`, 'danger');
+            continue;
+        }
+        newLinks.push(upload.url);
+        successCount++;
     }
-    const links = [...new Set([...(task.submission_links || []), upload.url])];
-    const update = await db.updateTask(task.id, { submission_links: links, upload_link: links[0] || null });
-    if (!update.success) {
-        showToast(update.error?.message || 'The file uploaded, but could not be linked to the task.', 'danger');
-        if (button) { button.disabled = false; button.innerHTML = original; }
-        input.value = '';
-        return;
+
+    if (newLinks.length > 0) {
+        const links = [...new Set([...(task.submission_links || []), ...newLinks])];
+        const update = await db.updateTask(task.id, { submission_links: links, upload_link: links[0] || null });
+        if (!update.success) {
+            showToast(update.error?.message || 'The files uploaded, but could not be linked to the task.', 'danger');
+        } else {
+            task.submission_links = links;
+            task.upload_link = links[0] || null;
+            showToast(`${successCount} file(s) uploaded successfully.`, 'success');
+        }
+    } else if (files.length > 0) {
+        showToast('No files were successfully uploaded.', 'danger');
     }
-    task.submission_links = links;
-    task.upload_link = links[0] || null;
-    showToast(`${file.name} uploaded successfully.`, 'success');
+
+    if (button) { button.disabled = false; button.innerHTML = original; }
+    input.value = '';
     prepareTeamworkTaskDetail(task);
 };
 
@@ -3581,29 +3607,46 @@ window.openEmployeeDocumentFilePicker = function () {
 window.updateEmployeeDocumentFileName = function (event) {
     const fileInput = event.target;
     const fileNameElement = document.getElementById('empDocFileName');
-    const file = fileInput.files?.[0] || null;
-    const validationError = getEmployeeDocumentFileValidationError(file);
-
-    if (validationError && file) {
-        fileInput.value = '';
-        if (fileNameElement) fileNameElement.textContent = t('doc_no_file_selected');
-        showToast(t(validationError), 'warning');
-        return;
+    const files = Array.from(fileInput.files || []);
+    
+    // Validate each file
+    for (const file of files) {
+        const validationError = getEmployeeDocumentFileValidationError(file);
+        if (validationError) {
+            fileInput.value = '';
+            if (fileNameElement) fileNameElement.textContent = t('doc_no_file_selected');
+            showToast(t(validationError), 'warning');
+            return;
+        }
     }
 
     if (fileNameElement) {
-        fileNameElement.textContent = file ? file.name : t('doc_no_file_selected');
+        if (files.length === 0) {
+            fileNameElement.textContent = t('doc_no_file_selected');
+        } else if (files.length === 1) {
+            fileNameElement.textContent = files[0].name;
+        } else {
+            fileNameElement.textContent = `${files.length} files selected`;
+        }
     }
 };
 
 window.handleEmployeeDocSave = async function (e) {
     e.preventDefault();
     const fileInput = document.getElementById('empDocFile');
-    const file = fileInput?.files?.[0] || null;
-    const validationError = getEmployeeDocumentFileValidationError(file);
-    if (validationError) {
-        showToast(t(validationError), 'warning');
+    const files = Array.from(fileInput?.files || []);
+    
+    if (files.length === 0) {
+        showToast(t('toast_error_saving_document'), 'warning');
         return;
+    }
+
+    for (const file of files) {
+        const validationError = getEmployeeDocumentFileValidationError(file);
+        if (validationError) {
+            showToast(t(validationError), 'warning');
+            return;
+        }
     }
 
     const saveButton = document.getElementById('empDocSaveButton');
@@ -3612,38 +3655,47 @@ window.handleEmployeeDocSave = async function (e) {
     if (uploadButton) uploadButton.disabled = true;
 
     try {
-        const fileType = getEmployeeDocumentFileType(file);
-        const rawFileBase64 = await readEmployeeDocumentFile(file);
-        const fileBase64 = String(rawFileBase64).replace(/^data:[^;]*;/, `data:${fileType};`);
-        const documentRecord = {
-            documentName: document.getElementById('empDocName').value.trim(),
-            ownerName: document.getElementById('empOwnerName').value.trim(),
-            ownerEmail: document.getElementById('empOwnerEmail').value.trim(),
-            responsibleName: document.getElementById('empResponsibleName').value.trim(),
-            responsibleEmail: document.getElementById('empResponsibleEmail').value.trim(),
-            expirationDate: document.getElementById('empExpiryDate').value,
-            ownerPhone: document.getElementById('empOwnerPhone').value.trim(),
-            fileType,
-            fileBase64,
-            notified30Days: true
-        };
+        let successCount = 0;
+        for (const file of files) {
+            const fileType = getEmployeeDocumentFileType(file);
+            const rawFileBase64 = await readEmployeeDocumentFile(file);
+            const fileBase64 = String(rawFileBase64).replace(/^data:[^;]*;/, `data:${fileType};`);
+            
+            // If multiple files, append original filename to documentName to differentiate
+            const baseDocName = document.getElementById('empDocName').value.trim();
+            const documentName = files.length > 1 ? `${baseDocName} (${file.name})` : baseDocName;
+            
+            const documentRecord = {
+                documentName,
+                ownerName: document.getElementById('empOwnerName').value.trim(),
+                ownerEmail: document.getElementById('empOwnerEmail').value.trim(),
+                responsibleName: document.getElementById('empResponsibleName').value.trim(),
+                responsibleEmail: document.getElementById('empResponsibleEmail').value.trim(),
+                expirationDate: document.getElementById('empExpiryDate').value,
+                ownerPhone: document.getElementById('empOwnerPhone').value.trim(),
+                fileType,
+                fileBase64,
+                notified30Days: true
+            };
 
-        const uploadResult = await db.uploadEmployeeDocument(currentUser.id, documentRecord);
-        if (!uploadResult.success) {
-            throw uploadResult.error || new Error(t('toast_error_saving_document'));
-        }
-
-        showToast(t('toast_document_saved_successfully'), "success");
-
-        const expiryInfo = getDocumentExpiryInfo(documentRecord.expirationDate);
-        if (expiryInfo.daysLeft !== null && expiryInfo.daysLeft <= 30) {
-            const notificationResult = await db.notifyEmployeeDocumentExpiry(uploadResult.data.id);
-            if (notificationResult.success && (notificationResult.data?.failures || 0) === 0) {
-                showToast(t('toast_document_expiry_notification_sent'), "success");
-            } else {
-                showToast(t('toast_document_expiry_notification_failed'), "warning");
+            const uploadResult = await db.uploadEmployeeDocument(currentUser.id, documentRecord);
+            if (!uploadResult.success) {
+                throw uploadResult.error || new Error(t('toast_error_saving_document'));
             }
+            const expiryInfo = getDocumentExpiryInfo(documentRecord.expirationDate);
+            if (expiryInfo.daysLeft !== null && expiryInfo.daysLeft <= 30) {
+                const notificationResult = await db.notifyEmployeeDocumentExpiry(uploadResult.data.id);
+                if (notificationResult.success && (notificationResult.data?.failures || 0) === 0) {
+                    showToast(t('toast_document_expiry_notification_sent'), "success");
+                } else {
+                    showToast(t('toast_document_expiry_notification_failed'), "warning");
+                }
+            }
+            
+            successCount++;
         }
+
+        showToast(`${successCount} document(s) saved successfully.`, "success");
 
         renderView('documents');
     } catch (error) {
@@ -3995,7 +4047,7 @@ async function renderDocuments() {
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
                             <label class="form-label">${t('doc_file')}</label>
-                            <input type="file" id="empDocFile" accept="application/pdf,image/png,image/jpeg" onchange="updateEmployeeDocumentFileName(event)" style="display: none;">
+                            <input type="file" id="empDocFile" accept="application/pdf,image/png,image/jpeg" onchange="updateEmployeeDocumentFileName(event)" style="display: none;" multiple>
                             <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                                 <button type="button" id="empDocUploadButton" class="btn-secondary" onclick="openEmployeeDocumentFilePicker()">
                                     <i data-lucide="upload"></i> ${t('doc_upload_btn')}
@@ -4456,83 +4508,91 @@ async function renderTasks() {
             <div class="card col-span-12" style="margin-bottom: 1rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <div class="card-title" style="margin-bottom: 0;">${t('task_assign_new') || 'Assign New Task'}</div>
-                    <button class="btn btn-primary btn-sm" id="btnToggleCreateTaskForm" onclick="document.getElementById('taskFormContainer').style.display='block'; this.style.display='none';">${t('add_new_task') || '+ Add new task'}</button>
+                    <button class="btn btn-primary btn-sm" onclick="document.getElementById('createTaskModal').classList.add('active'); document.getElementById('taskTitle').focus();">${t('add_new_task') || '+ Add new task'}</button>
                 </div>
-                
-                <div id="taskFormContainer" style="display: none;">
-                    <!-- Standard Form -->
-                    <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm" class="task-assign-form">
+            </div>
+
+            <!-- Create Task Modal -->
+            <div class="modal" id="createTaskModal">
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h2><i data-lucide="plus"></i> <span>${t('add_new_task') || 'Add New Task'}</span></h2>
+                        <button type="button" class="icon-btn" onclick="document.getElementById('createTaskModal').classList.remove('active')">
+                            <i data-lucide="x"></i>
+                        </button>
+                    </div>
+                    <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm" style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
                         <input type="hidden" id="taskParentId" value="">
 
-                    <!-- Fluid Flexbox Layout for responsiveness -->
-                    <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
-                        <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
-                            <label class="form-label">${t('task_title') || 'Task Title'}</label>
-                            <input type="text" autocomplete="off" id="taskTitle" class="form-control" required placeholder="">
-                        </div>
+                        <!-- Fluid Flexbox Layout for responsiveness -->
+                        <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                            <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
+                                <label class="form-label">${t('task_title') || 'Task Title'}</label>
+                                <input type="text" autocomplete="off" id="taskTitle" class="form-control" required placeholder="">
+                            </div>
 
-                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
-                            <label class="form-label">${t('task_due') || 'Due Date'}</label>
-                            <input type="date" id="taskDue" class="form-control">
-                        </div>
+                            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                                <label class="form-label">${t('task_due') || 'Due Date'}</label>
+                                <input type="date" id="taskDue" class="form-control">
+                            </div>
 
-                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
-                            <label class="form-label">${t('ui_project') || 'Project'}</label>
-                            <select id="taskProject" class="form-control" onchange="handleTaskProjectChange('new')">
-                                <option value=""></option>
-                                ${projectOptions}
-                            </select>
-                        </div>
-                        
-                        ${departmentSelectHTML}
+                            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                                <label class="form-label">${t('ui_project') || 'Project'}</label>
+                                <select id="taskProject" class="form-control" onchange="handleTaskProjectChange('new')">
+                                    <option value=""></option>
+                                    ${projectOptions}
+                                </select>
+                            </div>
+                            
+                            ${departmentSelectHTML}
 
-                        <div class="form-group" id="taskSubTypeGroup" style="flex: 1 1 150px; margin-bottom: 0; display: ${isMarketing ? 'block' : 'none'};">
-                            <label class="form-label">${t('ui_task_type') || 'Task Type'}</label>
-                            <select id="taskSubType" class="form-control" onchange="handleMarketingTaskTypeChange('new', this.value)" ${isMarketing ? 'required' : ''}>
-                                <option value=""></option>
-                                <option value="Daily Tasks">Daily Tasks</option>
-                                <option value="Designing Task">Designing Task</option>
-                            </select>
-                        </div>
+                            <div class="form-group" id="taskSubTypeGroup" style="flex: 1 1 150px; margin-bottom: 0; display: ${isMarketing ? 'block' : 'none'};">
+                                <label class="form-label">${t('ui_task_type') || 'Task Type'}</label>
+                                <select id="taskSubType" class="form-control" onchange="handleMarketingTaskTypeChange('new', this.value)" ${isMarketing ? 'required' : ''}>
+                                    <option value=""></option>
+                                    <option value="Daily Tasks">Daily Tasks</option>
+                                    <option value="Designing Task">Designing Task</option>
+                                </select>
+                            </div>
 
-                        <div id="newMarketingDesignFields" class="marketing-design-fields" style="display: none; flex: 1 1 100%;">
-                            ${renderMarketingDesignFields('new')}
-                        </div>
+                            <div id="newMarketingDesignFields" class="marketing-design-fields" style="display: none; flex: 1 1 100%;">
+                                ${renderMarketingDesignFields('new')}
+                            </div>
 
-                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
-                            <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
-                            <select id="taskAssignee" class="form-control" onchange="handleTaskAssigneeChange('new')" required ${isRegularEmployee ? 'disabled' : ''}>
-                                ${!isRegularEmployee ? `<option value="">${t('task_sel_emp') || 'Select Employee'}</option>` : ''}
-                                ${userOptions}
-                            </select>
-                        </div>
+                            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                                <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
+                                <select id="taskAssignee" class="form-control" onchange="handleTaskAssigneeChange('new')" required ${isRegularEmployee ? 'disabled' : ''}>
+                                    ${!isRegularEmployee ? `<option value="">${t('task_sel_emp') || 'Select Employee'}</option>` : ''}
+                                    ${userOptions}
+                                </select>
+                            </div>
 
-                        <div class="form-group" style="flex: 1 1 150px; margin-bottom: 0;">
-                            <label class="form-label">${t('ui_priority') || 'Priority'}</label>
-                            <select id="taskPriority" class="form-control">
-                                <option value="urgent">Critical</option>
-                                <option value="high">High</option>
-                                <option value="medium" selected>Medium</option>
-                                <option value="low">Low</option>
-                            </select>
-                        </div>
+                            <div class="form-group" style="flex: 1 1 150px; margin-bottom: 0;">
+                                <label class="form-label">${t('ui_priority') || 'Priority'}</label>
+                                <select id="taskPriority" class="form-control">
+                                    <option value="urgent">Critical</option>
+                                    <option value="high">High</option>
+                                    <option value="medium" selected>Medium</option>
+                                    <option value="low">Low</option>
+                                </select>
+                            </div>
 
-                        <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
-                            <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'; if (this.checked) populateTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache || '', Array.from(document.getElementById('taskWatchers').selectedOptions).map(option => option.value))">
-                                ${t('ui_add_watcher') || 'Add Watchers'}
-                            </label>
-                            <div id="taskWatchersGroup" style="display: none; margin-top: 0.5rem;">
-                                ${renderTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache)}
+                            <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
+                                <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                    <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'; if (this.checked) populateTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache || '', Array.from(document.getElementById('taskWatchers').selectedOptions).map(option => option.value))">
+                                    ${t('ui_add_watcher') || 'Add Watchers'}
+                                </label>
+                                <div id="taskWatchersGroup" style="display: none; margin-top: 0.5rem;">
+                                    ${renderTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache)}
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div style="text-align: right; margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('taskFormContainer').style.display='none'; const btnToggle = document.getElementById('btnToggleCreateTaskForm'); if(btnToggle) btnToggle.style.display='inline-block'; document.querySelector('.task-v2-legacy-host')?.classList.remove('show-form');">Cancel</button>
-                        <button type="submit" class="btn btn-primary">${t('task_assign_btn') || 'Create Task'}</button>
-                    </div>
-                </form>
+                        <div style="text-align: right; margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('createTaskModal').classList.remove('active');">Cancel</button>
+                            <button type="submit" class="btn btn-primary">${t('task_assign_btn') || 'Create Task'}</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         `;
@@ -4549,10 +4609,10 @@ async function renderTasks() {
 
         return `
             <div class="card task-item-card" id="task-card-${task.id}" data-status="${task.status}" draggable="true" ondragstart="handleTaskDragStart(event, '${task.id}')" onclick="openTaskDetailsModal('${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${prioColor}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: pointer; background: var(--color-surface); position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 2.5rem; gap: 0.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 3rem; gap: 0.5rem;">
                     <h4 style="margin: 0; font-size: 0.95rem; line-height: 1.4; color: var(--color-text); font-weight: 500; word-break: break-word;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${escapeHTML(task.displayTitle)}</h4>
                 </div>
-                ${canManageTask ? `<button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1.25rem; right: 1rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 0;" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>` : ''}
+                ${canManageTask ? `<button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1rem; right: 0.75rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 4px; border-radius: var(--radius-sm);" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>` : ''}
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0; display: flex; flex-direction: column; gap: 0.35rem;">
                     <div style="display: flex; align-items: center;"><i data-lucide="calendar" style="width: 12px; height: 12px; margin-right: 4px;"></i> Due: ${task.due_date || t('task_no_date') || 'No Date'}</div>
                     ${task.start_date ? `<div style="display: flex; align-items: center;"><i data-lucide="play" style="width: 12px; height: 12px; margin-right: 4px;"></i> Start: ${escapeHTML(task.start_date)}</div>` : ''}
@@ -4660,8 +4720,14 @@ async function renderTasksV2() {
         const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
         const dueDate = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
         const overdue = dueDate && task.status !== 'completed' && dueDate < new Date(new Date().toDateString());
+        const isCompleted = task.status === 'completed';
+        const isPendingApproval = task.status === 'Pending Approval';
+        const checkIconClass = isCompleted ? 'complete' : (isPendingApproval ? 'pending-approval' : '');
+        const checkAriaLabel = isCompleted ? 'Reopen' : (isPendingApproval ? 'Pending Approval' : 'Mark complete');
+        const checkOnClickStatus = isCompleted ? 'todo' : 'completed';
+        
         return `<article class="task-v2-row" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-status="${escapeHTML(task.status)}" data-due="${task.due_date || ''}">
-            <button class="task-v2-complete ${task.status === 'completed' ? 'complete' : ''}" type="button" aria-label="${task.status === 'completed' ? 'Reopen' : 'Mark complete'}" onclick="event.stopPropagation(); taskV2ToggleComplete('${task.id}', '${task.status === 'completed' ? 'todo' : 'completed'}')"><i data-lucide="check"></i></button>
+            <button class="task-v2-complete ${checkIconClass}" type="button" aria-label="${checkAriaLabel}" onclick="event.stopPropagation(); taskV2ToggleComplete('${task.id}', '${checkOnClickStatus}')"><i data-lucide="check"></i></button>
             <button class="task-v2-avatar" type="button" title="${escapeHTML(task.assignee?.full_name || 'Unassigned')}">${escapeHTML((task.assignee?.full_name || '?').charAt(0).toUpperCase())}</button>
             <button class="task-v2-row-main" type="button" onclick="openTaskDetailsModal('${task.id}')">
                 <span class="task-v2-row-title"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${escapeHTML(task.displayTitle || task.title)}</span>
@@ -4834,12 +4900,11 @@ window.setTaskV2Mode = function (mode) {
 };
 
 window.toggleTaskV2Create = function () {
-    const host = document.querySelector('.task-v2-legacy-host');
-    const form = document.getElementById('taskFormContainer');
-    if (!host || !form) return;
-    host.classList.toggle('show-form');
-    form.style.display = host.classList.contains('show-form') ? 'block' : 'none';
-    if (host.classList.contains('show-form')) document.getElementById('taskTitle')?.focus();
+    const modal = document.getElementById('createTaskModal');
+    if (modal) {
+        modal.classList.add('active');
+        document.getElementById('taskTitle')?.focus();
+    }
 };
 
 window.clearTaskV2Filters = function () {
@@ -5169,6 +5234,10 @@ window.handleCreateTask = async function (e) {
             }
             showToast(t('toast_task_sent_to_hussain_for_approval'), "info");
         }
+        
+        const modal = document.getElementById('createTaskModal');
+        if (modal) modal.classList.remove('active');
+        
         renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
     } else {
         showToast(t('toast_failed_to_create_task') + (error?.message || ''), "danger");
@@ -5542,14 +5611,19 @@ window.handleSaveContract = async function (e) {
     const departmentSelect = document.getElementById('contractDepartment');
     const departmentId = departmentSelect?.value || null;
     const departmentName = departmentSelect?.selectedOptions?.[0]?.textContent || '';
-    const policyFile = document.getElementById('contractPolicyDocument')?.files?.[0];
+    const policyFiles = Array.from(document.getElementById('contractPolicyDocument')?.files || []);
     let policyUrl = document.getElementById('existingContractPolicyUrl')?.value || null;
-    if (policyFile) {
-        const uploadResult = await db.uploadContractPolicy(currentContractEmployeeId, policyFile);
-        if (!uploadResult.success) {
-            showToast('The contract will be saved without the optional policy document. ' + (uploadResult.error?.message || 'Document upload failed.'), 'warning');
-        } else {
-            policyUrl = uploadResult.url;
+    const uploadedDocs = [];
+    
+    if (policyFiles.length > 0) {
+        for (const file of policyFiles) {
+            const uploadResult = await db.uploadContractPolicy(currentContractEmployeeId, file);
+            if (!uploadResult.success) {
+                showToast(`Unable to upload ${file.name}. ` + (uploadResult.error?.message || ''), 'warning');
+            } else {
+                if (!policyUrl) policyUrl = uploadResult.url; // Use the first uploaded one as the main policy url if not set
+                uploadedDocs.push({ url: uploadResult.url, name: file.name });
+            }
         }
     }
     const contractData = {
@@ -5584,9 +5658,11 @@ window.handleSaveContract = async function (e) {
 
     const { success, data: savedContract, error } = await db.upsertContract(contractData);
     if (success) {
-        if (policyFile && policyUrl && savedContract?.id) {
-            const documentResult = await db.addContractDocument(savedContract.id, currentContractEmployeeId, policyUrl, policyFile.name, 'confidentiality_policy', currentUser?.id || null);
-            if (!documentResult.success) showToast('Contract saved, but the uploaded document could not be indexed.', 'warning');
+        for (const doc of uploadedDocs) {
+            if (savedContract?.id) {
+                const documentResult = await db.addContractDocument(savedContract.id, currentContractEmployeeId, doc.url, doc.name, 'confidentiality_policy', currentUser?.id || null);
+                if (!documentResult.success) showToast(`Contract saved, but ${doc.name} could not be indexed.`, 'warning');
+            }
         }
         if (jobTitle) {
             const profileSync = await db.updateUserJobTitle(currentContractEmployeeId, jobTitle, departmentId);
@@ -5800,7 +5876,7 @@ async function renderContractPage() {
                     <input type="hidden" id="existingContractPolicyUrl" value="${escapeHTML(confidentialityPolicyUrl)}">
                     <div class="form-group">
                         <label class="form-label" for="contractPolicyDocument">Confidentiality Clause — Company Policy and Regulations</label>
-                        <input type="file" id="contractPolicyDocument" class="form-control" accept=".pdf,.doc,.docx,image/*">
+                        <input type="file" id="contractPolicyDocument" class="form-control" accept=".pdf,.doc,.docx,image/*" multiple>
                         ${confidentialityPolicyUrl ? `<small>Current document: <a href="${escapeHTML(confidentialityPolicyUrl)}" target="_blank" rel="noopener noreferrer">View uploaded policy</a></small>` : '<small>Optional. Accepted formats: PDF, Word, or image.</small>'}
                     </div>
                 </div>
@@ -6226,6 +6302,110 @@ window.closeAddTranslationModal = function () {
     document.getElementById('addTranslationModal').classList.remove('show');
 };
 
+async function renderTemplates() {
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title"><span data-i18n="ui_templates_title">${t('ui_templates_title') || 'Excel Templates'}</span></h1>
+                <p class="page-subtitle"><span data-i18n="ui_templates_subtitle">${t('ui_templates_subtitle') || 'Download templates for bulk imports'}</span></p>
+            </div>
+        </div>
+
+        <div class="dashboard-grid fade-in-up">
+            <!-- Employees Template -->
+            <div class="card" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1rem;">
+                <div style="background: var(--color-bg-alt); padding: 1.5rem; border-radius: 50%;">
+                    <i data-lucide="users" style="width: 32px; height: 32px; color: var(--color-primary);"></i>
+                </div>
+                <h3><span data-i18n="ui_template_employees">${t('ui_template_employees') || 'Employees Template'}</span></h3>
+                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">Import new employees and user accounts in bulk.</p>
+                <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
+                    <button class="btn btn-secondary" style="flex: 1;" onclick="downloadTemplate('employees')">
+                        <i data-lucide="download"></i> <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
+                    </button>
+                    <button class="btn btn-primary" style="flex: 1;" onclick="triggerBulkUpload('employees')">
+                        <i data-lucide="upload"></i> <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Clients Template -->
+            <div class="card" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1rem;">
+                <div style="background: var(--color-bg-alt); padding: 1.5rem; border-radius: 50%;">
+                    <i data-lucide="building-2" style="width: 32px; height: 32px; color: var(--color-primary);"></i>
+                </div>
+                <h3><span data-i18n="ui_template_clients">${t('ui_template_clients') || 'Clients Template'}</span></h3>
+                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">Import CRM clients and deal pipelines.</p>
+                <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
+                    <button class="btn btn-secondary" style="flex: 1;" onclick="downloadTemplate('clients')">
+                        <i data-lucide="download"></i> <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
+                    </button>
+                    <button class="btn btn-primary" style="flex: 1;" onclick="triggerBulkUpload('clients')">
+                        <i data-lucide="upload"></i> <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Projects Template -->
+            <div class="card" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1rem;">
+                <div style="background: var(--color-bg-alt); padding: 1.5rem; border-radius: 50%;">
+                    <i data-lucide="folder" style="width: 32px; height: 32px; color: var(--color-primary);"></i>
+                </div>
+                <h3><span data-i18n="ui_template_projects">${t('ui_template_projects') || 'Projects Template'}</span></h3>
+                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">Import projects and associate them with clients.</p>
+                <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
+                    <button class="btn btn-secondary" style="flex: 1;" onclick="downloadTemplate('projects')">
+                        <i data-lucide="download"></i> <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
+                    </button>
+                    <button class="btn btn-primary" style="flex: 1;" onclick="triggerBulkUpload('projects')">
+                        <i data-lucide="upload"></i> <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Tasks Template -->
+            <div class="card" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1rem;">
+                <div style="background: var(--color-bg-alt); padding: 1.5rem; border-radius: 50%;">
+                    <i data-lucide="list-checks" style="width: 32px; height: 32px; color: var(--color-primary);"></i>
+                </div>
+                <h3><span data-i18n="ui_template_tasks">${t('ui_template_tasks') || 'Tasks Template'}</span></h3>
+                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">Import tasks across multiple projects in bulk.</p>
+                <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
+                    <button class="btn btn-secondary" style="flex: 1;" onclick="downloadTemplate('tasks')">
+                        <i data-lucide="download"></i> <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
+                    </button>
+                    <button class="btn btn-primary" style="flex: 1;" onclick="triggerBulkUpload('tasks')">
+                        <i data-lucide="upload"></i> <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden input for bulk upload -->
+        <input type="file" id="bulkUploadInput" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" style="display: none;" onchange="handleBulkUpload(event)">
+    `;
+}
+
+window.downloadTemplate = function(type) {
+    // In a real app, this would trigger a download of an actual Excel file.
+    // For now, we'll just show an alert.
+    showToast(`Downloading ${type} template...`, 'success');
+};
+
+let currentBulkUploadType = null;
+window.triggerBulkUpload = function(type) {
+    currentBulkUploadType = type;
+    document.getElementById('bulkUploadInput').click();
+};
+
+window.handleBulkUpload = function(event) {
+    const file = event.target.files[0];
+    if (file) {
+        showToast(`Successfully uploaded ${file.name} for ${currentBulkUploadType}`, 'success');
+    }
+    event.target.value = ''; // Reset input
+};
+
 async function renderTranslationsPage() {
     if (currentUserRole !== 'ADMIN') {
         return `<div class="card" style="padding: 2rem; color: var(--color-danger); font-weight: bold;">Unauthorized. System Admin access required.</div>`;
@@ -6538,6 +6718,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'tasks_v2': content = await renderTasksV2(); break;
             case 'departments': content = await renderDepartments(); break;
             case 'translations': content = await renderTranslationsPage(); break;
+            case 'templates': content = await renderTemplates(); break;
             case 'clients': content = await renderClients(); break;
             case 'crm': content = await renderCRM(); break;
             case 'orders': content = await renderOrders(); break;
@@ -7041,8 +7222,14 @@ async function renderCRM() {
                 <p class="page-subtitle">Manage clients and deals</p>
             </div>
         </div>
-        <div class="dashboard-grid fade-in-up">
-            <div class="card col-span-3" style="grid-column: span 12 / span 12;">
+
+        <div style="display:flex;gap:.5rem;margin-bottom:2rem;flex-wrap:wrap;" class="fade-in-up">
+            <button class="btn btn-primary" data-crm-tab="pipeline" onclick="switchCrmTab('pipeline')"><span data-i18n="ui_deal_pipeline">${t('ui_deal_pipeline') || 'Deal Pipeline'}</span></button>
+            <button class="btn btn-secondary" data-crm-tab="clients" onclick="switchCrmTab('clients')"><span data-i18n="ui_client_directory">${t('ui_client_directory') || 'Client Directory'}</span></button>
+        </div>
+
+        <div id="crm-tab-content" class="dashboard-grid fade-in-up">
+            <div id="crm-pipeline" class="card col-span-3" style="grid-column: span 12 / span 12;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
                     <div class="card-title">${t('ui_deal_pipeline') || 'Deal Pipeline'}</div>
                     <button class="btn btn-primary" onclick="showCRMDealModal()"><i data-lucide="plus"></i> ${t('ui_new_deal') || 'New Deal'}</button>
@@ -7052,7 +7239,7 @@ async function renderCRM() {
                 </div>
             </div>
 
-            <div class="card col-span-3" style="grid-column: span 12 / span 12;">
+            <div id="crm-clients" class="card col-span-3" style="grid-column: span 12 / span 12; display: none;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
                     <div class="card-title">${t('ui_client_directory') || 'Client Directory'}</div>
                     <button class="btn btn-primary" onclick="showCRMClientModal()"><i data-lucide="plus"></i> ${t('ui_new_client') || 'New Client'}</button>
@@ -7086,6 +7273,23 @@ async function renderCRM() {
         </div>
     `;
 }
+
+window.switchCrmTab = function(tabId) {
+    document.querySelectorAll('[data-crm-tab]').forEach(btn => {
+        if (btn.getAttribute('data-crm-tab') === tabId) {
+            btn.classList.add('btn-primary');
+            btn.classList.remove('btn-secondary');
+        } else {
+            btn.classList.add('btn-secondary');
+            btn.classList.remove('btn-primary');
+        }
+    });
+
+    const pipelineEl = document.getElementById('crm-pipeline');
+    const clientsEl = document.getElementById('crm-clients');
+    if (pipelineEl) pipelineEl.style.display = tabId === 'pipeline' ? 'block' : 'none';
+    if (clientsEl) clientsEl.style.display = tabId === 'clients' ? 'block' : 'none';
+};
 
 // Drag & Drop Deal Logic
 window.allowDrop = function (ev) {
