@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     display_name VARCHAR(100) CHECK (display_name IS NULL OR BTRIM(display_name) <> ''),
     manager_id UUID REFERENCES auth.users(id),
     base_salary DECIMAL(10, 2) DEFAULT 3000.00,
+    hire_date DATE,
     annual_leave_allowance INTEGER DEFAULT 30,
     sick_leave_allowance INTEGER DEFAULT 10,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

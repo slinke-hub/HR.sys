@@ -1848,6 +1848,20 @@ const db = {
             return [];
         }
     },
+    async importDepartmentsJobTitles(payload) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('import_departments_job_titles', { payload });
+            if (error) throw error;
+            appCache.departments = { data: null, time: 0 };
+            appCache.jobTitles = { data: null, time: 0 };
+            return { success: true, data };
+        } catch (error) {
+            console.error("importDepartmentsJobTitles Error:", error);
+            return { success: false, error };
+        }
+    },
+    
     async fetchDepartments(forceRefresh = false) {
         if (!supabaseClient) return [];
         if (!forceRefresh && appCache.departments.data && (Date.now() - appCache.departments.time < CACHE_TTL)) {
@@ -1875,7 +1889,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('job_titles')
-                .select('id,name,department_id,is_active')
+                .select('id,name,name_ar,department_id,is_active')
                 .eq('is_active', true)
                 .order('name');
             if (error) throw error;

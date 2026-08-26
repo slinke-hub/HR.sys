@@ -17,6 +17,7 @@
     "renderView": "readonly",
     "lucide": "readonly",
     "Chart": "readonly",
+    "XLSX": "readonly",
     "setLoginMode": "readonly",
     "closeAnnouncementModal": "readonly",
     "closeClockOutModal": "readonly",

@@ -6371,6 +6371,15 @@ async function renderTemplates() {
             titleFallback: 'Tasks Template',
             desc: 'Import tasks across multiple projects in bulk.',
             columns: ['title', 'description', 'assignee_email', 'supervisor_email', 'due_date', 'priority', 'status', 'category', 'project_name', 'tags']
+        },
+        {
+            type: 'departments_jobtitles',
+            icon: 'building',
+            gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+            titleKey: 'ui_template_dept_jobs',
+            titleFallback: 'Departments & Job Titles',
+            desc: 'Import translated Departments and Job Titles.',
+            columns: ['Department (EN)', 'Department (AR)', 'Job Title (EN)', 'Job Title (AR)']
         }
     ];
 
@@ -6444,14 +6453,16 @@ window.downloadTemplate = function (type) {
         employees: ['full_name', 'email', 'phone', 'job_title', 'department', 'role', 'salary', 'hire_date', 'national_id', 'address'],
         clients: ['company_name', 'contact_name', 'email', 'phone', 'industry', 'country', 'city', 'deal_stage', 'deal_value', 'notes'],
         projects: ['project_name', 'project_type', 'category', 'description', 'status', 'assigned_people', 'tags', 'start_date', 'end_date', 'client'],
-        tasks: ['title', 'description', 'assignee_email', 'supervisor_email', 'due_date', 'priority', 'status', 'category', 'project_name', 'tags']
+        tasks: ['title', 'description', 'assignee_email', 'supervisor_email', 'due_date', 'priority', 'status', 'category', 'project_name', 'tags'],
+        departments_jobtitles: ['Department (EN)', 'Department (AR)', 'Job Title (EN)', 'Job Title (AR)']
     };
 
     const examples = {
         employees: ['John Doe', 'john@example.com', '+966501234567', 'Software Engineer', 'Engineering', 'EMPLOYEE', '8000', '2024-01-15', '1234567890', '123 Main St'],
         clients: ['Acme Corp', 'Jane Smith', 'jane@acme.com', '+1234567890', 'Technology', 'Saudi Arabia', 'Riyadh', 'Negotiation', '50000', 'Key account'],
         projects: ['Website Redesign', 'Client', 'Enterprise', 'New website for client', 'active', 'john@example.com', 'Frontend,UI/UX', '2024-01-01', '2024-06-30', 'Acme Corp'],
-        tasks: ['Design homepage mockup', 'Create high-fidelity wireframes', 'john@example.com', 'manager@example.com', '2024-03-15', 'high', 'todo', 'Design', 'Website Redesign', 'Frontend,UI/UX']
+        tasks: ['Design homepage mockup', 'Create high-fidelity wireframes', 'john@example.com', 'manager@example.com', '2024-03-15', 'high', 'todo', 'Design', 'Website Redesign', 'Frontend,UI/UX'],
+        departments_jobtitles: ['Engineering', 'الهندسة', 'Software Engineer', 'مهندس برمجيات']
     };
 
     const cols = schemas[type];
@@ -6480,12 +6491,47 @@ window.triggerBulkUpload = function (type) {
     document.getElementById('bulkUploadInput').click();
 };
 
-window.handleBulkUpload = function (event) {
+window.handleBulkUpload = async function (event) {
     const file = event.target.files[0];
-    if (file) {
-        showToast(`Successfully uploaded ${file.name} for ${currentBulkUploadType}`, 'success');
+    event.target.value = '';
+    if (!file) return;
+
+    if (typeof XLSX === 'undefined') {
+        showToast('Excel support is unavailable. Please refresh or check your internet connection.', 'error');
+        return;
     }
-    event.target.value = ''; // Reset input
+
+    try {
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+        const sheet = workbook.Sheets['Import Data'] || workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false })
+            .filter(row => Object.values(row).some(value => String(value).trim()));
+            
+        if (!rows.length) throw new Error('The workbook contains no data rows.');
+
+        if (currentBulkUploadType === 'departments_jobtitles') {
+            const payload = rows.map(r => ({
+                dept_en: String(r['Department (EN)'] || '').trim(),
+                dept_ar: String(r['Department (AR)'] || '').trim(),
+                job_en: String(r['Job Title (EN)'] || '').trim(),
+                job_ar: String(r['Job Title (AR)'] || '').trim()
+            })).filter(item => item.dept_en);
+            
+            if (payload.length > 0) {
+                const res = await db.importDepartmentsJobTitles(payload);
+                if (!res.success) throw res.error;
+                showToast(`Successfully imported ${payload.length} rows for Departments and Job Titles.`, 'success');
+                if (typeof renderView === 'function') renderView('templates');
+            } else {
+                throw new Error('No valid department entries found in the file.');
+            }
+        } else {
+            showToast(`Upload for ${currentBulkUploadType} is not implemented yet.`, 'info');
+        }
+    } catch (error) {
+        console.error('Bulk Upload Error:', error);
+        showToast(`Import failed: ${error.message || 'An error occurred'}`, 'error');
+    }
 };
 
 // ==========================================
@@ -6506,10 +6552,10 @@ async function renderCustodyHandover() {
                 <p class="page-subtitle">Record company property handover to employees</p>
             </div>
             <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
-                <button class="btn btn-secondary" onclick="window.print()">
+                <button class="btn btn-secondary" style="white-space: nowrap;" onclick="window.print()">
                     <i data-lucide="printer" style="width:16px;height:16px;"></i> Print / Save PDF
                 </button>
-                <button class="btn btn-primary" onclick="submitCustodyHandover(event)">
+                <button class="btn btn-primary" style="white-space: nowrap;" onclick="submitCustodyHandover(event)">
                     <i data-lucide="save" style="width:16px;height:16px;"></i> Save Record
                 </button>
             </div>
@@ -6517,13 +6563,13 @@ async function renderCustodyHandover() {
 
         <style>
             .custody-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
-            .custody-items-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-            .custody-items-table th { background: var(--color-primary); color: #fff; padding: 0.75rem 1rem; text-align: start; font-weight: 600; }
+            .custody-items-table { width: 100%; min-width: 850px; border-collapse: collapse; font-size: 0.9rem; }
+            .custody-items-table th { background: var(--color-primary); color: #ffffff !important; padding: 0.75rem 1rem; text-align: start; font-weight: 600; }
             .custody-items-table td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
             .custody-items-table tr:hover td { background: var(--color-bg-alt); }
             .custody-items-table input, .custody-items-table select { border: 1px solid var(--color-border); border-radius: 8px; padding: 0.4rem 0.6rem; width: 100%; background: var(--color-surface); color: var(--color-text); font-size: 0.85rem; }
             .custody-radio-group { display: flex; gap: 1rem; align-items: center; }
-            .custody-radio-group label { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; }
+            .custody-radio-group label { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; white-space: nowrap; }
             .declaration-box { background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 12px; padding: 1.75rem 2rem; line-height: 1.85; color: var(--color-text); }
             .declaration-box h3 { margin: 0 0 1rem 0; font-size: 1.1rem; color: var(--color-primary); border-bottom: 2px solid var(--color-primary); padding-bottom: 0.5rem; }
             .declaration-box ul { padding-inline-start: 1.25rem; margin: 0.75rem 0; }
@@ -6571,7 +6617,7 @@ async function renderCustodyHandover() {
                     <h2 style="margin:0;font-size:1rem;font-weight:700;color:var(--color-primary);display:flex;align-items:center;gap:0.5rem;">
                         <i data-lucide="package" style="width:18px;height:18px;"></i> Custody Items
                     </h2>
-                    <button type="button" class="btn btn-secondary" onclick="addCustodyRow()" style="font-size:0.85rem;padding:0.45rem 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="addCustodyRow()" style="font-size:0.85rem;padding:0.45rem 1rem;white-space: nowrap;">
                         <i data-lucide="plus" style="width:14px;height:14px;"></i> Add Item
                     </button>
                 </div>
