@@ -1,3 +1,5 @@
+/* global currentUser, currentUserRole, currentUserProfile, showToast, XLSX */
+/* exported renderPayrollModule, openPayrollLogSalesModal, submitPayrollLogSales */
 // payroll.js
 // Holds logic for Payroll Manager
 
@@ -158,11 +160,10 @@ window.generateAllPayslips = async function() {
             loanDeduction += Math.min(Number(l.monthly_installment), Number(l.remaining_balance));
         });
         
-        const totalDeductions = absenceDeduction + loanDeduction;
+        let totalDeductions = absenceDeduction + loanDeduction;
         
         // 4. Adjustments
         const empAdjs = adjustments.filter(a => a.employee_id === emp.id);
-        let adjsAmount = 0;
         empAdjs.forEach(a => {
             if(a.type === 'BONUS') commission += Number(a.amount);
             if(a.type === 'DEDUCTION') totalDeductions += Number(a.amount);
@@ -204,7 +205,7 @@ window.generateAllPayslips = async function() {
     } else {
         alert("Payslips generated and saved successfully!");
     }
-    switchPayrollTab('released');
+    window.switchPayrollTab('released');
 };
 
 
@@ -492,7 +493,6 @@ window.calculateAndShowEOS = function() {
 
 // Original employee payroll view
 async function renderEmployeePayroll() {
-    const payrolls = []; // await db.fetchPayroll(currentUser?.id);
     // Mock for beta
     let rowsHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">No payslips generated yet.</td></tr>`;
     
@@ -587,7 +587,7 @@ async function submitPayrollLogSales(e) {
             closePayrollLogSalesModal();
             // Refresh payroll UI
             if (window.currentPayrollTab === 'commissions') {
-                switchPayrollTab('commissions');
+                window.switchPayrollTab('commissions');
             } else if (typeof renderView === 'function') {
                 renderView('payroll');
             }
@@ -651,7 +651,7 @@ window.submitPayrollLogAbsence = async function(e) {
         showToast('Absence logged successfully', 'success');
         document.getElementById('payrollLogAbsenceModal').classList.remove('active', 'show');
         if (window.currentPayrollTab === 'attendance') {
-            switchPayrollTab('attendance');
+            window.switchPayrollTab('attendance');
         }
     } else {
         showToast(res.error?.message || 'Error logging absence', 'danger');
@@ -711,7 +711,7 @@ window.submitPayrollNewLoan = async function(e) {
         showToast('Loan added successfully', 'success');
         document.getElementById('payrollNewLoanModal').classList.remove('active', 'show');
         if (window.currentPayrollTab === 'loans') {
-            switchPayrollTab('loans');
+            window.switchPayrollTab('loans');
         }
     } else {
         showToast(res.error?.message || 'Error adding loan', 'danger');
@@ -728,6 +728,11 @@ window.downloadPayrollTemplate = async function() {
         .from('profiles')
         .select('*')
         .eq('status', 'ACTIVE');
+
+    if (error) {
+        showToast(error.message || 'Unable to load employees for the payroll template.', 'error');
+        return;
+    }
         
     let data = [];
     if (profiles && profiles.length > 0) {
@@ -828,7 +833,7 @@ window.handleBulkPayslipUpload = async function(event) {
                 } else {
                     alert('Bulk upload complete. ' + payslips.length + ' payslips generated!');
                 }
-                switchPayrollTab('released');
+                window.switchPayrollTab('released');
             } else {
                 alert("Failed to upload payslips.");
             }

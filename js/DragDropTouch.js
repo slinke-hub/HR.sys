@@ -410,8 +410,8 @@ var DragDropTouch;
             }
             dst.style.pointerEvents = 'none';
             // and repeat for all children
-            for (var i = 0; i < src.children.length; i++) {
-                this._copyStyle(src.children[i], dst.children[i]);
+            for (var childIndex = 0; childIndex < src.children.length; childIndex++) {
+                this._copyStyle(src.children[childIndex], dst.children[childIndex]);
             }
         };
         DragDropTouch.prototype._dispatchEvent = function (e, type, target) {

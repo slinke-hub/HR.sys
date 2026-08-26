@@ -85,6 +85,7 @@
                 <a href="#" class="nav-item" data-view="departments" style="display:none"><i data-lucide="building-2"></i><span data-i18n="nav_departments">Departments</span></a>
                 <a href="#" class="nav-item" data-view="translations" id="navTranslations" style="display:none"><i data-lucide="languages"></i><span data-i18n="nav_translations">Translations</span></a>
                 <a href="#" class="nav-item" data-view="templates" id="navTemplates" style="display:none"><i data-lucide="file-spreadsheet"></i><span data-i18n="nav_templates">Excel Templates</span></a>
+                <a href="#" class="nav-item" data-view="custody_handover" id="navCustodyHandover"><i data-lucide="package-check"></i><span data-i18n="nav_custody_handover">Custody Handover</span></a>
                 <a href="#" class="nav-item" data-view="users" style="display:none"><i data-lucide="user-cog"></i><span data-i18n="nav_users">User Management</span></a>
 
                 <a href="#" class="nav-item" data-view="integrations" style="display:none !important"><i data-lucide="webhook"></i><span>API Integrations</span></a>
@@ -765,6 +766,10 @@
                     <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple tags.</small>
                 </div>
                 <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label"><i data-lucide="check-square" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Initial Tasks (One per line)</label>
+                    <textarea id="newProjectTasks" class="form-control" rows="3" placeholder="Task 1&#10;Task 2"></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
                     <label class="form-label"><i data-lucide="align-left" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Description</label>
                     <textarea id="newProjectDesc" class="form-control" rows="3"></textarea>
                 </div>
@@ -958,6 +963,10 @@
                         <option value="Feature" data-i18n="tag_feature">Feature</option>
                     </select>
                     <small style="color:var(--color-text-secondary); display:block; margin-top:0.25rem; font-size: 0.75rem;">Hold Ctrl/Cmd to select multiple tags.</small>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label"><i data-lucide="check-square" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Initial Tasks (One per line)</label>
+                    <textarea id="newProjectTasks_dup" class="form-control" rows="3" placeholder="Task 1&#10;Task 2"></textarea>
                 </div>
                 <div class="form-group" style="margin-bottom: 1.5rem;">
                     <label class="form-label"><i data-lucide="align-left" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Description</label>
@@ -1437,10 +1446,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="js/db.js?v=49"></script>
-    <script src="js/data.js?v=20"></script>
+    <script src="js/data.js?v=21"></script>
     <script src="js/contract.js?v=22"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=96"></script>
+    <script src="js/app.js?v=97"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

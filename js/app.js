@@ -1,5 +1,5 @@
 // App State
-let currentLang = localStorage.getItem('app_lang') || 'en';
+let currentLang = localStorage.getItem('app_lang') || 'ar';
 let currentTheme = 'light';
 let currentView = 'login';
 let loginMode = 'login';
@@ -713,6 +713,10 @@ const htmlElement = document.documentElement;
 const viewContainer = document.getElementById('viewContainer');
 const navItems = document.querySelectorAll('.nav-item');
 
+// Apply language direction on startup
+htmlElement.setAttribute('dir', currentLang === 'ar' ? 'rtl' : 'ltr');
+htmlElement.setAttribute('lang', currentLang);
+
 // Initialize Icons
 lucide.createIcons();
 
@@ -1020,7 +1024,7 @@ window.handleLogout = async function () {
     if (pwaPrompt) localStorage.setItem('pwaPromptDismissed', pwaPrompt);
     if (appLang) localStorage.setItem('app_lang', appLang);
     sessionStorage.clear();
-    
+
     // Clear Payroll Modals and Forms for security
     const payrollForms = ['payrollLogSalesForm', 'payrollLogAbsenceForm', 'payrollNewLoanForm'];
     payrollForms.forEach(id => {
@@ -1094,12 +1098,12 @@ async function canCurrentUserAccessView(viewId) {
     if (isAdmin) return true;
     if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
     if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
-    
+
     if (viewId === 'orders' || viewId === 'projects' || viewId === 'crm' || viewId === 'clients') {
         const dept = (await getCurrentDepartmentName()).trim().toLowerCase();
         return normalizedRole === 'EMPLOYEE' && (dept === 'marketing & sales' || dept === 'sales' || dept === 'marketing');
     }
-    
+
     return true;
 }
 
@@ -1216,8 +1220,19 @@ window.handleLoginSubmit = async function (e) {
     // Hide/Show Role-Specific Nav Items
     window.updateSidebarVisibility();
 
-    // Route based on role
-    currentView = 'dashboard';
+    // Route based on role - restore last view or fallback to dashboard
+    const _loginRestorableViews = new Set([
+        'dashboard', 'community', 'time', 'leave', 'requests', 'archived',
+        'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
+        'archived_contracts', 'messages', 'notifications', 'performance',
+        'documents', 'profile', 'projects', 'approvals', 'tasks',
+        'departments', 'translations', 'clients', 'crm', 'orders', 'integrations', 'custody_handover'
+    ]);
+    const _loginSavedView = currentUser ? (localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view')) : null;
+    currentView = (_loginSavedView && _loginRestorableViews.has(_loginSavedView)) ? _loginSavedView : 'dashboard';
+    // Do not restore a sidebar page hidden for this user's role
+    const _loginRestoredNav = document.querySelector(`.nav-item[data-view="${currentView}"]`);
+    if (_loginRestoredNav && _loginRestoredNav.style.display === 'none') currentView = 'dashboard';
     renderView(currentView);
 }
 
@@ -2131,8 +2146,8 @@ async function renderTime() {
     const viewerProfile = currentUserProfile || await db.getUserProfile(currentUser?.id);
     const normalizedRole = String(currentUserRole || viewerProfile?.role || '').toUpperCase();
     const jobTitle = String(viewerProfile?.job_title || '').trim().toUpperCase();
-    const canViewAllAttendance = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole) || 
-                                 ['HR MANAGER', 'FINANCE MANAGER', 'ACCOUNTANT MANAGER'].includes(jobTitle);
+    const canViewAllAttendance = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole) ||
+        ['HR MANAGER', 'FINANCE MANAGER', 'ACCOUNTANT MANAGER'].includes(jobTitle);
     const [punches, employees] = await Promise.all([
         db.fetchTimePunches(canViewAllAttendance ? null : currentUser?.id),
         canViewAllAttendance ? db.fetchUsers() : Promise.resolve([viewerProfile || currentUser])
@@ -2366,7 +2381,7 @@ window.uploadTaskAttachment = async function (input) {
 
     let successCount = 0;
     const newLinks = [];
-    
+
     for (const file of files) {
         const upload = await db.uploadTaskAttachment(task.id, currentUser.id, file);
         if (!upload.success) {
@@ -2470,20 +2485,13 @@ window.submitDashboardShortLeave = async function (durationMinutes) {
     renderView('dashboard');
 };
 
-const COMPANY_JOB_TITLES = {
-    'Executive & Administrative': [
-        'General Manager', 'HR Manager'
-    ],
-    'Finance': ['Finance Manager', 'Accountant', 'Senior Financial Analyst', 'Senior Accountant', 'Internal Auditor', 'Staff Accountant / Junior Accountant', 'Bookkeeper', 'Payroll Clerk / Specialist'],
-    'Event Production & Operations': ['Event Manager', 'Event Coordinator', 'Operations Manager', 'Warehouse Manager', 'Logistics Coordinator', 'Procurement Officer', 'Client Account Manager', 'Barista', 'Technician'],
-    'Marketing & Sales': ['Marketing Manager', 'Marketing Representative', 'Sales Supervisor', 'Sales Representative', 'Graphic Designer', 'Photographer'],
-    'IT & Technical Support': ['IT Administrator', 'IT Support', 'Audio-Visual (AV) Specialist']
-};
+
 
 function companyJobTitleOptions(selected = '', departmentName = '') {
-    const groups = departmentName && COMPANY_JOB_TITLES[departmentName]
-        ? [[departmentName, COMPANY_JOB_TITLES[departmentName]]]
-        : Object.entries(COMPANY_JOB_TITLES);
+    const jobTitlesMap = db.getJobTitlesMap() || {};
+    const groups = departmentName && jobTitlesMap[departmentName]
+        ? [[departmentName, jobTitlesMap[departmentName]]]
+        : Object.entries(jobTitlesMap);
     return '<option value="">Select Job Title</option>' + groups.map(([department, titles]) =>
         `<optgroup label="${escapeHTML(department)}">${titles.map(title => `<option value="${escapeHTML(title)}" ${title === selected ? 'selected' : ''}>${escapeHTML(title)}</option>`).join('')}</optgroup>`
     ).join('');
@@ -2495,7 +2503,8 @@ window.syncJobTitlesWithDepartment = function (departmentSelectId, jobTitleSelec
     if (!departmentSelect || !titleSelect) return;
     const previous = titleSelect.value;
     const departmentName = departmentSelect.options[departmentSelect.selectedIndex]?.text || '';
-    if (!departmentSelect.value || !COMPANY_JOB_TITLES[departmentName]) {
+    const jobTitlesMap = db.getJobTitlesMap() || {};
+    if (!departmentSelect.value || !jobTitlesMap[departmentName]) {
         titleSelect.innerHTML = '<option value="">Select Department first</option>';
         titleSelect.value = '';
         titleSelect.disabled = true;
@@ -3018,12 +3027,12 @@ window.handleViewPayslip = function (month, netPay) {
         alert(`SAP Detailed Payslip for ${month}\n------------------------\nBase Salary: $${(netPay * 0.8).toFixed(2)}\nAllowances: $${(netPay * 0.2).toFixed(2)}\n\nNet Pay: $${netPay.toFixed(2)}`);
         return;
     }
-    
+
     document.getElementById('payslipModalMonth').textContent = `SAP Detailed Payslip for ${month}`;
     document.getElementById('payslipModalBase').textContent = `$${(netPay * 0.8).toFixed(2)}`;
     document.getElementById('payslipModalAllowances').textContent = `$${(netPay * 0.2).toFixed(2)}`;
     document.getElementById('payslipModalNet').textContent = `$${netPay.toFixed(2)}`;
-    
+
     modal.classList.add('active');
     if (window.lucide) window.lucide.createIcons();
 }
@@ -3219,7 +3228,8 @@ window.handleDirectoryDepartmentChange = async function (userId, departmentId, s
     const departmentName = selectElement.options[selectElement.selectedIndex]?.text || '';
     const jobTitleSelect = selectElement.closest('tr')?.querySelector('[data-directory-job-title]');
     const currentTitle = jobTitleSelect?.value || '';
-    if (!COMPANY_JOB_TITLES[departmentName]?.includes(currentTitle)) {
+    const jobTitlesMap = db.getJobTitlesMap() || {};
+    if (!jobTitlesMap[departmentName]?.includes(currentTitle)) {
         if (jobTitleSelect) jobTitleSelect.innerHTML = companyJobTitleOptions('', departmentName);
         showToast(`Now select a job title for ${departmentName}. The department will be saved with that title.`, 'info');
         return;
@@ -3608,7 +3618,7 @@ window.updateEmployeeDocumentFileName = function (event) {
     const fileInput = event.target;
     const fileNameElement = document.getElementById('empDocFileName');
     const files = Array.from(fileInput.files || []);
-    
+
     // Validate each file
     for (const file of files) {
         const validationError = getEmployeeDocumentFileValidationError(file);
@@ -3635,7 +3645,7 @@ window.handleEmployeeDocSave = async function (e) {
     e.preventDefault();
     const fileInput = document.getElementById('empDocFile');
     const files = Array.from(fileInput?.files || []);
-    
+
     if (files.length === 0) {
         showToast(t('toast_error_saving_document'), 'warning');
         return;
@@ -3660,11 +3670,11 @@ window.handleEmployeeDocSave = async function (e) {
             const fileType = getEmployeeDocumentFileType(file);
             const rawFileBase64 = await readEmployeeDocumentFile(file);
             const fileBase64 = String(rawFileBase64).replace(/^data:[^;]*;/, `data:${fileType};`);
-            
+
             // If multiple files, append original filename to documentName to differentiate
             const baseDocName = document.getElementById('empDocName').value.trim();
             const documentName = files.length > 1 ? `${baseDocName} (${file.name})` : baseDocName;
-            
+
             const documentRecord = {
                 documentName,
                 ownerName: document.getElementById('empOwnerName').value.trim(),
@@ -3691,7 +3701,7 @@ window.handleEmployeeDocSave = async function (e) {
                     showToast(t('toast_document_expiry_notification_failed'), "warning");
                 }
             }
-            
+
             successCount++;
         }
 
@@ -4081,121 +4091,140 @@ async function renderDocuments() {
     `;
 }
 
-// --- NEW VIEWS: PROFILE & TASKS ---
 // ==========================================
-// Messages (New)
+// Schedule & Reminders
 // ==========================================
-let currentChatUser = null;
-let messagePollingInterval = null;
 
-async function renderMessages() {
-    const users = await db.fetchAllProfiles();
+async function renderSchedule() {
+    const reminders = await db.fetchReminders(currentUser.id);
 
-    // Clear old polling if exists
-    if (messagePollingInterval) clearInterval(messagePollingInterval);
+    // Sort reminders: pending first, then by date.
+    const sortedReminders = reminders.sort((a, b) => {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        return new Date(a.due_date) - new Date(b.due_date);
+    });
 
-    // Build user list (excluding self)
-    const otherUsers = users.filter(u => u.id !== currentUser.id);
-    let usersHtml = otherUsers.map(u => `
-        <div class="chat-user-item" onclick="window.selectChatUser('${u.id}', '${u.full_name}')" style="padding: 1rem; border-bottom: 1px solid var(--color-border); cursor: pointer; display: flex; align-items: center; gap: 10px;">
-            <img src="${u.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(u.full_name) + '&background=007AFF&color=fff'}" class="avatar" style="width: 40px; height: 40px;">
-            <div>
-                <div style="font-weight: 600;">${u.full_name}</div>
-                <div style="font-size: 0.75rem; color: var(--color-text-secondary);">${u.role}</div>
-            </div>
-        </div>
-    `).join('');
+    const reminderItems = sortedReminders.length === 0
+        ? `<div style="text-align:center; padding: 2rem; color: var(--color-text-secondary);">${t('notif_no_found') || 'No reminders yet.'}</div>`
+        : sortedReminders.map(r => {
+            const isCompleted = r.status === 'completed';
+            const dueDate = new Date(r.due_date);
 
-    if (otherUsers.length === 0) usersHtml = `<div style="padding: 1rem; color: var(--color-text-secondary);">${t('msg_no_other')}</div>`;
+            // Build Google Calendar Add Link
+            const gcalStart = dueDate.toISOString().replace(/-|:|\.\d\d\d/g, "");
+            // Assuming 1 hour duration
+            const endDate = new Date(dueDate.getTime() + 60 * 60 * 1000);
+            const gcalEnd = endDate.toISOString().replace(/-|:|\.\d\d\d/g, "");
+
+            const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(r.title)}&details=${encodeURIComponent(r.description || '')}&dates=${gcalStart}/${gcalEnd}`;
+
+            return `
+            <div class="card fade-in-up" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 1rem; ${isCompleted ? 'opacity: 0.6;' : 'border-left: 4px solid var(--color-primary);'}">
+                <div>
+                    <h3 style="margin-bottom: 0.25rem; ${isCompleted ? 'text-decoration: line-through;' : ''}">${escapeHTML(r.title)}</h3>
+                    <p style="font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">${escapeHTML(r.description || '')}</p>
+                    <div style="font-size: 0.8rem; color: var(--color-text-secondary);">
+                        <i data-lucide="calendar" style="width:14px; height:14px; vertical-align:middle;"></i> ${dueDate.toLocaleString()}
+                    </div>
+                </div>
+                <div style="display:flex; gap: 0.5rem; align-items:center;">
+                    ${!isCompleted ? `<button class="btn btn-secondary btn-icon" title="Mark Completed" onclick="window.toggleReminderStatus('${r.id}', 'completed')"><i data-lucide="check"></i></button>` : `<button class="btn btn-secondary btn-icon" title="Mark Pending" onclick="window.toggleReminderStatus('${r.id}', 'pending')"><i data-lucide="rotate-ccw"></i></button>`}
+                    <a href="${gcalUrl}" target="_blank" class="btn btn-secondary btn-icon" title="Add to Google Calendar" style="color:var(--color-text);"><i data-lucide="calendar-plus"></i></a>
+                    <button class="btn btn-secondary btn-icon" style="color:var(--color-danger);" title="Delete" onclick="window.deleteReminder('${r.id}')"><i data-lucide="trash-2"></i></button>
+                </div>
+            </div>`;
+        }).join('');
 
     return `
         <div class="page-header">
-            <h2>${t('msg_title')}</h2>
+            <h2>Schedule & Reminders</h2>
+            <button class="btn btn-primary" onclick="window.showReminderModal()"><i data-lucide="plus"></i> Add Reminder</button>
         </div>
-        <div class="card" style="display: flex; height: 600px; padding: 0; overflow: hidden;">
-            <!-- Sidebar -->
-            <div style="width: 300px; border-right: 1px solid var(--color-border); overflow-y: auto; background: var(--color-background);">
-                ${usersHtml}
-            </div>
-            <!-- Chat Area -->
-            <div style="flex: 1; display: flex; flex-direction: column;" id="chatArea">
-                <div style="flex: 1; display: flex; justify-content: center; align-items: center; color: var(--color-text-secondary);">
-                    ${t('msg_select')}
+        <div class="card" style="padding: 0; background: transparent; box-shadow: none;">
+            ${reminderItems}
+        </div>
+        
+        <!-- Add Reminder Modal -->
+        <div class="modal" id="reminderModal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h2>New Reminder</h2>
+                    <button class="btn btn-icon" onclick="document.getElementById('reminderModal').classList.remove('show')"><i data-lucide="x"></i></button>
                 </div>
+                <form onsubmit="window.handleCreateReminder(event)">
+                    <div class="form-group">
+                        <label class="form-label">Title *</label>
+                        <input type="text" id="reminderTitle" class="form-control" required placeholder="Meeting with client...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea id="reminderDescription" class="form-control" rows="3" placeholder="Additional details..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Due Date & Time *</label>
+                        <input type="datetime-local" id="reminderDueDate" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Create Reminder</button>
+                </form>
             </div>
         </div>
     `;
 }
 
-window.selectChatUser = async function (userId, userName) {
-    currentChatUser = { id: userId, name: userName };
-    const chatArea = document.getElementById('chatArea');
-    if (!chatArea) return;
+window.showReminderModal = () => {
+    document.getElementById('reminderTitle').value = '';
+    document.getElementById('reminderDescription').value = '';
+    document.getElementById('reminderDueDate').value = '';
+    document.getElementById('reminderModal').classList.add('show');
+};
 
-    chatArea.innerHTML = `
-        <div style="padding: 1rem; border-bottom: 1px solid var(--color-border); font-weight: 600; display: flex; align-items: center; gap: 10px; background: var(--color-surface);">
-            <span>${t('msg_chat_with')} ${userName}</span>
-            <button class="btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; margin-left: auto;" onclick="window.refreshMessages()">${t('msg_refresh')}</button>
-        </div>
-        <div id="messageHistory" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 10px; background: var(--color-background);">
-            <div style="text-align:center; color:var(--color-text-secondary);">${t('msg_loading')}</div>
-        </div>
-        <div style="padding: 1rem; border-top: 1px solid var(--color-border); display: flex; gap: 10px; background: var(--color-surface);">
-            <input type="text" id="messageInput" class="form-control" placeholder="${t('msg_type_ph')}" style="flex: 1;" onkeypress="if(event.key === 'Enter') window.sendChatMessage()">
-            <button class="btn-primary" onclick="window.sendChatMessage()">${t('msg_send')}</button>
-        </div>
-    `;
+window.handleCreateReminder = async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('reminderTitle').value.trim();
+    const description = document.getElementById('reminderDescription').value.trim();
+    const dueDate = document.getElementById('reminderDueDate').value;
 
-    await window.refreshMessages();
-
-    // Set up basic polling every 10 seconds
-    if (messagePollingInterval) clearInterval(messagePollingInterval);
-    messagePollingInterval = setInterval(() => window.refreshMessages(true), 10000);
-}
-
-window.refreshMessages = async function (isPolling = false) {
-    if (!currentChatUser) return;
-    const historyContainer = document.getElementById('messageHistory');
-    if (!historyContainer) return;
-
-    const messages = await db.fetchMessageHistory(currentUser.id, currentChatUser.id);
-
-    if (messages.length === 0) {
-        historyContainer.innerHTML = `<div style="text-align:center; color:var(--color-text-secondary); margin-top: 2rem;">${t('msg_no_msgs')}</div>`;
+    if (!title || !dueDate) {
+        showToast('Please fill in all required fields.', 'danger');
         return;
     }
 
-    let isAtBottom = historyContainer.scrollHeight - historyContainer.scrollTop <= historyContainer.clientHeight + 50;
+    const { success, error } = await db.createReminder({
+        user_id: currentUser.id,
+        title,
+        description,
+        due_date: new Date(dueDate).toISOString(),
+        status: 'pending'
+    });
 
-    historyContainer.innerHTML = messages.map(m => {
-        const isMine = m.sender_id === currentUser.id;
-        return `
-            <div style="align-self: ${isMine ? 'flex-end' : 'flex-start'}; max-width: 70%; background: ${isMine ? 'var(--color-primary)' : 'var(--color-surface)'}; color: ${isMine ? 'white' : 'var(--color-text)'}; padding: 0.75rem 1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border: ${isMine ? 'none' : '1px solid var(--color-border)'};">
-                <div style="margin-bottom: 0.25rem;">${escapeHTML(m.content)}</div>
-                <div style="font-size: 0.7rem; opacity: 0.7; text-align: right;">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-            </div>
-        `;
-    }).join('');
-
-    if (!isPolling || isAtBottom) {
-        historyContainer.scrollTop = historyContainer.scrollHeight;
-    }
-}
-
-window.sendChatMessage = async function () {
-    if (!currentChatUser) return;
-    const input = document.getElementById('messageInput');
-    const content = input.value.trim();
-    if (!content) return;
-
-    input.value = '';
-    const { success, error } = await db.sendMessage(currentUser.id, currentChatUser.id, content);
     if (success) {
-        await window.refreshMessages();
+        showToast('Reminder created!', 'success');
+        document.getElementById('reminderModal').classList.remove('show');
+        renderView('schedule');
     } else {
-        showToast(t('toast_failed_to_send_message'), "danger");
+        showToast(error?.message || 'Error creating reminder.', 'danger');
     }
-}
+};
+
+window.toggleReminderStatus = async (id, status) => {
+    const { success, error } = await db.updateReminderStatus(id, status);
+    if (success) {
+        renderView('schedule');
+    } else {
+        showToast(error?.message || 'Error updating reminder.', 'danger');
+    }
+};
+
+window.deleteReminder = async (id) => {
+    if (!confirm(t('html_are_you_sure') || 'Are you sure you want to delete this reminder?')) return;
+    const { success, error } = await db.deleteReminder(id);
+    if (success) {
+        renderView('schedule');
+    } else {
+        showToast(error?.message || 'Error deleting reminder.', 'danger');
+    }
+};
 
 async function renderProfile() {
     const profile = await db.getUserProfile(currentUser.id);
@@ -4725,7 +4754,7 @@ async function renderTasksV2() {
         const checkIconClass = isCompleted ? 'complete' : (isPendingApproval ? 'pending-approval' : '');
         const checkAriaLabel = isCompleted ? 'Reopen' : (isPendingApproval ? 'Pending Approval' : 'Mark complete');
         const checkOnClickStatus = isCompleted ? 'todo' : 'completed';
-        
+
         return `<article class="task-v2-row" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-status="${escapeHTML(task.status)}" data-due="${task.due_date || ''}">
             <button class="task-v2-complete ${checkIconClass}" type="button" aria-label="${checkAriaLabel}" onclick="event.stopPropagation(); taskV2ToggleComplete('${task.id}', '${checkOnClickStatus}')"><i data-lucide="check"></i></button>
             <button class="task-v2-avatar" type="button" title="${escapeHTML(task.assignee?.full_name || 'Unassigned')}">${escapeHTML((task.assignee?.full_name || '?').charAt(0).toUpperCase())}</button>
@@ -5234,10 +5263,10 @@ window.handleCreateTask = async function (e) {
             }
             showToast(t('toast_task_sent_to_hussain_for_approval'), "info");
         }
-        
+
         const modal = document.getElementById('createTaskModal');
         if (modal) modal.classList.remove('active');
-        
+
         renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
     } else {
         showToast(t('toast_failed_to_create_task') + (error?.message || ''), "danger");
@@ -5614,7 +5643,7 @@ window.handleSaveContract = async function (e) {
     const policyFiles = Array.from(document.getElementById('contractPolicyDocument')?.files || []);
     let policyUrl = document.getElementById('existingContractPolicyUrl')?.value || null;
     const uploadedDocs = [];
-    
+
     if (policyFiles.length > 0) {
         for (const file of policyFiles) {
             const uploadResult = await db.uploadContractPolicy(currentContractEmployeeId, file);
@@ -5634,7 +5663,7 @@ window.handleSaveContract = async function (e) {
         department: departmentName,
         job_title_ar: jobTitle,
         job_title_en: jobTitle,
-        
+
         start_date: document.getElementById('contractStartDate').value,
         end_date: document.getElementById('contractEndDate').value || null,
         salary: document.getElementById('contractSalary').value || null,
@@ -6144,7 +6173,7 @@ window.filterTranslations = function () {
 window.saveAllTranslations = async function () {
     const updates = [];
     const btn = document.querySelector('button[onclick="saveAllTranslations()"]');
-    if(btn) {
+    if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 4px;"></div> Saving...';
     }
@@ -6210,10 +6239,13 @@ window.saveAllTranslations = async function () {
 
     // Await all DB updates for departments and profiles
     await Promise.all([...deptPromises, ...profilePromises]);
-    
+
+    // Apply changes to the live UI immediately
+    if (typeof updateTranslations === 'function') updateTranslations();
+
     showToast('All translations saved successfully', 'success');
-    
-    if(btn) {
+
+    if (btn) {
         btn.disabled = false;
         btn.innerHTML = '<i data-lucide="save" style="width:16px;height:16px;margin-right:4px;"></i> Save All Changes';
         lucide.createIcons();
@@ -6303,107 +6335,345 @@ window.closeAddTranslationModal = function () {
 };
 
 async function renderTemplates() {
+    const templates = [
+        {
+            type: 'employees',
+            icon: 'users',
+            gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            titleKey: 'ui_template_employees',
+            titleFallback: 'Employees Template',
+            desc: 'Import new employees and user accounts in bulk.',
+            columns: ['full_name', 'email', 'phone', 'job_title', 'department', 'role', 'salary', 'hire_date', 'national_id', 'address']
+        },
+        {
+            type: 'clients',
+            icon: 'building-2',
+            gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+            titleKey: 'ui_template_clients',
+            titleFallback: 'Clients Template',
+            desc: 'Import CRM clients and deal pipelines.',
+            columns: ['company_name', 'contact_name', 'email', 'phone', 'industry', 'country', 'city', 'deal_stage', 'deal_value', 'notes']
+        },
+        {
+            type: 'projects',
+            icon: 'folder-kanban',
+            gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+            titleKey: 'ui_template_projects',
+            titleFallback: 'Projects Template',
+            desc: 'Import projects and associate them with clients.',
+            columns: ['project_name', 'project_type', 'category', 'description', 'status', 'assigned_people', 'tags', 'start_date', 'end_date', 'client']
+        },
+        {
+            type: 'tasks',
+            icon: 'list-checks',
+            gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+            titleKey: 'ui_template_tasks',
+            titleFallback: 'Tasks Template',
+            desc: 'Import tasks across multiple projects in bulk.',
+            columns: ['title', 'description', 'assignee_email', 'supervisor_email', 'due_date', 'priority', 'status', 'category', 'project_name', 'tags']
+        }
+    ];
+
+    const cards = templates.map(tmpl => `
+        <div class="template-card fade-in-up" style="
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        " onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 32px rgba(0,0,0,0.12)'" onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'">
+            <!-- Gradient top banner with icon -->
+            <div style="background: ${tmpl.gradient}; padding: 2rem; display: flex; align-items: center; justify-content: center; min-height: 140px;">
+                <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.25); border-radius: 16px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
+                    <i data-lucide="${tmpl.icon}" style="width: 32px; height: 32px; color: #fff;"></i>
+                </div>
+            </div>
+            <!-- Card body -->
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; flex: 1; gap: 0.75rem;">
+                <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--color-text);">
+                    <span data-i18n="${tmpl.titleKey}">${t(tmpl.titleKey) || tmpl.titleFallback}</span>
+                </h3>
+                <p style="margin: 0; color: var(--color-text-secondary); font-size: 0.825rem; line-height: 1.5; flex: 1;">${tmpl.desc}</p>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <button class="btn btn-secondary" style="flex: 1; font-size: 0.75rem; padding: 0.6rem 0.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; line-height: 1.2;" onclick="downloadTemplate('${tmpl.type}')">
+                        <i data-lucide="download" style="width:16px;height:16px;"></i>
+                        <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
+                    </button>
+                    <button class="btn btn-primary" style="flex: 1; font-size: 0.75rem; padding: 0.6rem 0.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; line-height: 1.2;" onclick="triggerBulkUpload('${tmpl.type}')">
+                        <i data-lucide="upload" style="width:16px;height:16px;"></i>
+                        <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
     return `
+        <style>
+            .templates-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 1.25rem;
+            }
+            @media (max-width: 480px) {
+                .templates-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 0.75rem;
+                }
+            }
+        </style>
         <div class="page-header fade-in-up">
             <div>
                 <h1 class="page-title"><span data-i18n="ui_templates_title">${t('ui_templates_title') || 'Excel Templates'}</span></h1>
                 <p class="page-subtitle"><span data-i18n="ui_templates_subtitle">${t('ui_templates_subtitle') || 'Download templates for bulk imports'}</span></p>
             </div>
         </div>
-
-        <div class="dashboard-grid fade-in-up">
-            <!-- Employees Template -->
-            <div class="card" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1rem;">
-                <div style="background: var(--color-bg-alt); padding: 1.5rem; border-radius: 50%;">
-                    <i data-lucide="users" style="width: 32px; height: 32px; color: var(--color-primary);"></i>
-                </div>
-                <h3><span data-i18n="ui_template_employees">${t('ui_template_employees') || 'Employees Template'}</span></h3>
-                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">Import new employees and user accounts in bulk.</p>
-                <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="downloadTemplate('employees')">
-                        <i data-lucide="download"></i> <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
-                    </button>
-                    <button class="btn btn-primary" style="flex: 1;" onclick="triggerBulkUpload('employees')">
-                        <i data-lucide="upload"></i> <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Clients Template -->
-            <div class="card" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1rem;">
-                <div style="background: var(--color-bg-alt); padding: 1.5rem; border-radius: 50%;">
-                    <i data-lucide="building-2" style="width: 32px; height: 32px; color: var(--color-primary);"></i>
-                </div>
-                <h3><span data-i18n="ui_template_clients">${t('ui_template_clients') || 'Clients Template'}</span></h3>
-                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">Import CRM clients and deal pipelines.</p>
-                <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="downloadTemplate('clients')">
-                        <i data-lucide="download"></i> <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
-                    </button>
-                    <button class="btn btn-primary" style="flex: 1;" onclick="triggerBulkUpload('clients')">
-                        <i data-lucide="upload"></i> <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Projects Template -->
-            <div class="card" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1rem;">
-                <div style="background: var(--color-bg-alt); padding: 1.5rem; border-radius: 50%;">
-                    <i data-lucide="folder" style="width: 32px; height: 32px; color: var(--color-primary);"></i>
-                </div>
-                <h3><span data-i18n="ui_template_projects">${t('ui_template_projects') || 'Projects Template'}</span></h3>
-                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">Import projects and associate them with clients.</p>
-                <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="downloadTemplate('projects')">
-                        <i data-lucide="download"></i> <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
-                    </button>
-                    <button class="btn btn-primary" style="flex: 1;" onclick="triggerBulkUpload('projects')">
-                        <i data-lucide="upload"></i> <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Tasks Template -->
-            <div class="card" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1rem;">
-                <div style="background: var(--color-bg-alt); padding: 1.5rem; border-radius: 50%;">
-                    <i data-lucide="list-checks" style="width: 32px; height: 32px; color: var(--color-primary);"></i>
-                </div>
-                <h3><span data-i18n="ui_template_tasks">${t('ui_template_tasks') || 'Tasks Template'}</span></h3>
-                <p style="color: var(--color-text-secondary); font-size: 0.875rem;">Import tasks across multiple projects in bulk.</p>
-                <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="downloadTemplate('tasks')">
-                        <i data-lucide="download"></i> <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
-                    </button>
-                    <button class="btn btn-primary" style="flex: 1;" onclick="triggerBulkUpload('tasks')">
-                        <i data-lucide="upload"></i> <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
-                    </button>
-                </div>
-            </div>
+        <div class="templates-grid">
+            ${cards}
         </div>
-
         <!-- Hidden input for bulk upload -->
         <input type="file" id="bulkUploadInput" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" style="display: none;" onchange="handleBulkUpload(event)">
     `;
 }
 
-window.downloadTemplate = function(type) {
-    // In a real app, this would trigger a download of an actual Excel file.
-    // For now, we'll just show an alert.
-    showToast(`Downloading ${type} template...`, 'success');
+window.downloadTemplate = function (type) {
+    const schemas = {
+        employees: ['full_name', 'email', 'phone', 'job_title', 'department', 'role', 'salary', 'hire_date', 'national_id', 'address'],
+        clients: ['company_name', 'contact_name', 'email', 'phone', 'industry', 'country', 'city', 'deal_stage', 'deal_value', 'notes'],
+        projects: ['project_name', 'project_type', 'category', 'description', 'status', 'assigned_people', 'tags', 'start_date', 'end_date', 'client'],
+        tasks: ['title', 'description', 'assignee_email', 'supervisor_email', 'due_date', 'priority', 'status', 'category', 'project_name', 'tags']
+    };
+
+    const examples = {
+        employees: ['John Doe', 'john@example.com', '+966501234567', 'Software Engineer', 'Engineering', 'EMPLOYEE', '8000', '2024-01-15', '1234567890', '123 Main St'],
+        clients: ['Acme Corp', 'Jane Smith', 'jane@acme.com', '+1234567890', 'Technology', 'Saudi Arabia', 'Riyadh', 'Negotiation', '50000', 'Key account'],
+        projects: ['Website Redesign', 'Client', 'Enterprise', 'New website for client', 'active', 'john@example.com', 'Frontend,UI/UX', '2024-01-01', '2024-06-30', 'Acme Corp'],
+        tasks: ['Design homepage mockup', 'Create high-fidelity wireframes', 'john@example.com', 'manager@example.com', '2024-03-15', 'high', 'todo', 'Design', 'Website Redesign', 'Frontend,UI/UX']
+    };
+
+    const cols = schemas[type];
+    if (!cols) { showToast('Unknown template type', 'error'); return; }
+
+    const header = cols.join(',');
+    const example = examples[type].map(v => `"${v}"`).join(',');
+    const csvContent = `${header}\n${example}\n`;
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${type}_template.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} template downloaded!`, 'success');
 };
 
 let currentBulkUploadType = null;
-window.triggerBulkUpload = function(type) {
+window.triggerBulkUpload = function (type) {
     currentBulkUploadType = type;
     document.getElementById('bulkUploadInput').click();
 };
 
-window.handleBulkUpload = function(event) {
+window.handleBulkUpload = function (event) {
     const file = event.target.files[0];
     if (file) {
         showToast(`Successfully uploaded ${file.name} for ${currentBulkUploadType}`, 'success');
     }
     event.target.value = ''; // Reset input
+};
+
+// ==========================================
+// CUSTODY HANDOVER
+// ==========================================
+async function renderCustodyHandover() {
+    // Pre-fill employee name and department if available
+    const profile = currentUserProfile || await db.getUserProfile(currentUser?.id);
+    const fullName = profile?.full_name || '';
+    const department = profile?.department_name || '';
+    const idNumber = profile?.national_id || '';
+    const today = new Date().toISOString().split('T')[0];
+
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title"><i data-lucide="package-check" style="width:28px;height:28px;vertical-align:middle;margin-inline-end:0.5rem;"></i>Custody Handover</h1>
+                <p class="page-subtitle">Record company property handover to employees</p>
+            </div>
+            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="window.print()">
+                    <i data-lucide="printer" style="width:16px;height:16px;"></i> Print / Save PDF
+                </button>
+                <button class="btn btn-primary" onclick="submitCustodyHandover(event)">
+                    <i data-lucide="save" style="width:16px;height:16px;"></i> Save Record
+                </button>
+            </div>
+        </div>
+
+        <style>
+            .custody-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+            .custody-items-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+            .custody-items-table th { background: var(--color-primary); color: #fff; padding: 0.75rem 1rem; text-align: start; font-weight: 600; }
+            .custody-items-table td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+            .custody-items-table tr:hover td { background: var(--color-bg-alt); }
+            .custody-items-table input, .custody-items-table select { border: 1px solid var(--color-border); border-radius: 8px; padding: 0.4rem 0.6rem; width: 100%; background: var(--color-surface); color: var(--color-text); font-size: 0.85rem; }
+            .custody-radio-group { display: flex; gap: 1rem; align-items: center; }
+            .custody-radio-group label { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; }
+            .declaration-box { background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 12px; padding: 1.75rem 2rem; line-height: 1.85; color: var(--color-text); }
+            .declaration-box h3 { margin: 0 0 1rem 0; font-size: 1.1rem; color: var(--color-primary); border-bottom: 2px solid var(--color-primary); padding-bottom: 0.5rem; }
+            .declaration-box ul { padding-inline-start: 1.25rem; margin: 0.75rem 0; }
+            .declaration-box ul li { margin-bottom: 0.65rem; }
+            .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+            .signature-line { border-top: 2px solid var(--color-border); padding-top: 0.5rem; margin-top: 2rem; font-size: 0.85rem; color: var(--color-text-secondary); }
+            @media (max-width: 640px) { .signature-grid { grid-template-columns: 1fr; } .custody-form-grid { grid-template-columns: 1fr; } }
+            @media print {
+                .topbar, .sidebar, .page-header > div:last-child, button { display: none !important; }
+                .card { box-shadow: none !important; border: 1px solid #ccc !important; }
+                body { background: #fff !important; color: #000 !important; }
+            }
+        </style>
+
+        <form id="custodyHandoverForm" onsubmit="submitCustodyHandover(event)" style="display:flex;flex-direction:column;gap:1.5rem;">
+
+            <!-- Employee Info Card -->
+            <div class="card fade-in-up" style="padding: 1.5rem;">
+                <h2 style="margin: 0 0 1.25rem 0; font-size: 1rem; font-weight: 700; color: var(--color-primary); display:flex;align-items:center;gap:0.5rem;">
+                    <i data-lucide="user" style="width:18px;height:18px;"></i> Employee Information
+                </h2>
+                <div class="custody-form-grid">
+                    <div class="form-group" style="margin:0">
+                        <label class="form-label">Full Name *</label>
+                        <input type="text" id="chFullName" class="form-control" value="${escapeHTML(fullName)}" placeholder="Employee full name" required>
+                    </div>
+                    <div class="form-group" style="margin:0">
+                        <label class="form-label">ID Number *</label>
+                        <input type="text" id="chIdNumber" class="form-control" value="${escapeHTML(idNumber)}" placeholder="National / Employee ID" required>
+                    </div>
+                    <div class="form-group" style="margin:0">
+                        <label class="form-label">Department *</label>
+                        <input type="text" id="chDepartment" class="form-control" value="${escapeHTML(department)}" placeholder="Department name" required>
+                    </div>
+                    <div class="form-group" style="margin:0">
+                        <label class="form-label">Handover Date *</label>
+                        <input type="date" id="chDate" class="form-control" value="${today}" required>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Items Table Card -->
+            <div class="card fade-in-up" style="padding: 1.5rem; overflow-x: auto;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem;">
+                    <h2 style="margin:0;font-size:1rem;font-weight:700;color:var(--color-primary);display:flex;align-items:center;gap:0.5rem;">
+                        <i data-lucide="package" style="width:18px;height:18px;"></i> Custody Items
+                    </h2>
+                    <button type="button" class="btn btn-secondary" onclick="addCustodyRow()" style="font-size:0.85rem;padding:0.45rem 1rem;">
+                        <i data-lucide="plus" style="width:14px;height:14px;"></i> Add Item
+                    </button>
+                </div>
+                <table class="custody-items-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;">#</th>
+                            <th>Item</th>
+                            <th>Model / Serial Number</th>
+                            <th style="width:80px;">Quantity</th>
+                            <th style="width:130px;">Condition</th>
+                            <th style="width:50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="custodyItemsBody">
+                        <tr>
+                            <td style="text-align:center;color:var(--color-text-secondary);">1</td>
+                            <td><input type="text" placeholder="e.g. Laptop" required></td>
+                            <td><input type="text" placeholder="e.g. Dell XPS 9500 / SN12345"></td>
+                            <td><input type="number" value="1" min="1" style="width:70px;"></td>
+                            <td>
+                                <div class="custody-radio-group">
+                                    <label><input type="radio" name="cond_1" value="New" checked> New</label>
+                                    <label><input type="radio" name="cond_1" value="Used"> Used</label>
+                                </div>
+                            </td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Declaration Section -->
+            <div class="card fade-in-up" style="padding: 1.5rem;">
+                <div class="declaration-box">
+                    <h3>Declaration of Custody and Responsibility</h3>
+                    <p>I, the undersigned employee, hereby acknowledge receipt of the company property detailed in the preceding table in good working condition. In accepting custody of these items, I agree to and undertake the following:</p>
+                    <ul>
+                        <li><strong>Proper Usage:</strong> To exercise due diligence in safeguarding the entrusted property and to use it exclusively for the execution of my official duties.</li>
+                        <li><strong>Prompt Reporting:</strong> To immediately report any loss, theft, or damage of said property to my direct manager, as well as the IT or Human Resources department.</li>
+                        <li><strong>Liability:</strong> To accept full financial and administrative liability for any repair or replacement costs arising from improper use, unauthorized alterations, or gross negligence on my part.</li>
+                        <li><strong>Return of Property:</strong> To surrender all entrusted items in their original functioning condition (subject to normal wear and tear) upon the termination of my employment, or immediately upon the request of company management.</li>
+                    </ul>
+                </div>
+
+                <!-- Signature Block -->
+                <div class="signature-grid" style="margin-top:2rem;">
+                    <div>
+                        <div class="form-group" style="margin-bottom:0.75rem;">
+                            <label class="form-label">Employee's Full Name</label>
+                            <input type="text" id="chSigEmployeeName" class="form-control" value="${escapeHTML(fullName)}" placeholder="Full name">
+                        </div>
+                        <div class="signature-line">Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: __________</div>
+                    </div>
+                    <div>
+                        <div class="form-group" style="margin-bottom:0.75rem;">
+                            <label class="form-label">Direct Manager or HR</label>
+                            <input type="text" id="chSigManager" class="form-control" placeholder="Manager / HR representative name">
+                        </div>
+                        <div class="signature-line">Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: __________</div>
+                    </div>
+                </div>
+            </div>
+
+        </form>
+    `;
+}
+
+let custodyRowCount = 1;
+window.addCustodyRow = function () {
+    custodyRowCount++;
+    const tbody = document.getElementById('custodyItemsBody');
+    if (!tbody) return;
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td style="text-align:center;color:var(--color-text-secondary);">${custodyRowCount}</td>
+        <td><input type="text" placeholder="e.g. Mouse" required></td>
+        <td><input type="text" placeholder="Model / Serial number"></td>
+        <td><input type="number" value="1" min="1" style="width:70px;"></td>
+        <td>
+            <div class="custody-radio-group">
+                <label><input type="radio" name="cond_${custodyRowCount}" value="New" checked> New</label>
+                <label><input type="radio" name="cond_${custodyRowCount}" value="Used"> Used</label>
+            </div>
+        </td>
+        <td><button type="button" onclick="this.closest('tr').remove()" style="background:none;border:none;cursor:pointer;color:var(--color-danger);padding:0.25rem;"><i data-lucide="trash-2" style="width:15px;height:15px;"></i></button></td>
+    `;
+    tbody.appendChild(row);
+    if (window.lucide) lucide.createIcons();
+};
+
+window.submitCustodyHandover = function (event) {
+    if (event) event.preventDefault();
+    const fullName = document.getElementById('chFullName')?.value?.trim();
+    const idNumber = document.getElementById('chIdNumber')?.value?.trim();
+    const department = document.getElementById('chDepartment')?.value?.trim();
+    const date = document.getElementById('chDate')?.value;
+    if (!fullName || !idNumber || !department || !date) {
+        showToast('Please fill in all required employee fields.', 'warning');
+        return;
+    }
+    showToast('Custody handover record saved successfully!', 'success');
 };
 
 async function renderTranslationsPage() {
@@ -6417,26 +6687,32 @@ async function renderTranslationsPage() {
     ]);
 
     const allKeys = Array.from(new Set([...Object.keys(i18n.en || {}), ...Object.keys(i18n.ar || {})])).sort();
+    const uiKeys = allKeys.filter(k => !k.startsWith('tag_'));
+    const translatedCount = uiKeys.filter(k => i18n.en[k] && i18n.ar[k]).length;
+    const totalCount = uiKeys.length;
+    const progressPct = totalCount > 0 ? Math.round((translatedCount / totalCount) * 100) : 0;
 
     // UI Strings Table
-    const uiRowsHTML = allKeys.filter(k => !k.startsWith('tag_')).map(key => {
+    const uiRowsHTML = uiKeys.map(key => {
         const enVal = escapeHTML(i18n.en[key] || '');
         const arVal = escapeHTML(i18n.ar[key] || '');
         const keyEscaped = escapeHTML(key);
         const keyAttr = escapeHTML(key.toLowerCase());
         const enAttr = enVal.toLowerCase();
         const arAttr = arVal.toLowerCase();
+        const isMissing = !i18n.ar[key];
 
         return `
-            <tr class="trans-row" data-key="${keyAttr}" data-en="${enAttr}" data-ar="${arAttr}">
+            <tr class="trans-row" data-key="${keyAttr}" data-en="${enAttr}" data-ar="${arAttr}" style="${isMissing ? 'background: rgba(255,180,0,0.06);' : ''}">
                 <td style="font-family: monospace; font-weight: 600; font-size: 0.85rem; color: var(--color-accent); word-break: break-all;">
                     ${keyEscaped}
+                    ${isMissing ? '<span style="background:#e67e22;color:#fff;border-radius:4px;padding:1px 5px;font-size:0.7rem;margin-inline-start:4px;">Missing AR</span>' : ''}
                 </td>
                 <td>
                     <input type="text" id="trans_en_${keyEscaped}" class="form-control" style="font-size:0.85rem;" value="${enVal}">
                 </td>
                 <td>
-                    <input type="text" id="trans_ar_${keyEscaped}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}">
+                    <input type="text" id="trans_ar_${keyEscaped}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}" placeholder="أدخل الترجمة العربية...">
                 </td>
                 <td>
                     <div style="display: flex; gap: 0.4rem; justify-content: center; flex-wrap: nowrap; min-width: 60px;">
@@ -6531,8 +6807,14 @@ async function renderTranslationsPage() {
                                 <option value="untranslated">Not Translated</option>
                             </select>
                         </div>
-                        <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
-                            Total Keys: <strong id="transTotalCount">${allKeys.length}</strong>
+                        <div style="font-size: 0.85rem; color: var(--color-text-secondary); display:flex; align-items:center; gap: 0.75rem; flex-wrap:wrap;">
+                            <span>Total: <strong id="transTotalCount">${totalCount}</strong></span>
+                            <span style="color: var(--color-success);">Translated: <strong>${translatedCount}</strong></span>
+                            <span style="color: var(--color-warning);">Missing AR: <strong>${totalCount - translatedCount}</strong></span>
+                            <div style="width: 80px; height: 6px; background: var(--color-border); border-radius: 3px; overflow: hidden;">
+                                <div style="width: ${progressPct}%; height: 100%; background: var(--color-success); border-radius: 3px; transition: width 0.3s;"></div>
+                            </div>
+                            <span style="font-weight:700; color: ${progressPct < 80 ? 'var(--color-warning)' : 'var(--color-success)'}">${progressPct}%</span>
                         </div>
                     </div>
                     <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
@@ -6627,10 +6909,10 @@ async function renderTranslationsPage() {
     `;
 }
 
-window.switchTransTab = function(tabId, btn) {
+window.switchTransTab = function (tabId, btn) {
     document.querySelectorAll('.trans-tab-content').forEach(c => c.style.display = 'none');
     document.getElementById('trans-tab-' + tabId).style.display = 'block';
-    if(btn) {
+    if (btn) {
         document.querySelectorAll('.task-v2-tabs button').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
     }
@@ -6707,7 +6989,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'contract_preview': content = await window.renderContractPrintPreview(); break;
             case 'employees': content = await renderEmployeesDirectory(); break;
             case 'archived_contracts': content = await renderArchivedContracts(); break;
-            case 'messages': content = await renderMessages(); break;
+            case 'schedule': content = await renderSchedule(); break;
             case 'notifications': content = await renderNotifications(); break;
             case 'performance': content = await renderPerformance(); break;
             case 'documents': content = await renderDocuments(); break;
@@ -6719,6 +7001,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'departments': content = await renderDepartments(); break;
             case 'translations': content = await renderTranslationsPage(); break;
             case 'templates': content = await renderTemplates(); break;
+            case 'custody_handover': content = await renderCustodyHandover(); break;
             case 'clients': content = await renderClients(); break;
             case 'crm': content = await renderCRM(); break;
             case 'orders': content = await renderOrders(); break;
@@ -7274,7 +7557,7 @@ async function renderCRM() {
     `;
 }
 
-window.switchCrmTab = function(tabId) {
+window.switchCrmTab = function (tabId) {
     document.querySelectorAll('[data-crm-tab]').forEach(btn => {
         if (btn.getAttribute('data-crm-tab') === tabId) {
             btn.classList.add('btn-primary');
@@ -7831,6 +8114,11 @@ window.showDepartmentModal = async (dept = null) => {
         document.getElementById('departmentModalTitle').innerText = 'New Department';
         document.getElementById('departmentSubmitBtn').innerText = 'Create Department';
     }
+
+    window.currentDepartmentJobTitles = dept && db.getJobTitlesMap()[dept.name] ? [...db.getJobTitlesMap()[dept.name]] : [];
+    document.getElementById('departmentJobTitleInput').value = '';
+    if (window.renderDepartmentJobTitlesList) window.renderDepartmentJobTitlesList();
+
     document.getElementById('departmentModal').classList.add('show');
 };
 window.closeDepartmentModal = () => {
@@ -7890,6 +8178,47 @@ window.deleteDepartment = (id) => {
     );
 };
 
+window.renderDepartmentJobTitlesList = () => {
+    const list = document.getElementById('departmentJobTitlesList');
+    if (!list) return;
+    list.innerHTML = (window.currentDepartmentJobTitles || []).map((title, idx) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem; background:rgba(255,255,255,0.05); border-radius:4px; margin-bottom:0.25rem;">
+            <span>${escapeHTML(title)}</span>
+            <button type="button" class="btn btn-icon" style="color:var(--color-danger); width:24px; height:24px;" onclick="removeDepartmentJobTitleDraft(${idx})">
+                <i data-lucide="x" style="width:14px; height:14px;"></i>
+            </button>
+        </div>
+    `).join('');
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.addDepartmentJobTitleDraft = () => {
+    const input = document.getElementById('departmentJobTitleInput');
+    const val = input.value.trim();
+    if (!val) return;
+    if (!window.currentDepartmentJobTitles) window.currentDepartmentJobTitles = [];
+    if (window.currentDepartmentJobTitles.includes(val)) {
+        showToast('Job title already exists in this department', 'warning');
+        return;
+    }
+    window.currentDepartmentJobTitles.push(val);
+    input.value = '';
+    window.renderDepartmentJobTitlesList();
+};
+
+window.handleDepartmentJobTitleKeydown = (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        window.addDepartmentJobTitleDraft();
+    }
+};
+
+window.removeDepartmentJobTitleDraft = (idx) => {
+    if (!window.currentDepartmentJobTitles) return;
+    window.currentDepartmentJobTitles.splice(idx, 1);
+    window.renderDepartmentJobTitlesList();
+};
+
 window.handleCreateDepartment = async (e) => {
     e.preventDefault();
     const id = document.getElementById('departmentId').value;
@@ -7906,7 +8235,8 @@ window.handleCreateDepartment = async (e) => {
 
     const empSelect = document.getElementById('departmentEmployees');
     const selectedEmployeeIds = Array.from(empSelect.selectedOptions).map(opt => opt.value);
-    const allowedTitles = COMPANY_JOB_TITLES[data.name] || null;
+
+    const allowedTitles = window.currentDepartmentJobTitles && window.currentDepartmentJobTitles.length > 0 ? window.currentDepartmentJobTitles : null;
     const selectedProfiles = (window.departmentProfilesCache || []).filter(profile => selectedEmployeeIds.includes(profile.id));
     const incompatibleEmployees = allowedTitles ? selectedProfiles.filter(profile => !allowedTitles.includes(profile.job_title)) : [];
     if (incompatibleEmployees.length) {
@@ -7921,13 +8251,39 @@ window.handleCreateDepartment = async (e) => {
     }
 
     let res;
+    let newDeptId = id;
     if (id) {
         res = await db.updateDepartment(id, data, selectedEmployeeIds);
     } else {
         const existingDepartment = (await db.fetchDepartments()).find(department => department.name.toLowerCase() === data.name.toLowerCase());
-        res = existingDepartment
-            ? await db.updateDepartment(existingDepartment.id, data, selectedEmployeeIds)
-            : await db.createDepartment(data, selectedEmployeeIds);
+        if (existingDepartment) {
+            newDeptId = existingDepartment.id;
+            res = await db.updateDepartment(existingDepartment.id, data, selectedEmployeeIds);
+        } else {
+            res = await db.createDepartment(data, selectedEmployeeIds);
+            if (res.success && res.data) newDeptId = res.data.id;
+        }
+    }
+
+    if (res.success && newDeptId) {
+        // Sync Job Titles
+        const oldTitles = id ? (db.getJobTitlesMap()[data.name] || []) : [];
+        const newTitles = window.currentDepartmentJobTitles || [];
+
+        const toDelete = oldTitles.filter(t => !newTitles.includes(t));
+        const toCreate = newTitles.filter(t => !oldTitles.includes(t));
+
+        if (toDelete.length || toCreate.length) {
+            const allDbTitles = await db.fetchJobTitles(true) || [];
+            for (const t of toDelete) {
+                const rec = allDbTitles.find(r => r.name === t && r.department_id === newDeptId);
+                if (rec) await db.deleteJobTitle(rec.id);
+            }
+            for (const t of toCreate) {
+                await db.createJobTitle({ name: t, department_id: newDeptId, is_active: true });
+            }
+            await db.fetchJobTitles(true); // force refresh
+        }
     }
 
     if (res.success) {
@@ -8336,7 +8692,7 @@ async function initApp() {
             'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
             'archived_contracts', 'messages', 'notifications', 'performance',
             'documents', 'profile', 'projects', 'approvals', 'tasks',
-            'departments', 'translations', 'clients', 'crm', 'orders', 'integrations'
+            'departments', 'translations', 'clients', 'crm', 'orders', 'integrations', 'custody_handover'
         ]);
         const savedView = localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view');
         currentView = restorableViews.has(savedView) ? savedView : 'dashboard';
@@ -8358,6 +8714,7 @@ async function initApp() {
 const REQUEST_STAGE_LABELS = {
     SUPERVISOR_MANAGER: 'Supervisor / Manager',
     DEPARTMENT_MANAGER: 'Department Manager',
+    HR_MANAGER: 'HR Manager',
     ACCOUNTANT_MANAGER: 'Accounting Manager',
     GENERAL_MANAGER: 'General Manager',
     ADMIN_FALLBACK: 'System Administrator'
@@ -8881,12 +9238,31 @@ window.handleCreateProject = async function (event) {
     const assigneesSelect = document.getElementById('newProjectAssignees');
     const assignedPeople = Array.from(assigneesSelect.selectedOptions).map(opt => opt.value);
 
+    const initialTasksRaw = document.getElementById('newProjectTasks') ? document.getElementById('newProjectTasks').value : '';
+    const initialTasks = initialTasksRaw.split('\n').map(t => t.trim()).filter(t => t.length > 0);
+
     document.getElementById('projectModal').classList.remove('active');
     showToast(t('toast_creating_project'), "info");
 
-    const { success } = await db.createProject(name, type, desc, assignedPeople, category, tags);
+    const { success, data } = await db.createProject(name, type, desc, assignedPeople, category, tags);
 
     if (success) {
+        let createdProjectId = data && data.length > 0 ? data[0].id : null;
+
+        // Create initial tasks
+        if (createdProjectId && initialTasks.length > 0) {
+            for (const taskTitle of initialTasks) {
+                // Keep the privacy rule of the task by assigning it to the project assignees explicitly in visibleTo and setting visibility to private if needed, or public with project context.
+                // We'll use visibility='public' as that's default, but assigned to the project.
+                await db.createTask(
+                    taskTitle, `Initial task for project: ${name}`, null, null,
+                    currentUser.id, 'medium', category, { en: taskTitle }, {},
+                    null, null, null, 'public', createdProjectId, tags, assignedPeople
+                );
+            }
+            showToast(`${initialTasks.length} initial tasks created.`, "success");
+        }
+
         // Webhook simulation via notification
         await db.createNotification(currentUser.id, `Project created: ${name}`);
         showToast(t('toast_project_created_successfully'), "success");
@@ -9010,7 +9386,13 @@ async function renderApprovals() {
         const employee = userMap.get(workflow.employee_id);
         const source = sourceMap.get(`${workflow.source_table}:${workflow.source_id}`);
         const canDecide = step?.approver_id === currentUser?.id;
-        return `<tr><td><strong>${escapeHTML(employee?.full_name || 'Employee')}</strong></td><td>${escapeHTML(workflow.request_type || 'Employee Request')}</td><td>${escapeHTML(source?.details || workflow.request_type || 'Request details')}</td><td><span class="status-badge warning">${escapeHTML(REQUEST_STAGE_LABELS[step?.stage_key] || 'Pending approval')}</span></td><td>${workflow.created_at ? new Date(workflow.created_at).toLocaleDateString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
+
+        let detailsString = (source ?? { details: 'Unknown Request' }).details;
+        if (workflow.type === 'MANUAL' && /^loan/i.test(workflow.manual_type || '')) {
+            detailsString = `Loan — SAR ${Number(workflow.manual_amount || 0).toLocaleString()}`;
+        }
+
+        return `<tr><td><strong>${escapeHTML(employee?.full_name || 'Employee')}</strong></td><td>${escapeHTML(workflow.request_type || 'Employee Request')}</td><td>${escapeHTML(detailsString)}</td><td><span class="status-badge warning">${escapeHTML(REQUEST_STAGE_LABELS[step?.stage_key] || 'Pending approval')}</span></td><td>${workflow.created_at ? new Date(workflow.created_at).toLocaleDateString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
     }).join('');
 
     const departmentNames = new Set(managedDepartments.map(department => department.name));

@@ -1,3 +1,5 @@
+/* eslint-disable no-redeclare, no-global-assign */
+/* exported db */
 // IMPORTANT: Replace these with your actual Supabase Project URL and Anon Key
 const SUPABASE_URL = 'https://bbbetcdioiaozdjkvwxu.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJiYmV0Y2Rpb2lhb3pkamt2d3h1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTM0NjQsImV4cCI6MjEwMTU4OTQ2NH0.GhV7HsGnAXA8Zb_IV3hxhwI9qmbM3qhcuWRMSXKUNcw';
@@ -43,6 +45,12 @@ function applyI18nGetters(obj) {
 }
 
 // Global DB helper functions for the prototype
+let appCache = {
+    profiles: { data: null, time: 0 },
+    departments: { data: null, time: 0 },
+    jobTitles: { data: null, time: 0 }
+};
+const CACHE_TTL = 60000; // 60 seconds
 const db = {
 
 
@@ -131,6 +139,9 @@ const db = {
         try {
             const { data, error } = await supabaseClient.rpc('archive_and_delete_employee', { target_user_id: userId });
             if (error) throw error;
+            if (data && data.success === false) {
+                throw new Error(data.error_message || 'Database error occurred during deletion');
+            }
             return { success: true, data };
         } catch (error) {
             console.error("Error deleting user:", error);
@@ -221,32 +232,20 @@ const db = {
         }
     },
 
-    async decideRequestApproval(sourceTable, sourceId, decision, note = '') {
-        if (!supabaseClient) return { success: false, error: new Error('Supabase is not initialized') };
-        try {
-            const { data, error } = await supabaseClient.rpc('decide_request_approval', {
-                p_source_table: sourceTable,
-                p_source_id: sourceId,
-                p_decision: decision,
-                p_note: note
-            });
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            console.error("decideRequestApproval Error:", error);
-            return { success: false, error };
-        }
-    },
-
     async createRequest(employeeId, requestType, leaveType, loanAmount = null, numberOfDays = null, notes = null) {
         if (!supabaseClient) return { success: false, error: new Error('Supabase is not initialized') };
         try {
+            let initialStatus = 'PENDING';
+            if (requestType === 'Loan' || requestType === 'Loan Request') {
+                initialStatus = 'PENDING_SUPERVISOR';
+            }
             const { data, error } = await supabaseClient.from('requests').insert([{
                 employee_id: employeeId,
                 request_type: requestType,
                 leave_type: leaveType,
                 loan_amount: loanAmount,
-                number_of_days: numberOfDays
+                number_of_days: numberOfDays,
+                status: initialStatus
             }]).select();
             if (error) throw error;
             await this.flushTaskNotificationEmails();
@@ -335,6 +334,43 @@ const db = {
     async decideRequestApproval(sourceTable, sourceId, decision, note = null) {
         if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {
+            if (sourceTable === 'requests') {
+                const { data: req } = await supabaseClient.from('requests').select('*').eq('id', sourceId).single();
+                if (req && (req.request_type === 'Loan' || req.request_type === 'Loan Request')) {
+                    let nextStatus = req.status;
+                    if (decision === 'REJECTED') {
+                        nextStatus = 'REJECTED';
+                    } else if (decision === 'APPROVED') {
+                        if (req.status === 'PENDING_SUPERVISOR') nextStatus = 'PENDING_HR';
+                        else if (req.status === 'PENDING_HR') nextStatus = 'PENDING_ACCOUNTING';
+                        else if (req.status === 'PENDING_ACCOUNTING') nextStatus = 'PENDING_GM';
+                        else if (req.status === 'PENDING_GM' || req.status === 'PENDING') nextStatus = 'APPROVED';
+                        else nextStatus = 'APPROVED';
+                    }
+                    const { error } = await supabaseClient.from('requests').update({ status: nextStatus }).eq('id', sourceId);
+                    if (error) throw error;
+                    
+                    if (nextStatus === 'APPROVED') {
+                        const { data: existing } = await supabaseClient.from('employee_loans').select('id')
+                            .eq('employee_id', req.employee_id)
+                            .eq('requested_amount', req.loan_amount)
+                            .order('created_at', { ascending: false }).limit(1);
+
+                        if (!existing || existing.length === 0) {
+                            const loanPayload = {
+                                employee_id: req.employee_id,
+                                requested_amount: req.loan_amount,
+                                monthly_installment: req.loan_amount,
+                                remaining_balance: req.loan_amount,
+                                status: 'APPROVED'
+                            };
+                            await supabaseClient.from('employee_loans').insert([loanPayload]);
+                        }
+                    }
+
+                    return { success: true, data: { status: nextStatus } };
+                }
+            }
             const { data, error } = await supabaseClient.rpc('decide_request_approval', {
                 p_source_table: sourceTable,
                 p_source_id: sourceId,
@@ -671,7 +707,7 @@ const db = {
     async updateUserRole(userId, newRole) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('profiles')
                 .update({ role: newRole })
                 .eq('id', userId);
@@ -685,7 +721,7 @@ const db = {
     async assignManager(userId, managerId) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('profiles')
                 .update({ manager_id: managerId || null })
                 .eq('id', userId);
@@ -742,7 +778,7 @@ const db = {
     async createGoal(employeeId, title, description, dueDate) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('performance_goals')
                 .insert([{ employee_id: employeeId, title, description, due_date: dueDate }]);
             if (error) throw error;
@@ -773,7 +809,7 @@ const db = {
     async requestDocument(employeeId, docType, purpose) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('document_requests')
                 .insert([{ employee_id: employeeId, doc_type: docType, purpose }]);
             if (error) throw error;
@@ -815,7 +851,7 @@ const db = {
 
     async updateUserPassword(newPassword) {
         try {
-            const { data, error } = await supabaseClient.auth.updateUser({ password: newPassword });
+            const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
             if (error) throw error;
             return { success: true };
         } catch (error) {
@@ -846,7 +882,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .update({ 
+                .update({
                     display_name: displayName,
                     full_name: fullName,
                     iqama_number: iqama,
@@ -891,9 +927,9 @@ const db = {
                     assigned_people: assignedPeople,
                     project_category: projectCategory,
                     project_tags: projectTags
-                }]);
+                }]).select();
             if (error) throw error;
-            return { success: true };
+            return { success: true, data: data };
         } catch (error) {
             console.error("createProject Error:", error);
             return { success: false, error };
@@ -921,7 +957,7 @@ const db = {
     async updateProject(projectId, projectName, projectType, description, assignedPeople, projectCategory, projectTags) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('projects')
                 .update({
                     project_name: projectName,
@@ -1002,7 +1038,9 @@ const db = {
             };
             const { data, error } = await supabaseClient
                 .from('tasks')
-                .insert([newTask]);
+                .insert([newTask])
+                .select()
+                .single();
             
             if (error) {
                 if (error.code === 'PGRST204' || error.message?.includes('could not find the column') || error.code === '42703' || (error.status && error.status === 400)) {
@@ -1025,18 +1063,18 @@ const db = {
                     delete safeTask.delivery_status;
                     delete safeTask.parent_task_id;
                     
-                    const retry = await supabaseClient.from('tasks').insert([safeTask]);
+                    const retry = await supabaseClient.from('tasks').insert([safeTask]).select().single();
                     if (retry.error) {
                         console.error("createTask compatibility retry failed:", retry.error.message || retry.error, retry.error.details || '');
                         throw retry.error;
                     }
                     await this.flushTaskNotificationEmails();
-                    return { success: true };
+                    return { success: true, data: retry.data };
                 }
                 throw error;
             }
             await this.flushTaskNotificationEmails();
-            return { success: true };
+            return { success: true, data };
         } catch (error) {
             console.error("createTask Error:", error);
             return { success: false, error };
@@ -1072,7 +1110,7 @@ const db = {
     async updateTask(taskId, updates) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('tasks')
                 .update(updates)
                 .eq('id', taskId);
@@ -1159,9 +1197,9 @@ const db = {
     async addTaskComment(taskId, userId, content) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('task_comments')
-                .insert([{ 
+                .insert([{
                     task_id: taskId,
                     user_id: userId,
                     content: content
@@ -1384,6 +1422,20 @@ const db = {
             return { success: false, error };
         }
     },
+    async markNotificationRead(id) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("markNotificationRead Error:", error);
+            return { success: false, error };
+        }
+    },
     async markNotificationsRead(userId) {
         if (!supabaseClient) return { success: false };
         try {
@@ -1509,45 +1561,78 @@ const db = {
     // ==========================================
     // Messaging (New)
     // ==========================================
-    async fetchAllProfiles() {
+    async fetchAllProfiles(forceRefresh = false) {
         if (!supabaseClient) return [];
+        if (!forceRefresh && appCache.profiles.data && (Date.now() - appCache.profiles.time < CACHE_TTL)) {
+            return appCache.profiles.data;
+        }
         try {
             const { data, error } = await supabaseClient
                 .from('profiles')
                 .select('id, full_name, role, avatar_url, job_title, department_id, manager_id, last_login')
                 .eq('is_active', true);
             if (error) throw error;
-            return (data || []).map(applyI18nGetters);
+            const mapped = (data || []).map(applyI18nGetters);
+            appCache.profiles = { data: mapped, time: Date.now() };
+            return mapped;
         } catch (error) {
             console.error("fetchAllProfiles Error:", error);
             return [];
         }
     },
-    async fetchMessageHistory(userId1, userId2) {
+    async fetchReminders(userId) {
         if (!supabaseClient) return [];
         try {
             const { data, error } = await supabaseClient
-                .from('messages')
+                .from('reminders')
                 .select('*')
-                .or(`and(sender_id.eq.${userId1},receiver_id.eq.${userId2}),and(sender_id.eq.${userId2},receiver_id.eq.${userId1})`)
-                .order('created_at', { ascending: true });
+                .eq('user_id', userId)
+                .order('due_date', { ascending: true });
             if (error) throw error;
             return (data || []).map(applyI18nGetters);
         } catch (error) {
-            console.error("fetchMessageHistory Error:", error);
+            console.error("fetchReminders Error:", error);
             return [];
         }
     },
-    async sendMessage(senderId, receiverId, content) {
+    async createReminder(reminderData) {
         if (!supabaseClient) return { success: false };
         try {
             const { error } = await supabaseClient
-                .from('messages')
-                .insert([{ sender_id: senderId, receiver_id: receiverId, content }]);
+                .from('reminders')
+                .insert([reminderData]);
             if (error) throw error;
             return { success: true };
         } catch (error) {
-            console.error("sendMessage Error:", error);
+            console.error("createReminder Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateReminderStatus(id, status) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('reminders')
+                .update({ status })
+                .eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateReminderStatus Error:", error);
+            return { success: false, error };
+        }
+    },
+    async deleteReminder(id) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('reminders')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("deleteReminder Error:", error);
             return { success: false, error };
         }
     },
@@ -1763,29 +1848,98 @@ const db = {
             return [];
         }
     },
-    async fetchDepartments() {
+    async fetchDepartments(forceRefresh = false) {
         if (!supabaseClient) return [];
+        if (!forceRefresh && appCache.departments.data && (Date.now() - appCache.departments.time < CACHE_TTL)) {
+            return appCache.departments.data;
+        }
         try {
             let { data, error } = await supabaseClient.from('departments').select('*').eq('is_active', true).order('name');
             if (error && error.message?.includes('is_active')) {
                 ({ data, error } = await supabaseClient.from('departments').select('*').order('name'));
             }
             if (error) throw error;
-            return (data || []).map(applyI18nGetters);
+            const mapped = (data || []).map(applyI18nGetters);
+            appCache.departments = { data: mapped, time: Date.now() };
+            return mapped;
         } catch (error) {
             console.error("fetchDepartments Error:", error);
             return [];
         }
     },
-    async fetchJobTitles() {
+    async fetchJobTitles(forceRefresh = false) {
         if (!supabaseClient) return [];
+        if (!forceRefresh && appCache.jobTitles.data && (Date.now() - appCache.jobTitles.time < CACHE_TTL)) {
+            return appCache.jobTitles.data;
+        }
         try {
-            const { data, error } = await supabaseClient.from('job_titles').select('id,name,department_id,is_active').eq('is_active', true).order('name');
+            const { data, error } = await supabaseClient
+                .from('job_titles')
+                .select('id,name,department_id,is_active')
+                .eq('is_active', true)
+                .order('name');
             if (error) throw error;
-            return (data || []).map(applyI18nGetters);
+            const mapped = (data || []).map(applyI18nGetters);
+            appCache.jobTitles = { data: mapped, time: Date.now() };
+            return mapped;
         } catch (error) {
-            console.error('fetchJobTitles Error:', error);
+            console.error("fetchJobTitles Error:", error);
             return [];
+        }
+    },
+    getJobTitlesMap() {
+        const map = {};
+        const depts = appCache.departments.data || [];
+        const titles = appCache.jobTitles.data || [];
+        
+        depts.forEach(d => {
+            map[d.name] = [];
+        });
+        
+        titles.forEach(t => {
+            const dept = depts.find(d => d.id === t.department_id);
+            if (dept && t.is_active) {
+                map[dept.name].push(t.name);
+            }
+        });
+        
+        return map;
+    },
+    async createJobTitle(titleData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.from('job_titles').insert([titleData]).select().single();
+            if (error) throw error;
+            appCache.jobTitles = { data: null, time: 0 }; // Invalidate cache
+            return { success: true, data };
+        } catch (error) {
+            console.error("createJobTitle Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateJobTitle(id, titleData) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('job_titles').update(titleData).eq('id', id);
+            if (error) throw error;
+            appCache.jobTitles = { data: null, time: 0 }; // Invalidate cache
+            return { success: true };
+        } catch (error) {
+            console.error("updateJobTitle Error:", error);
+            return { success: false, error };
+        }
+    },
+    async deleteJobTitle(id) {
+        if (!supabaseClient) return { success: false };
+        try {
+            // We soft-delete by default or hard delete. Let's do a hard delete if there are no constraints, otherwise we might need soft-delete. The SQL setup uses ON DELETE CASCADE or just simple deletes.
+            const { error } = await supabaseClient.from('job_titles').delete().eq('id', id);
+            if (error) throw error;
+            appCache.jobTitles = { data: null, time: 0 }; // Invalidate cache
+            return { success: true };
+        } catch (error) {
+            console.error("deleteJobTitle Error:", error);
+            return { success: false, error };
         }
     },
     async createDepartment(deptData, employeeIds = []) {

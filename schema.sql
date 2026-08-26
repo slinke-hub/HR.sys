@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     id UUID REFERENCES auth.users(id) PRIMARY KEY,
     role VARCHAR(20) DEFAULT 'EMPLOYEE' CHECK (role IN ('ADMIN', 'MANAGER', 'EMPLOYEE')),
     job_title VARCHAR(100),
+    emp_index BIGSERIAL UNIQUE,
     avatar_url TEXT,
     display_name VARCHAR(100) CHECK (display_name IS NULL OR BTRIM(display_name) <> ''),
     manager_id UUID REFERENCES auth.users(id),

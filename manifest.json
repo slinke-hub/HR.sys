@@ -1,22 +1,23 @@
 {
+  "id": "/",
   "name": "MUQAM HR",
   "short_name": "MUQAM HR",
   "description": "MUQAM Human Resources Management System",
-  "start_url": "/index.html",
+  "lang": "en",
+  "dir": "auto",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#0b192c",
   "theme_color": "#1e3e62",
-  "orientation": "portrait",
-  "icons": [
-    {
-      "src": "/images/logo.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/images/logo.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
+  "orientation": "any",
+  "categories": ["business", "productivity"],
+  "icons": [{ "src": "/images/logo.png", "sizes": "any", "type": "image/png", "purpose": "any" }],
+  "shortcuts": [
+    { "name": "Dashboard", "short_name": "Dashboard", "url": "/?view=dashboard&source=shortcut", "icons": [{ "src": "/images/logo.png", "sizes": "any", "type": "image/png" }] },
+    { "name": "Task Manager", "short_name": "Tasks", "url": "/?view=tasks&source=shortcut", "icons": [{ "src": "/images/logo.png", "sizes": "any", "type": "image/png" }] },
+    { "name": "Employee Requests", "short_name": "Requests", "url": "/?view=requests&source=shortcut", "icons": [{ "src": "/images/logo.png", "sizes": "any", "type": "image/png" }] },
+    { "name": "Time & Attendance", "short_name": "Attendance", "url": "/?view=time&source=shortcut", "icons": [{ "src": "/images/logo.png", "sizes": "any", "type": "image/png" }] }
   ]
 }
