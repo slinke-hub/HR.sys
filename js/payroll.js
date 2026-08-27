@@ -203,7 +203,7 @@ window.generateAllPayslips = async function() {
             window.lucide.createIcons();
         }
     } else {
-        alert("Payslips generated and saved successfully!");
+        window.showAppMessageModal("Payslips generated and saved successfully!");
     }
     window.switchPayrollTab('released');
 };
@@ -445,7 +445,7 @@ window.calculateAndShowEOS = function() {
     const reason = document.getElementById('eos-reason').value;
     
     if(!hireDateStr || !finalDateStr || isNaN(baseSalary)) {
-        alert("Please fill all fields.");
+        window.showAppMessageModal("Please fill all fields.");
         return;
     }
     
@@ -831,11 +831,11 @@ window.handleBulkPayslipUpload = async function(event) {
                     document.getElementById('successModal').classList.add('active', 'show');
                     if (window.lucide) { window.lucide.createIcons(); }
                 } else {
-                    alert('Bulk upload complete. ' + payslips.length + ' payslips generated!');
+                    window.showAppMessageModal('Bulk upload complete. ' + payslips.length + ' payslips generated!');
                 }
                 window.switchPayrollTab('released');
             } else {
-                alert("Failed to upload payslips.");
+                window.showAppMessageModal("Failed to upload payslips.");
             }
         } catch (error) {
             console.error(error);
@@ -843,7 +843,7 @@ window.handleBulkPayslipUpload = async function(event) {
                 modal.classList.remove('active', 'show');
                 modal.style.display = 'none';
             }
-            alert("Error processing Excel file: " + error.message);
+            window.showAppMessageModal("Error processing Excel file: " + error.message);
         }
         
         event.target.value = ''; // Reset input

@@ -171,6 +171,20 @@ const db = {
             return { success: false, error: new Error(message) };
         }
     },
+    async syncEmployeeLoginAccounts(temporaryPassword, applyChanges = false) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('sync_employee_login_accounts', {
+                temporary_password: temporaryPassword,
+                apply_changes: applyChanges
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('syncEmployeeLoginAccounts Error:', error);
+            return { success: false, error };
+        }
+    },
 
     // Request API
     async fetchRequests(userObj = null) {
@@ -976,6 +990,67 @@ const db = {
             return { success: false, error };
         }
     },
+    async fetchTaskLists() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('task_lists')
+                .select('*')
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            const message = String(error?.message || error || '');
+            if (!message.includes('task_lists')) console.error('fetchTaskLists Error:', error);
+            return [];
+        }
+    },
+    async saveUserDirectoryChanges(changes) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('save_user_directory_changes', { p_changes: changes });
+            if (error) {
+                const missingRpc = error.code === 'PGRST202' || error.code === '42883' || String(error.message || '').includes('save_user_directory_changes');
+                if (!missingRpc) throw error;
+                for (const change of changes) {
+                    const { id, ...updates } = change;
+                    const fallback = await this.updateUserProfile(id, updates);
+                    if (!fallback.success) throw fallback.error || new Error('Failed to save user changes');
+                }
+                return { success: true, data: { updated_count: changes.length } };
+            }
+            return { success: true, data };
+        } catch (error) {
+            console.error('saveUserDirectoryChanges Error:', error);
+            return { success: false, error };
+        }
+    },
+    async createTaskList(name, ownerId, sharedWith = []) {
+        if (!supabaseClient) return { success: false, error: new Error('Not connected') };
+        try {
+            const { data, error } = await supabaseClient.from('task_lists').insert([{
+                name: String(name || '').trim(), owner_id: ownerId, shared_with: sharedWith
+            }]).select().single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('createTaskList Error:', error);
+            return { success: false, error };
+        }
+    },
+    async updateTaskList(listId, updates = {}) {
+        if (!supabaseClient) return { success: false, error: new Error('Not connected') };
+        try {
+            const { data, error } = await supabaseClient.from('task_lists')
+                .update({ ...updates, updated_at: new Date().toISOString() })
+                .eq('id', listId).select().single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('updateTaskList Error:', error);
+            return { success: false, error };
+        }
+    },
     async fetchTasks(_userId = null) {
         if (!supabaseClient) return [];
         try {
@@ -1003,7 +1078,7 @@ const db = {
             return [];
         }
     },
-    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = [], parentTaskId = null, marketingDepartment = null, contentLinks = [], submissionLinks = [], deliveryStatus = null) {
+    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = [], parentTaskId = null, marketingDepartment = null, contentLinks = [], submissionLinks = [], deliveryStatus = null, taskListId = null) {
         if (!supabaseClient) return { success: false };
         try {
             const newTask = { 
@@ -1035,7 +1110,8 @@ const db = {
                 marketing_department: marketingDepartment,
                 content_links: contentLinks,
                 submission_links: submissionLinks,
-                delivery_status: deliveryStatus
+                delivery_status: deliveryStatus,
+                task_list_id: taskListId || null
             };
             const { data, error } = await supabaseClient
                 .from('tasks')
@@ -1063,6 +1139,7 @@ const db = {
                     delete safeTask.submission_links;
                     delete safeTask.delivery_status;
                     delete safeTask.parent_task_id;
+                    delete safeTask.task_list_id;
                     
                     const retry = await supabaseClient.from('tasks').insert([safeTask]).select().single();
                     if (retry.error) {
@@ -1136,6 +1213,7 @@ const db = {
                     delete safeUpdates.content_links;
                     delete safeUpdates.submission_links;
                     delete safeUpdates.delivery_status;
+                    delete safeUpdates.task_list_id;
                     
                     const retry = await supabaseClient.from('tasks').update(safeUpdates).eq('id', taskId);
                     if (retry.error) throw retry.error;
@@ -2044,12 +2122,17 @@ const db = {
     async deleteDepartment(id) {
         if (!supabaseClient) return { success: false };
         try {
-            // Unassign employees from this department first to avoid foreign key constraints
-            const { error: profileError } = await supabaseClient.from('profiles').update({ department_id: null }).eq('department_id', id);
-            if (profileError) console.error("Error unassigning employees from department:", profileError);
-
-            const { error } = await supabaseClient.from('departments').delete().eq('id', id);
-            if (error) throw error;
+            const { error: rpcError } = await supabaseClient.rpc('archive_department', { p_department_id: id });
+            if (rpcError) {
+                const missingRpc = rpcError.code === 'PGRST202' || rpcError.code === '42883' || String(rpcError.message || '').includes('archive_department');
+                if (!missingRpc) throw rpcError;
+                // Compatibility fallback for environments where the migration has
+                // not yet been applied. Archiving preserves referenced history.
+                const { error: fallbackError } = await supabaseClient.from('departments').update({ is_active: false }).eq('id', id);
+                if (fallbackError) throw fallbackError;
+            }
+            appCache.departments = { data: null, time: 0 };
+            appCache.jobTitles = { data: null, time: 0 };
             return { success: true };
         } catch (error) {
             console.error("deleteDepartment Error:", error);
@@ -2670,6 +2753,21 @@ const db = {
             return { success: true };
         } catch (error) {
             console.error("updateProfileTranslations Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateJobTitleTranslation(jobTitleId, nameAr) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.rpc('admin_update_job_title_translation', {
+                p_job_title_id: jobTitleId,
+                p_name_ar: nameAr
+            });
+            if (error) throw error;
+            appCache.jobTitles = { data: null, time: 0 };
+            return { success: true };
+        } catch (error) {
+            console.error('updateJobTitleTranslation Error:', error);
             return { success: false, error };
         }
     },

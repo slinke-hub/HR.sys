@@ -30,7 +30,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/layout.css?v=6">
-    <link rel="stylesheet" href="css/components.css?v=37">
+    <link rel="stylesheet" href="css/components.css?v=39">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -114,6 +114,9 @@
                         <i data-lucide="search" class="search-icon"></i>
                         <input type="text" autocomplete="off" placeholder="Search (Cmd/Ctrl + K)" class="search-input" data-i18n-placeholder="search_placeholder">
                     </div>
+                    <button type="button" class="header-language-switcher" onclick="window.toggleLanguage()" data-i18n-title="nav_language" aria-label="Switch language" title="Switch language">
+                        <i data-lucide="languages"></i>
+                    </button>
                     <div class="profile-dropdown-wrapper" style="position: relative;">
                         <div class="user-profile" onclick="window.toggleProfileDropdown()" style="cursor: pointer;">
                             <div style="position: relative;">
@@ -136,12 +139,6 @@
                                 <span data-i18n="nav_notifications">Notifications Center</span>
                             </a>
 
-                            <a href="#" class="dropdown-item" onclick="window.toggleLanguage(); return false;" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
-                                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                    <i data-lucide="globe" style="width: 18px; height: 18px;"></i>
-                                    <span data-i18n="nav_language">Language: </span> <strong id="currentLangDisplay">EN</strong>
-                                </div>
-                            </a>
                             <a href="#" class="dropdown-item" onclick="window.toggleTheme(); return false;" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-border);">
                                 <i data-lucide="moon" style="width: 18px; height: 18px;"></i>
                                 <span data-i18n="nav_theme">Toggle Theme</span>
@@ -173,21 +170,21 @@
                 <input type="hidden" id="crmClientId">
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Client Name *</label>
+                        <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_client_name">Client Name</span> *</label>
                         <input type="text" id="crmClientName" class="form-control" required>
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="building-2" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Company</label>
+                        <label class="form-label"><i data-lucide="building-2" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_company">Company</span></label>
                         <input type="text" id="crmClientCompany" class="form-control">
                     </div>
                 </div>
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="mail" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Email</label>
+                        <label class="form-label"><i data-lucide="mail" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_email">Email</span></label>
                         <input type="email" id="crmClientEmail" class="form-control">
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="phone" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Phone</label>
+                        <label class="form-label"><i data-lucide="phone" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_phone">Phone</span></label>
                         <input type="text" id="crmClientPhone" class="form-control">
                     </div>
                 </div>
@@ -207,37 +204,37 @@
                 <input type="hidden" id="crmDealId">
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="file-text" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Deal Title *</label>
+                        <label class="form-label"><i data-lucide="file-text" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_deal_title">Deal Title</span> *</label>
                         <input type="text" id="crmDealTitle" class="form-control" required>
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="building-2" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Client *</label>
+                        <label class="form-label"><i data-lucide="building-2" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_client">Client</span> *</label>
                         <select id="crmDealClient" class="form-control" required></select>
                     </div>
                 </div>
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="dollar-sign" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Amount (SAR) *</label>
+                        <label class="form-label"><i data-lucide="dollar-sign" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_amount_sar">Amount (SAR)</span> *</label>
                         <input type="number" id="crmDealAmount" class="form-control" required>
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="calendar" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Closing Date</label>
+                        <label class="form-label"><i data-lucide="calendar" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_closing_date">Closing Date</span></label>
                         <input type="date" id="crmDealClosingDate" class="form-control">
                     </div>
                 </div>
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="tag" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Event Type</label>
+                        <label class="form-label"><i data-lucide="tag" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_event_type">Event Type</span></label>
                         <input type="text" id="crmDealEventType" class="form-control">
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="calendar-clock" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> First Contact Date</label>
+                        <label class="form-label"><i data-lucide="calendar-clock" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_first_contact_date">First Contact Date</span></label>
                         <input type="date" id="crmDealFirstContactDate" class="form-control">
                     </div>
                 </div>
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="message-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Contacted Via</label>
+                        <label class="form-label"><i data-lucide="message-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_contacted_via">Contacted Via</span></label>
                         <select id="crmDealContactMethod" class="form-control">
                             <option value="" data-i18n="html_select_method">Select Method</option>
                             <option value="Phone call" data-i18n="html_phone_call">Phone call</option>
@@ -246,12 +243,12 @@
                         </select>
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="rss" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Heard About Us From</label>
+                        <label class="form-label"><i data-lucide="rss" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_heard_from">Heard About Us From</span></label>
                         <input type="text" id="crmDealLeadSource" class="form-control">
                     </div>
                 </div>
                 <div class="form-group" style="margin-bottom: 1rem;">
-                    <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> Assigned To</label>
+                    <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_assigned_to">Assigned To</span></label>
                     <select id="crmDealAssignee" class="form-control"></select>
                 </div>
                 <div class="form-group" style="margin-bottom: 1rem;">
@@ -1036,7 +1033,7 @@
                 <input type="hidden" id="departmentId">
                 <div class="form-group">
                     <label class="form-label">Department (EN) *</label>
-                    <input type="text" id="departmentNameEn" class="form-control" required>
+                    <input type="text" id="departmentNameEn" class="form-control" required oninput="window.filterDepartmentHeadOptions()">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Department (AR)</label>
@@ -1051,7 +1048,7 @@
                     <div id="departmentJobTitlesList" style="display: flex; flex-direction: column; gap: 0.25rem; min-height: 32px; padding: 0.25rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-color);"></div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label" data-i18n="html_department_head">Department Head</label>
+                    <label class="form-label" data-i18n="html_department_head">Assign Manager</label>
                     <select id="departmentHead" class="form-control">
                         <!-- Loaded dynamically -->
                     </select>
@@ -1594,11 +1591,11 @@
     <script src="js/vendor/supabase.js"></script>
     <script src="js/vendor/chart.umd.min.js"></script>
     <script src="js/vendor/xlsx.full.min.js"></script>
-    <script src="js/db.js?v=50"></script>
-    <script src="js/data.js?v=24"></script>
+    <script src="js/db.js?v=54"></script>
+    <script src="js/data.js?v=26"></script>
     <script src="js/contract.js?v=23"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=102"></script>
+    <script src="js/app.js?v=110"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

@@ -164,7 +164,7 @@ function showInstallBanner() {
                     console.log(`User response to the install prompt: ${outcome}`);
                     deferredPrompt = null;
                 } else {
-                    alert("To install, open your browser's menu and select 'Add to Home Screen' or 'Install App'.");
+                    window.showAppMessageModal("To install, open your browser's menu and select 'Add to Home Screen' or 'Install App'.");
                 }
                 localStorage.setItem('pwaPromptDismissed', 'true');
             });
@@ -198,7 +198,7 @@ window.showEditUserModal = async (userId) => {
     document.getElementById('editFullNameAr').value = user.display_name_ar || '';
     document.getElementById('editIqama').value = user.iqama_number || '';
     document.getElementById('editPhone').value = user.phone_number || '';
-    const departments = await db.fetchDepartments();
+    const [departments] = await Promise.all([db.fetchDepartments(), db.fetchJobTitles(true)]);
     const departmentSelect = document.getElementById('editDepartment');
     departmentSelect.innerHTML = '<option value="">Select Department</option>' + departments.map(department => `<option value="${department.id}" ${department.id === user.department_id ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('');
     const selectedDepartment = departments.find(department => department.id === user.department_id)?.name || '';
@@ -1120,6 +1120,7 @@ window.updateSidebarVisibility = async function () {
     const payrollNav = document.getElementById('navPayroll');
     const projectsNav = document.querySelector('.nav-item[data-view="projects"]');
     const crmNav = document.querySelector('.nav-item[data-view="crm"]');
+    const clientsNav = document.querySelector('.nav-item[data-view="clients"]');
 
     const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
     if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
@@ -1136,6 +1137,7 @@ window.updateSidebarVisibility = async function () {
     const canUseMarketingPages = isAdmin || (normalizedRole === 'EMPLOYEE' && (['marketing & sales', 'sales', 'marketing'].includes((await getCurrentDepartmentName()).trim().toLowerCase())));
     if (projectsNav) projectsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (crmNav) crmNav.style.display = canUseMarketingPages ? 'flex' : 'none';
+    if (clientsNav) clientsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
 
     let isHussain = false;
     if (typeof currentUser !== 'undefined' && currentUser) {
@@ -1398,9 +1400,9 @@ async function renderTeamHierarchyWidget() {
             <div class="card col-span-12">
                 <div class="card-title" style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
                     <i data-lucide="git-fork" style="width: 20px; height: 20px; color: var(--color-accent);"></i>
-                    <span>${t('team_hierarchy') || 'Team Hierarchy'}</span>
+                    <span>${t('team_hierarchy')}</span>
                 </div>
-                <p style="color:var(--color-text-secondary); font-size:0.85rem; padding: 1rem 0;">No team members found.</p>
+                <p style="color:var(--color-text-secondary); font-size:0.85rem; padding: 1rem 0;">${t('team_no_members')}</p>
             </div>
         `;
     }
@@ -1483,9 +1485,9 @@ async function renderTeamHierarchyWidget() {
             <div class="card-title" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <i data-lucide="git-fork" style="width: 20px; height: 20px; color: var(--color-accent);"></i>
-                    <span>${t('team_hierarchy') || 'Team Hierarchy'}</span>
+                    <span>${t('team_hierarchy')}</span>
                 </div>
-                <span class="status-badge info" style="font-size: 0.75rem;">${allUsers.length} Members</span>
+                <span class="status-badge info" style="font-size: 0.75rem;">${t('team_members')} ${allUsers.length}</span>
             </div>
             <div class="hierarchy-square-tree" style="max-height: 480px; overflow-x: auto; overflow-y: auto;">
                 <div style="display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; width: 100%;">
@@ -1718,28 +1720,28 @@ async function renderDashboard() {
             ${expirationAlerts ? `<div class="col-span-12">${expirationAlerts}</div>` : ''}
             ${canUsePersonalLeaveWidgets ? `
             <div class="card col-span-12 annual-leave-widget">
-                <div class="annual-leave-widget-title"><i data-lucide="plane-takeoff"></i><span>Annual Leave</span></div>
+                <div class="annual-leave-widget-title"><i data-lucide="plane-takeoff"></i><span>${t('dashboard_annual_leave')}</span></div>
                 <div class="annual-leave-widget-balance"><i data-lucide="luggage"></i><strong>${annualAvailable.toFixed(2)}</strong></div>
-                <div class="annual-leave-widget-date">Days available as of ${annualBalanceAsOf}</div>
+                <div class="annual-leave-widget-date">${t('dashboard_days_available_as_of')} ${annualBalanceAsOf}</div>
                 <div class="annual-leave-widget-breakdown">
-                    <span>${annualRequested.toFixed(2)} Days requested.</span>
-                    <span>${annualUtilized.toFixed(2)} Days utilized.</span>
-                    <span>${annualAvailableByYearEnd.toFixed(2)} Days available by year end.</span>
+                    <span>${annualRequested.toFixed(2)} ${t('dashboard_days_requested')}</span>
+                    <span>${annualUtilized.toFixed(2)} ${t('dashboard_days_utilized')}</span>
+                    <span>${annualAvailableByYearEnd.toFixed(2)} ${t('dashboard_days_available_year_end')}</span>
                 </div>
             </div>` : ''}
             ${canUsePersonalLeaveWidgets ? `
             <div class="card col-span-12 short-leave-card">
-                <div class="short-leave-title"><i data-lucide="person-standing"></i><span>Short Leave</span></div>
+                <div class="short-leave-title"><i data-lucide="person-standing"></i><span>${t('dashboard_short_leave')}</span></div>
                 <div class="short-leave-reasons">
-                    <label><input type="radio" name="dashboardShortLeaveReason" value="I am running late to the office."> I am running late to the office.</label>
-                    <label><input type="radio" name="dashboardShortLeaveReason" value="I will be out for a meeting."> I will be out for a meeting.</label>
-                    <label><input type="radio" name="dashboardShortLeaveReason" value="I need to attend an urgent family matter."> I need to attend an urgent family matter.</label>
+                    <label><input type="radio" name="dashboardShortLeaveReason" value="I am running late to the office."> ${t('dashboard_short_late')}</label>
+                    <label><input type="radio" name="dashboardShortLeaveReason" value="I will be out for a meeting."> ${t('dashboard_short_meeting')}</label>
+                    <label><input type="radio" name="dashboardShortLeaveReason" value="I need to attend an urgent family matter."> ${t('dashboard_short_family')}</label>
                 </div>
                 <div class="short-leave-durations">
-                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(15)">15 Minutes</button>
-                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(60)">1 Hour</button>
-                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(120)">2 Hours</button>
-                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(180)">3 Hours</button>
+                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(15)">${t('dashboard_15_minutes')}</button>
+                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(60)">${t('dashboard_1_hour')}</button>
+                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(120)">${t('dashboard_2_hours')}</button>
+                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(180)">${t('dashboard_3_hours')}</button>
                 </div>
             </div>` : ''}
             
@@ -2196,7 +2198,7 @@ async function renderTime() {
                     <thead>
                         <tr>
                             <th>${t('date')}</th>
-                            <th>${t('time')}</th>
+                            <th>${t('time_time')}</th>
                             ${canViewAllAttendance ? '<th>Employee Name</th><th>ID Number</th>' : ''}
                             <th>${t('time_punch_type')}</th>
                             <th>${t('status')}</th>
@@ -2237,7 +2239,8 @@ window.openTaskDetailsModal = async function (id) {
     document.getElementById('taskSidePanel').classList.toggle('task-v2-detail', currentView === 'tasks' || currentView === 'tasks_v2');
 
     // Check permission to create tasks
-    const canCreateTask = !!currentUser;
+    const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
+    const canCreateTask = !!currentUser && (!task.task_list_id || privateList?.owner_id === currentUser.id);
     const btnCreateSubTask = document.getElementById('btnCreateSubTask');
     if (btnCreateSubTask) {
         btnCreateSubTask.style.display = canCreateTask ? 'inline-block' : 'none';
@@ -2291,9 +2294,11 @@ function prepareTeamworkTaskDetail(task) {
     if (!panel) return;
     panel.classList.add('teamwork-task-detail');
     const header = panel.querySelector('.side-panel-header');
+    const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
+    const canManagePrivateTask = !task.task_list_id || taskList?.owner_id === currentUser?.id;
     if (header) {
-        const canEdit = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
-        const canApproveCompletion = task.status === 'Pending Approval' && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
+        const canEdit = task.task_list_id ? canManagePrivateTask : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
+        const canApproveCompletion = !task.task_list_id && task.status === 'Pending Approval' && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
         let actions = header.querySelector('.task-detail-actions');
         if (!actions) {
             actions = document.createElement('div');
@@ -2312,7 +2317,7 @@ function prepareTeamworkTaskDetail(task) {
             grid.insertAdjacentElement('afterend', content);
         }
         const links = [...(task.content_links || []), ...(task.submission_links || [])].filter(Boolean);
-        const canUploadFiles = !!currentUser && (currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser.id) || (task.watchers || []).includes(currentUser.id));
+        const canUploadFiles = !!currentUser && (task.task_list_id ? canManagePrivateTask : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser.id) || (task.watchers || []).includes(currentUser.id));
         content.innerHTML = `
             <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : '<span>Add a description</span>'}</p></section>
             <nav class="task-detail-tabs" aria-label="Task information"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">Details</button><button type="button" data-task-info-tab="custom-fields" onclick="setTaskDetailInfoTab('custom-fields')">Custom fields</button><button type="button" data-task-info-tab="dependencies" onclick="setTaskDetailInfoTab('dependencies')">Dependencies</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">Proofs</button></nav>
@@ -2338,6 +2343,8 @@ function prepareTeamworkTaskDetail(task) {
     if (legacySubtaskHeading) legacySubtaskHeading.style.display = 'none';
     const legacySubtaskList = document.getElementById('taskSubTasksList');
     if (legacySubtaskList) legacySubtaskList.style.display = 'none';
+    const commentForm = document.getElementById('taskCommentInput')?.closest('form');
+    if (commentForm) commentForm.style.display = canManagePrivateTask ? 'flex' : 'none';
     setTaskDetailInfoTab('details');
     setTaskActivityTab('comments');
     if (window.lucide) window.lucide.createIcons();
@@ -2488,11 +2495,11 @@ window.submitDashboardShortLeave = async function (durationMinutes) {
 
 function companyJobTitleOptions(selected = '', departmentName = '') {
     const jobTitlesMap = db.getJobTitlesMap() || {};
-    const groups = departmentName && jobTitlesMap[departmentName]
-        ? [[departmentName, jobTitlesMap[departmentName]]]
-        : Object.entries(jobTitlesMap);
-    return '<option value="">Select Job Title</option>' + groups.map(([department, titles]) =>
-        `<optgroup label="${escapeHTML(department)}">${titles.map(title => `<option value="${escapeHTML(title)}" ${title === selected ? 'selected' : ''}>${escapeHTML(title)}</option>`).join('')}</optgroup>`
+    if (!departmentName) return '<option value="">Select Department first</option>';
+    const matchedDepartment = Object.keys(jobTitlesMap).find(name => name.trim().toLowerCase() === departmentName.trim().toLowerCase());
+    const titles = matchedDepartment ? jobTitlesMap[matchedDepartment] : [];
+    return '<option value="">Select Job Title</option>' + titles.map(title =>
+        `<option value="${escapeHTML(title)}" ${title === selected ? 'selected' : ''}>${escapeHTML(title)}</option>`
     ).join('');
 }
 
@@ -2503,7 +2510,8 @@ window.syncJobTitlesWithDepartment = function (departmentSelectId, jobTitleSelec
     const previous = titleSelect.value;
     const departmentName = departmentSelect.options[departmentSelect.selectedIndex]?.text || '';
     const jobTitlesMap = db.getJobTitlesMap() || {};
-    if (!departmentSelect.value || !jobTitlesMap[departmentName]) {
+    const matchedDepartment = Object.keys(jobTitlesMap).find(name => name.trim().toLowerCase() === departmentName.trim().toLowerCase());
+    if (!departmentSelect.value || !matchedDepartment) {
         titleSelect.innerHTML = '<option value="">Select Department first</option>';
         titleSelect.value = '';
         titleSelect.disabled = true;
@@ -2524,6 +2532,8 @@ window.setTaskDetailInfoTab = function (tab) {
     const subtasks = allTasks.filter(item => item.parent_task_id === task.id);
     const contentLinks = task.content_links || (task.source_link ? [task.source_link] : []);
     const proofLinks = task.submission_links || (task.upload_link ? [task.upload_link] : []);
+    const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
+    const canManageTask = !task.task_list_id || privateList?.owner_id === currentUser?.id;
     if (tab === 'custom-fields') {
         const fields = [
             ['Department', task.department], ['Task type', task.sub_type], ['Business', task.marketing_department],
@@ -2536,7 +2546,7 @@ window.setTaskDetailInfoTab = function (tab) {
         panel.innerHTML = proofLinks.length ? `<div class="task-detail-link-list">${proofLinks.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : '<div class="task-tab-empty">No submission proofs have been added.</div>';
     } else {
         panel.innerHTML = `<div class="task-detail-data-grid"><div><span>Status</span><strong>${escapeHTML(task.status || 'Not set')}</strong></div><div><span>Priority</span><strong>${escapeHTML(task.priority || 'Not set')}</strong></div><div><span>Content links</span><strong>${contentLinks.length}</strong></div><div><span>Due date</span><strong>${escapeHTML(task.due_date || 'Not set')}</strong></div></div>
-            <section class="task-detail-inline-subtasks"><div class="task-detail-subtask-heading"><strong>Subtasks <span>${subtasks.length}</span></strong><button type="button" onclick="openInlineSubtaskComposer()"><i data-lucide="plus"></i> Add a subtask</button></div><div id="taskDetailSubtaskHost">${subtasks.length ? subtasks.map(subtask => `<button type="button" class="task-detail-subtask-row" onclick="openTaskDetailsModal('${subtask.id}')"><i data-lucide="circle"></i><span>${escapeHTML(subtask.displayTitle || subtask.title)}</span><small>${escapeHTML(subtask.due_date || 'No due date')}</small></button>`).join('') : '<div class="task-tab-empty">No subtasks yet.</div>'}</div></section>`;
+            <section class="task-detail-inline-subtasks"><div class="task-detail-subtask-heading"><strong>Subtasks <span>${subtasks.length}</span></strong>${canManageTask ? '<button type="button" onclick="openInlineSubtaskComposer()"><i data-lucide="plus"></i> Add a subtask</button>' : '<span class="task-private-badge"><i data-lucide="eye"></i>View only</span>'}</div><div id="taskDetailSubtaskHost">${subtasks.length ? subtasks.map(subtask => `<button type="button" class="task-detail-subtask-row" onclick="openTaskDetailsModal('${subtask.id}')"><i data-lucide="circle"></i><span>${escapeHTML(subtask.displayTitle || subtask.title)}</span><small>${escapeHTML(subtask.due_date || 'No due date')}</small></button>`).join('') : '<div class="task-tab-empty">No subtasks yet.</div>'}</div></section>`;
     }
     if (window.lucide) window.lucide.createIcons();
 };
@@ -2550,7 +2560,9 @@ window.setTaskActivityTab = function (tab) {
     if (!task || !activityPanel || !comments) return;
     panel.querySelectorAll('[data-task-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.taskActivityTab === tab));
     comments.style.display = tab === 'comments' ? 'flex' : 'none';
-    if (composer) composer.style.display = tab === 'comments' ? '' : 'none';
+    const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
+    const canComment = !task.task_list_id || privateList?.owner_id === currentUser?.id;
+    if (composer) composer.style.display = tab === 'comments' && canComment ? '' : 'none';
     activityPanel.style.display = tab === 'comments' ? 'none' : 'block';
     if (tab === 'activity') {
         activityPanel.innerHTML = `<div class="task-activity-event"><i data-lucide="circle-plus"></i><div><strong>Task created</strong><span>${task.created_at ? new Date(task.created_at).toLocaleString() : 'Date unavailable'}</span></div></div><div class="task-activity-event"><i data-lucide="workflow"></i><div><strong>Current stage: ${escapeHTML(task.status || 'Not set')}</strong><span>Assigned to ${escapeHTML(window.formatEmployeeName(task.assignee) || 'Unassigned')}</span></div></div>`;
@@ -3023,7 +3035,7 @@ function initCharts() {
 window.handleViewPayslip = function (month, netPay) {
     const modal = document.getElementById('viewPayslipModal');
     if (!modal) {
-        alert(`SAP Detailed Payslip for ${month}\n------------------------\nBase Salary: $${(netPay * 0.8).toFixed(2)}\nAllowances: $${(netPay * 0.2).toFixed(2)}\n\nNet Pay: $${netPay.toFixed(2)}`);
+        window.showAppMessageModal(`SAP Detailed Payslip for ${month}\n------------------------\nBase Salary: $${(netPay * 0.8).toFixed(2)}\nAllowances: $${(netPay * 0.2).toFixed(2)}\n\nNet Pay: $${netPay.toFixed(2)}`);
         return;
     }
 
@@ -3227,13 +3239,23 @@ window.handleChangeJobTitle = async function (id, jobTitle, selectElement = null
 }
 
 window.handleDirectoryDepartmentChange = async function (userId, departmentId, selectElement) {
-    if (!departmentId) return;
-    const departmentName = selectElement.options[selectElement.selectedIndex]?.text || '';
     const jobTitleSelect = selectElement.closest('tr')?.querySelector('[data-directory-job-title]');
+    if (!departmentId) {
+        if (jobTitleSelect) {
+            jobTitleSelect.innerHTML = '<option value="">Select Department first</option>';
+            jobTitleSelect.disabled = true;
+        }
+        return;
+    }
+    const departmentName = selectElement.options[selectElement.selectedIndex]?.text || '';
     const currentTitle = jobTitleSelect?.value || '';
     const jobTitlesMap = db.getJobTitlesMap() || {};
-    if (!jobTitlesMap[departmentName]?.includes(currentTitle)) {
-        if (jobTitleSelect) jobTitleSelect.innerHTML = companyJobTitleOptions('', departmentName);
+    const matchedDepartment = Object.keys(jobTitlesMap).find(name => name.trim().toLowerCase() === departmentName.trim().toLowerCase());
+    if (!matchedDepartment || !jobTitlesMap[matchedDepartment].includes(currentTitle)) {
+        if (jobTitleSelect) {
+            jobTitleSelect.disabled = false;
+            jobTitleSelect.innerHTML = companyJobTitleOptions('', departmentName);
+        }
         showToast(`Now select a job title for ${departmentName}. The department will be saved with that title.`, 'info');
         return;
     }
@@ -3250,7 +3272,7 @@ window.handleDirectoryDepartmentChange = async function (userId, departmentId, s
 async function renderUsers() {
     if (currentUserRole !== 'ADMIN') return '<div style="padding: 2rem;">Unauthorized</div>';
 
-    const [users, departments] = await Promise.all([db.fetchUsers(), db.fetchDepartments()]);
+    const [users, departments] = await Promise.all([db.fetchUsers(), db.fetchDepartments(), db.fetchJobTitles(true)]);
     window.currentAdminUsers = users;
 
     return `
@@ -3260,6 +3282,9 @@ async function renderUsers() {
                 <p class="page-subtitle">${t('users_sub')}</p>
             </div>
             <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary" id="saveAllUsersButton" onclick="saveAllUserManagementChanges()">
+                    <i data-lucide="save"></i> Save All
+                </button>
                 <input type="file" id="bulkUserUploadUsersPage" accept=".xlsx, .xls" style="display: none;" onchange="handleBulkUpload(event)">
                 <button class="btn btn-secondary" onclick="window.triggerSpecificBulkUpload('employees', 'bulkUserUploadUsersPage')">
                     <i data-lucide="upload"></i> ${t('ui_bulk_upload') || 'Bulk Upload'}
@@ -3278,8 +3303,8 @@ async function renderUsers() {
                             <tr>
                                 <th>${t('users_details')}</th>
                                 <th>${t('users_role')}</th>
-                                <th>${t('users_job_title')}</th>
                                 <th>${t('users_department')}</th>
+                                <th>${t('users_job_title')}</th>
                                 <th>${t('users_assign_role')}</th>
                                 <th>${t('users_assign_mgr')}</th>
                                 <th>${t('users_contract')}</th>
@@ -3300,13 +3325,13 @@ async function renderUsers() {
                                     </td>
                                     <td><span data-user-role-badge class="status-badge ${u.role === 'ADMIN' ? 'success' : 'info'}">${u.role}</span></td>
                                     <td>
-                                        <select data-directory-job-title class="form-control" style="width: 100%; min-width: 130px; max-width: 200px; padding: 0.25rem; font-size: 0.8rem;" onchange="handleChangeJobTitle('${u.id}', this.value, this)">${companyJobTitleOptions(u.job_title || '', departments.find(department => department.id === u.department_id)?.name || '')}</select>
-                                    </td>
-                                    <td>
                                         <select data-directory-department class="form-control" style="width: 100%; min-width: 130px; max-width: 200px; padding: 0.25rem;" onchange="handleDirectoryDepartmentChange('${u.id}', this.value, this)">
                                             <option value="">Select Department</option>
                                             ${departments.map(department => `<option value="${department.id}" ${u.department_id === department.id ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('')}
                                         </select>
+                                    </td>
+                                    <td>
+                                        <select data-directory-job-title class="form-control" style="width: 100%; min-width: 130px; max-width: 200px; padding: 0.25rem; font-size: 0.8rem;" onchange="handleChangeJobTitle('${u.id}', this.value, this)" ${u.department_id ? '' : 'disabled'}>${companyJobTitleOptions(u.job_title || '', departments.find(department => department.id === u.department_id)?.name || '')}</select>
                                     </td>
                                     <td>
                                         <select data-user-role-select class="form-control" style="width: 100%; min-width: 100px; max-width: 150px; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
@@ -4166,11 +4191,11 @@ async function renderSchedule() {
                 <form onsubmit="window.handleCreateReminder(event)">
                     <div class="form-group">
                         <label class="form-label">${t('schedule_title_label')} *</label>
-                        <input type="text" id="reminderTitle" class="form-control" required placeholder="Meeting with client...">
+                        <input type="text" id="reminderTitle" class="form-control" required placeholder="${t('schedule_title_placeholder')}">
                     </div>
                     <div class="form-group">
                         <label class="form-label">${t('schedule_description_label')}</label>
-                        <textarea id="reminderDescription" class="form-control" rows="3" placeholder="Additional details..."></textarea>
+                        <textarea id="reminderDescription" class="form-control" rows="3" placeholder="${t('schedule_description_placeholder')}"></textarea>
                     </div>
                     <div class="form-group">
                         <label class="form-label">${t('schedule_due_label')} *</label>
@@ -4282,13 +4307,11 @@ window.toggleReminderStatus = async (id, status) => {
 };
 
 window.deleteReminder = async (id) => {
-    if (!confirm(t('html_are_you_sure') || 'Are you sure you want to delete this reminder?')) return;
-    const { success, error } = await db.deleteReminder(id);
-    if (success) {
-        renderView('schedule');
-    } else {
-        showToast(error?.message || 'Error deleting reminder.', 'danger');
-    }
+    window.showConfirmModal(t('html_confirm_action'), t('html_are_you_sure') || 'Are you sure you want to delete this reminder?', async () => {
+        const { success, error } = await db.deleteReminder(id);
+        if (success) renderView('schedule');
+        else showToast(error?.message || 'Error deleting reminder.', 'danger');
+    });
 };
 
 async function renderProfile() {
@@ -4482,11 +4505,12 @@ async function renderTasks() {
 
     console.log("renderTasks: Fetching users and tasks...");
     // Fetch users, tasks, and the signed-in user's department manager in parallel
-    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments] = await Promise.all([
+    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments, taskLists] = await Promise.all([
         db.fetchUsers(),
         tasksPromise,
         db.fetchMyDepartmentSupervisors(),
-        db.fetchDepartments()
+        db.fetchDepartments(),
+        db.fetchTaskLists()
     ]);
     console.log("renderTasks: Fetched users and tasks.", { usersCount: allUsers.length, tasksCount: fetchedTasks.length });
     let tasks = fetchedTasks;
@@ -4564,6 +4588,13 @@ async function renderTasks() {
     window.taskAssigneeOptionsCache = userOptions;
     window.taskAllUsersCache = allUsers;
     window.taskDepartmentsCache = allDepartments;
+    window.taskListsCache = taskLists || [];
+    const ownTaskLists = (taskLists || []).filter(list => list.owner_id === currentUser.id);
+    const currentProfile = allUsers.find(user => user.id === currentUser.id) || currentUser;
+    window.taskListShareCandidates = allUsers.filter(user => user.id !== currentUser.id && (
+        user.department_id === currentProfile.department_id || user.id === currentProfile.manager_id
+    ));
+    const taskListOptions = ownTaskLists.map(list => `<option value="${escapeHTML(list.id)}">${escapeHTML(list.name)}</option>`).join('');
     window.taskWatcherOptionsCache = allUsers.map(u => {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
         return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
@@ -4590,7 +4621,7 @@ async function renderTasks() {
             <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
                 <label class="form-label">${t('ui_department') || "Task's Department"}</label>
                 <select id="taskDepartment" class="form-control" onchange="window.handleTaskDepartmentChange('new', this.value)">
-                    <option value="">?" Select ?"</option>
+                    <option value="">${t('ui_select') || 'Select'}</option>
                     ${departmentOptions}
                 </select>
             </div>
@@ -4637,6 +4668,15 @@ async function renderTasks() {
                                     ${projectOptions}
                                 </select>
                             </div>
+
+                            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                                <label class="form-label">${t('task_private_list')}</label>
+                                <select id="taskListId" class="form-control" onchange="handlePrivateTaskListSelection(this.value)">
+                                    <option value="">${t('task_no_private_list')}</option>
+                                    ${taskListOptions}
+                                </select>
+                                <small class="text-muted">${t('task_private_list_help')}</small>
+                            </div>
                             
                             ${departmentSelectHTML}
 
@@ -4664,10 +4704,10 @@ async function renderTasks() {
                             <div class="form-group" style="flex: 1 1 150px; margin-bottom: 0;">
                                 <label class="form-label">${t('ui_priority') || 'Priority'}</label>
                                 <select id="taskPriority" class="form-control">
-                                    <option value="urgent">Critical</option>
-                                    <option value="high">High</option>
-                                    <option value="medium" selected>Medium</option>
-                                    <option value="low">Low</option>
+                                    <option value="urgent">${t('priority_critical') || 'Critical'}</option>
+                                    <option value="high">${t('priority_high') || 'High'}</option>
+                                    <option value="medium" selected>${t('priority_medium')}</option>
+                                    <option value="low">${t('priority_low')}</option>
                                 </select>
                             </div>
 
@@ -4683,9 +4723,21 @@ async function renderTasks() {
                         </div>
 
                         <div style="text-align: right; margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
-                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('createTaskModal').classList.remove('active');">Cancel</button>
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('createTaskModal').classList.remove('active');">${t('btn_cancel')}</button>
                             <button type="submit" class="btn btn-primary">${t('task_assign_btn') || 'Create Task'}</button>
                         </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="modal" id="taskListModal">
+                <div class="modal-content task-list-modal-content">
+                    <div class="modal-header"><div><h2 id="taskListModalTitle">${t('task_list_new')}</h2><p>${t('task_list_intro')}</p></div><button type="button" class="icon-btn" onclick="closeTaskListModal()"><i data-lucide="x"></i></button></div>
+                    <form onsubmit="handleSaveTaskList(event)">
+                        <input type="hidden" id="taskListEditId">
+                        <div class="form-group"><label class="form-label">${t('task_list_name')}</label><input id="taskListName" class="form-control" maxlength="80" required placeholder="${t('task_list_name_placeholder')}"></div>
+                        <div class="form-group"><label class="form-label">${t('task_list_view_access')}</label><p class="task-list-help">${t('task_list_view_help')}</p><div id="taskListViewerPicker" class="task-list-viewer-picker"></div></div>
+                        <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeTaskListModal()">${t('btn_cancel')}</button><button class="btn btn-primary" type="submit">${t('task_list_save')}</button></div>
                     </form>
                 </div>
             </div>
@@ -4693,7 +4745,10 @@ async function renderTasks() {
     }
 
     function renderTaskCard(task) {
-        const canManageTask = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
+        const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
+        const canManageTask = task.task_list_id
+            ? taskList?.owner_id === currentUser?.id
+            : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
         const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
         let prioColor = 'var(--color-border)';
         if (task.priority === 'medium') prioColor = 'var(--color-primary)';
@@ -4702,7 +4757,7 @@ async function renderTasks() {
         if (task.priority === 'urgent') prioColor = 'var(--color-danger)'; // legacy fallback
 
         return `
-            <div class="card task-item-card" id="task-card-${task.id}" data-status="${task.status}" draggable="true" ondragstart="handleTaskDragStart(event, '${task.id}')" onclick="openTaskDetailsModal('${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${prioColor}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: pointer; background: var(--color-surface); position: relative;">
+            <div class="card task-item-card" id="task-card-${task.id}" data-status="${task.status}" draggable="${canManageTask}" ${canManageTask ? `ondragstart="handleTaskDragStart(event, '${task.id}')"` : ''} onclick="openTaskDetailsModal('${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${prioColor}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: pointer; background: var(--color-surface); position: relative;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 3rem; gap: 0.5rem;">
                     <h4 style="margin: 0; font-size: 0.95rem; line-height: 1.4; color: var(--color-text); font-weight: 500; word-break: break-word;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${escapeHTML(task.displayTitle)}</h4>
                 </div>
@@ -4795,21 +4850,32 @@ async function renderTasksV2() {
     const gridStart = legacyHTML.indexOf('<div class="dashboard-grid');
     const taskContent = gridStart >= 0 ? legacyHTML.slice(gridStart) : legacyHTML;
     const projects = window.projectsCache || [];
+    const taskLists = window.taskListsCache || [];
     const canCreateTask = !!currentUser;
     const selectedProject = window.taskV2SelectedProject || 'all';
     const statusLabels = { 'Pending Approval': 'Awaiting approval', todo: 'To do', in_progress: 'In progress', review: 'Review', completed: 'Done', Approved: 'Approved', Rejected: 'Rejected' };
 
     const projectItems = [
-        `<button class="task-v2-list-link ${selectedProject === 'all' ? 'active' : ''}" onclick="selectTaskV2Project('all')"><span>All tasks</span><b>${tasks.length}</b></button>`,
+        `<button class="task-v2-list-link ${selectedProject === 'all' ? 'active' : ''}" onclick="selectTaskV2Project('all')"><span>${t('task_all_tasks')}</span><b>${tasks.length}</b></button>`,
         ...projects.map(project => {
             const count = tasks.filter(task => task.project_id === project.id).length;
             return `<button class="task-v2-list-link ${selectedProject === project.id ? 'active' : ''}" onclick="selectTaskV2Project('${project.id}')"><span>${escapeHTML(project.project_name)}</span><b>${count}</b></button>`;
         }),
-        `<button class="task-v2-list-link ${selectedProject === 'none' ? 'active' : ''}" onclick="selectTaskV2Project('none')"><span>No project</span><b>${tasks.filter(task => !task.project_id).length}</b></button>`
+        `<button class="task-v2-list-link ${selectedProject === 'none' ? 'active' : ''}" onclick="selectTaskV2Project('none')"><span>${t('task_no_project')}</span><b>${tasks.filter(task => !task.project_id).length}</b></button>`
     ].join('');
 
+    const personalListItems = taskLists.map(list => {
+        const count = tasks.filter(task => task.task_list_id === list.id).length;
+        const isOwner = list.owner_id === currentUser?.id;
+        const active = window.taskV2SelectedList === list.id;
+        return `<div class="task-v2-private-list-row"><button class="task-v2-list-link ${active ? 'active' : ''}" onclick="selectTaskV2PrivateList('${list.id}')"><span><i data-lucide="${isOwner ? 'lock-keyhole' : 'eye'}"></i>${escapeHTML(list.name)}</span><b>${count}</b></button>${isOwner ? `<button class="task-list-share-button" type="button" title="Share view-only access" aria-label="Share ${escapeHTML(list.name)}" onclick="openTaskListModal('${list.id}')"><i data-lucide="user-round-plus"></i></button>` : ''}</div>`;
+    }).join('');
+
     const taskRows = tasks.map(task => {
-        const canManageTask = currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
+        const taskList = taskLists.find(list => list.id === task.task_list_id);
+        const canManageTask = task.task_list_id
+            ? taskList?.owner_id === currentUser?.id
+            : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
         const project = projects.find(item => item.id === task.project_id);
         const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
         const dueDate = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
@@ -4820,12 +4886,12 @@ async function renderTasksV2() {
         const checkAriaLabel = isCompleted ? 'Reopen' : (isPendingApproval ? 'Pending Approval' : 'Mark complete');
         const checkOnClickStatus = isCompleted ? 'todo' : 'completed';
 
-        return `<article class="task-v2-row" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-status="${escapeHTML(task.status)}" data-due="${task.due_date || ''}">
-            <button class="task-v2-complete ${checkIconClass}" type="button" aria-label="${checkAriaLabel}" onclick="event.stopPropagation(); taskV2ToggleComplete('${task.id}', '${checkOnClickStatus}')"><i data-lucide="check"></i></button>
+        return `<article class="task-v2-row" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-due="${task.due_date || ''}">
+            <button class="task-v2-complete ${checkIconClass}" type="button" aria-label="${canManageTask ? checkAriaLabel : 'View only'}" ${canManageTask ? `onclick="event.stopPropagation(); taskV2ToggleComplete('${task.id}', '${checkOnClickStatus}')"` : 'disabled'}><i data-lucide="${canManageTask ? 'check' : 'eye'}"></i></button>
             <button class="task-v2-avatar" type="button" title="${escapeHTML(window.formatEmployeeName(task.assignee) || 'Unassigned')}">${escapeHTML((window.formatEmployeeName(task.assignee) || '?').charAt(0).toUpperCase())}</button>
             <button class="task-v2-row-main" type="button" onclick="openTaskDetailsModal('${task.id}')">
-                <span class="task-v2-row-title"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${escapeHTML(task.displayTitle || task.title)}</span>
-                <span class="task-v2-row-context">${task.parent_task_id ? `Subtask of: ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')} · ` : ''}${escapeHTML(project?.project_name || 'No project')} · ${escapeHTML(task.category || 'General')}</span>
+                <span class="task-v2-row-title"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${task.task_list_id ? `<span class="task-private-badge"><i data-lucide="${canManageTask ? 'lock-keyhole' : 'eye'}"></i>${canManageTask ? 'Private' : 'View only'}</span>` : ''}${escapeHTML(task.displayTitle || task.title)}</span>
+                <span class="task-v2-row-context">${task.parent_task_id ? `Subtask of: ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')} · ` : ''}${escapeHTML(taskList?.name || project?.project_name || 'No project')} · ${escapeHTML(task.category || 'General')}</span>
             </button>
             <span class="task-v2-status task-v2-status-${String(task.status).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}">${escapeHTML(statusLabels[task.status] || task.status)}</span>
             <span class="task-v2-priority task-v2-priority-${escapeHTML(task.priority || 'medium')}">${escapeHTML(task.priority || 'medium')}</span>
@@ -4838,36 +4904,36 @@ async function renderTasksV2() {
         <section class="task-v2-shell" aria-labelledby="task-v2-title">
             <div class="task-v2-header">
                 <div>
-                    <div class="task-v2-eyebrow">WORK MANAGEMENT</div>
-                    <h1 class="page-title" id="task-v2-title">Task Manager</h1>
-                    <p class="page-subtitle">Plan, assign and track team work from one focused workspace.</p>
+                    <div class="task-v2-eyebrow">${t('task_work_management')}</div>
+                    <h1 class="page-title" id="task-v2-title">${t('nav_task_manager')}</h1>
+                    <p class="page-subtitle">${t('task_manager_subtitle')}</p>
                 </div>
             </div>
             <nav class="task-v2-tabs" aria-label="Task views">
-                <button class="active" data-task-v2-mode="list" onclick="setTaskV2Mode('list')">List</button>
-                <button data-task-v2-mode="board" onclick="setTaskV2Mode('board')">Board</button>
+                <button class="active" data-task-v2-mode="list" onclick="setTaskV2Mode('list')">${t('task_list_view')}</button>
+                <button data-task-v2-mode="board" onclick="setTaskV2Mode('board')">${t('task_board_view')}</button>
             </nav>
             <div class="task-v2-stats" aria-label="Task summary">
-                <div><strong>${tasks.length}</strong><span>Total tasks</span></div>
-                <div><strong>${openCount}</strong><span>Open</span></div>
-                <div><strong>${dueSoonCount}</strong><span>Due this week</span></div>
-                <div class="${overdueCount ? 'is-alert' : ''}"><strong>${overdueCount}</strong><span>Overdue</span></div>
+                <div><strong>${tasks.length}</strong><span>${t('task_total')}</span></div>
+                <div><strong>${openCount}</strong><span>${t('task_open')}</span></div>
+                <div><strong>${dueSoonCount}</strong><span>${t('task_due_week')}</span></div>
+                <div class="${overdueCount ? 'is-alert' : ''}"><strong>${overdueCount}</strong><span>${t('task_overdue')}</span></div>
             </div>
             <div class="task-v2-toolbar" role="search">
-                <label class="task-v2-search"><i data-lucide="search"></i><input type="search" id="taskV2Search" placeholder="Search tasks, assignees or projects" oninput="filterTasksV2()" aria-label="Search tasks"></label>
+                <label class="task-v2-search"><i data-lucide="search"></i><input type="search" id="taskV2Search" placeholder="${t('task_search_placeholder')}" oninput="filterTasksV2()" aria-label="${t('task_search')}"></label>
                 <select id="taskV2Status" class="form-control" onchange="filterTasksV2()" aria-label="Filter by status">
-                    <option value="">All statuses</option><option value="Pending Approval">Awaiting approval</option><option value="todo">To do</option><option value="in_progress">In progress</option><option value="review">Review</option><option value="completed">Done</option>
+                    <option value="">${t('task_all_statuses')}</option><option value="Pending Approval">${t('ui_awaiting_approval')}</option><option value="todo">${t('task_to_do')}</option><option value="in_progress">${t('task_in_progress')}</option><option value="review">${t('task_review')}</option><option value="completed">${t('task_done')}</option>
                 </select>
-                <button class="btn btn-secondary task-v2-quick-filter" data-filter="overdue" type="button" onclick="setTaskV2QuickFilter('overdue')">Late</button>
-                <button class="btn btn-secondary task-v2-quick-filter" data-filter="week" type="button" onclick="setTaskV2QuickFilter('week')">Due this week</button>
-                <button class="btn btn-secondary" type="button" onclick="clearTaskV2Filters()">Clear</button>
-                ${canCreateTask ? `<button class="btn btn-primary" type="button" onclick="toggleTaskV2Create()"><i data-lucide="plus"></i> Add a task</button>` : ''}
+                <button class="btn btn-secondary task-v2-quick-filter" data-filter="overdue" type="button" onclick="setTaskV2QuickFilter('overdue')">${t('task_late')}</button>
+                <button class="btn btn-secondary task-v2-quick-filter" data-filter="week" type="button" onclick="setTaskV2QuickFilter('week')">${t('task_due_week')}</button>
+                <button class="btn btn-secondary" type="button" onclick="clearTaskV2Filters()">${t('task_clear')}</button>
+                ${canCreateTask ? `<button class="btn btn-primary" type="button" onclick="toggleTaskV2Create()"><i data-lucide="plus"></i> ${t('task_add')}</button>` : ''}
             </div>
             <div class="task-v2-workspace">
-                <aside class="task-v2-lists"><h3>Projects</h3>${projectItems}</aside>
+                <aside class="task-v2-lists"><div class="task-v2-list-section-title"><h3>${t('task_private_lists')}</h3><button type="button" onclick="openTaskListModal()" aria-label="${t('task_create_private_list')}" title="${t('task_create_private_list')}"><i data-lucide="plus"></i></button></div>${personalListItems || `<p class="task-list-sidebar-empty">${t('task_private_lists_empty')}</p>`}<h3 class="task-v2-projects-heading">${t('nav_projects')}</h3>${projectItems}</aside>
                 <main class="task-v2-list-pane">
-                    <div class="task-v2-list-heading"><div><h2>Tasks</h2><span id="taskV2VisibleCount">${tasks.length}</span></div><span>${tasks.reduce((sum, task) => sum + (parseFloat(task.estimated_time) || 0), 0)}h estimated</span></div>
-                    <div id="taskV2Rows" class="task-v2-rows">${taskRows || '<div class="task-v2-empty">No tasks in this view.</div>'}</div>
+                    <div class="task-v2-list-heading"><div><h2>${t('nav_tasks')}</h2><span id="taskV2VisibleCount">${tasks.length}</span></div><span>${tasks.reduce((sum, task) => sum + (parseFloat(task.estimated_time) || 0), 0)} ${t('task_hours_estimated')}</span></div>
+                    <div id="taskV2Rows" class="task-v2-rows">${taskRows || `<div class="task-v2-empty">${t('task_no_tasks_view')}</div>`}</div>
                 </main>
             </div>
             <div class="task-v2-legacy-host">${taskContent}</div>
@@ -4878,6 +4944,7 @@ window.filterTasksV2 = function () {
     const query = (document.getElementById('taskV2Search')?.value || '').trim().toLowerCase();
     const status = document.getElementById('taskV2Status')?.value || '';
     const projectId = window.taskV2SelectedProject || 'all';
+    const listId = window.taskV2SelectedList || '';
     const quickFilter = window.taskV2QuickFilter || '';
     const now = new Date(new Date().toDateString());
     let visibleCount = 0;
@@ -4887,12 +4954,14 @@ window.filterTasksV2 = function () {
         if (!row) return;
         const project = (window.projectsCache || []).find(item => item.id === task.project_id);
         const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
-        const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, project?.project_name, task.parent_task_id ? 'subtask' : 'parent task', parentTask?.displayTitle, parentTask?.title].filter(Boolean).join(' ').toLowerCase();
+        const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
+        const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, project?.project_name, privateList?.name, task.parent_task_id ? 'subtask' : 'parent task', parentTask?.displayTitle, parentTask?.title].filter(Boolean).join(' ').toLowerCase();
         const due = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
         const days = due ? (due - now) / 86400000 : null;
         const matchesQuick = !quickFilter || (quickFilter === 'overdue' && days < 0 && task.status !== 'completed') || (quickFilter === 'week' && days >= 0 && days <= 7 && task.status !== 'completed');
-        const matchesProject = projectId === 'all' || (projectId === 'none' ? !task.project_id : task.project_id === projectId);
-        const visible = (!query || searchable.includes(query)) && (!status || task.status === status) && matchesProject && matchesQuick;
+        const matchesProject = listId ? true : (projectId === 'all' || (projectId === 'none' ? !task.project_id : task.project_id === projectId));
+        const matchesList = !listId || task.task_list_id === listId;
+        const visible = (!query || searchable.includes(query)) && (!status || task.status === status) && matchesProject && matchesList && matchesQuick;
         row.style.display = visible ? '' : 'none';
         if (visible) visibleCount += 1;
     });
@@ -4914,6 +4983,8 @@ window.openInlineSubtaskComposer = function () {
     if (!parentId || !list || document.getElementById('inlineSubtaskForm')) return;
     const parent = window.taskCache?.[parentId];
     if (!parent) return;
+    const privateList = (window.taskListsCache || []).find(list => list.id === parent.task_list_id);
+    if (parent.task_list_id && privateList?.owner_id !== currentUser?.id) return;
     list.insertAdjacentHTML('afterbegin', `
         <form id="inlineSubtaskForm" class="inline-subtask-form" onsubmit="handleInlineSubtaskSubmit(event, '${parentId}')">
             <div class="inline-subtask-title-row">
@@ -4957,7 +5028,9 @@ window.handleInlineSubtaskSubmit = async function (event, parentId) {
         parent.category || 'General', { en: title }, {}, null, null, estimatedTime,
         parent.visibility || 'public', parent.project_id || null, parent.tags || [],
         parent.visible_to || [], null, null, null, 'todo', parent.supervisor_id || null,
-        parent.department || null, parent.sub_type || null, parent.watchers || [], parentId
+        parent.department || null, parent.sub_type || null, parent.watchers || [], parentId,
+        parent.marketing_department || null, parent.content_links || [], parent.submission_links || [],
+        parent.delivery_status || null, parent.task_list_id || null
     );
     if (!result.success) {
         submit.disabled = false;
@@ -4971,6 +5044,7 @@ window.handleInlineSubtaskSubmit = async function (event, parentId) {
 };
 
 window.selectTaskV2Project = function (projectId) {
+    window.taskV2SelectedList = '';
     window.taskV2SelectedProject = projectId;
     document.querySelectorAll('.task-v2-list-link').forEach(button => button.classList.toggle('active', button.getAttribute('onclick').includes(`'${projectId}'`)));
     window.filterTasksV2();
@@ -5252,15 +5326,18 @@ window.handleCreateTask = async function (e) {
     const assignee = document.getElementById('taskAssignee').value;
     const due = document.getElementById('taskDue').value;
     const priority = document.getElementById('taskPriority').value;
-    const projectId = document.getElementById('taskProject').value || null;
+    const taskListId = document.getElementById('taskListId')?.value || null;
+    const projectId = taskListId ? null : (document.getElementById('taskProject').value || null);
     const supervisorSelect = document.getElementById('taskSupervisor');
     const supervisorId = supervisorSelect && !supervisorSelect.disabled
         ? supervisorSelect.value
         : (window.taskDepartmentSupervisors?.[0]?.id || null);
+    const effectiveAssignee = taskListId ? currentUser.id : assignee;
+    const effectiveSupervisor = taskListId ? null : supervisorId;
 
     // Check if assignee is in Designing
     const allUsers = await db.fetchUsers();
-    const assigneeObj = allUsers.find(u => u.id === assignee);
+    const assigneeObj = allUsers.find(u => u.id === effectiveAssignee);
     const depts = await db.fetchDepartments();
     const userDept = assigneeObj ? depts.find(d => d.id === assigneeObj.department_id) : null;
     const isDesigner = userDept && userDept.name.toLowerCase().includes('designing');
@@ -5311,16 +5388,16 @@ window.handleCreateTask = async function (e) {
         document.getElementById('taskDue').value = document.getElementById('taskDesignDeadline')?.value || due;
     }
     let watchers = [];
-    if (document.getElementById('enableWatchers') && document.getElementById('enableWatchers').checked) {
+    if (!taskListId && document.getElementById('enableWatchers') && document.getElementById('enableWatchers').checked) {
         watchers = Array.from(document.getElementById('taskWatchers').selectedOptions).map(opt => opt.value);
     }
     const parentTaskId = document.getElementById('taskParentId') ? document.getElementById('taskParentId').value || null : null;
 
     const finalDue = isMarketingDesign ? document.getElementById('taskDesignDeadline').value : due;
-    const { success, error } = await db.createTask(title, description, assignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, supervisorId, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus);
+    const { success, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, taskListId ? 'private' : 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId);
     if (success) {
         showToast(t('toast_task_created_successfully'), "success");
-        await db.triggerWebhooks('task_created', { title, assignee_id: assignee, supervisor_id: supervisorId, due_date: due, priority, project_id: projectId });
+        await db.triggerWebhooks('task_created', { title, assignee_id: effectiveAssignee, supervisor_id: effectiveSupervisor, due_date: due, priority, project_id: projectId, task_list_id: taskListId });
         if (status === 'Pending Approval') {
             const hussain = allUsers.find(u => u.full_name && u.full_name.toLowerCase().includes('hussain') || u.email && u.email.toLowerCase().includes('hussain'));
             if (hussain) {
@@ -5425,6 +5502,11 @@ window.openEditTaskModal = async function (id) {
             console.error('Task not found in cache for ID:', id);
             return;
         }
+        const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
+        if (task.task_list_id && privateList?.owner_id !== currentUser?.id) {
+            showToast('This private task list is shared with you as view only.', 'info');
+            return;
+        }
 
         document.getElementById('editTaskId').value = task.id;
         document.getElementById('editTaskTitle').value = task.title || '';
@@ -5448,7 +5530,10 @@ window.openEditTaskModal = async function (id) {
 
         const assigneeSelect = document.getElementById('editTaskAssignee');
         if (assigneeSelect) {
-            if (currentUserRole === 'EMPLOYEE') {
+            if (task.task_list_id) {
+                assigneeSelect.value = currentUser.id;
+                assigneeSelect.disabled = true;
+            } else if (currentUserRole === 'EMPLOYEE') {
                 assigneeSelect.disabled = true;
             } else {
                 assigneeSelect.disabled = false;
@@ -5515,11 +5600,11 @@ window.openEditTaskModal = async function (id) {
             modal.classList.add('active');
         } else {
             console.error('editTaskModal not found in DOM');
-            alert('Error: Edit Task Modal missing in HTML.');
+            window.showAppMessageModal('Error: Edit Task Modal missing in HTML.');
         }
     } catch (err) {
         console.error('Error in openEditTaskModal:', err);
-        alert('Error opening edit modal. Check console for details.');
+        window.showAppMessageModal('Error opening edit modal. Check console for details.');
     }
 };
 
@@ -6140,11 +6225,11 @@ window.handlePrintContract = async (employeeId) => {
             renderView('contract_preview');
         } else {
             // One draft/historical, ask to confirm
-            if (confirm(`Employee has one ${contracts[0].status} contract. Do you want to print it?`)) {
+            window.showConfirmModal(t('html_confirm_action'), `${t('contract_single_print_prompt')} (${contracts[0].status})`, async () => {
                 window.currentContractIdToPrint = contracts[0].id;
                 window.currentEmployeeIdToPrint = employeeId;
                 renderView('contract_preview');
-            }
+            });
         }
     } else {
         // Multiple contracts
@@ -6235,9 +6320,9 @@ window.filterTranslations = function () {
     if (countEl) countEl.textContent = visibleCount;
 };
 
-window.saveAllTranslations = async function () {
+window.saveAllTranslations = async function (silent = false) {
     const updates = [];
-    const btn = document.querySelector('button[onclick="saveAllTranslations()"]');
+    const btn = silent ? null : document.querySelector('button[onclick="saveAllTranslations()"]');
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 4px;"></div> Saving...';
@@ -6281,7 +6366,12 @@ window.saveAllTranslations = async function () {
     if (updates.length > 0) {
         const res = await db.saveSystemTranslationsBatch(updates);
         if (!res.success) {
-            showToast('Failed to save UI/Tag translations', 'danger');
+            if (!silent) showToast(res.error?.message || 'Failed to save UI/Tag translations', 'danger');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="save"></i> Save All Changes';
+            }
+            return;
         }
     }
 
@@ -6302,13 +6392,29 @@ window.saveAllTranslations = async function () {
         profilePromises.push(db.updateProfileTranslations(profId, nameAr, jobAr));
     });
 
+    const jobTitlePromises = [];
+    document.querySelectorAll('.trans-job-title-row').forEach(row => {
+        const titleId = row.dataset.id;
+        const nameAr = document.getElementById('job_title_ar_' + titleId)?.value || null;
+        jobTitlePromises.push(db.updateJobTitleTranslation(titleId, nameAr));
+    });
+
     // Await all DB updates for departments and profiles
-    await Promise.all([...deptPromises, ...profilePromises]);
+    const entityResults = await Promise.all([...deptPromises, ...profilePromises, ...jobTitlePromises]);
+    const entityFailure = entityResults.find(result => result && result.success === false);
+    if (entityFailure) {
+        if (!silent) showToast(entityFailure.error?.message || 'Some translations could not be saved.', 'danger');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="save"></i> Save All Changes';
+        }
+        return;
+    }
 
     // Apply changes to the live UI immediately
     if (typeof updateTranslations === 'function') updateTranslations();
 
-    showToast('All translations saved successfully', 'success');
+    if (!silent) showToast('All translations saved successfully', 'success');
 
     if (btn) {
         btn.disabled = false;
@@ -6376,13 +6482,14 @@ window.importTranslationsJSON = function (event) {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function (e) {
+    reader.onload = async function (e) {
         try {
             const parsed = JSON.parse(e.target.result);
             if (parsed.en && typeof i18n !== 'undefined') Object.assign(i18n.en, parsed.en);
             if (parsed.ar && typeof i18n !== 'undefined') Object.assign(i18n.ar, parsed.ar);
-            showToast("Translations imported successfully!", "success");
-            renderView('translations');
+            await renderView('translations');
+            await window.saveAllTranslations(true);
+            showToast("Translations imported and saved successfully!", "success");
         } catch (err) {
             showToast("Failed to parse JSON file", "danger");
         }
@@ -6666,15 +6773,15 @@ async function renderCustodyHandover() {
     return `
         <div class="page-header fade-in-up">
             <div>
-                <h1 class="page-title"><i data-lucide="package-check" style="width:28px;height:28px;vertical-align:middle;margin-inline-end:0.5rem;"></i>Custody Handover</h1>
-                <p class="page-subtitle">Record company property handover to employees</p>
+                <h1 class="page-title"><i data-lucide="package-check" style="width:28px;height:28px;vertical-align:middle;margin-inline-end:0.5rem;"></i>${t('custody_title')}</h1>
+                <p class="page-subtitle">${t('custody_subtitle')}</p>
             </div>
             <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
                 <button class="btn btn-secondary" style="white-space: nowrap;" onclick="window.print()">
-                    <i data-lucide="printer" style="width:16px;height:16px;"></i> Print / Save PDF
+                    <i data-lucide="printer" style="width:16px;height:16px;"></i> ${t('custody_print')}
                 </button>
                 <button class="btn btn-primary" style="white-space: nowrap;" onclick="submitCustodyHandover(event)">
-                    <i data-lucide="save" style="width:16px;height:16px;"></i> Save Record
+                    <i data-lucide="save" style="width:16px;height:16px;"></i> ${t('custody_save')}
                 </button>
             </div>
         </div>
@@ -6693,7 +6800,9 @@ async function renderCustodyHandover() {
             .declaration-box ul { padding-inline-start: 1.25rem; margin: 0.75rem 0; }
             .declaration-box ul li { margin-bottom: 0.65rem; }
             .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-            .signature-line { border-top: 2px solid var(--color-border); padding-top: 0.5rem; margin-top: 2rem; font-size: 0.85rem; color: var(--color-text-secondary); }
+            .signature-line { border-top: 2px solid var(--color-border); padding-top: 0.5rem; margin-top: 2rem; font-size: 0.85rem; color: var(--color-text-secondary); display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+            .signature-line-field { display:inline-flex; align-items:center; gap:0.45rem; }
+            .signature-blank { display:inline-block; min-width:8rem; border-bottom:1px dashed currentColor; transform:translateY(-0.15rem); }
             @media (max-width: 640px) { .signature-grid { grid-template-columns: 1fr; } .custody-form-grid { grid-template-columns: 1fr; } }
             @media print {
                 .topbar, .sidebar, .page-header > div:last-child, button { display: none !important; }
@@ -6707,23 +6816,23 @@ async function renderCustodyHandover() {
             <!-- Employee Info Card -->
             <div class="card fade-in-up" style="padding: 1.5rem;">
                 <h2 style="margin: 0 0 1.25rem 0; font-size: 1rem; font-weight: 700; color: var(--color-primary); display:flex;align-items:center;gap:0.5rem;">
-                    <i data-lucide="user" style="width:18px;height:18px;"></i> Employee Information
+                    <i data-lucide="user" style="width:18px;height:18px;"></i> ${t('custody_employee_info')}
                 </h2>
                 <div class="custody-form-grid">
                     <div class="form-group" style="margin:0">
-                        <label class="form-label">Full Name *</label>
-                        <input type="text" id="chFullName" class="form-control" value="${escapeHTML(fullName)}" placeholder="Employee full name" required>
+                        <label class="form-label">${t('custody_full_name')} *</label>
+                        <input type="text" id="chFullName" class="form-control" value="${escapeHTML(fullName)}" placeholder="${t('custody_full_name_placeholder')}" required>
                     </div>
                     <div class="form-group" style="margin:0">
-                        <label class="form-label">ID Number *</label>
-                        <input type="text" id="chIdNumber" class="form-control" value="${escapeHTML(idNumber)}" placeholder="National / Employee ID" required>
+                        <label class="form-label">${t('custody_id_number')} *</label>
+                        <input type="text" id="chIdNumber" class="form-control" value="${escapeHTML(idNumber)}" placeholder="${t('custody_id_placeholder')}" required>
                     </div>
                     <div class="form-group" style="margin:0">
-                        <label class="form-label">Department *</label>
-                        <input type="text" id="chDepartment" class="form-control" value="${escapeHTML(department)}" placeholder="Department name" required>
+                        <label class="form-label">${t('custody_department')} *</label>
+                        <input type="text" id="chDepartment" class="form-control" value="${escapeHTML(department)}" placeholder="${t('custody_department_placeholder')}" required>
                     </div>
                     <div class="form-group" style="margin:0">
-                        <label class="form-label">Handover Date *</label>
+                        <label class="form-label">${t('custody_handover_date')} *</label>
                         <input type="date" id="chDate" class="form-control" value="${today}" required>
                     </div>
                 </div>
@@ -6733,33 +6842,33 @@ async function renderCustodyHandover() {
             <div class="card fade-in-up" style="padding: 1.5rem; overflow-x: auto;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem;">
                     <h2 style="margin:0;font-size:1rem;font-weight:700;color:var(--color-primary);display:flex;align-items:center;gap:0.5rem;">
-                        <i data-lucide="package" style="width:18px;height:18px;"></i> Custody Items
+                        <i data-lucide="package" style="width:18px;height:18px;"></i> ${t('custody_items')}
                     </h2>
                     <button type="button" class="btn btn-secondary" onclick="addCustodyRow()" style="font-size:0.85rem;padding:0.45rem 1rem;white-space: nowrap;">
-                        <i data-lucide="plus" style="width:14px;height:14px;"></i> Add Item
+                        <i data-lucide="plus" style="width:14px;height:14px;"></i> ${t('custody_add_item')}
                     </button>
                 </div>
                 <table class="custody-items-table">
                     <thead>
                         <tr>
                             <th style="width:40px;">#</th>
-                            <th>Item</th>
-                            <th>Model / Serial Number</th>
-                            <th style="width:80px;">Quantity</th>
-                            <th style="width:130px;">Condition</th>
+                            <th>${t('custody_item')}</th>
+                            <th>${t('custody_model_serial')}</th>
+                            <th style="width:80px;">${t('custody_quantity')}</th>
+                            <th style="width:130px;">${t('custody_condition')}</th>
                             <th style="width:50px;"></th>
                         </tr>
                     </thead>
                     <tbody id="custodyItemsBody">
                         <tr>
                             <td style="text-align:center;color:var(--color-text-secondary);">1</td>
-                            <td><input type="text" placeholder="e.g. Laptop" required></td>
-                            <td><input type="text" placeholder="e.g. Dell XPS 9500 / SN12345"></td>
+                            <td><input type="text" placeholder="${t('custody_item_placeholder')}" required></td>
+                            <td><input type="text" placeholder="${t('custody_model_placeholder')}"></td>
                             <td><input type="number" value="1" min="1" style="width:70px;"></td>
                             <td>
                                 <div class="custody-radio-group">
-                                    <label><input type="radio" name="cond_1" value="New" checked> New</label>
-                                    <label><input type="radio" name="cond_1" value="Used"> Used</label>
+                                    <label><input type="radio" name="cond_1" value="New" checked> ${t('custody_new')}</label>
+                                    <label><input type="radio" name="cond_1" value="Used"> ${t('custody_used')}</label>
                                 </div>
                             </td>
                             <td></td>
@@ -6771,13 +6880,13 @@ async function renderCustodyHandover() {
             <!-- Declaration Section -->
             <div class="card fade-in-up" style="padding: 1.5rem;">
                 <div class="declaration-box">
-                    <h3>Declaration of Custody and Responsibility</h3>
-                    <p>I, the undersigned employee, hereby acknowledge receipt of the company property detailed in the preceding table in good working condition. In accepting custody of these items, I agree to and undertake the following:</p>
+                    <h3>${t('custody_declaration_title')}</h3>
+                    <p>${t('custody_declaration_intro')}</p>
                     <ul>
-                        <li><strong>Proper Usage:</strong> To exercise due diligence in safeguarding the entrusted property and to use it exclusively for the execution of my official duties.</li>
-                        <li><strong>Prompt Reporting:</strong> To immediately report any loss, theft, or damage of said property to my direct manager, as well as the IT or Human Resources department.</li>
-                        <li><strong>Liability:</strong> To accept full financial and administrative liability for any repair or replacement costs arising from improper use, unauthorized alterations, or gross negligence on my part.</li>
-                        <li><strong>Return of Property:</strong> To surrender all entrusted items in their original functioning condition (subject to normal wear and tear) upon the termination of my employment, or immediately upon the request of company management.</li>
+                        <li><strong>${t('custody_usage_title')}:</strong> ${t('custody_usage_text')}</li>
+                        <li><strong>${t('custody_reporting_title')}:</strong> ${t('custody_reporting_text')}</li>
+                        <li><strong>${t('custody_liability_title')}:</strong> ${t('custody_liability_text')}</li>
+                        <li><strong>${t('custody_return_title')}:</strong> ${t('custody_return_text')}</li>
                     </ul>
                 </div>
 
@@ -6785,17 +6894,17 @@ async function renderCustodyHandover() {
                 <div class="signature-grid" style="margin-top:2rem;">
                     <div>
                         <div class="form-group" style="margin-bottom:0.75rem;">
-                            <label class="form-label">Employee's Full Name</label>
+                            <label class="form-label">${t('custody_employee_signature_name')}</label>
                             <input type="text" id="chSigEmployeeName" class="form-control" value="${escapeHTML(fullName)}" placeholder="Full name">
                         </div>
-                        <div class="signature-line">Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: __________</div>
+                        <div class="signature-line"><span class="signature-line-field">${t('custody_signature')}: <span class="signature-blank"></span></span><span class="signature-line-field">${t('custody_date')}: <span class="signature-blank"></span></span></div>
                     </div>
                     <div>
                         <div class="form-group" style="margin-bottom:0.75rem;">
-                            <label class="form-label">Direct Manager or HR</label>
-                            <input type="text" id="chSigManager" class="form-control" placeholder="Manager / HR representative name">
+                            <label class="form-label">${t('custody_manager_hr')}</label>
+                            <input type="text" id="chSigManager" class="form-control" placeholder="${t('custody_manager_placeholder')}">
                         </div>
-                        <div class="signature-line">Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: __________</div>
+                        <div class="signature-line"><span class="signature-line-field">${t('custody_signature')}: <span class="signature-blank"></span></span><span class="signature-line-field">${t('custody_date')}: <span class="signature-blank"></span></span></div>
                     </div>
                 </div>
             </div>
@@ -6812,13 +6921,13 @@ window.addCustodyRow = function () {
     const row = document.createElement('tr');
     row.innerHTML = `
         <td style="text-align:center;color:var(--color-text-secondary);">${custodyRowCount}</td>
-        <td><input type="text" placeholder="e.g. Mouse" required></td>
-        <td><input type="text" placeholder="Model / Serial number"></td>
+        <td><input type="text" placeholder="${t('custody_item_placeholder')}" required></td>
+        <td><input type="text" placeholder="${t('custody_model_placeholder')}"></td>
         <td><input type="number" value="1" min="1" style="width:70px;"></td>
         <td>
             <div class="custody-radio-group">
-                <label><input type="radio" name="cond_${custodyRowCount}" value="New" checked> New</label>
-                <label><input type="radio" name="cond_${custodyRowCount}" value="Used"> Used</label>
+                <label><input type="radio" name="cond_${custodyRowCount}" value="New" checked> ${t('custody_new')}</label>
+                <label><input type="radio" name="cond_${custodyRowCount}" value="Used"> ${t('custody_used')}</label>
             </div>
         </td>
         <td><button type="button" onclick="this.closest('tr').remove()" style="background:none;border:none;cursor:pointer;color:var(--color-danger);padding:0.25rem;"><i data-lucide="trash-2" style="width:15px;height:15px;"></i></button></td>
@@ -6834,10 +6943,10 @@ window.submitCustodyHandover = function (event) {
     const department = document.getElementById('chDepartment')?.value?.trim();
     const date = document.getElementById('chDate')?.value;
     if (!fullName || !idNumber || !department || !date) {
-        showToast('Please fill in all required employee fields.', 'warning');
+        showToast(t('custody_required_warning'), 'warning');
         return;
     }
-    showToast('Custody handover record saved successfully!', 'success');
+    showToast(t('custody_saved_success'), 'success');
 };
 
 async function renderTranslationsPage() {
@@ -6845,9 +6954,10 @@ async function renderTranslationsPage() {
         return `<div class="card" style="padding: 2rem; color: var(--color-danger); font-weight: bold;">Unauthorized. System Admin access required.</div>`;
     }
 
-    const [departments, profiles] = await Promise.all([
+    const [departments, profiles, jobTitles] = await Promise.all([
         db.fetchDepartments(),
-        db.fetchAllProfiles()
+        db.fetchAllProfiles(),
+        db.fetchJobTitles(true)
     ]);
 
     const allKeys = Array.from(new Set([...Object.keys(i18n.en || {}), ...Object.keys(i18n.ar || {})])).sort();
@@ -6873,10 +6983,10 @@ async function renderTranslationsPage() {
                     ${isMissing ? '<span style="background:#e67e22;color:#fff;border-radius:4px;padding:1px 5px;font-size:0.7rem;margin-inline-start:4px;">Missing AR</span>' : ''}
                 </td>
                 <td>
-                    <input type="text" id="trans_en_${keyEscaped}" class="form-control" style="font-size:0.85rem;" value="${enVal}">
+                    <input type="text" id="trans_en_${keyEscaped}" class="form-control" style="font-size:0.85rem;" value="${enVal}" onchange="queueTranslationAutosave()">
                 </td>
                 <td>
-                    <input type="text" id="trans_ar_${keyEscaped}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}" placeholder="أدخل الترجمة العربية...">
+                    <input type="text" id="trans_ar_${keyEscaped}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}" placeholder="أدخل الترجمة العربية..." onchange="queueTranslationAutosave()">
                 </td>
                 <td>
                     <div style="display: flex; gap: 0.4rem; justify-content: center; flex-wrap: nowrap; min-width: 60px;">
@@ -6898,8 +7008,8 @@ async function renderTranslationsPage() {
         return `
             <tr class="trans-tag-row" data-key="${key}">
                 <td style="font-weight: 600; font-size: 0.85rem;">${tag}</td>
-                <td><input type="text" id="tag_en_${key}" class="form-control" style="font-size:0.85rem;" value="${enVal}"></td>
-                <td><input type="text" id="tag_ar_${key}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}"></td>
+                <td><input type="text" id="tag_en_${key}" class="form-control" style="font-size:0.85rem;" value="${enVal}" onchange="queueTranslationAutosave()"></td>
+                <td><input type="text" id="tag_ar_${key}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}" onchange="queueTranslationAutosave()"></td>
             </tr>
         `;
     }).join('');
@@ -6910,9 +7020,19 @@ async function renderTranslationsPage() {
             <tr class="trans-dept-row" data-id="${d.id}">
                 <td style="font-weight: 600; font-size: 0.85rem;">${escapeHTML(d.name)}</td>
                 <td><input type="text" class="form-control" style="font-size:0.85rem;" value="${escapeHTML(d.name)}" readonly disabled></td>
-                <td><input type="text" id="dept_ar_${d.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(d.name_ar || '')}" placeholder="Arabic Name"></td>
+                <td><input type="text" id="dept_ar_${d.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(d.name_ar || '')}" placeholder="Arabic Name" onchange="queueTranslationAutosave()"></td>
             </tr>
         `;
+    }).join('');
+
+    const jobTitleRowsHTML = (jobTitles || []).filter(title => title.is_active !== false).map(title => {
+        const department = departments.find(item => item.id === title.department_id);
+        return `
+            <tr class="trans-job-title-row" data-id="${title.id}">
+                <td style="font-weight:600;font-size:.85rem;">${escapeHTML(department?.name || 'Unknown department')}</td>
+                <td>${escapeHTML(title.name || '')}</td>
+                <td><input type="text" id="job_title_ar_${title.id}" class="form-control" style="font-size:.85rem;direction:rtl;" value="${escapeHTML(title.name_ar || '')}" placeholder="Arabic Job Title" onchange="queueTranslationAutosave()"></td>
+            </tr>`;
     }).join('');
 
     // Employees Table
@@ -6920,8 +7040,8 @@ async function renderTranslationsPage() {
         return `
             <tr class="trans-profile-row" data-id="${p.id}">
                 <td style="font-weight: 600; font-size: 0.85rem; white-space: nowrap;">${escapeHTML(window.formatEmployeeName(p) || '')} <br> <small style="color: var(--color-text-secondary); font-weight: normal;">${escapeHTML(p.job_title || '')}</small></td>
-                <td><input type="text" id="profile_name_ar_${p.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(p.display_name_ar || '')}" placeholder="Arabic Name"></td>
-                <td><input type="text" id="profile_job_ar_${p.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(p.job_title_ar || '')}" placeholder="Arabic Job Title"></td>
+                <td><input type="text" id="profile_name_ar_${p.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(p.display_name_ar || '')}" placeholder="Arabic Name" onchange="queueTranslationAutosave()"></td>
+                <td><input type="text" id="profile_job_ar_${p.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(p.job_title_ar || '')}" placeholder="Arabic Job Title" onchange="queueTranslationAutosave()"></td>
             </tr>
         `;
     }).join('');
@@ -6955,7 +7075,8 @@ async function renderTranslationsPage() {
                     <button type="button" class="active" onclick="switchTransTab('ui', this)">UI Strings</button>
                     <button type="button" onclick="switchTransTab('tags', this)">Tags</button>
                     <button type="button" onclick="switchTransTab('departments', this)">Departments</button>
-                    <button type="button" onclick="switchTransTab('profiles', this)">Employees & Job Titles</button>
+                    <button type="button" onclick="switchTransTab('job-titles', this)">Job Titles</button>
+                    <button type="button" onclick="switchTransTab('profiles', this)">Employees</button>
                 </div>
 
                 <div id="trans-tab-ui" class="trans-tab-content">
@@ -7022,6 +7143,15 @@ async function renderTranslationsPage() {
                                 </tr>
                             </thead>
                             <tbody>${deptsRowsHTML}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="trans-tab-job-titles" class="trans-tab-content" style="display:none;">
+                    <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
+                        <table class="data-table">
+                            <thead><tr><th>Department</th><th>Job Title (English)</th><th>Job Title (Arabic)</th></tr></thead>
+                            <tbody>${jobTitleRowsHTML}</tbody>
                         </table>
                     </div>
                 </div>
@@ -7460,59 +7590,279 @@ window.addEventListener('click', function (e) {
 // Departments Features
 // ==========================================
 async function renderDepartments() {
-    const departments = await db.fetchDepartments();
-    const profiles = await db.fetchAllProfiles();
+    const [departments, profiles, databaseTitles] = await Promise.all([
+        db.fetchDepartments(), db.fetchAllProfiles(), db.fetchJobTitles()
+    ]);
+    const catalog = window.departmentManagerCatalog;
+    const workbookDepartments = Object.keys(catalog);
+    const liveByName = new Map(departments.map(department => [department.name.toLowerCase(), department]));
+    const displayDepartments = workbookDepartments.map(name => liveByName.get(name.toLowerCase()) || {
+        id: '', name, name_ar: '', head_id: null, catalogOnly: true
+    });
+    departments.forEach(department => {
+        if (!workbookDepartments.some(name => name.toLowerCase() === department.name.toLowerCase())) displayDepartments.push(department);
+    });
 
-    let tableRows = departments.length ? departments.map(d => {
-        const empCount = profiles.filter(p => p.department_id === d.id).length;
+    const cards = displayDepartments.map((department, index) => {
+        const employees = profiles.filter(profile => profile.department_id === department.id);
+        const head = profiles.find(profile => profile.id === department.head_id);
+        const catalogRoles = catalog[department.name] || [];
+        const liveRoles = databaseTitles
+            .filter(title => title.department_id === department.id && title.is_active !== false)
+            .map(title => ({ title: title.name, level: title.job_level || catalogRoles.find(role => role.title === title.name)?.level || 'Other' }));
+        const roles = [...catalogRoles];
+        liveRoles.forEach(role => {
+            if (!roles.some(existing => existing.title.toLowerCase() === role.title.toLowerCase())) roles.push(role);
+        });
+        const grouped = ['Entry-Level', 'Mid-Level', 'Leadership', 'Other'].map(level => ({
+            level,
+            roles: roles.filter(role => role.level === level)
+        })).filter(group => group.roles.length);
+        const searchText = `${department.name} ${roles.map(role => role.title).join(' ')}`.toLowerCase();
+        const editAction = department.id
+            ? `editDepartment('${department.id}')`
+            : `showDepartmentCatalogModal('${department.name.replace(/'/g, "\\'")}')`;
         return `
-        <tr id="dept-row-${d.id}">
-            <td>${d.name}</td>
-            <td>${empCount}</td>
-            <td>${window.formatEmployeeName(profiles.find(p => p.id === d.head_id)) || '-'}</td>
-            <td>
-                <button class="btn btn-icon" onclick="editDepartment('${d.id}')"><i data-lucide="edit-2"></i></button>
-                <button class="btn btn-icon" style="color:var(--color-danger);" onclick="deleteDepartment('${d.id}')"><i data-lucide="trash-2"></i></button>
-            </td>
-        </tr>
-    `}).join('') : `<tr><td colspan="4" style="text-align:center;">No departments found</td></tr>`;
+            <article class="department-manager-card" data-department-card data-search="${escapeHTML(searchText)}" data-levels="${escapeHTML(grouped.map(group => group.level).join('|'))}">
+                <div class="department-manager-card-head">
+                    <div class="department-manager-icon"><i data-lucide="${['briefcase-business','megaphone','badge-dollar-sign','monitor-cog','factory'][index % 5]}"></i></div>
+                    <div class="department-manager-heading">
+                        <div class="department-manager-title-row">
+                            <h2>${escapeHTML(department.name)}</h2>
+                            ${department.catalogOnly ? '<span class="department-catalog-badge">Workbook catalog</span>' : ''}
+                        </div>
+                        <p>${roles.length} job titles · ${employees.length} employees</p>
+                    </div>
+                    <div class="department-manager-actions">
+                        <button class="btn btn-icon" aria-label="Edit department" title="Edit department" onclick="${editAction}"><i data-lucide="edit-3"></i></button>
+                        ${department.id ? `<button class="btn btn-icon department-delete-button" aria-label="Delete department" title="Delete department" onclick="deleteDepartment('${department.id}')"><i data-lucide="trash-2"></i></button>` : ''}
+                    </div>
+                </div>
+                <div class="department-manager-lead">
+                    <span>Department manager</span>
+                    <strong>${escapeHTML(window.formatEmployeeName(head) || 'Not assigned')}</strong>
+                </div>
+                <div class="department-role-groups">
+                    ${grouped.map(group => `
+                        <section class="department-role-group" data-role-level="${escapeHTML(group.level)}">
+                            <div class="department-role-group-title"><span>${escapeHTML(group.level)}</span><small>${group.roles.length}</small></div>
+                            <div class="department-role-chips">${group.roles.map(role => `<span>${escapeHTML(role.title)}</span>`).join('')}</div>
+                        </section>
+                    `).join('') || '<p class="department-empty-roles">No job titles added yet.</p>'}
+                </div>
+            </article>`;
+    }).join('');
+
+    const totalRoles = Object.values(catalog).reduce((total, roles) => total + roles.length, 0);
+    const managersAssigned = displayDepartments.filter(department => department.head_id).length;
 
     return `
-        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="page-header department-manager-header">
             <div>
                 <h1 class="page-title">${t('ui_departments_management')}</h1>
-                <p class="page-subtitle">Manage company departments.</p>
+                <p class="page-subtitle">Manage departments, reporting leads, and the job architecture from the company workbook.</p>
             </div>
-            <div style="display: flex; gap: 0.5rem;">
-                <input type="file" id="bulkDeptUploadDeptsPage" accept=".xlsx, .xls" style="display: none;" onchange="handleBulkUpload(event)">
-                <button class="btn btn-secondary" onclick="window.triggerSpecificBulkUpload('departments_jobtitles', 'bulkDeptUploadDeptsPage')">
-                    <i data-lucide="upload"></i> Bulk Upload
-                </button>
+            <div class="department-manager-header-actions">
                 <button class="btn btn-primary" onclick="showDepartmentModal()">
                     <i data-lucide="plus"></i> New Department
                 </button>
             </div>
         </div>
-        
-        <div class="card">
-            <div class="table-responsive">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>${t('ui_name') || 'Name'}</th>
-                            <th>${t('ui_description')}</th>
-                            <th>${t('ui_head')}</th>
-                            <th>${t('ui_actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRows}
-                    </tbody>
-                </table>
-            </div>
+
+        <section class="department-manager-stats" aria-label="Department summary">
+            <div><i data-lucide="building-2"></i><span><strong>${displayDepartments.length}</strong><small>Departments</small></span></div>
+            <div><i data-lucide="contact-round"></i><span><strong>${totalRoles}</strong><small>Workbook job titles</small></span></div>
+            <div><i data-lucide="users"></i><span><strong>${profiles.length}</strong><small>Employees</small></span></div>
+            <div><i data-lucide="user-check"></i><span><strong>${managersAssigned}</strong><small>Managers assigned</small></span></div>
+        </section>
+
+        <section class="department-manager-toolbar">
+            <label class="department-manager-search"><i data-lucide="search"></i><input type="search" placeholder="Search departments or job titles" oninput="filterDepartmentManagerCards()" id="departmentManagerSearch"></label>
+            <select class="form-control" id="departmentManagerLevel" onchange="filterDepartmentManagerCards()" aria-label="Filter by job level">
+                <option value="">All job levels</option>
+                <option value="Entry-Level">Entry-Level</option>
+                <option value="Mid-Level">Mid-Level</option>
+                <option value="Leadership">Leadership</option>
+            </select>
+            <span id="departmentManagerResultCount">${displayDepartments.length} departments</span>
+        </section>
+
+        <div class="department-manager-grid" id="departmentManagerGrid">
+            ${cards}
+            <div class="department-manager-empty" id="departmentManagerEmpty" hidden><i data-lucide="search-x"></i><strong>No matching departments</strong><span>Try another name, title, or level.</span></div>
         </div>
     `;
 }
+
+window.saveAllUserManagementChanges = async function () {
+    const rows = [...document.querySelectorAll('[data-user-row]')];
+    if (!rows.length) return;
+    const changes = rows.map(row => ({
+        id: row.dataset.userRow,
+        department_id: row.querySelector('[data-directory-department]')?.value || null,
+        job_title: row.querySelector('[data-directory-job-title]')?.value || '',
+        role: row.querySelector('[data-user-role-select]')?.value || 'EMPLOYEE',
+        manager_id: row.querySelector('[data-user-manager-select]')?.value || null
+    }));
+    const button = document.getElementById('saveAllUsersButton');
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner"></span> Saving...';
+    }
+    const result = await db.saveUserDirectoryChanges(changes);
+    if (!result.success) {
+        showToast(result.error?.message || 'Failed to save all user changes.', 'danger');
+    } else {
+        changes.forEach(change => {
+            const index = (window.currentAdminUsers || []).findIndex(user => user.id === change.id);
+            if (index >= 0) window.currentAdminUsers[index] = { ...window.currentAdminUsers[index], ...change };
+        });
+        showToast(`Saved changes for ${changes.length} users.`, 'success');
+    }
+    if (button) {
+        button.disabled = false;
+        button.innerHTML = '<i data-lucide="save"></i> Save All';
+        if (window.lucide) window.lucide.createIcons();
+    }
+};
+
+window.queueTranslationAutosave = function () {
+    clearTimeout(window.translationAutosaveTimer);
+    window.translationAutosaveTimer = setTimeout(() => {
+        if (currentView === 'translations') window.saveAllTranslations(true);
+    }, 700);
+};
+
+window.departmentManagerCatalog = {
+    'Administrative': [
+        ['Receptionist','Entry-Level'], ['Data Entry Clerk','Entry-Level'], ['Administrative Assistant','Entry-Level'],
+        ['Office Manager','Mid-Level'], ['Executive Assistant (EA)','Mid-Level'], ['Facilities Coordinator','Mid-Level'],
+        ['Director of Administration','Leadership'], ['Chief Administrative Officer (CAO)','Leadership']
+    ],
+    'Marketing': [
+        ['Marketing Coordinator','Entry-Level'], ['Marketing Representative','Entry-Level'], ['Social Media Assistant','Entry-Level'], ['Graphic Designer','Mid-Level'], ['Photographer','Mid-Level'],
+        ['Social Media Manager','Mid-Level'], ['SEO/SEM Specialist','Mid-Level'], ['Content Strategist','Mid-Level'],
+        ['Product Marketing Manager','Mid-Level'], ['Marketing Manager','Leadership'], ['Director of Marketing','Leadership'],
+        ['Chief Marketing Officer (CMO)','Leadership']
+    ],
+    'Sales': [
+        ['Sales Development Representative (SDR)','Entry-Level'], ['Business Development Representative (BDR)','Entry-Level'],
+        ['Sales Coordinator','Entry-Level'], ['Sales Representative','Entry-Level'], ['Customer Services','Entry-Level'], ['Account Executive (AE)','Mid-Level'], ['Account Manager','Mid-Level'],
+        ['Customer Success Manager','Mid-Level'], ['Sales Manager','Leadership'], ['Regional Sales Director','Leadership'],
+        ['Vice President (VP) of Sales','Leadership'], ['Chief Revenue Officer (CRO)','Leadership']
+    ],
+    'IT': [
+        ['Helpdesk Technician','Entry-Level'], ['Desktop Support Analyst','Entry-Level'], ['IT Support Specialist','Entry-Level'],
+        ['Systems Administrator','Mid-Level'], ['Network Engineer','Mid-Level'], ['Database Administrator','Mid-Level'],
+        ['Cybersecurity Analyst','Mid-Level'], ['Software Developer','Mid-Level'], ['IT Manager','Leadership'],
+        ['Director of IT','Leadership'], ['Chief Technology Officer (CTO)','Leadership']
+    ],
+    'Operations and Production': [
+        ['Operations Assistant','Entry-Level'], ['Production Worker','Entry-Level'], ['Logistics Coordinator','Entry-Level'], ['Barista','Entry-Level'],
+        ['Operations Analyst','Mid-Level'], ['Quality Assurance (QA) Specialist','Mid-Level'], ['Production Supervisor','Mid-Level'], ['Technician','Mid-Level'],
+        ['Supply Chain Manager','Mid-Level'], ['Operations Manager','Leadership'], ['Director of Operations','Leadership'],
+        ['Chief Operating Officer (COO)','Leadership']
+    ]
+};
+
+window.selectTaskV2PrivateList = function (listId) {
+    window.taskV2SelectedList = listId;
+    window.taskV2SelectedProject = 'all';
+    document.querySelectorAll('.task-v2-list-link').forEach(button => button.classList.toggle('active', button.getAttribute('onclick')?.includes(`'${listId}'`)));
+    window.filterTasksV2();
+};
+
+window.handlePrivateTaskListSelection = function (listId) {
+    const isPrivate = !!listId;
+    const project = document.getElementById('taskProject');
+    const assignee = document.getElementById('taskAssignee');
+    const watchers = document.getElementById('enableWatchers');
+    const watchersGroup = document.getElementById('taskWatchersGroup');
+    if (project) {
+        if (isPrivate) project.value = '';
+        project.disabled = isPrivate;
+    }
+    if (assignee) {
+        if (isPrivate) assignee.value = currentUser.id;
+        assignee.disabled = isPrivate || currentUserRole === 'EMPLOYEE';
+    }
+    if (watchers) {
+        if (isPrivate) watchers.checked = false;
+        watchers.disabled = isPrivate;
+    }
+    if (watchersGroup && isPrivate) watchersGroup.style.display = 'none';
+};
+
+window.openTaskListModal = function (listId = '') {
+    const modal = document.getElementById('taskListModal');
+    if (!modal) return;
+    const list = (window.taskListsCache || []).find(item => item.id === listId && item.owner_id === currentUser?.id);
+    document.getElementById('taskListEditId').value = list?.id || '';
+    document.getElementById('taskListName').value = list?.name || '';
+    document.getElementById('taskListModalTitle').textContent = list ? t('task_list_share') : t('task_list_new');
+    const selected = new Set(list?.shared_with || []);
+    const picker = document.getElementById('taskListViewerPicker');
+    picker.innerHTML = (window.taskListShareCandidates || []).map(person => `
+        <label class="task-list-viewer-option">
+            <input type="checkbox" value="${escapeHTML(person.id)}" ${selected.has(person.id) ? 'checked' : ''}>
+            <span><strong>${escapeHTML(window.formatEmployeeName(person) || 'Employee')}</strong><small>${escapeHTML(person.job_title || person.role || 'Colleague')}</small></span>
+        </label>`).join('') || `<p class="task-list-help">${t('task_list_no_colleagues')}</p>`;
+    modal.classList.add('active');
+    document.getElementById('taskListName').focus();
+};
+
+window.closeTaskListModal = function () {
+    document.getElementById('taskListModal')?.classList.remove('active');
+};
+
+window.handleSaveTaskList = async function (event) {
+    event.preventDefault();
+    const id = document.getElementById('taskListEditId').value;
+    const name = document.getElementById('taskListName').value.trim();
+    const sharedWith = [...document.querySelectorAll('#taskListViewerPicker input:checked')].map(input => input.value);
+    if (!name) return;
+    const submit = event.currentTarget.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    const result = id
+        ? await db.updateTaskList(id, { name, shared_with: sharedWith })
+        : await db.createTaskList(name, currentUser.id, sharedWith);
+    submit.disabled = false;
+    if (!result.success) {
+        showToast(result.error?.message || 'Unable to save the private list.', 'danger');
+        return;
+    }
+    showToast(id ? 'Private list sharing updated.' : 'Private task list created.', 'success');
+    window.closeTaskListModal();
+    await renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
+};
+Object.keys(window.departmentManagerCatalog).forEach(department => {
+    window.departmentManagerCatalog[department] = window.departmentManagerCatalog[department].map(([title, level]) => ({ title, level }));
+});
+
+window.filterDepartmentManagerCards = () => {
+    const query = (document.getElementById('departmentManagerSearch')?.value || '').trim().toLowerCase();
+    const level = document.getElementById('departmentManagerLevel')?.value || '';
+    const cards = [...document.querySelectorAll('[data-department-card]')];
+    let visible = 0;
+    cards.forEach(card => {
+        const matches = (!query || card.dataset.search.includes(query)) && (!level || card.dataset.levels.split('|').includes(level));
+        card.hidden = !matches;
+        if (matches) visible += 1;
+    });
+    const count = document.getElementById('departmentManagerResultCount');
+    if (count) count.textContent = `${visible} department${visible === 1 ? '' : 's'}`;
+    const empty = document.getElementById('departmentManagerEmpty');
+    if (empty) empty.hidden = visible !== 0;
+};
+
+window.showDepartmentCatalogModal = departmentName => {
+    const roles = (window.departmentManagerCatalog[departmentName] || []).map(role => role.title);
+    window.showDepartmentModal(null).then(() => {
+        document.getElementById('departmentNameEn').value = departmentName;
+        window.currentDepartmentJobTitles = roles;
+        window.renderDepartmentJobTitlesList();
+    });
+};
 
 // ==========================================
 // CRM Features
@@ -7822,7 +8172,8 @@ window.startDealApprovalWorkflow = async function () {
 };
 
 window.decideDealApproval = async function (stepId, decision) {
-    const note = window.prompt(decision === 'REJECTED' ? (t('crm_rejection_note_prompt') || 'Enter the rejection reason:') : (t('crm_approval_note_prompt') || 'Optional approval note:'));
+    const note = await window.showPromptModal(decision === 'REJECTED' ? (t('crm_rejection_note_prompt') || 'Enter the rejection reason:') : (t('crm_approval_note_prompt') || 'Optional approval note:'), t('crm_approval'));
+    if (note === null) return;
     if (decision === 'REJECTED' && !String(note || '').trim()) return showToast(t('crm_rejection_note_required') || 'A rejection reason is required.', 'warning');
     const result = await db.decideDealApproval(stepId, decision, note || '');
     if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the decision.', 'danger');
@@ -8354,11 +8705,9 @@ window.printOrder = async (orderId) => {
 window.showDepartmentModal = async (dept = null) => {
     try {
         if (db.fetchAllProfiles) {
-            const profiles = await db.fetchAllProfiles();
+            const [profiles, departments] = await Promise.all([db.fetchAllProfiles(), db.fetchDepartments()]);
             window.departmentProfilesCache = profiles;
-            const headSelect = document.getElementById('departmentHead');
-            headSelect.innerHTML = '<option value="">Select a head...</option>' +
-                profiles.map(p => `<option value="${p.id}">${escapeHTML(window.formatEmployeeName(p) || 'Employee')} - ${escapeHTML(p.job_title || 'No job title')} (${escapeHTML(p.employee_id || p.email)})</option>`).join('');
+            window.departmentModalDepartmentsCache = departments;
         }
     } catch (e) {
         console.error("Error loading profiles for department head:", e);
@@ -8383,10 +8732,30 @@ window.showDepartmentModal = async (dept = null) => {
         window.currentDepartmentJobTitles = [];
     }
 
+    window.filterDepartmentHeadOptions(dept?.head_id || '');
+
     if(document.getElementById('departmentJobTitleInput')) document.getElementById('departmentJobTitleInput').value = '';
     window.renderDepartmentJobTitlesList();
 
     document.getElementById('departmentModal').classList.add('show');
+};
+
+window.filterDepartmentHeadOptions = function (selectedHeadId = '') {
+    const headSelect = document.getElementById('departmentHead');
+    if (!headSelect) return;
+    const departmentId = document.getElementById('departmentId')?.value || '';
+    const departmentName = document.getElementById('departmentNameEn')?.value.trim().toLowerCase() || '';
+    const department = (window.departmentModalDepartmentsCache || []).find(item =>
+        item.id === departmentId || (!departmentId && item.name?.trim().toLowerCase() === departmentName)
+    );
+    const employees = department
+        ? (window.departmentProfilesCache || []).filter(profile => profile.department_id === department.id)
+        : [];
+    headSelect.innerHTML = '<option value="">Select a department employee...</option>' + employees.map(profile =>
+        `<option value="${profile.id}">${escapeHTML(window.formatEmployeeName(profile) || 'Employee')} — ${escapeHTML(profile.job_title || 'No job title')}</option>`
+    ).join('');
+    headSelect.disabled = !department || employees.length === 0;
+    if (selectedHeadId && employees.some(profile => profile.id === selectedHeadId)) headSelect.value = selectedHeadId;
 };
 window.closeDepartmentModal = () => {
     document.getElementById('departmentModal').classList.remove('show');
@@ -8419,6 +8788,47 @@ window.closeConfirmModal = () => {
     const modal = document.getElementById('confirmModal');
     if (modal) modal.classList.remove('show');
 };
+
+window.showAppMessageModal = (message, title = t('ui_notice') || 'Notice') => {
+    let modal = document.getElementById('appMessageModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'appMessageModal';
+        modal.className = 'modal';
+        modal.style.zIndex = '100001';
+        modal.innerHTML = `<div class="modal-content" style="max-width:440px;text-align:center"><div class="modal-header"><h2 id="appMessageModalTitle"></h2><button type="button" class="close-modal" onclick="document.getElementById('appMessageModal').classList.remove('show')">&times;</button></div><p id="appMessageModalText" style="white-space:pre-line;color:var(--color-text-secondary);margin:1rem 0 1.5rem"></p><button type="button" class="btn btn-primary" onclick="document.getElementById('appMessageModal').classList.remove('show')">${t('btn_ok') || 'OK'}</button></div>`;
+        document.body.appendChild(modal);
+    }
+    document.getElementById('appMessageModalTitle').textContent = title;
+    document.getElementById('appMessageModalText').textContent = String(message || '');
+    modal.classList.add('show');
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.showPromptModal = (message, title = t('ui_input_required') || 'Input required', options = {}) => new Promise(resolve => {
+    let modal = document.getElementById('appPromptModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'appPromptModal';
+        modal.className = 'modal';
+        modal.style.zIndex = '100002';
+        modal.innerHTML = `<div class="modal-content" style="max-width:500px"><div class="modal-header"><h2 id="appPromptModalTitle"></h2><button type="button" class="close-modal" data-prompt-cancel>&times;</button></div><form id="appPromptModalForm"><label class="form-label" id="appPromptModalMessage"></label><textarea id="appPromptModalInput" class="form-control" rows="3"></textarea><div class="modal-actions"><button type="button" class="btn btn-secondary" data-prompt-cancel>${t('btn_cancel')}</button><button type="submit" class="btn btn-primary">${t('html_confirm') || 'Confirm'}</button></div></form></div>`;
+        document.body.appendChild(modal);
+    }
+    const input = document.getElementById('appPromptModalInput');
+    document.getElementById('appPromptModalTitle').textContent = title;
+    document.getElementById('appPromptModalMessage').textContent = message;
+    input.value = options.value || '';
+    input.required = !!options.required;
+    const finish = value => { modal.classList.remove('show'); resolve(value); };
+    modal.querySelectorAll('[data-prompt-cancel]').forEach(button => button.onclick = () => finish(null));
+    document.getElementById('appPromptModalForm').onsubmit = event => { event.preventDefault(); finish(input.value); };
+    modal.classList.add('show');
+    setTimeout(() => input.focus(), 0);
+});
+
+// Route legacy informational alerts through the shared in-app modal.
+window.alert = message => window.showAppMessageModal(message);
 
 window.editDepartment = async (id) => {
     const depts = await db.fetchDepartments();
@@ -8559,8 +8969,8 @@ window.showCRMClientModal = (client = null) => {
         document.getElementById('crmClientCompany').value = client.company || '';
         document.getElementById('crmClientEmail').value = client.email || '';
         document.getElementById('crmClientPhone').value = client.phone || '';
-        document.getElementById('crmClientModalTitle').innerText = 'Edit Client';
-        document.getElementById('crmClientSubmitBtn').innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Save Changes';
+        document.getElementById('crmClientModalTitle').innerText = t('ui_edit_client') || 'Edit Client';
+        document.getElementById('crmClientSubmitBtn').innerHTML = `<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> ${t('html_save_changes')}`;
     } else {
         document.getElementById('crmClientId').value = '';
         document.getElementById('crmClientName').value = '';
@@ -8568,7 +8978,7 @@ window.showCRMClientModal = (client = null) => {
         document.getElementById('crmClientEmail').value = '';
         document.getElementById('crmClientPhone').value = '';
         document.getElementById('crmClientModalTitle').innerText = t('ui_new_client') || 'New Client';
-        document.getElementById('crmClientSubmitBtn').innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Create Client';
+        document.getElementById('crmClientSubmitBtn').innerHTML = `<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> ${t('btn_create_client')}`;
     }
     document.getElementById('crmClientModal').classList.add('show');
     if (window.lucide) window.lucide.createIcons();
@@ -8633,13 +9043,13 @@ window.handleCreateClient = async (e) => {
 window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     const clients = await db.fetchClients();
     const select = document.getElementById('crmDealClient');
-    select.innerHTML = '<option value="">Select a client...</option>' +
+    select.innerHTML = `<option value="">${t('crm_select_client')}</option>` +
         clients.map(c => `<option value="${c.id}">${c.name} (${c.company})</option>`).join('');
 
     const users = await db.fetchUsers();
     const assigneeSelect = document.getElementById('crmDealAssignee');
     if (assigneeSelect) {
-        assigneeSelect.innerHTML = '<option value="">Unassigned</option>' +
+        assigneeSelect.innerHTML = `<option value="">${t('crm_unassigned')}</option>` +
             users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
     }
 
@@ -8648,16 +9058,16 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     const titleEl = document.getElementById('crmDealModalTitle');
     const submitBtn = document.getElementById('crmDealSubmitBtn');
     if (isViewOnly) {
-        titleEl.textContent = 'View Deal Details';
+        titleEl.textContent = t('crm_view_deal');
         submitBtn.style.display = 'none';
     } else if (id) {
-        titleEl.textContent = 'Edit Deal';
+        titleEl.textContent = t('crm_edit_deal');
         submitBtn.style.display = 'block';
-        submitBtn.innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Save Changes';
+        submitBtn.innerHTML = `<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> ${t('html_save_changes')}`;
     } else {
         titleEl.textContent = t('ui_new_deal') || 'New Deal';
         submitBtn.style.display = 'block';
-        submitBtn.innerHTML = '<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> Create Deal';
+        submitBtn.innerHTML = `<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> ${t('crm_create_deal')}`;
     }
 
     // Toggle disabled state for all inputs
@@ -9003,7 +9413,7 @@ function renderRequestWorkflowProgress(workflow, approverNames = {}) {
 window.handleRequestAction = async function (sourceTable, id, decision) {
     let note = null;
     if (decision === 'REJECTED') {
-        note = window.prompt('Please enter the reason for rejecting this request:');
+        note = await window.showPromptModal(t('approval_rejection_reason_prompt'), t('ui_rejected'), { required: true });
         if (note === null) return;
         if (!note.trim()) return showToast('A rejection reason is required.', 'warning');
     }
@@ -9033,16 +9443,16 @@ async function renderMyRequestStatuses() {
     }).join('');
 
     return `<div class="page-header fade-in-up">
-        <div><h1 class="page-title">My Requests</h1><p class="page-subtitle">Track your submitted requests and their current approval status.</p></div>
-        <button type="button" class="btn-primary" onclick="showNewRequestModal()"><i data-lucide="plus"></i> New Request</button>
+        <div><h1 class="page-title">${t('ui_my_requests')}</h1><p class="page-subtitle">${t('ui_track_request_status')}</p></div>
+        <button type="button" class="btn-primary" onclick="showNewRequestModal()"><i data-lucide="plus"></i> ${t('leave_new_req')}</button>
     </div>
     <div class="card fade-in-up" style="margin-bottom:1rem"><div class="form-group" style="max-width:320px;margin:0">
-        <label class="form-label" for="myRequestStatusDate">Search by date</label>
+        <label class="form-label" for="myRequestStatusDate">${t('ui_search_by_date')}</label>
         <input type="date" id="myRequestStatusDate" class="form-control" onchange="filterMyRequestStatuses()">
     </div></div>
     <div class="card fade-in-up"><div class="table-responsive"><table class="data-table">
-        <thead><tr><th>Date</th><th>Request</th><th>Status</th><th>Approval Stage</th><th>Rejection Reason</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--color-text-secondary)">You have not submitted any requests yet.</td></tr>'}</tbody>
+        <thead><tr><th>${t('date')}</th><th>${t('ui_request')}</th><th>${t('status')}</th><th>${t('ui_approval_stage')}</th><th>${t('ui_rejection_reason')}</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--color-text-secondary)">${t('ui_no_submitted_requests')}</td></tr>`}</tbody>
     </table></div></div>`;
 }
 
@@ -9680,13 +10090,13 @@ async function renderApprovals() {
         return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(window.formatEmployeeName(assignee) || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleTaskApprovalDecision('${task.id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleTaskApprovalDecision('${task.id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Watcher access · View only</span>'}</td></tr>`;
     }).join('');
 
-    return `<div class="page-header"><div><h1 class="page-title">${t('ui_approvals_dashboard')}</h1><p class="page-subtitle">Requests and task completions waiting for management approval.</p></div></div>
+    return `<div class="page-header"><div><h1 class="page-title">${t('ui_approvals_dashboard')}</h1><p class="page-subtitle">${t('approvals_subtitle')}</p></div></div>
         <div class="card" style="padding:.5rem;margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
-            <button class="btn-primary" data-approval-tab="requests" onclick="setApprovalsTab('requests')">Employee requests approvals <span class="status-badge">${pendingRequests.length}</span></button>
-            <button class="btn-secondary" data-approval-tab="tasks" onclick="setApprovalsTab('tasks')">Tasks approval <span class="status-badge">${pendingTasks.length}</span></button>
+            <button class="btn-primary" data-approval-tab="requests" onclick="setApprovalsTab('requests')">${t('approvals_employee_requests')} <span class="status-badge">${pendingRequests.length}</span></button>
+            <button class="btn-secondary" data-approval-tab="tasks" onclick="setApprovalsTab('tasks')">${t('approvals_tasks')} <span class="status-badge">${pendingTasks.length}</span></button>
         </div>
-        <section data-approval-panel="requests" class="card"><div class="table-responsive"><table class="data-table"><thead><tr><th>Employee</th><th>Request</th><th>Details</th><th>Current stage</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${requestRows || '<tr><td colspan="6" style="text-align:center;padding:2rem">No employee requests are waiting for your approval.</td></tr>'}</tbody></table></div></section>
-        <section data-approval-panel="tasks" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>Task</th><th>Department</th><th>Project</th><th>Assignee</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${taskRows || '<tr><td colspan="6" style="text-align:center;padding:2rem">No tasks are waiting for approval.</td></tr>'}</tbody></table></div></section>`;
+        <section data-approval-panel="requests" class="card"><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('leave_employee')}</th><th>${t('ui_request')}</th><th>${t('req_details')}</th><th>${t('approvals_current_stage')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${requestRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_employee_requests')}</td></tr>`}</tbody></table></div></section>
+        <section data-approval-panel="tasks" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('nav_tasks')}</th><th>${t('custody_department')}</th><th>${t('ui_project')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${taskRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_tasks')}</td></tr>`}</tbody></table></div></section>`;
 };
 
 window.setApprovalsTab = function (tab) {
@@ -9700,7 +10110,7 @@ window.setApprovalsTab = function (tab) {
 window.handleApprovalRequestDecision = async function (sourceTable, sourceId, decision) {
     let note = null;
     if (decision === 'REJECTED') {
-        note = window.prompt('Please enter the rejection reason:');
+        note = await window.showPromptModal(t('approval_rejection_reason_prompt'), t('ui_rejected'), { required: true });
         if (note === null || !note.trim()) return;
     }
     const result = await db.decideRequestApproval(sourceTable, sourceId, decision, note);
@@ -9715,7 +10125,7 @@ window.handleTaskApprovalDecision = async function (taskId, decision) {
         if (currentView === 'approvals') renderView('approvals');
         return;
     }
-    const reason = window.prompt('Please enter the reason for returning this task:');
+    const reason = await window.showPromptModal(t('task_return_reason_prompt'), t('approvals_tasks'), { required: true });
     if (reason === null || !reason.trim()) return;
     const result = await db.updateTask(taskId, { status: 'in_progress', completion_requested_by: null, completion_requested_at: null });
     if (!result.success) return showToast(result.error?.message || 'Unable to return this task.', 'danger');
@@ -9735,7 +10145,7 @@ window.handleApprovalAction = async function (taskId, newStatus) {
 
     if (newStatus === 'Rejected') {
         if (isDesigningTask) {
-            const reason = prompt("Please enter the rejection reason:");
+            const reason = await window.showPromptModal(t('approval_rejection_reason_prompt'), t('ui_rejected'), { required: true });
             if (reason === null) return; // User cancelled
 
             const res = await db.updateTask(taskId, { delivery_status: 'Edit needed' });
