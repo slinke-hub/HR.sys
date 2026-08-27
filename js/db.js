@@ -2756,6 +2756,49 @@ const db = {
             return { success: false, error };
         }
     },
+    async fetchContractPrintRequests(filters = {}) {
+        if (!supabaseClient) return [];
+        try {
+            let query = supabaseClient.from('contract_print_requests').select('*').order('requested_at', { ascending: false });
+            if (filters.employeeId) query = query.eq('employee_id', filters.employeeId);
+            if (filters.managerId) query = query.eq('manager_id', filters.managerId);
+            if (filters.status) query = query.eq('status', filters.status);
+            const { data, error } = await query;
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchContractPrintRequests Error:', error);
+            return [];
+        }
+    },
+    async requestContractPrint(contractId, employeeId, managerId) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.from('contract_print_requests').insert([{
+                contract_id: contractId, employee_id: employeeId, manager_id: managerId || null
+            }]).select().single();
+            if (error) throw error;
+            if (managerId) await this.createNotification(managerId, 'An employee requested permission to print their contract.');
+            return { success: true, data };
+        } catch (error) {
+            console.error('requestContractPrint Error:', error);
+            return { success: false, error };
+        }
+    },
+    async decideContractPrintRequest(requestId, status, managerNote = null) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.from('contract_print_requests').update({
+                status, manager_note: managerNote, decided_at: new Date().toISOString()
+            }).eq('id', requestId).select().single();
+            if (error) throw error;
+            await this.createNotification(data.employee_id, status === 'APPROVED' ? 'Your contract print request was approved.' : 'Your contract print request was rejected.');
+            return { success: true, data };
+        } catch (error) {
+            console.error('decideContractPrintRequest Error:', error);
+            return { success: false, error };
+        }
+    },
     async updateJobTitleTranslation(jobTitleId, nameAr) {
         if (!supabaseClient) return { success: false };
         try {

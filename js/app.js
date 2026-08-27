@@ -714,6 +714,9 @@ lucide.createIcons();
 window.toggleTheme = function () {
     currentTheme = currentTheme === 'light' ? 'dark' : 'light';
     htmlElement.setAttribute('data-theme', currentTheme);
+    if (currentUser?.id) localStorage.setItem(`muqam_hr_theme_${currentUser.id}`, currentTheme);
+    const themeIcon = document.getElementById('themeIcon');
+    if (themeIcon) themeIcon.setAttribute('data-lucide', currentTheme === 'light' ? 'moon' : 'sun');
     lucide.createIcons();
     const dropdown = document.getElementById('profileDropdown');
     if (dropdown) dropdown.style.display = 'none';
@@ -1190,6 +1193,7 @@ window.handleLoginSubmit = async function (e) {
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
         currentUserRole = profile.role;
+        applyPreferredTheme(profile);
         updateTopbarProfile(profile);
         // Check for Birthday
         if (profile.birth_date) {
@@ -4316,6 +4320,12 @@ window.deleteReminder = async (id) => {
 
 async function renderProfile() {
     const profile = await db.getUserProfile(currentUser.id);
+    const [ownContracts, ownPrintRequests] = await Promise.all([
+        db.fetchContracts(currentUser.id),
+        db.fetchContractPrintRequests({ employeeId: currentUser.id })
+    ]);
+    const ownContract = (ownContracts || []).find(contract => contract.status === 'Active') || ownContracts?.[0] || null;
+    const latestPrintRequest = ownContract ? ownPrintRequests.find(request => request.contract_id === ownContract.id) : null;
     const displayName = getProfileDisplayName(profile);
     const userAvatar = profile.avatar_url || localStorage.getItem('user_avatar_' + currentUser.id);
     const avatar = userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=007AFF&color=fff`;
@@ -4333,11 +4343,13 @@ async function renderProfile() {
                     <img src="${avatar}" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem; border: 4px solid var(--color-background); box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
                 </div>
                 <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem;">${escapeHTML(displayName)}</h3>
-                <p style="color: var(--color-primary); font-weight: 500; margin-bottom: 1.5rem;">${currentUserRole}</p>
+                <p style="color: var(--color-primary); font-weight: 500; margin-bottom: 1.5rem;">${t(`role_${String(currentUserRole || 'employee').toLowerCase()}`) || currentUserRole}</p>
                 <form autocomplete="off" onsubmit="handleUpdateProfilePhoto(event)" style="margin-bottom: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
                     <div class="form-group" style="text-align: left;">
                         <label class="form-label" style="font-size: 0.85rem;">${t('prof_update_pic')}</label>
-                        <input type="file" id="avatarFile" accept="image/*" class="form-control" style="font-size: 0.85rem;" required>
+                        <input type="file" id="avatarFile" accept="image/*" hidden required onchange="document.getElementById('avatarFileName').textContent=this.files?.[0]?.name || t('prof_no_file_selected')">
+                        <label for="avatarFile" class="profile-file-picker"><i data-lucide="image-plus"></i><span>${t('prof_choose_photo')}</span></label>
+                        <small id="avatarFileName" class="profile-file-name">${t('prof_no_file_selected')}</small>
                     </div>
                     <button type="submit" class="btn-secondary" style="width: 100%; transition: all 0.2s;">${t('prof_upload_photo')}</button>
                 </form>
@@ -4373,6 +4385,26 @@ async function renderProfile() {
                         </div>
                         <button type="submit" class="btn-primary" style="transition: all 0.2s;">${t('prof_save')}</button>
                     </form>
+                </div>
+
+                <div class="card profile-contract-card">
+                    <div class="card-title">${t('profile_my_contract')}</div>
+                    ${ownContract ? `
+                        <div class="profile-contract-grid">
+                            <div><span>${t('users_job_title')}</span><strong>${escapeHTML(ownContract.job_title_en || ownContract.job_title || profile.job_title || t('emp_na'))}</strong></div>
+                            <div><span>${t('contract_status')}</span><strong>${escapeHTML(ownContract.status || t('emp_na'))}</strong></div>
+                            <div><span>${t('contract_start')}</span><strong>${escapeHTML(ownContract.start_date || t('emp_na'))}</strong></div>
+                            <div><span>${t('contract_end')}</span><strong>${escapeHTML(ownContract.end_date || t('contract_indefinite'))}</strong></div>
+                            <div><span>${t('prof_iqama')}</span><strong>${escapeHTML(ownContract.identity_number || profile.iqama_number || t('emp_na'))}</strong></div>
+                            <div><span>${t('prof_phone')}</span><strong>${escapeHTML(ownContract.employee_phone || profile.phone_number || t('emp_na'))}</strong></div>
+                        </div>
+                        <div class="profile-contract-actions">
+                            ${latestPrintRequest?.status === 'APPROVED'
+                                ? `<button class="btn btn-primary" onclick="openOwnContractPrint('${ownContract.id}')"><i data-lucide="printer"></i>${t('profile_print_contract')}</button>`
+                                : latestPrintRequest?.status === 'PENDING'
+                                    ? `<span class="status-badge warning">${t('profile_print_pending')}</span>`
+                                    : `<button class="btn btn-secondary" onclick="requestOwnContractPrint('${ownContract.id}')"><i data-lucide="send"></i>${t('profile_request_print')}</button>`}
+                        </div>` : `<p class="text-muted">${t('profile_no_contract')}</p>`}
                 </div>
 
                 <div class="card">
@@ -4740,6 +4772,7 @@ async function renderTasks() {
                         <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeTaskListModal()">${t('btn_cancel')}</button><button class="btn btn-primary" type="submit">${t('task_list_save')}</button></div>
                     </form>
                 </div>
+
             </div>
         `;
     }
@@ -5813,6 +5846,8 @@ window.handleSaveContract = async function (e) {
         department: departmentName,
         job_title_ar: jobTitle,
         job_title_en: jobTitle,
+        identity_number: document.getElementById('contractIdentityNumber')?.value.trim() || null,
+        employee_phone: document.getElementById('contractEmployeePhone')?.value.trim() || null,
 
         start_date: document.getElementById('contractStartDate').value,
         end_date: document.getElementById('contractEndDate').value || null,
@@ -5859,7 +5894,9 @@ window.handleSaveContract = async function (e) {
         await db.updateUserProfile(currentContractEmployeeId, {
             nationality: contractData.nationality,
             base_salary: contractData.salary,
-            display_name_ar: document.getElementById('contractEmployeeNameAr')?.value || null
+            display_name_ar: document.getElementById('contractEmployeeNameAr')?.value || null,
+            iqama_number: contractData.identity_number,
+            phone_number: contractData.employee_phone
         });
         delete window.viewHTMLCache.users;
         delete window.viewHTMLCache.employees;
@@ -5896,6 +5933,8 @@ async function renderContractPage() {
     const selectedDepartment = departments.find(department => department.id === selectedDepartmentId);
     const jobTitle = contract?.job_title || contract?.job_title_en || userProfile?.job_title || '';
     const displayNameAr = userProfile?.display_name_ar || '';
+    const identityNumber = contract?.identity_number || userProfile?.iqama_number || '';
+    const employeePhone = contract?.employee_phone || userProfile?.phone_number || '';
     const startDate = contract?.start_date || '';
     const endDate = contract?.end_date || '';
     const salary = contract?.salary || '';
@@ -5950,6 +5989,14 @@ async function renderContractPage() {
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">Employee Name (Arabic)</label>
                             <input type="text" id="contractEmployeeNameAr" class="form-control" value="${escapeHTML(displayNameAr)}" placeholder="الاسم بالعربي">
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('prof_iqama')}</label>
+                            <input type="text" id="contractIdentityNumber" class="form-control" value="${escapeHTML(identityNumber)}" required>
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label">${t('prof_phone')}</label>
+                            <input type="tel" id="contractEmployeePhone" class="form-control" value="${escapeHTML(employeePhone)}" required>
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">Department</label>
@@ -6085,8 +6132,14 @@ async function renderContractPage() {
 }
 
 async function renderEmployeesDirectory() {
-    const [users, viewerProfile] = await Promise.all([db.fetchUsers(), db.getUserProfile(currentUser?.id)]);
+    const [users, viewerProfile, printRequests] = await Promise.all([
+        db.fetchUsers(),
+        db.getUserProfile(currentUser?.id),
+        db.fetchContractPrintRequests({ managerId: currentUser?.id, status: 'PENDING' })
+    ]);
     const canEditContracts = window.canCurrentUserEditContracts(viewerProfile);
+    const canApprovePrints = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
+    const pendingPrintRequests = canApprovePrints ? printRequests : [];
 
     // Directory is visible to everyone, but we only show basic info.
 
@@ -6117,6 +6170,20 @@ async function renderEmployeesDirectory() {
             <button class="btn-primary" type="button" aria-current="page"><i data-lucide="users"></i> ${t("active_contracts")}</button>
             ${canEditContracts ? `<button class="btn-secondary" type="button" onclick="renderView('archived_contracts')"><i data-lucide="archive"></i> ${t("archived_contracts")}</button>` : ''}
         </div>
+        ${pendingPrintRequests.length ? `
+        <div class="card fade-in-up contract-print-requests">
+            <div class="card-title"><i data-lucide="printer-check"></i> ${t('profile_print_requests')}</div>
+            ${pendingPrintRequests.map(request => {
+                const employee = users.find(user => user.id === request.employee_id);
+                return `<div class="contract-print-request-row">
+                    <span>${escapeHTML(window.formatEmployeeName(employee))}</span>
+                    <div>
+                        <button class="btn btn-primary btn-sm" onclick="handleContractPrintDecision('${request.id}', 'APPROVED')">${t('ui_approve')}</button>
+                        <button class="btn btn-secondary btn-sm" onclick="handleContractPrintDecision('${request.id}', 'REJECTED')">${t('ui_reject')}</button>
+                    </div>
+                </div>`;
+            }).join('')}
+        </div>` : ''}
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-12">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
@@ -6160,9 +6227,9 @@ async function renderEmployeesDirectory() {
                                         <button class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="Edit Contract">
                                             <i data-lucide="file-pen-line"></i> Edit Contract
                                         </button>` : ''}
-                                        <button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')" title="${t('ui_print_contract') || 'Print Contract'}">
+                                        ${u.id === currentUser.id && !canEditContracts ? '' : `<button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')" title="${t('ui_print_contract') || 'Print Contract'}">
                                             <i data-lucide="printer"></i> ${t('ui_print_contract') || 'Print Contract'}
-                                        </button>
+                                        </button>`}
                                     </td>
                                 </tr>
                             `).join('')}
@@ -6202,6 +6269,14 @@ window.handlePrintContract = async (employeeId) => {
     const isUnderManagement = employee.manager_id === currentUser?.id;
     const isAdmin = currentUserRole === 'ADMIN';
     window.canViewFullContractIdentity = isAdmin;
+
+    if (isSelf && !isAdmin && !window.canCurrentUserEditContracts(currentUserProfile)) {
+        const requests = await db.fetchContractPrintRequests({ employeeId, status: 'APPROVED' });
+        if (!requests.length) {
+            showToast(t('profile_print_approval_required'), 'warning');
+            return;
+        }
+    }
 
     if (!isAdmin && !isSelf && !(isManager && isUnderManagement)) {
         showToast("Unauthorized: You do not have permission to view this contract.", "error");
@@ -6267,6 +6342,14 @@ window.handlePrintContract = async (employeeId) => {
             document.body.insertAdjacentHTML('beforeend', modalHTML);
         }
     }
+};
+
+window.handleContractPrintDecision = async (requestId, status) => {
+    const result = await db.decideContractPrintRequest(requestId, status);
+    if (!result.success) return showToast(result.error?.message || t('profile_print_decision_failed'), 'danger');
+    showToast(status === 'APPROVED' ? t('profile_print_approved') : t('profile_print_rejected'), 'success');
+    delete window.viewHTMLCache.employees;
+    renderView('employees');
 };
 
 // ==========================================
@@ -7693,6 +7776,36 @@ async function renderDepartments() {
         </div>
     `;
 }
+
+function applyPreferredTheme(profile) {
+    const savedTheme = profile?.id ? localStorage.getItem(`muqam_hr_theme_${profile.id}`) : null;
+    const role = String(profile?.role || currentUserRole || '').toUpperCase();
+    currentTheme = savedTheme || (['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(role) ? 'dark' : 'light');
+    htmlElement.setAttribute('data-theme', currentTheme);
+    const themeIcon = document.getElementById('themeIcon');
+    if (themeIcon) themeIcon.setAttribute('data-lucide', currentTheme === 'light' ? 'moon' : 'sun');
+}
+
+window.requestOwnContractPrint = async function (contractId) {
+    const profile = currentUserProfile || await db.getUserProfile(currentUser.id);
+    let managerId = profile.manager_id || null;
+    if (!managerId && profile.department_id) {
+        const departments = await db.fetchDepartments();
+        managerId = departments.find(department => department.id === profile.department_id)?.head_id || null;
+    }
+    if (!managerId) return showToast(t('profile_no_department_manager'), 'warning');
+    const result = await db.requestContractPrint(contractId, currentUser.id, managerId);
+    if (!result.success) return showToast(result.error?.message || t('profile_print_request_failed'), 'danger');
+    showToast(t('profile_print_requested'), 'success');
+    delete window.viewHTMLCache.profile;
+    renderView('profile');
+};
+
+window.openOwnContractPrint = function (contractId) {
+    window.currentContractIdToPrint = contractId;
+    window.currentEmployeeIdToPrint = currentUser.id;
+    renderView('contract_preview');
+};
 
 window.saveAllUserManagementChanges = async function () {
     const rows = [...document.querySelectorAll('[data-user-row]')];
@@ -9326,6 +9439,7 @@ async function initApp() {
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
         currentUserRole = profile.role;
+        applyPreferredTheme(profile);
 
         // TEMPORARY OVERRIDE: Force Admin role for privatepple@gmail.com in frontend
         if (currentUser.email && currentUser.email.toLowerCase() === 'privatepple@gmail.com') {

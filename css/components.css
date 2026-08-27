@@ -834,6 +834,38 @@ textarea.form-control {
   margin-right: 0;
 }
 
+/* Keep compact action controls large enough for their icon and stroke. */
+.btn.btn-icon,
+button.btn-icon {
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  line-height: 1;
+}
+
+.btn.btn-icon [data-lucide],
+button.btn-icon [data-lucide] {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex: 0 0 22px;
+}
+
+.action-btn > :is(i, svg) {
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
+  padding: 8px;
+  flex: 0 0 36px;
+}
+
 .btn:hover [data-lucide] {
   transform: scale(1.1);
 }
@@ -4919,3 +4951,43 @@ input.btn-primary,
 .task-list-viewer-option span { display:flex; flex-direction:column; min-width:0; }
 .task-list-viewer-option strong { color:var(--color-text-primary); font-size:.8rem; }
 .task-list-viewer-option small { margin-top:.18rem; color:var(--color-text-secondary); font-size:.7rem; }
+.profile-file-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  min-height: 48px;
+  padding: .75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.profile-file-picker:hover { border-color: var(--color-accent); }
+.profile-menu-item { transition: background .2s ease, color .2s ease, box-shadow .2s ease; }
+[data-theme="dark"] .profile-dropdown-menu .profile-menu-item:hover,
+[data-theme="dark"] .profile-dropdown-menu .profile-menu-item:focus-visible {
+  background: linear-gradient(100deg, rgba(180, 125, 24, .22), rgba(245, 190, 70, .42)) !important;
+  color: #ffe6a3 !important;
+  box-shadow: inset 3px 0 0 #f5c451, 0 0 18px rgba(245, 196, 81, .18);
+}
+[data-theme="dark"] .profile-dropdown-menu .profile-menu-item:hover svg,
+[data-theme="dark"] .profile-dropdown-menu .profile-menu-item:focus-visible svg { color: #ffd76a !important; }
+.profile-file-picker svg { width: 19px; height: 19px; }
+.profile-file-name { display: block; margin-top: .5rem; color: var(--color-text-secondary); text-align: center; overflow-wrap: anywhere; }
+.profile-contract-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; }
+.profile-contract-grid > div { padding: .85rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-base); }
+.profile-contract-grid span { display: block; color: var(--color-text-secondary); font-size: .78rem; margin-bottom: .3rem; }
+.profile-contract-grid strong { color: var(--color-text-primary); }
+.profile-contract-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+.contract-print-requests { margin-bottom: 1rem; }
+.contract-print-requests .card-title { display: flex; align-items: center; gap: .5rem; }
+.contract-print-request-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 0; border-top: 1px solid var(--color-border); }
+.contract-print-request-row > div { display: flex; gap: .5rem; }
+
+@media (max-width: 700px) {
+  .profile-contract-grid { grid-template-columns: 1fr; }
+  .contract-print-request-row { align-items: flex-start; flex-direction: column; }
+}

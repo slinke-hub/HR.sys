@@ -81,6 +81,10 @@ window.renderContractForm = async function() {
                         <label>Iqama Number/Saudi ID</label>
                         <input type="text" id="emp_identity" value="${escapeContractHTML(employee.iqama_number)}" required>
                     </div>
+                    <div class="form-group">
+                        <label>${t('prof_phone')}</label>
+                        <input type="tel" id="emp_phone" value="${escapeContractHTML(employee.phone_number)}" required>
+                    </div>
                 </div>
             </div>
 
@@ -239,6 +243,7 @@ window.getContractFormData = function(status = 'Draft') {
         nationality: nationality === 'SA' ? 'Saudi' : 'Non-Saudi',
         is_saudi: nationality === 'SA',
         identity_number: document.getElementById('emp_identity').value,
+        employee_phone: document.getElementById('emp_phone').value,
         
         job_title_en: document.getElementById('job_title').value,
         job_title: document.getElementById('job_title').value,
@@ -271,6 +276,7 @@ window.saveContractDraft = async function() {
     const data = window.getContractFormData('Draft');
     const res = await db.createContract(data);
     if (res.success) {
+        await db.updateUserProfile(data.employee_id, { iqama_number: data.identity_number, phone_number: data.employee_phone, nationality: data.nationality });
         window.showToast(t('contract_saved_draft') || 'Contract saved as draft.', 'success');
         renderView('employees');
     } else {
@@ -298,6 +304,7 @@ window.submitContract = async function() {
     const data = window.getContractFormData('Pending Employee Approval');
     const res = await db.createContract(data);
     if (res.success) {
+        await db.updateUserProfile(data.employee_id, { iqama_number: data.identity_number, phone_number: data.employee_phone, nationality: data.nationality });
         window.showToast(t('contract_submitted') || 'Contract submitted successfully.', 'success');
         renderView('employees');
     } else {

@@ -206,6 +206,38 @@
   z-index: 5;
 }
 
+[data-theme="dark"] .topbar {
+  --color-bg-base: rgba(21, 31, 52, 0.92);
+  --color-bg-surface: rgba(9, 18, 34, 0.88);
+  --color-bg-elevated: #15233b;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-border: rgba(148, 163, 184, 0.22);
+  --color-primary: #f8fafc;
+  background: linear-gradient(110deg, rgba(7, 16, 31, 0.97), rgba(18, 31, 55, 0.94));
+  border-bottom-color: rgba(56, 189, 248, 0.24);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+}
+
+[data-theme="dark"] .topbar .icon-btn,
+[data-theme="dark"] .topbar .user-name,
+[data-theme="dark"] .topbar .user-role {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .topbar .icon-btn:hover,
+[data-theme="dark"] .topbar .user-profile:hover,
+[data-theme="dark"] .topbar .header-language-switcher:hover {
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.2);
+}
+
+[data-theme="dark"] .topbar .avatar {
+  border: 2px solid rgba(125, 211, 252, 0.7);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
 .search-container {
   display: flex;
   align-items: center;
