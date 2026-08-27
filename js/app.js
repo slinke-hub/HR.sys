@@ -4044,8 +4044,13 @@ async function renderDocuments() {
             </div>
         </div>
         <div class="dashboard-grid fade-in-up">
+            <div class="card col-span-12 document-upload-launcher">
+                <button type="button" class="btn-primary" onclick="document.getElementById('employeeDocumentUploadModal').classList.add('active')"><i data-lucide="plus"></i> ${t('doc_add_new') || 'Add New'}</button>
+            </div>
             <!-- Upload Official Document -->
-            <div class="card col-span-12">
+            <div class="modal" id="employeeDocumentUploadModal">
+              <div class="modal-content document-upload-modal-content">
+                <button type="button" class="icon-btn modal-close-btn" aria-label="Close" onclick="document.getElementById('employeeDocumentUploadModal').classList.remove('active')"><i data-lucide="x"></i></button>
                 <div class="card-title">${t('doc_upload_title')}</div>
                 <form autocomplete="off" onsubmit="handleEmployeeDocSave(event)">
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
@@ -4109,6 +4114,7 @@ async function renderDocuments() {
                         <i data-lucide="save"></i> ${t('doc_save_btn')}
                     </button>
                 </form>
+              </div>
             </div>
             
 
@@ -6197,10 +6203,7 @@ async function renderEmployeesDirectory() {
                     <table class="data-table" id="employeeDirectoryTable">
                         <thead>
                             <tr>
-                                <th>${t('time_emp_id')}</th>
-                                <th>${t('emp_name')}</th>
-                                <th>${t('emp_contact')}</th>
-                                <th>${t('emp_role_title')}</th>
+                                <th>ID</th><th>${t('emp_name')}</th><th>Role</th><th>Department</th><th>Job Title</th><th>Assign Role</th><th>Assign Manager</th><th>${t('users_contract') || 'Contract'}</th>
                                 <th>${t('actions') || 'Actions'}</th>
                             </tr>
                         </thead>
@@ -6212,16 +6215,13 @@ async function renderEmployeesDirectory() {
                                         <div style="font-weight: 600;">${window.formatEmployeeName(u) || t('emp_na')}</div>
                                     </td>
                                     <td>
-                                        <div style="font-size: 0.85rem;">
-                                            <i data-lucide="mail" style="width:12px;height:12px;margin-right:4px;vertical-align:middle;"></i> ${u.id}<br/>
-                                            <i data-lucide="phone" style="width:12px;height:12px;margin-right:4px;vertical-align:middle;"></i> ${u.phone_number || t('emp_na')}<br/>
-                                            <i data-lucide="credit-card" style="width:12px;height:12px;margin-right:4px;vertical-align:middle;"></i> ${u.iqama_number || t('emp_na')}
-                                        </div>
-                                    </td>
-                                    <td>
                                         <span class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${u.role}</span><br/>
-                                        <span style="font-size: 0.85rem; color: var(--text-light); margin-top: 4px; display: inline-block;">${u.job_title || t('emp_no_title')}</span>
                                     </td>
+                                    <td>${escapeHTML(u.department_name || u.department || t('emp_na'))}</td>
+                                    <td>${escapeHTML(u.job_title || t('emp_no_title'))}</td>
+                                    <td>${canEditContracts ? `<select class="form-control directory-inline-select" data-directory-role="${u.id}"><option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>ADMIN</option><option value="MANAGER" ${u.role === 'MANAGER' ? 'selected' : ''}>MANAGER</option><option value="SUPERVISOR" ${u.role === 'SUPERVISOR' ? 'selected' : ''}>SUPERVISOR</option><option value="EMPLOYEE" ${u.role === 'EMPLOYEE' ? 'selected' : ''}>EMPLOYEE</option></select>` : u.role}</td>
+                                    <td>${canEditContracts ? `<select class="form-control directory-inline-select" data-directory-manager="${u.id}"><option value="">${t('no_manager') || 'No Manager'}</option>${users.filter(manager => manager.id !== u.id && ['ADMIN','MANAGER','SUPERVISOR'].includes(manager.role)).map(manager => `<option value="${manager.id}" ${manager.id === u.manager_id ? 'selected' : ''}>${escapeHTML(window.formatEmployeeName(manager))}</option>`).join('')}</select>` : escapeHTML(users.find(manager => manager.id === u.manager_id)?.full_name || t('emp_na'))}</td>
+                                    <td><button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')"><i data-lucide="file-signature"></i> ${t('users_contract') || 'Contract'}</button></td>
                                     <td>
                                         ${canEditContracts ? `
                                         <button class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="Edit Contract">
@@ -10309,6 +10309,7 @@ window.handleApprovalAction = async function (taskId, newStatus) {
 // Global Esc Key Handler for Modals and Popups
 document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
+        window.toggleHeaderSearch?.(false);
         const activeModals = document.querySelectorAll('.modal.active, .modal.show, .popup.active, .slide-panel.active');
         activeModals.forEach(modal => {
             modal.classList.remove('active');
@@ -10318,7 +10319,14 @@ document.addEventListener('keydown', function (event) {
 });
 
 // Global Search Logic
-const searchInput = document.querySelector('.search-input');
+const searchInput = document.querySelector('#headerSearchInput, .search-input');
+window.toggleHeaderSearch = function (open) {
+    const modal = document.getElementById('headerSearchModal');
+    const input = document.getElementById('headerSearchInput');
+    if (!modal) return;
+    modal.hidden = !open;
+    if (open) setTimeout(() => input?.focus(), 0);
+};
 if (searchInput) {
     searchInput.addEventListener('input', function (e) {
         const query = e.target.value.toLowerCase().trim();
@@ -10345,7 +10353,7 @@ if (searchInput) {
     document.addEventListener('keydown', function (event) {
         if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
             event.preventDefault();
-            searchInput.focus();
+            window.toggleHeaderSearch(true);
         }
     });
 }

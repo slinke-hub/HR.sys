@@ -4986,6 +4986,14 @@ input.btn-primary,
 .contract-print-requests .card-title { display: flex; align-items: center; gap: .5rem; }
 .contract-print-request-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 0; border-top: 1px solid var(--color-border); }
 .contract-print-request-row > div { display: flex; gap: .5rem; }
+.document-upload-launcher { display: flex; justify-content: flex-start; }
+.document-upload-modal-content { width: min(1100px, calc(100vw - 1.5rem)); max-height: calc(100vh - 1.5rem); overflow-y: auto; position: relative; }
+.document-upload-modal-content .modal-close-btn { position: absolute; top: .75rem; inset-inline-end: .75rem; z-index: 1; }
+.directory-inline-select { min-width: 125px; padding: .55rem .65rem; }
+.employee-directory-table-wrap { overflow-x: auto; }
+@media (max-width: 900px) {
+  .employee-directory-table-wrap .data-table { min-width: 1120px; }
+}
 
 @media (max-width: 700px) {
   .profile-contract-grid { grid-template-columns: 1fr; }

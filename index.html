@@ -29,8 +29,8 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
-    <link rel="stylesheet" href="css/layout.css?v=6">
-    <link rel="stylesheet" href="css/components.css?v=41">
+    <link rel="stylesheet" href="css/layout.css?v=8">
+    <link rel="stylesheet" href="css/components.css?v=42">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -110,10 +110,7 @@
                 </div>
                 
                 <div class="topbar-actions">
-                    <div class="search-container">
-                        <i data-lucide="search" class="search-icon"></i>
-                        <input type="text" autocomplete="off" placeholder="Search (Cmd/Ctrl + K)" class="search-input" data-i18n-placeholder="search_placeholder">
-                    </div>
+                    <button type="button" class="header-search-trigger" onclick="window.toggleHeaderSearch(true)" data-i18n-title="search_placeholder" aria-label="Search" title="Search"><i data-lucide="search"></i></button>
                     <button type="button" class="header-language-switcher" onclick="window.toggleLanguage()" data-i18n-title="nav_language" aria-label="Switch language" title="Switch language">
                         <i data-lucide="languages"></i>
                     </button>
@@ -151,6 +148,13 @@
                     </div>
                 </div>
             </header>
+            <div class="header-search-modal" id="headerSearchModal" hidden>
+                <div class="header-search-dialog" role="dialog" aria-modal="true" aria-label="Search">
+                    <i data-lucide="search" class="search-icon"></i>
+                    <input id="headerSearchInput" type="text" autocomplete="off" placeholder="Search (Cmd/Ctrl + K)" class="search-input" data-i18n-placeholder="search_placeholder">
+                    <button type="button" class="icon-btn" onclick="window.toggleHeaderSearch(false)" aria-label="Close"><i data-lucide="x"></i></button>
+                </div>
+            </div>
 
             <!-- Dynamic Views Container -->
             <div class="view-container" id="viewContainer">
@@ -1595,7 +1599,7 @@
     <script src="js/data.js?v=27"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=111"></script>
+    <script src="js/app.js?v=113"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">
