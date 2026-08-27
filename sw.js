@@ -1,4 +1,4 @@
-const CACHE_NAME = 'muqam-hr-mobile-v6';
+const CACHE_NAME = 'muqam-hr-mobile-v7';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.json', '/offline.html',
   '/css/variables.css', '/css/layout.css', '/css/components.css',
@@ -61,4 +61,35 @@ self.addEventListener('fetch', event => {
       return cached || network;
     })
   );
+});
+
+self.addEventListener('push', event => {
+  let payload = { title: 'MUQAM HR', body: 'You have a new update.', url: '/?view=notifications' };
+  try {
+    if (event.data) payload = { ...payload, ...event.data.json() };
+  } catch (_error) {
+    payload.body = event.data?.text() || payload.body;
+  }
+  event.waitUntil(self.registration.showNotification(payload.title, {
+    body: payload.body,
+    icon: '/images/logo.png',
+    badge: '/images/logo.png',
+    tag: payload.tag || 'muqam-hr-update',
+    renotify: true,
+    data: { url: payload.url || '/?view=notifications' }
+  }));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || '/?view=notifications', self.location.origin).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const existing = windows.find(client => new URL(client.url).origin === self.location.origin);
+    if (existing) {
+      await existing.navigate(targetUrl);
+      return existing.focus();
+    }
+    return self.clients.openWindow(targetUrl);
+  })());
 });

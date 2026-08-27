@@ -1002,6 +1002,117 @@ textarea.form-control {
   min-width: 190px;
 }
 
+.deal-workflow-button {
+  width: 100%;
+  margin-top: .75rem;
+  justify-content: center;
+}
+
+.deal-workflow-modal {
+  width: min(900px, calc(100vw - 2rem));
+  max-width: 900px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.deal-workflow-section {
+  padding: 1rem 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.deal-workflow-section h3 { margin-bottom: .75rem; }
+
+.workflow-approver-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+  margin: 1rem 0;
+}
+
+.workflow-approver-grid label { display: grid; gap: .4rem; }
+
+.deal-approval-steps,
+.deal-attachment-list,
+.deal-activity-list { display: grid; gap: .65rem; }
+
+.deal-approval-step {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.deal-approval-step.approved { border-inline-start: 4px solid var(--color-success); }
+.deal-approval-step.rejected { border-inline-start: 4px solid var(--color-danger); }
+.deal-approval-index {
+  width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center;
+  background: var(--color-bg-elevated); font-weight: 700;
+}
+.deal-approval-copy { display: grid; gap: .15rem; min-width: 0; }
+.deal-approval-copy span, .deal-approval-copy small, .deal-activity-item small { color: var(--color-text-secondary); }
+.deal-approval-actions { display: flex; gap: .4rem; }
+
+.deal-attachment-form {
+  display: grid;
+  grid-template-columns: minmax(130px, .65fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: .65rem;
+  margin-bottom: .8rem;
+}
+.deal-attachment-item {
+  display: flex; gap: .65rem; align-items: center; padding: .7rem;
+  border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text);
+}
+.deal-attachment-item span { display: grid; min-width: 0; }
+.deal-attachment-item small { color: var(--color-text-secondary); }
+.deal-activity-item { display: grid; grid-template-columns: .75rem 1fr; gap: .6rem; }
+.deal-activity-item > span { width: .65rem; height: .65rem; margin-top: .35rem; border-radius: 50%; background: var(--color-primary); }
+.deal-activity-item div { display: grid; gap: .15rem; }
+.deal-activity-item p { margin: .15rem 0 0; }
+.empty-state-inline { padding: 1rem; text-align: center; color: var(--color-text-secondary); }
+
+.project-deal-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .5rem;
+  padding: .75rem;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: .82rem;
+}
+.project-deal-summary span, .project-deal-summary a { display: flex; align-items: center; gap: .35rem; color: var(--color-text-secondary); }
+.project-deal-summary svg { width: 14px; height: 14px; flex: 0 0 auto; }
+
+.schedule-google-note {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .75rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
+}
+.schedule-google-note svg { width: 18px; height: 18px; }
+.reminder-card { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; border-inline-start: 4px solid var(--color-primary); }
+.reminder-card.completed { opacity: .65; border-inline-start-color: var(--color-success); }
+.reminder-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.reminder-actions .btn { white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .deal-workflow-modal { width: calc(100vw - 1rem); max-height: calc(100vh - 1rem); padding: 1rem; }
+  .workflow-approver-grid, .deal-attachment-form { grid-template-columns: 1fr; }
+  .deal-approval-step { grid-template-columns: 2rem minmax(0, 1fr); }
+  .deal-approval-step > :last-child { grid-column: 2; justify-self: start; }
+  .kanban-col { min-width: min(84vw, 280px); flex-basis: min(84vw, 280px); }
+  .project-deal-summary { grid-template-columns: 1fr; }
+  .reminder-card { flex-direction: column; }
+  .reminder-actions { width: 100%; justify-content: flex-start; }
+}
+
 .deal-status-control {
   display: grid;
   gap: .5rem;
@@ -1993,10 +2104,7 @@ textarea.form-control {
 }
 
 input,
-select,
-textarea {
-  color: #000000 !important;
-}
+
 
 /* Square Card Team Hierarchy Layout */
 .hierarchy-square-tree {
@@ -4720,3 +4828,5 @@ h1, h2, h3, h4, h5, h6, p, span, .nav-item span, label {
         animation: none;
     }
 }
+
+select.form-control { min-height: 42px; padding-top: 0.5rem; padding-bottom: 0.5rem; }

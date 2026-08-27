@@ -88,8 +88,17 @@ window.renderContractForm = async function() {
                 <h3>3. Job Details</h3>
                 <div class="form-grid">
                     <div class="form-group">
+                        <label>Department</label>
+                        <select id="contract_department" onchange="window.updateContractJobTitles(this.value)">
+                            <option value="">Select Department</option>
+                            ${(appCache?.departments?.data || []).map(d => `<option value="${d.name}" ${employee.department_id === d.id ? 'selected' : ''}>${escapeContractHTML(d.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label>Job Title</label>
-                        <select id="job_title" required>${typeof companyJobTitleOptions === 'function' ? companyJobTitleOptions(employee.job_title || '') : `<option value="${escapeContractHTML(employee.job_title)}">${escapeContractHTML(employee.job_title)}</option>`}</select>
+                        <select id="job_title" required>
+                            <option value="">Select Department First</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Work Arrangement</label>
@@ -414,4 +423,11 @@ window.renderContractPrintPreview = async function() {
             </div>
         </div>
     `;
+};
+
+window.updateContractJobTitles = function(deptName) {
+    const jobTitleSelect = document.getElementById('job_title');
+    if (jobTitleSelect) {
+        jobTitleSelect.innerHTML = typeof companyJobTitleOptions === 'function' ? companyJobTitleOptions('', deptName) : '<option value=\'\'>Select Department First</option>';
+    }
 };

@@ -1253,3 +1253,48 @@ body.modal-open {
     flex: 0 0 auto;
   }
 }
+
+
+/* Responsive Header Overrides for iPad & Mobile */
+@media (max-width: 1024px) {
+  .topbar {
+    gap: 0.5rem !important;
+    padding-inline: 1rem !important;
+  }
+  .topbar-actions {
+    flex: 1 !important;
+    justify-content: flex-end !important;
+    gap: 0.5rem !important;
+    min-width: 0 !important;
+  }
+  .search-container {
+    max-width: 180px !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+  .user-info {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding-left: max(0.5rem, env(safe-area-inset-left)) !important;
+    padding-right: max(0.5rem, env(safe-area-inset-right)) !important;
+  }
+  .search-container {
+    display: none !important; /* Hide search on iPad portrait and below to prevent squishing */
+  }
+  .app-logo {
+    max-width: 140px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-logo {
+    max-width: 120px !important;
+  }
+  .topbar-actions {
+    gap: 0.25rem !important;
+  }
+}

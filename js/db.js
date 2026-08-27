@@ -657,7 +657,7 @@ const db = {
             return [];
         }
     },
-    async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '', departmentId = '', nationality = 'Saudi', fullNameAr = '') {
+    async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '', departmentId = '', nationality = 'Saudi', fullNameAr = '', employeeId = '') {
         if (!supabaseClient) {
             console.warn("Mock createUser");
             return { data: 'mock-user-id-1234', error: null };
@@ -670,7 +670,8 @@ const db = {
                 new_job_title: jobTitle,
                 new_full_name: fullName,
                 new_iqama: iqama,
-                new_phone: phone
+                new_phone: phone,
+                new_employee_id: employeeId
             });
             if (error) {
                 if (error.code === '42P04' || error.status === 409 || error.message.includes('already exists')) {
@@ -904,7 +905,7 @@ const db = {
     async fetchProjects(userId = null) {
         if (!supabaseClient) return [];
         try {
-            let query = supabaseClient.from('projects').select('*').order('created_at', { ascending: false });
+            let query = supabaseClient.from('projects').select('*, crm_clients(name, company)').order('created_at', { ascending: false });
             // Let RLS handle user-specific project visibility, or we can explicitely filter:
             // if (userId) { ... }
             const { data, error } = await query;
@@ -1396,12 +1397,14 @@ const db = {
             return [];
         }
     },
-    async createNotification(userId, message) {
+    async createNotification(userId, message, taskId = null) {
         if (!supabaseClient) return { success: false };
         try {
+            const payload = { user_id: userId, message };
+            if (taskId) payload.task_id = taskId;
             const { error } = await supabaseClient
                 .from('notifications')
-                .insert([{ user_id: userId, message }]);
+                .insert([payload]);
             if (error) throw error;
             return { success: true };
         } catch (error) {
@@ -1861,6 +1864,48 @@ const db = {
             return { success: false, error };
         }
     },
+    async getPushPublicKey() {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.functions.invoke('push-notification-dispatcher', { body: { action: 'config' } });
+            if (error) throw error;
+            if (!data?.publicKey) throw new Error('Push notification service is not configured.');
+            return { success: true, publicKey: data.publicKey };
+        } catch (error) {
+            console.error('getPushPublicKey Error:', error);
+            return { success: false, error };
+        }
+    },
+    async savePushSubscription(userId, subscription) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const json = subscription.toJSON();
+            const { error } = await supabaseClient.from('push_subscriptions').upsert({
+                user_id: userId,
+                endpoint: json.endpoint,
+                p256dh: json.keys?.p256dh,
+                auth_key: json.keys?.auth,
+                user_agent: navigator.userAgent,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'endpoint' });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('savePushSubscription Error:', error);
+            return { success: false, error };
+        }
+    },
+    async dispatchPushNotifications() {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.functions.invoke('push-notification-dispatcher', { body: { action: 'dispatch' } });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.warn('Push delivery deferred:', error?.message || error);
+            return { success: false, error };
+        }
+    },
     
     async fetchDepartments(forceRefresh = false) {
         if (!supabaseClient) return [];
@@ -1887,11 +1932,7 @@ const db = {
             return appCache.jobTitles.data;
         }
         try {
-            const { data, error } = await supabaseClient
-                .from('job_titles')
-                .select('id,name,name_ar,department_id,is_active')
-                .eq('is_active', true)
-                .order('name');
+            const { data, error } = await supabaseClient.from('job_titles').select('*');
             if (error) throw error;
             const mapped = (data || []).map(applyI18nGetters);
             appCache.jobTitles = { data: mapped, time: Date.now() };
@@ -2110,6 +2151,90 @@ const db = {
             return { success: false, error };
         }
     },
+    async fetchDealWorkflow(dealId) {
+        if (!supabaseClient) return { approvals: [], attachments: [], activity: [] };
+        try {
+            const [approvals, attachments, activity] = await Promise.all([
+                supabaseClient.from('crm_deal_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title)').eq('deal_id', dealId).order('step_order'),
+                supabaseClient.from('crm_deal_attachments').select('*').eq('deal_id', dealId).order('created_at', { ascending: false }),
+                supabaseClient.from('crm_deal_activity').select('*, profiles:actor_id(full_name, display_name_ar)').eq('deal_id', dealId).order('created_at', { ascending: false })
+            ]);
+            const firstError = approvals.error || attachments.error || activity.error;
+            if (firstError) throw firstError;
+            return { approvals: approvals.data || [], attachments: attachments.data || [], activity: activity.data || [] };
+        } catch (error) {
+            console.error('fetchDealWorkflow Error:', error);
+            return { approvals: [], attachments: [], activity: [], error };
+        }
+    },
+    async startDealApproval(dealId, approvers) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.rpc('start_deal_approval', {
+                p_deal_id: dealId,
+                p_marketing_manager: approvers.marketingManager,
+                p_general_manager: approvers.generalManager,
+                p_operations_manager: approvers.operationsManager
+            });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('startDealApproval Error:', error);
+            return { success: false, error };
+        }
+    },
+    async decideDealApproval(stepId, decision, note) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.rpc('decide_deal_approval', {
+                p_step_id: stepId,
+                p_decision: decision,
+                p_note: note || null
+            });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('decideDealApproval Error:', error);
+            return { success: false, error };
+        }
+    },
+    async uploadDealAttachment(dealId, userId, file, category, description) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const safeName = String(file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+            const path = `${dealId}/${Date.now()}-${safeName}`;
+            const { error: uploadError } = await supabaseClient.storage.from('crm-deal-files').upload(path, file, { upsert: false });
+            if (uploadError) throw uploadError;
+            const { data: publicData } = supabaseClient.storage.from('crm-deal-files').getPublicUrl(path);
+            const { data, error } = await supabaseClient.from('crm_deal_attachments').insert([{
+                deal_id: dealId,
+                category: category || 'OTHER',
+                file_name: file.name,
+                file_url: publicData.publicUrl,
+                description: description || null,
+                uploaded_by: userId
+            }]).select().single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('uploadDealAttachment Error:', error);
+            return { success: false, error };
+        }
+    },
+    async logDealActivity(dealId, action, fromStatus, toStatus, note) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.from('crm_deal_activity').insert([{
+                deal_id: dealId, action, from_status: fromStatus || null, to_status: toStatus || null,
+                note: note || null, actor_id: (await supabaseClient.auth.getUser()).data.user?.id
+            }]);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('logDealActivity Error:', error);
+            return { success: false, error };
+        }
+    },
     async createOrder(orderData, dealId) {
         if (!supabaseClient) return { success: false };
         try {
@@ -2124,6 +2249,28 @@ const db = {
             return { success: true };
         } catch (error) {
             console.error("createOrder Error:", error);
+            return { success: false, error };
+        }
+    },
+    async createProjectFromWonDeal(projectData, dealId) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.rpc('create_project_from_won_deal', {
+                p_deal_id: dealId,
+                p_event_date: projectData.event_date || null,
+                p_start_date: projectData.start_date || null,
+                p_end_date: projectData.end_date || null,
+                p_uninstallation_date: projectData.uninstallation_date || null,
+                p_event_location: projectData.event_location || null,
+                p_project_amount: projectData.invoice_amount || 0,
+                p_paid_amount: projectData.paid_amount || 0,
+                p_project_status: projectData.project_status || 'Not Confirmed',
+                p_notes: projectData.notes || null
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('createProjectFromWonDeal Error:', error);
             return { success: false, error };
         }
     },

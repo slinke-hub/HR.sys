@@ -108,21 +108,11 @@ let deferredPrompt;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(registrations.map(registration => registration.unregister()));
-            if ('caches' in window) {
-                const cacheNames = await caches.keys();
-                await Promise.all(cacheNames.filter(name => name.startsWith('hr-sys-')).map(name => caches.delete(name)));
-            }
-            console.log('Legacy service workers and caches cleared.');
-            if (navigator.serviceWorker.controller && sessionStorage.getItem('sw_cleanup_reloaded') !== 'true') {
-                sessionStorage.setItem('sw_cleanup_reloaded', 'true');
-                window.location.reload();
-                return;
-            }
-            sessionStorage.removeItem('sw_cleanup_reloaded');
-        } catch (cleanupError) {
-            console.warn('Service worker cleanup failed:', cleanupError);
+            const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+            registration.update().catch(() => {});
+            console.log('MUQAM HR background service registered.');
+        } catch (error) {
+            console.warn('Background service registration failed:', error?.message || error);
         }
     });
 }
@@ -228,7 +218,7 @@ window.showEditUserModal = async (userId) => {
     mgrSelect.innerHTML = '<option value="">No Manager</option>';
     const users = await db.fetchUsers();
     users.filter(m => m.role === 'MANAGER' || m.role === 'ADMIN').forEach(m => {
-        mgrSelect.innerHTML += `<option value="${m.id}" ${user.manager_id === m.id ? 'selected' : ''}>${m.full_name || 'Mgr'}</option>`;
+        mgrSelect.innerHTML += `<option value="${m.id}" ${user.manager_id === m.id ? 'selected' : ''}>${window.formatEmployeeName(m) || 'Mgr'}</option>`;
     });
 
     document.getElementById('editUserModal').classList.add('active');
@@ -244,7 +234,7 @@ window.refreshUserRowInPlace = async function (userId, knownUpdates = null) {
     const row = document.querySelector(`[data-user-row="${userId}"]`);
     if (!row) return;
     const details = row.querySelector('[data-user-details]');
-    if (details) details.innerHTML = `<div style="font-weight:bold;color:var(--primary-color);">EMP-${escapeHTML(String(user.emp_index || 'New'))}</div><div style="font-weight:bold;">${escapeHTML(user.full_name || 'N/A')}</div><div style="font-size:.8rem;color:var(--text-light);">ID: <span title="${user.id}">${user.id.substring(0, 8)}...</span><br>Iqama: ${escapeHTML(user.iqama_number || 'N/A')}<br>Phone: ${escapeHTML(user.phone_number || 'N/A')}</div>`;
+    if (details) details.innerHTML = `<div style="font-weight:bold;color:var(--primary-color);">EMP-${escapeHTML(String(user.emp_index || 'New'))}</div><div style="font-weight:bold;">${escapeHTML(window.formatEmployeeName(user) || 'N/A')}</div><div style="font-size:.8rem;color:var(--text-light);">ID: <span title="${user.id}">${user.id.substring(0, 8)}...</span><br>Iqama: ${escapeHTML(user.iqama_number || 'N/A')}<br>Phone: ${escapeHTML(user.phone_number || 'N/A')}</div>`;
     const badge = row.querySelector('[data-user-role-badge]');
     if (badge) {
         badge.className = `status-badge ${user.role === 'ADMIN' ? 'success' : 'info'}`;
@@ -314,7 +304,7 @@ window.showAdminPasswordResetModal = (userId) => {
     const form = document.getElementById('adminPasswordResetForm');
     form.reset();
     document.getElementById('adminPasswordResetUserId').value = user.id;
-    document.getElementById('adminPasswordResetUserName').textContent = user.full_name || `EMP-${user.emp_index || ''}`;
+    document.getElementById('adminPasswordResetUserName').textContent = window.formatEmployeeName(user) || `EMP-${user.emp_index || ''}`;
     document.getElementById('adminNewPassword').type = 'password';
     document.getElementById('adminConfirmPassword').type = 'password';
     document.getElementById('adminPasswordResetModal').classList.add('show');
@@ -447,7 +437,7 @@ window.renderRequests = async () => {
         return `
         <tr>
             <td>${new Date(r.created_at).toLocaleDateString()}</td>
-            <td>${r.profiles?.full_name || 'Unknown'}</td>
+            <td>${window.formatEmployeeName(r.profiles) || 'Unknown'}</td>
             <td>
                 ${r.request_type}
                 ${r.loan_amount ? `<br><small style="color:var(--color-text-secondary)">SAR ${r.loan_amount}</small>` : ''}
@@ -512,7 +502,7 @@ window.showNewRequestModal = async () => {
         empSelect.innerHTML = `<option value="${currentUser.id}">${currentUser.email}</option>`;
         empSelect.disabled = true;
     } else {
-        empSelect.innerHTML = users.map(u => `<option value="${u.id}" ${u.id === currentUser.id ? 'selected' : ''}>${u.full_name || u.email}</option>`).join('');
+        empSelect.innerHTML = users.map(u => `<option value="${u.id}" ${u.id === currentUser.id ? 'selected' : ''}>${window.formatEmployeeName(u) || u.email}</option>`).join('');
         empSelect.disabled = false;
     }
 
@@ -730,6 +720,16 @@ window.toggleTheme = function () {
 }
 
 // --- LANGUAGE MANAGEMENT ---
+
+window.formatEmployeeName = (profile) => {
+    if (!profile) return 'Unknown';
+    if (typeof profile === 'string') return profile;
+    if (typeof currentLang !== 'undefined' && currentLang === 'ar' && profile.display_name_ar) {
+        return profile.display_name_ar;
+    }
+    return profile.full_name || profile.display_name || 'Unknown';
+};
+
 window.toggleLanguage = function () {
     currentLang = currentLang === 'en' ? 'ar' : 'en';
     localStorage.setItem('app_lang', currentLang);
@@ -961,7 +961,7 @@ async function renderCommunity() {
                 ${m.profiles.avatar_url ? `<img src="${m.profiles.avatar_url}" style="width:100%;height:100%;object-fit:cover;">` : `<i data-lucide="user"></i>`}
             </div>
             <div style="max-width:70%; ${m.is_birthday_alert ? 'background: linear-gradient(135deg, #fce7f3, #fbcfe8); border: 1px solid #f9a8d4;' : (m.user_id === currentUser.id ? 'background:var(--color-primary); color:white;' : 'background:var(--color-surface); border:1px solid var(--color-border);')} padding:1rem; border-radius:8px;">
-                <div style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; ${m.user_id === currentUser.id ? 'color:rgba(255,255,255,0.9);' : 'color:var(--color-text-secondary);'}">${m.profiles.full_name}</div>
+                <div style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; ${m.user_id === currentUser.id ? 'color:rgba(255,255,255,0.9);' : 'color:var(--color-text-secondary);'}">${window.formatEmployeeName(m.profiles)}</div>
                 <div style="${m.is_birthday_alert ? 'font-weight:bold; font-size:1.1rem; color: #be185d;' : ''}">${m.message}</div>
                 <div style="font-size:0.75rem; margin-top:0.5rem; ${m.user_id === currentUser.id ? 'color:rgba(255,255,255,0.7);' : 'color:var(--color-text-tertiary);'}">${new Date(m.created_at).toLocaleString()}</div>
             </div>
@@ -1099,7 +1099,7 @@ async function canCurrentUserAccessView(viewId) {
     if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
     if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
 
-    if (viewId === 'orders' || viewId === 'projects' || viewId === 'crm' || viewId === 'clients') {
+    if (viewId === 'projects' || viewId === 'crm' || viewId === 'clients') {
         const dept = (await getCurrentDepartmentName()).trim().toLowerCase();
         return normalizedRole === 'EMPLOYEE' && (dept === 'marketing & sales' || dept === 'sales' || dept === 'marketing');
     }
@@ -1118,7 +1118,6 @@ window.updateSidebarVisibility = async function () {
     const templatesNav = document.getElementById('navTemplates');
     const approvalsNav = document.getElementById('navApprovals');
     const payrollNav = document.getElementById('navPayroll');
-    const ordersNav = document.querySelector('.nav-item[data-view="orders"]');
     const projectsNav = document.querySelector('.nav-item[data-view="projects"]');
     const crmNav = document.querySelector('.nav-item[data-view="crm"]');
 
@@ -1135,7 +1134,6 @@ window.updateSidebarVisibility = async function () {
     if (payrollNav) payrollNav.style.display = (isAdmin || isAccountantManager) ? 'flex' : 'none';
 
     const canUseMarketingPages = isAdmin || (normalizedRole === 'EMPLOYEE' && (['marketing & sales', 'sales', 'marketing'].includes((await getCurrentDepartmentName()).trim().toLowerCase())));
-    if (ordersNav) ordersNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (projectsNav) projectsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (crmNav) crmNav.style.display = canUseMarketingPages ? 'flex' : 'none';
 
@@ -1196,7 +1194,7 @@ window.handleLoginSubmit = async function (e) {
             const today = new Date();
             const bday = new Date(profile.birth_date);
             if (today.getMonth() === bday.getMonth() && today.getDate() === bday.getDate()) {
-                const bdayMessage = `🎉 ${t('birthday_msg')} ${profile.full_name}! 🎂🎈`;
+                const bdayMessage = `🎉 ${t('birthday_msg')} ${window.formatEmployeeName(profile)}! 🎂🎈`;
 
                 // Check if we already posted it today to prevent duplicates
                 const chat = await db.fetchCommunityChat();
@@ -1226,9 +1224,10 @@ window.handleLoginSubmit = async function (e) {
         'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
         'archived_contracts', 'messages', 'notifications', 'performance',
         'documents', 'profile', 'projects', 'approvals', 'tasks',
-        'departments', 'translations', 'clients', 'crm', 'orders', 'integrations', 'custody_handover'
+        'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover'
     ]);
-    const _loginSavedView = currentUser ? (localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view')) : null;
+    const _loginRequestedView = new URLSearchParams(window.location.search).get('view');
+    const _loginSavedView = _loginRequestedView || (currentUser ? (localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view')) : null);
     currentView = (_loginSavedView && _loginRestorableViews.has(_loginSavedView)) ? _loginSavedView : 'dashboard';
     // Do not restore a sidebar page hidden for this user's role
     const _loginRestoredNav = document.querySelector(`.nav-item[data-view="${currentView}"]`);
@@ -1446,11 +1445,11 @@ async function renderTeamHierarchyWidget() {
         const userAvatar = user.avatar_url || localStorage.getItem('user_avatar_' + user.id) || '';
         const hasCustomAvatar = userAvatar && typeof userAvatar === 'string' && userAvatar.trim().length > 0;
         const avatarContent = hasCustomAvatar
-            ? `<img src="${escapeHTML(userAvatar.trim())}" class="hierarchy-square-avatar" alt="${escapeHTML(user.full_name || 'Employee')}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
+            ? `<img src="${escapeHTML(userAvatar.trim())}" class="hierarchy-square-avatar" alt="${escapeHTML(window.formatEmployeeName(user) || 'Employee')}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
                <span class="hierarchy-square-avatar hierarchy-avatar-placeholder" hidden aria-label="Profile photo unavailable"><i data-lucide="user"></i></span>`
             : `<span class="hierarchy-square-avatar hierarchy-avatar-placeholder" aria-label="No profile photo"><i data-lucide="user"></i></span>`;
         const avatarMarkup = canViewEmployeeInfo
-            ? `<button type="button" class="hierarchy-avatar-button" aria-label="View ${escapeHTML(user.full_name || 'employee')} information" onclick="openHierarchyEmployeeInfo('${user.id}')">${avatarContent}</button>`
+            ? `<button type="button" class="hierarchy-avatar-button" aria-label="View ${escapeHTML(window.formatEmployeeName(user) || 'employee')} information" onclick="openHierarchyEmployeeInfo('${user.id}')">${avatarContent}</button>`
             : avatarContent;
 
         return `
@@ -1458,7 +1457,7 @@ async function renderTeamHierarchyWidget() {
                 <div class="hierarchy-square-card ${isSelf ? 'is-self-card' : ''}">
                     ${avatarMarkup}
                     <div style="width: 100%;">
-                        <div class="hierarchy-square-name" title="${escapeHTML(user.full_name || 'Employee')}">${escapeHTML(user.full_name || 'Employee')}</div>
+                        <div class="hierarchy-square-name" title="${escapeHTML(window.formatEmployeeName(user) || 'Employee')}">${escapeHTML(window.formatEmployeeName(user) || 'Employee')}</div>
                         <div class="hierarchy-square-title" title="${escapeHTML(user.job_title || 'Team Member')}">${escapeHTML(user.job_title || 'Team Member')}</div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.3rem; margin-top: auto;">
@@ -1533,11 +1532,11 @@ window.openHierarchyEmployeeInfo = function (userId) {
     modal.innerHTML = `<div class="modal-content hierarchy-employee-card">
         <button type="button" class="close-modal" aria-label="Close employee information" onclick="closeHierarchyEmployeeInfo()">&times;</button>
         <div class="hierarchy-employee-card-header">
-            ${avatar ? `<img src="${escapeHTML(avatar)}" alt="${escapeHTML(employee.full_name || 'Employee')}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;"><span class="hierarchy-employee-card-avatar hierarchy-avatar-placeholder" hidden><i data-lucide="user"></i></span>` : `<span class="hierarchy-employee-card-avatar hierarchy-avatar-placeholder"><i data-lucide="user"></i></span>`}
-            <div><h2 id="hierarchyEmployeeInfoTitle">${escapeHTML(employee.full_name || 'Employee')}</h2><p>${escapeHTML(employee.job_title || 'No job title')}</p></div>
+            ${avatar ? `<img src="${escapeHTML(avatar)}" alt="${escapeHTML(window.formatEmployeeName(employee) || 'Employee')}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;"><span class="hierarchy-employee-card-avatar hierarchy-avatar-placeholder" hidden><i data-lucide="user"></i></span>` : `<span class="hierarchy-employee-card-avatar hierarchy-avatar-placeholder"><i data-lucide="user"></i></span>`}
+            <div><h2 id="hierarchyEmployeeInfoTitle">${escapeHTML(window.formatEmployeeName(employee) || 'Employee')}</h2><p>${escapeHTML(employee.job_title || 'No job title')}</p></div>
         </div>
         <dl class="hierarchy-employee-details">
-            <div><dt>Full Name</dt><dd>${escapeHTML(employee.full_name || 'Not provided')}</dd></div>
+            <div><dt>Full Name</dt><dd>${escapeHTML(window.formatEmployeeName(employee) || 'Not provided')}</dd></div>
             <div><dt>Nationality</dt><dd>${escapeHTML(employee.nationality || 'Not provided')}</dd></div>
             <div><dt>Iqama / ID Number</dt><dd>${escapeHTML(employee.iqama_number || 'Not provided')}</dd></div>
             <div><dt>Phone Number</dt><dd>${escapeHTML(employee.phone_number || 'Not provided')}</dd></div>
@@ -2161,10 +2160,10 @@ async function renderTime() {
     const initialVisibleCount = canViewAllAttendance ? punches.filter(punch => dateKey(punch.punch_time) === todayKey).length : punches.length;
 
     let tableRows = punches.map(p => `
-        <tr class="attendance-record-row" data-attendance-date="${dateKey(p.punch_time)}" data-employee-name="${escapeHTML(String(employeeMap[p.employee_id]?.full_name || '').toLowerCase())}" data-employee-id="${escapeHTML(String(employeeMap[p.employee_id]?.iqama_number || p.employee_id || '').toLowerCase())}" ${canViewAllAttendance && dateKey(p.punch_time) !== todayKey ? 'hidden' : ''}>
+        <tr class="attendance-record-row" data-attendance-date="${dateKey(p.punch_time)}" data-employee-name="${escapeHTML(String(window.formatEmployeeName(employeeMap[p.employee_id]) || '').toLowerCase())}" data-employee-id="${escapeHTML(String(employeeMap[p.employee_id]?.iqama_number || p.employee_id || '').toLowerCase())}" ${canViewAllAttendance && dateKey(p.punch_time) !== todayKey ? 'hidden' : ''}>
             <td>${new Date(p.punch_time).toLocaleDateString()}</td>
             <td>${new Date(p.punch_time).toLocaleTimeString()}</td>
-            ${canViewAllAttendance ? `<td><strong>${escapeHTML(employeeMap[p.employee_id]?.full_name || 'Unknown employee')}</strong></td><td>${escapeHTML(employeeMap[p.employee_id]?.iqama_number || p.employee_id)}</td>` : ''}
+            ${canViewAllAttendance ? `<td><strong>${escapeHTML(window.formatEmployeeName(employeeMap[p.employee_id]) || 'Unknown employee')}</strong></td><td>${escapeHTML(employeeMap[p.employee_id]?.iqama_number || p.employee_id)}</td>` : ''}
             <td>${p.punch_type}</td>
             <td><span class="status-badge ${p.punch_type === 'IN' ? 'success' : 'info'}">${p.punch_type}</span></td>
         </tr>
@@ -2174,7 +2173,7 @@ async function renderTime() {
         tableRows = `<tr><td colspan="${canViewAllAttendance ? 6 : 4}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
     }
 
-    const empName = viewerProfile?.full_name || currentUser?.user_metadata?.full_name || 'Employee';
+    const empName = window.formatEmployeeName(viewerProfile) || window.formatEmployeeName(currentUser?.user_metadata) || 'Employee';
     const isSystemAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
     const pageTitle = isSystemAdmin ? t('nav_time') : `${t('nav_time')} - ${escapeHTML(empName)}`;
     return `
@@ -2219,8 +2218,8 @@ window.openTaskDetailsModal = async function (id) {
 
     document.getElementById('detailsTaskId').value = task.id;
     document.getElementById('detailsTaskTitle').textContent = task.displayTitle || task.title;
-    document.getElementById('detailsTaskAssignee').textContent = task.assignee?.full_name || 'Unassigned';
-    document.getElementById('detailsTaskCreator').textContent = task.creator?.full_name || 'System';
+    document.getElementById('detailsTaskAssignee').textContent = window.formatEmployeeName(task.assignee) || 'Unassigned';
+    document.getElementById('detailsTaskCreator').textContent = window.formatEmployeeName(task.creator) || 'System';
     document.getElementById('detailsTaskStatus').textContent = task.status;
     document.getElementById('detailsTaskPriority').textContent = task.priority;
     document.getElementById('detailsTaskVisibility').textContent = task.visibility || 'public';
@@ -2277,7 +2276,7 @@ window.openTaskDetailsModal = async function (id) {
         list.innerHTML = comments.map(c => `
             <div style="background: var(--color-bg-base); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--color-border); margin-bottom: 0.5rem; box-shadow: var(--shadow-sm);">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
-                    <strong>${escapeHTML(c.user?.full_name || 'Unknown User')}</strong>
+                    <strong>${escapeHTML(window.formatEmployeeName(c.user) || 'Unknown User')}</strong>
                     <span style="font-size: 0.75rem; color: var(--color-text-secondary);">${new Date(c.created_at).toLocaleString()}</span>
                 </div>
                 <div>${escapeHTML(c.content)}</div>
@@ -2417,7 +2416,7 @@ function renderRecentLoginsHTML(profiles) {
         .slice(0, 5)
         .map(profile => `
             <div style="display:flex; justify-content:space-between; gap:1rem; margin-bottom:0.5rem;">
-                <span>${escapeHTML(profile.full_name || 'Employee')}</span>
+                <span>${escapeHTML(window.formatEmployeeName(profile) || 'Employee')}</span>
                 <time datetime="${escapeHTML(profile.last_login)}" style="color:var(--color-text-secondary); font-size:0.85rem; white-space:nowrap;">${new Date(profile.last_login).toLocaleString()}</time>
             </div>
         `).join('') || `<p>${t('ui_no_recent_logins') || 'No recent logins.'}</p>`;
@@ -2554,9 +2553,9 @@ window.setTaskActivityTab = function (tab) {
     if (composer) composer.style.display = tab === 'comments' ? '' : 'none';
     activityPanel.style.display = tab === 'comments' ? 'none' : 'block';
     if (tab === 'activity') {
-        activityPanel.innerHTML = `<div class="task-activity-event"><i data-lucide="circle-plus"></i><div><strong>Task created</strong><span>${task.created_at ? new Date(task.created_at).toLocaleString() : 'Date unavailable'}</span></div></div><div class="task-activity-event"><i data-lucide="workflow"></i><div><strong>Current stage: ${escapeHTML(task.status || 'Not set')}</strong><span>Assigned to ${escapeHTML(task.assignee?.full_name || 'Unassigned')}</span></div></div>`;
+        activityPanel.innerHTML = `<div class="task-activity-event"><i data-lucide="circle-plus"></i><div><strong>Task created</strong><span>${task.created_at ? new Date(task.created_at).toLocaleString() : 'Date unavailable'}</span></div></div><div class="task-activity-event"><i data-lucide="workflow"></i><div><strong>Current stage: ${escapeHTML(task.status || 'Not set')}</strong><span>Assigned to ${escapeHTML(window.formatEmployeeName(task.assignee) || 'Unassigned')}</span></div></div>`;
     } else if (tab === 'info') {
-        activityPanel.innerHTML = `<div class="task-detail-data-grid"><div><span>Created by</span><strong>${escapeHTML(task.creator?.full_name || 'System')}</strong></div><div><span>Assigned to</span><strong>${escapeHTML(task.assignee?.full_name || 'Unassigned')}</strong></div><div><span>Visibility</span><strong>${escapeHTML(task.visibility || 'public')}</strong></div><div><span>Estimated time</span><strong>${escapeHTML(task.estimated_time || 'Not set')}</strong></div></div>`;
+        activityPanel.innerHTML = `<div class="task-detail-data-grid"><div><span>Created by</span><strong>${escapeHTML(window.formatEmployeeName(task.creator) || 'System')}</strong></div><div><span>Assigned to</span><strong>${escapeHTML(window.formatEmployeeName(task.assignee) || 'Unassigned')}</strong></div><div><span>Visibility</span><strong>${escapeHTML(task.visibility || 'public')}</strong></div><div><span>Estimated time</span><strong>${escapeHTML(task.estimated_time || 'Not set')}</strong></div></div>`;
     }
     if (window.lucide) window.lucide.createIcons();
 };
@@ -2661,7 +2660,7 @@ async function renderLeave() {
         const allProfiles = await db.fetchAllProfiles();
         let teamIds = [currentUser.id];
         allProfiles.forEach(p => {
-            profilesMap[p.id] = p.full_name || 'Unknown User';
+            profilesMap[p.id] = window.formatEmployeeName(p) || 'Unknown User';
             if (p.manager_id === currentUser.id) teamIds.push(p.id);
         });
         if (currentUserRole !== 'ADMIN') {
@@ -3178,18 +3177,22 @@ async function renderAdmin() {
 // Render User Management (Admin Only)
 window.handleCreateUser = async function (e) {
     e.preventDefault();
-    const email = document.getElementById('newEmail').value;
+    const employeeId = document.getElementById('newEmployeeId').value;
+    let email = document.getElementById('newEmail').value.trim();
+    if (!email) {
+        email = `${employeeId.toLowerCase().replace(/[^a-z0-9]/g, '')}@muqam.local`;
+    }
     const password = document.getElementById('newPassword').value;
     const role = 'EMPLOYEE';
     const jobTitle = '';
     const fullName = document.getElementById('newFullName').value;
     const fullNameAr = document.getElementById('newFullNameAr').value;
-    const iqama = document.getElementById('newIqama').value;
+    const iqama = '';
     const phone = document.getElementById('newPhone').value;
     const departmentId = '';
-    const nationality = document.getElementById('newNationality').value;
+    const nationality = '';
 
-    const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone, departmentId, nationality, fullNameAr);
+    const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone, departmentId, nationality, fullNameAr, employeeId);
     if (!error) {
         showToast(t('toast_user_created_successfully'), 'success');
         if (typeof closeAddUserModal === 'function') closeAddUserModal();
@@ -3256,9 +3259,15 @@ async function renderUsers() {
                 <h1 class="page-title">${t('nav_users')}</h1>
                 <p class="page-subtitle">${t('users_sub')}</p>
             </div>
-            <button class="btn-primary" onclick="showAddUserModal()">
-                <i data-lucide="user-plus"></i> ${t('users_add_new')}
-            </button>
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="file" id="bulkUserUploadUsersPage" accept=".xlsx, .xls" style="display: none;" onchange="handleBulkUpload(event)">
+                <button class="btn btn-secondary" onclick="window.triggerSpecificBulkUpload('employees', 'bulkUserUploadUsersPage')">
+                    <i data-lucide="upload"></i> ${t('ui_bulk_upload') || 'Bulk Upload'}
+                </button>
+                <button class="btn-primary" onclick="showAddUserModal()">
+                    <i data-lucide="user-plus"></i> ${t('users_add_new')}
+                </button>
+            </div>
         </div>
         <div class="dashboard-grid fade-in-up">
             <div class="card col-span-12">
@@ -3282,7 +3291,7 @@ async function renderUsers() {
                                 <tr data-user-row="${u.id}">
                                     <td data-user-details>
                                         <div style="font-weight: bold; color: var(--primary-color);">EMP-${u.emp_index || 'New'}</div>
-                                        <div style="font-weight: bold;">${u.full_name || 'N/A'}</div>
+                                        <div style="font-weight: bold;">${window.formatEmployeeName(u) || 'N/A'}</div>
                                         <div style="font-size: 0.8rem; color: var(--text-light);">
                                             ID: <span title="${u.id}">${u.id.substring(0, 8)}...</span><br/>
                                             Iqama: ${u.iqama_number || 'N/A'}<br/>
@@ -3310,11 +3319,11 @@ async function renderUsers() {
                                     <td>
                                         <select data-user-manager-select class="form-control" style="width: 100%; min-width: 120px; max-width: 180px; padding: 0.25rem;" onchange="handleAssignManager('${u.id}', this.value)">
                                             <option value="">${t('users_no_mgr')}</option>
-                                            ${users.filter(m => (m.role === 'MANAGER' || m.role === 'ADMIN' || m.role === 'SUPERVISOR') && m.id !== u.id).map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${escapeHTML(m.full_name || 'User')} (${m.role})</option>`).join('')}
+                                            ${users.filter(m => (m.role === 'MANAGER' || m.role === 'ADMIN' || m.role === 'SUPERVISOR') && m.id !== u.id).map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${escapeHTML(window.formatEmployeeName(m) || 'User')} (${m.role})</option>`).join('')}
                                         </select>
                                     </td>
                                     <td>
-                                        <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap;" onclick="navigateToContract('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')">
+                                        <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap;" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')">
                                             <i data-lucide="file-signature" style="width:14px;height:14px;margin-right:4px;"></i> ${t('users_contract')}
                                         </button>
                                     </td>
@@ -4120,27 +4129,29 @@ async function renderSchedule() {
             const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(r.title)}&details=${encodeURIComponent(r.description || '')}&dates=${gcalStart}/${gcalEnd}`;
 
             return `
-            <div class="card fade-in-up" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 1rem; ${isCompleted ? 'opacity: 0.6;' : 'border-left: 4px solid var(--color-primary);'}">
+            <div class="card fade-in-up reminder-card ${isCompleted ? 'completed' : ''}">
                 <div>
                     <h3 style="margin-bottom: 0.25rem; ${isCompleted ? 'text-decoration: line-through;' : ''}">${escapeHTML(r.title)}</h3>
                     <p style="font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">${escapeHTML(r.description || '')}</p>
                     <div style="font-size: 0.8rem; color: var(--color-text-secondary);">
                         <i data-lucide="calendar" style="width:14px; height:14px; vertical-align:middle;"></i> ${dueDate.toLocaleString()}
+                        ${r.recurrence_type && r.recurrence_type !== 'NONE' ? `<span class="reminder-repeat-badge"><i data-lucide="repeat"></i>${t('schedule_repeat_' + r.recurrence_type.toLowerCase())}${r.recurrence_type === 'CUSTOM' ? ` (${r.recurrence_interval} ${t('schedule_days')})` : ''}</span>` : ''}
                     </div>
                 </div>
-                <div style="display:flex; gap: 0.5rem; align-items:center;">
-                    ${!isCompleted ? `<button class="btn btn-secondary btn-icon" title="Mark Completed" onclick="window.toggleReminderStatus('${r.id}', 'completed')"><i data-lucide="check"></i></button>` : `<button class="btn btn-secondary btn-icon" title="Mark Pending" onclick="window.toggleReminderStatus('${r.id}', 'pending')"><i data-lucide="rotate-ccw"></i></button>`}
-                    <a href="${gcalUrl}" target="_blank" class="btn btn-secondary btn-icon" title="Add to Google Calendar" style="color:var(--color-text);"><i data-lucide="calendar-plus"></i></a>
-                    <button class="btn btn-secondary btn-icon" style="color:var(--color-danger);" title="Delete" onclick="window.deleteReminder('${r.id}')"><i data-lucide="trash-2"></i></button>
+                <div class="reminder-actions">
+                    ${!isCompleted ? `<button class="btn btn-secondary btn-icon" title="${t('schedule_mark_completed')}" onclick="window.toggleReminderStatus('${r.id}', 'completed')"><i data-lucide="check"></i></button>` : `<button class="btn btn-secondary btn-icon" title="${t('schedule_mark_pending')}" onclick="window.toggleReminderStatus('${r.id}', 'pending')"><i data-lucide="rotate-ccw"></i></button>`}
+                    <a href="${gcalUrl}" target="_blank" rel="noopener" class="btn btn-secondary" title="${t('schedule_add_google')}" style="color:var(--color-text);"><i data-lucide="calendar-plus"></i><span>${t('schedule_add_google')}</span></a>
+                    <button class="btn btn-secondary btn-icon" style="color:var(--color-danger);" title="${t('schedule_delete')}" onclick="window.deleteReminder('${r.id}')"><i data-lucide="trash-2"></i></button>
                 </div>
             </div>`;
         }).join('');
 
     return `
         <div class="page-header">
-            <h2>Schedule & Reminders</h2>
-            <button class="btn btn-primary" onclick="window.showReminderModal()"><i data-lucide="plus"></i> Add Reminder</button>
+            <div><h1 class="page-title">${t('schedule_title')}</h1><p class="page-subtitle">${t('schedule_subtitle')}</p></div>
+            <div class="schedule-header-actions"><button class="btn btn-secondary" onclick="window.enablePushNotifications()"><i data-lucide="bell-ring"></i> ${t('schedule_enable_notifications')}</button><button class="btn btn-primary" onclick="window.showReminderModal()"><i data-lucide="plus"></i> ${t('schedule_add_reminder')}</button></div>
         </div>
+        <div class="schedule-google-note"><i data-lucide="info"></i><span>${t('schedule_google_note')}</span></div>
         <div class="card" style="padding: 0; background: transparent; box-shadow: none;">
             ${reminderItems}
         </div>
@@ -4149,23 +4160,37 @@ async function renderSchedule() {
         <div class="modal" id="reminderModal">
             <div class="modal-content" style="max-width: 500px;">
                 <div class="modal-header">
-                    <h2>New Reminder</h2>
+                    <h2>${t('schedule_new_reminder')}</h2>
                     <button class="btn btn-icon" onclick="document.getElementById('reminderModal').classList.remove('show')"><i data-lucide="x"></i></button>
                 </div>
                 <form onsubmit="window.handleCreateReminder(event)">
                     <div class="form-group">
-                        <label class="form-label">Title *</label>
+                        <label class="form-label">${t('schedule_title_label')} *</label>
                         <input type="text" id="reminderTitle" class="form-control" required placeholder="Meeting with client...">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Description</label>
+                        <label class="form-label">${t('schedule_description_label')}</label>
                         <textarea id="reminderDescription" class="form-control" rows="3" placeholder="Additional details..."></textarea>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Due Date & Time *</label>
+                        <label class="form-label">${t('schedule_due_label')} *</label>
                         <input type="datetime-local" id="reminderDueDate" class="form-control" required>
                     </div>
-                    <button type="submit" class="btn btn-primary" style="width: 100%;">Create Reminder</button>
+                    <div class="form-group">
+                        <label class="form-label">${t('schedule_repeat')}</label>
+                        <select id="reminderRecurrence" class="form-control" onchange="window.handleReminderRecurrenceChange()">
+                            <option value="NONE">${t('schedule_repeat_none')}</option>
+                            <option value="DAILY">${t('schedule_repeat_daily')}</option>
+                            <option value="WEEKLY">${t('schedule_repeat_weekly')}</option>
+                            <option value="MONTHLY">${t('schedule_repeat_monthly')}</option>
+                            <option value="CUSTOM">${t('schedule_repeat_custom')}</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="reminderCustomIntervalGroup" hidden>
+                        <label class="form-label">${t('schedule_repeat_every_days')}</label>
+                        <input type="number" id="reminderCustomInterval" class="form-control" min="1" max="365" value="2">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">${t('schedule_create')}</button>
                 </form>
             </div>
         </div>
@@ -4176,7 +4201,43 @@ window.showReminderModal = () => {
     document.getElementById('reminderTitle').value = '';
     document.getElementById('reminderDescription').value = '';
     document.getElementById('reminderDueDate').value = '';
+    document.getElementById('reminderRecurrence').value = 'NONE';
+    document.getElementById('reminderCustomInterval').value = '2';
+    document.getElementById('reminderCustomIntervalGroup').hidden = true;
     document.getElementById('reminderModal').classList.add('show');
+};
+
+window.handleReminderRecurrenceChange = () => {
+    document.getElementById('reminderCustomIntervalGroup').hidden = document.getElementById('reminderRecurrence').value !== 'CUSTOM';
+};
+
+function urlBase64ToUint8Array(value) {
+    const padding = '='.repeat((4 - value.length % 4) % 4);
+    const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(character => character.charCodeAt(0)));
+}
+
+window.enablePushNotifications = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        return showToast(t('schedule_push_unsupported'), 'warning');
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return showToast(t('schedule_push_denied'), 'warning');
+    const keyResult = await db.getPushPublicKey();
+    if (!keyResult.success) return showToast(keyResult.error?.message || t('schedule_push_not_configured'), 'danger');
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        let subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+            subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(keyResult.publicKey) });
+        }
+        const saved = await db.savePushSubscription(currentUser.id, subscription);
+        if (!saved.success) throw saved.error;
+        showToast(t('schedule_push_enabled'), 'success');
+    } catch (error) {
+        showToast(error?.message || t('schedule_push_failed'), 'danger');
+    }
 };
 
 window.handleCreateReminder = async (e) => {
@@ -4195,7 +4256,11 @@ window.handleCreateReminder = async (e) => {
         title,
         description,
         due_date: new Date(dueDate).toISOString(),
-        status: 'pending'
+        status: 'pending',
+        recurrence_type: document.getElementById('reminderRecurrence').value,
+        recurrence_interval: document.getElementById('reminderRecurrence').value === 'CUSTOM'
+            ? Math.max(1, parseInt(document.getElementById('reminderCustomInterval').value, 10) || 1)
+            : 1
     });
 
     if (success) {
@@ -4492,7 +4557,7 @@ async function renderTasks() {
         users = users.filter(u => u.id === currentUser.id);
     }
     const userOptions = users.map(u => {
-        const label = u.full_name || u.id.substring(0, 8);
+        const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
         const selected = (isRegularEmployee && u.id === currentUser.id) ? 'selected' : '';
         return `<option value="${escapeHTML(u.id)}" ${selected}>${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
     }).join('');
@@ -4500,7 +4565,7 @@ async function renderTasks() {
     window.taskAllUsersCache = allUsers;
     window.taskDepartmentsCache = allDepartments;
     window.taskWatcherOptionsCache = allUsers.map(u => {
-        const label = u.full_name || u.id.substring(0, 8);
+        const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
         return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
     }).join('');
 
@@ -4645,7 +4710,7 @@ async function renderTasks() {
                 <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0; display: flex; flex-direction: column; gap: 0.35rem;">
                     <div style="display: flex; align-items: center;"><i data-lucide="calendar" style="width: 12px; height: 12px; margin-right: 4px;"></i> Due: ${task.due_date || t('task_no_date') || 'No Date'}</div>
                     ${task.start_date ? `<div style="display: flex; align-items: center;"><i data-lucide="play" style="width: 12px; height: 12px; margin-right: 4px;"></i> Start: ${escapeHTML(task.start_date)}</div>` : ''}
-                    <div style="display: flex; align-items: center;"><i data-lucide="user" style="width: 12px; height: 12px; margin-right: 4px;"></i> ${task.assignee?.full_name || t('task_unknown') || 'Unassigned'}</div>
+                    <div style="display: flex; align-items: center;"><i data-lucide="user" style="width: 12px; height: 12px; margin-right: 4px;"></i> ${window.formatEmployeeName(task.assignee) || t('task_unknown') || 'Unassigned'}</div>
                     ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> Subtask of: ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
                     ${task.estimated_time ? `<div style="display: flex; align-items: center;"><i data-lucide="clock" style="width: 12px; height: 12px; margin-right: 4px;"></i> Est: ${escapeHTML(task.estimated_time)}</div>` : ''}
                 </div>
@@ -4757,7 +4822,7 @@ async function renderTasksV2() {
 
         return `<article class="task-v2-row" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-status="${escapeHTML(task.status)}" data-due="${task.due_date || ''}">
             <button class="task-v2-complete ${checkIconClass}" type="button" aria-label="${checkAriaLabel}" onclick="event.stopPropagation(); taskV2ToggleComplete('${task.id}', '${checkOnClickStatus}')"><i data-lucide="check"></i></button>
-            <button class="task-v2-avatar" type="button" title="${escapeHTML(task.assignee?.full_name || 'Unassigned')}">${escapeHTML((task.assignee?.full_name || '?').charAt(0).toUpperCase())}</button>
+            <button class="task-v2-avatar" type="button" title="${escapeHTML(window.formatEmployeeName(task.assignee) || 'Unassigned')}">${escapeHTML((window.formatEmployeeName(task.assignee) || '?').charAt(0).toUpperCase())}</button>
             <button class="task-v2-row-main" type="button" onclick="openTaskDetailsModal('${task.id}')">
                 <span class="task-v2-row-title"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${escapeHTML(task.displayTitle || task.title)}</span>
                 <span class="task-v2-row-context">${task.parent_task_id ? `Subtask of: ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')} · ` : ''}${escapeHTML(project?.project_name || 'No project')} · ${escapeHTML(task.category || 'General')}</span>
@@ -4852,7 +4917,7 @@ window.openInlineSubtaskComposer = function () {
     list.insertAdjacentHTML('afterbegin', `
         <form id="inlineSubtaskForm" class="inline-subtask-form" onsubmit="handleInlineSubtaskSubmit(event, '${parentId}')">
             <div class="inline-subtask-title-row">
-                <span class="inline-subtask-avatar">${escapeHTML((currentUser?.full_name || currentUser?.email || '?').charAt(0).toUpperCase())}</span>
+                <span class="inline-subtask-avatar">${escapeHTML((window.formatEmployeeName(currentUser) || currentUser?.email || '?').charAt(0).toUpperCase())}</span>
                 <input id="inlineSubtaskTitle" class="form-control" type="text" placeholder="Write a task name or type / for commands" aria-label="Subtask name" required autofocus>
                 <label class="inline-subtask-date"><i data-lucide="calendar"></i><input id="inlineSubtaskDue" type="date" aria-label="Subtask due date"></label>
             </div>
@@ -5037,7 +5102,7 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
         ? (window.taskAllUsersCache || []).filter(user => user.department_id === department.id)
         : [];
     select.innerHTML = `<option value="">${department ? (t('task_sel_emp') || 'Select Employee') : 'Select a department first'}</option>` + employees.map(user => {
-        const label = user.full_name || user.id.substring(0, 8);
+        const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
         return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(user.role)})</option>`;
     }).join('');
     select.value = employees.some(user => user.id === selectedAssigneeId) ? selectedAssigneeId : '';
@@ -5259,7 +5324,7 @@ window.handleCreateTask = async function (e) {
         if (status === 'Pending Approval') {
             const hussain = allUsers.find(u => u.full_name && u.full_name.toLowerCase().includes('hussain') || u.email && u.email.toLowerCase().includes('hussain'));
             if (hussain) {
-                await db.createNotification(hussain.id, `A new task requires your approval: ${title}`);
+                await db.createNotification(hussain.id, `A new task requires your approval: ${title}`, taskId);
             }
             showToast(t('toast_task_sent_to_hussain_for_approval'), "info");
         }
@@ -5992,7 +6057,7 @@ async function renderEmployeesDirectory() {
                                 <tr>
                                     <td style="font-weight: bold; color: var(--color-primary);">EMP-${u.emp_index || '-'}</td>
                                     <td>
-                                        <div style="font-weight: 600;">${u.full_name || t('emp_na')}</div>
+                                        <div style="font-weight: 600;">${window.formatEmployeeName(u) || t('emp_na')}</div>
                                     </td>
                                     <td>
                                         <div style="font-size: 0.85rem;">
@@ -6007,7 +6072,7 @@ async function renderEmployeesDirectory() {
                                     </td>
                                     <td>
                                         ${canEditContracts ? `
-                                        <button class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(u.full_name || 'Employee').replace(/'/g, "\\'")}')" title="Edit Contract">
+                                        <button class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="Edit Contract">
                                             <i data-lucide="file-pen-line"></i> Edit Contract
                                         </button>` : ''}
                                         <button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')" title="${t('ui_print_contract') || 'Print Contract'}">
@@ -6450,45 +6515,51 @@ async function renderTemplates() {
 
 window.downloadTemplate = function (type) {
     const schemas = {
-        employees: ['full_name', 'email', 'phone', 'job_title', 'department', 'role', 'salary', 'hire_date', 'national_id', 'address'],
+        employees: ['Employee ID', 'full_name', 'Full Name in Arabic', 'email', 'phone', 'Temp Password'],
         clients: ['company_name', 'contact_name', 'email', 'phone', 'industry', 'country', 'city', 'deal_stage', 'deal_value', 'notes'],
         projects: ['project_name', 'project_type', 'category', 'description', 'status', 'assigned_people', 'tags', 'start_date', 'end_date', 'client'],
         tasks: ['title', 'description', 'assignee_email', 'supervisor_email', 'due_date', 'priority', 'status', 'category', 'project_name', 'tags'],
-        departments_jobtitles: ['Department (EN)', 'Department (AR)', 'Job Title (EN)', 'Job Title (AR)']
+        departments_jobtitles: ['Department (EN)', 'Department (AR)', 'Job Title (EN)', 'Job Title (AR)', 'Head']
     };
 
+
+
+
+
     const examples = {
-        employees: ['John Doe', 'john@example.com', '+966501234567', 'Software Engineer', 'Engineering', 'EMPLOYEE', '8000', '2024-01-15', '1234567890', '123 Main St'],
+        employees: ['MQ-0001', 'John Doe', 'جون دو', '', '', 'Pass123!'],
         clients: ['Acme Corp', 'Jane Smith', 'jane@acme.com', '+1234567890', 'Technology', 'Saudi Arabia', 'Riyadh', 'Negotiation', '50000', 'Key account'],
         projects: ['Website Redesign', 'Client', 'Enterprise', 'New website for client', 'active', 'john@example.com', 'Frontend,UI/UX', '2024-01-01', '2024-06-30', 'Acme Corp'],
         tasks: ['Design homepage mockup', 'Create high-fidelity wireframes', 'john@example.com', 'manager@example.com', '2024-03-15', 'high', 'todo', 'Design', 'Website Redesign', 'Frontend,UI/UX'],
-        departments_jobtitles: ['Engineering', 'الهندسة', 'Software Engineer', 'مهندس برمجيات']
+        departments_jobtitles: ['Engineering', 'الهندسة', 'Software Engineer', 'مهندس برمجيات', 'MQ-0001']
     };
 
-    const cols = schemas[type];
+        const cols = schemas[type];
     if (!cols) { showToast('Unknown template type', 'error'); return; }
-
-    const header = cols.join(',');
-    const example = examples[type].map(v => `"${v}"`).join(',');
-    const csvContent = `${header}\n${example}\n`;
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${type}_template.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} template downloaded!`, 'success');
+    
+    try {
+        const data = [
+            cols.reduce((acc, col, i) => { acc[col] = examples[type][i]; return acc; }, {})
+        ];
+        const ws = XLSX.utils.json_to_sheet(data, { header: cols });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Import Data");
+        XLSX.writeFile(wb, `${type}_template.xlsx`);
+        showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} template downloaded!`, 'success');
+    } catch (e) {
+        console.error(e);
+        showToast('Error generating template. Please make sure XLSX library is loaded.', 'error');
+    }
 };
 
 let currentBulkUploadType = null;
 window.triggerBulkUpload = function (type) {
     currentBulkUploadType = type;
     document.getElementById('bulkUploadInput').click();
+};
+window.triggerSpecificBulkUpload = function (type, inputId) {
+    currentBulkUploadType = type;
+    document.getElementById(inputId).click();
 };
 
 window.handleBulkUpload = async function (event) {
@@ -6509,12 +6580,59 @@ window.handleBulkUpload = async function (event) {
             
         if (!rows.length) throw new Error('The workbook contains no data rows.');
 
+        
+        if (currentBulkUploadType === 'employees') {
+            let successCount = 0;
+            let errorCount = 0;
+            showToast(`Uploading ${rows.length} users...`, 'info');
+
+            for (const row of rows) {
+                const empId = row['Employee ID'] || '';
+                const fullName = row['full_name'] || '';
+                const fullNameAr = row['Full Name in Arabic'] || '';
+                let email = row['email'] || '';
+                const phone = row['phone'] || '';
+                const password = row['Temp Password'] || 'Default123!';
+                
+                const jobTitle = '';
+                const deptId = '';
+                const role = 'EMPLOYEE';
+                const nationality = '';
+                const iqama = '';
+
+                if (!fullName) {
+                    errorCount++;
+                    continue; // Skip invalid row
+                }
+                
+                if (!email && empId) {
+                    email = `${empId.toLowerCase().replace(/[^a-z0-9]/g, '')}@muqam.local`;
+                } else if (!email) {
+                    email = `user${Math.floor(Math.random()*10000)}@muqam.local`;
+                }
+
+                const res = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone, deptId, nationality, fullNameAr, empId);
+                if (res.error) {
+                    console.error("Bulk Upload Error:", res.error);
+                    errorCount++;
+                } else {
+                    successCount++;
+                }
+            }
+
+            showToast(`Bulk upload complete. Success: ${successCount}, Errors: ${errorCount}.`, 'success');
+            if (typeof renderView === 'function') renderView('templates');
+            return;
+        }
+
         if (currentBulkUploadType === 'departments_jobtitles') {
             const payload = rows.map(r => ({
                 dept_en: String(r['Department (EN)'] || '').trim(),
                 dept_ar: String(r['Department (AR)'] || '').trim(),
                 job_en: String(r['Job Title (EN)'] || '').trim(),
-                job_ar: String(r['Job Title (AR)'] || '').trim()
+                job_ar: String(r['Job Title (AR)'] || '').trim(),
+                head: String(r['Head'] || '').trim(),
+                head: String(r['Head'] || '').trim()
             })).filter(item => item.dept_en);
             
             if (payload.length > 0) {
@@ -6801,7 +6919,7 @@ async function renderTranslationsPage() {
     const profilesRowsHTML = (profiles || []).map(p => {
         return `
             <tr class="trans-profile-row" data-id="${p.id}">
-                <td style="font-weight: 600; font-size: 0.85rem; white-space: nowrap;">${escapeHTML(p.full_name || '')} <br> <small style="color: var(--color-text-secondary); font-weight: normal;">${escapeHTML(p.job_title || '')}</small></td>
+                <td style="font-weight: 600; font-size: 0.85rem; white-space: nowrap;">${escapeHTML(window.formatEmployeeName(p) || '')} <br> <small style="color: var(--color-text-secondary); font-weight: normal;">${escapeHTML(p.job_title || '')}</small></td>
                 <td><input type="text" id="profile_name_ar_${p.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(p.display_name_ar || '')}" placeholder="Arabic Name"></td>
                 <td><input type="text" id="profile_job_ar_${p.id}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${escapeHTML(p.job_title_ar || '')}" placeholder="Arabic Job Title"></td>
             </tr>
@@ -7050,7 +7168,6 @@ window.renderView = async function (viewId, isBack = false) {
             case 'custody_handover': content = await renderCustodyHandover(); break;
             case 'clients': content = await renderClients(); break;
             case 'crm': content = await renderCRM(); break;
-            case 'orders': content = await renderOrders(); break;
             case 'integrations': content = await renderIntegrations(); break;
             default:
                 content = `
@@ -7352,7 +7469,7 @@ async function renderDepartments() {
         <tr id="dept-row-${d.id}">
             <td>${d.name}</td>
             <td>${empCount}</td>
-            <td>${profiles.find(p => p.id === d.head_id)?.full_name || '-'}</td>
+            <td>${window.formatEmployeeName(profiles.find(p => p.id === d.head_id)) || '-'}</td>
             <td>
                 <button class="btn btn-icon" onclick="editDepartment('${d.id}')"><i data-lucide="edit-2"></i></button>
                 <button class="btn btn-icon" style="color:var(--color-danger);" onclick="deleteDepartment('${d.id}')"><i data-lucide="trash-2"></i></button>
@@ -7366,9 +7483,15 @@ async function renderDepartments() {
                 <h1 class="page-title">${t('ui_departments_management')}</h1>
                 <p class="page-subtitle">Manage company departments.</p>
             </div>
-            <button class="btn btn-primary" onclick="showDepartmentModal()">
-                <i data-lucide="plus"></i> New Department
-            </button>
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="file" id="bulkDeptUploadDeptsPage" accept=".xlsx, .xls" style="display: none;" onchange="handleBulkUpload(event)">
+                <button class="btn btn-secondary" onclick="window.triggerSpecificBulkUpload('departments_jobtitles', 'bulkDeptUploadDeptsPage')">
+                    <i data-lucide="upload"></i> Bulk Upload
+                </button>
+                <button class="btn btn-primary" onclick="showDepartmentModal()">
+                    <i data-lucide="plus"></i> New Department
+                </button>
+            </div>
         </div>
         
         <div class="card">
@@ -7512,7 +7635,7 @@ async function renderCRM() {
     const deals = await db.fetchDeals();
     const users = await db.fetchUsers();
 
-    const stages = ['LEAD', 'PITCH', 'NEGOTIATION', 'WON', 'LOST'];
+    const stages = ['LEAD', 'PITCH', 'QUOTATION', 'TECHNICAL', 'APPROVAL', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
 
     let boardHtml = '';
     stages.forEach(stage => {
@@ -7521,7 +7644,7 @@ async function renderCRM() {
             <div class="kanban-col" id="crm-col-${stage}" ondrop="dropDeal(event, '${stage}')" ondragover="allowDrop(event)">
                 <h3 id="crm-header-${stage}">${t('crm_' + stage.toLowerCase()) || stage} (${stageDeals.length})</h3>
                 ${stageDeals.map(d => `
-                    <div class="card kanban-card" id="deal-card-${d.id}" draggable="true" ondragstart="dragDeal(event, '${d.id}')" data-stage="${stage}" style="position: relative;">
+                    <div class="card kanban-card" id="deal-card-${d.id}" draggable="true" ondragstart="dragDeal(event, '${d.id}')" data-stage="${stage}" data-workflow-status="${escapeHTML(d.workflow_status || 'NOT_STARTED')}" style="position: relative;">
                         <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 4px;">
                             <button class="btn btn-icon" style="padding: 2px;" onclick="showCRMDealModal('${d.id}', true)" title="View Deal">
                                 <i data-lucide="eye" style="width: 14px; height: 14px; color: var(--color-text-secondary);"></i>
@@ -7536,8 +7659,10 @@ async function renderCRM() {
                             ${d.crm_clients ? d.crm_clients.name : 'Unknown Client'}
                         </div>
                         ${d.closing_date ? `<div style="font-size: 0.75rem; color: var(--color-danger); margin-bottom: 0.5rem;"><i data-lucide="calendar" style="width: 12px; height: 12px;"></i> Close: ${d.closing_date}</div>` : ''}
-                        ${d.assigned_to ? `<div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;"><i data-lucide="user" style="width: 12px; height: 12px;"></i> ${(users.find(u => u.id === d.assigned_to) || {}).full_name || 'User'}</div>` : ''}
+                        ${d.assigned_to ? `<div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;"><i data-lucide="user" style="width: 12px; height: 12px;"></i> ${window.formatEmployeeName(users.find(u => u.id === d.assigned_to) || {}) || 'User'}</div>` : ''}
+                        ${stage === 'APPROVAL' ? `<div class="status-badge ${d.workflow_status === 'APPROVED' ? 'success' : (d.workflow_status === 'REJECTED' ? 'danger' : 'warning')}" style="margin-bottom:.5rem;">${t('crm_workflow_' + String(d.workflow_status || 'not_started').toLowerCase()) || String(d.workflow_status || 'NOT_STARTED').replace(/_/g, ' ')}</div>` : ''}
                         <div class="status-badge success" style="margin-top: auto;">SAR ${d.amount}</div>
+                        <button type="button" class="btn btn-secondary btn-sm deal-workflow-button" onclick="openDealWorkflowModal('${d.id}')"><i data-lucide="git-branch"></i> ${t('crm_workflow') || 'Workflow'}</button>
                     </div>
                 `).join('')}
             </div>
@@ -7620,6 +7745,108 @@ window.switchCrmTab = function (tabId) {
     if (clientsEl) clientsEl.style.display = tabId === 'clients' ? 'block' : 'none';
 };
 
+const dealApprovalStageLabels = {
+    MARKETING_MANAGER: 'crm_marketing_manager',
+    GENERAL_MANAGER: 'crm_general_manager',
+    OPERATIONS_MANAGER: 'crm_operations_manager'
+};
+
+function dealEmployeeName(profile) {
+    return currentLang === 'ar' && profile?.display_name_ar
+        ? profile.display_name_ar
+        : (window.formatEmployeeName(profile));
+}
+
+window.openDealWorkflowModal = async function (dealId) {
+    const [deals, users, workflow] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDealWorkflow(dealId)]);
+    const deal = deals.find(item => item.id === dealId);
+    if (!deal) return showToast(t('crm_deal_not_found') || 'Deal not found.', 'danger');
+    document.getElementById('workflowDealId').value = dealId;
+    document.getElementById('dealWorkflowName').textContent = deal.title;
+    const options = `<option value="">${t('crm_select_employee') || 'Select employee'}</option>` + users.map(user =>
+        `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}${user.job_title ? ` — ${escapeHTML(user.job_title)}` : ''}</option>`
+    ).join('');
+    ['workflowMarketingManager', 'workflowGeneralManager', 'workflowOperationsManager'].forEach(id => {
+        document.getElementById(id).innerHTML = options;
+    });
+    const titleMatch = (pattern) => users.find(user => pattern.test(String(user.job_title || '')))?.id || '';
+    document.getElementById('workflowMarketingManager').value = titleMatch(/marketing.*manager/i);
+    document.getElementById('workflowGeneralManager').value = titleMatch(/general manager|\bGM\b/i);
+    document.getElementById('workflowOperationsManager').value = titleMatch(/operations?.*manager/i);
+    renderDealWorkflowContents(workflow);
+    document.getElementById('workflowSetupSection').style.display = workflow.approvals.length ? 'none' : 'block';
+    document.getElementById('dealWorkflowModal').classList.add('show');
+    updateTranslations();
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.closeDealWorkflowModal = function () {
+    document.getElementById('dealWorkflowModal').classList.remove('show');
+};
+
+function renderDealWorkflowContents(workflow) {
+    const approvalsEl = document.getElementById('dealApprovalSteps');
+    const nextPending = workflow.approvals.find(step => step.status === 'PENDING');
+    approvalsEl.innerHTML = workflow.approvals.length ? workflow.approvals.map(step => {
+        const canDecide = step.status === 'PENDING' && step.id === nextPending?.id && (step.approver_id === currentUser?.id || currentUserRole === 'ADMIN');
+        const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
+        return `<article class="deal-approval-step ${step.status.toLowerCase()}">
+            <div class="deal-approval-index">${step.status === 'APPROVED' ? '✓' : (step.status === 'REJECTED' ? '×' : step.step_order)}</div>
+            <div class="deal-approval-copy"><strong>${escapeHTML(label)}</strong><span>${escapeHTML(dealEmployeeName(step.profiles))}</span>${step.decision_note ? `<small>${escapeHTML(step.decision_note)}</small>` : ''}</div>
+            ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideDealApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideDealApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${step.status === 'APPROVED' ? 'success' : (step.status === 'REJECTED' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + step.status.toLowerCase()) || step.status)}</span>`}
+        </article>`;
+    }).join('') : `<p class="empty-state-inline">${t('crm_approval_not_started') || 'Approval has not started.'}</p>`;
+
+    document.getElementById('dealAttachmentList').innerHTML = workflow.attachments.length ? workflow.attachments.map(file =>
+        `<a class="deal-attachment-item" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener"><i data-lucide="paperclip"></i><span><strong>${escapeHTML(file.file_name)}</strong><small>${escapeHTML(file.description || file.category.replace(/_/g, ' '))}</small></span></a>`
+    ).join('') : `<p class="empty-state-inline">${t('crm_no_files') || 'No files uploaded.'}</p>`;
+
+    document.getElementById('dealActivityList').innerHTML = workflow.activity.length ? workflow.activity.map(item =>
+        `<div class="deal-activity-item"><span></span><div><strong>${escapeHTML(String(item.action || '').replace(/_/g, ' '))}</strong><small>${escapeHTML(dealEmployeeName(item.profiles))} · ${new Date(item.created_at).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-US')}</small>${item.note ? `<p>${escapeHTML(item.note)}</p>` : ''}</div></div>`
+    ).join('') : `<p class="empty-state-inline">${t('crm_no_activity') || 'No activity recorded yet.'}</p>`;
+}
+
+window.startDealApprovalWorkflow = async function () {
+    const dealId = document.getElementById('workflowDealId').value;
+    const approvers = {
+        marketingManager: document.getElementById('workflowMarketingManager').value,
+        generalManager: document.getElementById('workflowGeneralManager').value,
+        operationsManager: document.getElementById('workflowOperationsManager').value
+    };
+    if (Object.values(approvers).some(value => !value)) return showToast(t('crm_select_all_approvers') || 'Select all three approvers.', 'warning');
+    const result = await db.startDealApproval(dealId, approvers);
+    if (!result.success) return showToast(result.error?.message || t('crm_approval_start_failed') || 'Could not start approval.', 'danger');
+    showToast(t('crm_approval_started') || 'Approval workflow started.', 'success');
+    window.closeDealWorkflowModal();
+    if (currentView === 'crm') renderView('crm');
+};
+
+window.decideDealApproval = async function (stepId, decision) {
+    const note = window.prompt(decision === 'REJECTED' ? (t('crm_rejection_note_prompt') || 'Enter the rejection reason:') : (t('crm_approval_note_prompt') || 'Optional approval note:'));
+    if (decision === 'REJECTED' && !String(note || '').trim()) return showToast(t('crm_rejection_note_required') || 'A rejection reason is required.', 'warning');
+    const result = await db.decideDealApproval(stepId, decision, note || '');
+    if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the decision.', 'danger');
+    const dealId = document.getElementById('workflowDealId').value;
+    const workflow = await db.fetchDealWorkflow(dealId);
+    renderDealWorkflowContents(workflow);
+    showToast(decision === 'APPROVED' ? (t('crm_approval_saved') || 'Approval saved.') : (t('crm_rejection_saved') || 'Rejection saved.'), 'success');
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.handleDealAttachmentUpload = async function (event) {
+    event.preventDefault();
+    const dealId = document.getElementById('workflowDealId').value;
+    const file = document.getElementById('dealAttachmentFile').files[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) return showToast(t('crm_file_too_large') || 'The maximum file size is 15 MB.', 'warning');
+    const result = await db.uploadDealAttachment(dealId, currentUser.id, file, document.getElementById('dealAttachmentCategory').value, document.getElementById('dealAttachmentDescription').value);
+    if (!result.success) return showToast(result.error?.message || t('crm_upload_failed') || 'Upload failed.', 'danger');
+    event.target.reset();
+    renderDealWorkflowContents(await db.fetchDealWorkflow(dealId));
+    showToast(t('crm_file_uploaded') || 'File uploaded.', 'success');
+    if (window.lucide) window.lucide.createIcons();
+};
+
 // Drag & Drop Deal Logic
 window.allowDrop = function (ev) {
     ev.preventDefault();
@@ -7666,6 +7893,17 @@ window.dropDeal = async (ev, newStage) => {
     const oldStage = card ? card.getAttribute('data-stage') : null;
     if (oldStage === newStage) return;
 
+    if (newStage === 'APPROVAL') {
+        await window.openDealWorkflowModal(dealId);
+        return;
+    }
+
+    if ((newStage === 'PROPOSAL' || newStage === 'NEGOTIATION' || newStage === 'WON') && card?.getAttribute('data-workflow-status') !== 'APPROVED') {
+        showToast(t('crm_approval_required') || 'Complete all internal approvals before advancing this deal.', 'warning');
+        await window.openDealWorkflowModal(dealId);
+        return;
+    }
+
     if (newStage === 'LOST') {
         document.getElementById('lostDealId').value = dealId;
         document.getElementById('lostOldStage').value = oldStage || '';
@@ -7682,6 +7920,9 @@ window.dropDeal = async (ev, newStage) => {
         document.getElementById('orderInvoiceAmount').value = '';
         document.getElementById('orderProjectStatus').value = 'Not Confirmed';
         document.getElementById('orderNotes').value = '';
+        document.getElementById('orderEventDate').value = '';
+        document.getElementById('orderPaidAmount').value = '';
+        document.getElementById('orderUninstallationDate').value = '';
         document.getElementById('crmOrderModal').classList.add('show');
         if (window.lucide) window.lucide.createIcons();
         return;
@@ -7689,11 +7930,11 @@ window.dropDeal = async (ev, newStage) => {
 
     window.moveDealCard(dealId, newStage);
 
-    const res = await db.updateDealStage(dealId, newStage);
+    const res = newStage === 'PROPOSAL'
+        ? await db.updateDeal(dealId, { stage: newStage, proposal_sent_at: new Date().toISOString() })
+        : await db.updateDealStage(dealId, newStage);
     if (res.success) {
-        if (oldStage === 'WON') {
-            await db.deleteOrderByDealId(dealId);
-        }
+        await db.logDealActivity(dealId, 'STAGE_CHANGED', oldStage, newStage, null);
         showToast(t('toast_deal_moved_to') + newStage, "success");
     } else {
         showToast(t('toast_failed_to_move_deal'), "danger");
@@ -7716,12 +7957,7 @@ window.handleLostReasonSubmit = async (e) => {
     // Instead of updateDealStage, we update the full deal or updateDeal with reason
     const res = await db.updateDeal(dealId, { stage: 'LOST', lost_reason: reason });
     if (res.success) {
-        if (oldStage === 'WON') {
-            await db.deleteOrderByDealId(dealId);
-            showToast(t('toast_deal_marked_as_lost_order_removed'), "success");
-        } else {
-            showToast(t('toast_deal_marked_as_lost'), "success");
-        }
+        showToast(t('toast_deal_marked_as_lost'), "success");
     } else {
         showToast(t('toast_failed_to_update_deal'), "danger");
     }
@@ -7735,24 +7971,27 @@ window.handleOrderSubmit = async (e) => {
     e.preventDefault();
     const dealId = document.getElementById('orderDealId').value;
 
-    const orderData = {
+    const projectData = {
         start_date: document.getElementById('orderStartDate').value || null,
         end_date: document.getElementById('orderEndDate').value || null,
         event_location: document.getElementById('orderLocation').value || null,
         invoice_amount: parseFloat(document.getElementById('orderInvoiceAmount').value) || 0,
         project_status: document.getElementById('orderProjectStatus').value || 'Not Confirmed',
         notes: document.getElementById('orderNotes').value || null,
+        event_date: document.getElementById('orderEventDate').value || null,
+        paid_amount: parseFloat(document.getElementById('orderPaidAmount').value) || 0,
+        uninstallation_date: document.getElementById('orderUninstallationDate').value || null,
     };
 
     closeCRMOrderModal();
     window.moveDealCard(dealId, 'WON');
 
-    const res = await db.createOrder(orderData, dealId);
+    const res = await db.createProjectFromWonDeal(projectData, dealId);
     if (res.success) {
-        showToast(t('toast_order_saved_and_deal_won'), "success");
+        showToast(t('crm_project_created_deal_won') || 'Project created and deal marked as won.', "success");
         await db.triggerWebhooks('deal_won', { deal_id: dealId });
     } else {
-        showToast(t('toast_failed_to_save_order'), "danger");
+        showToast(res.error?.message || t('crm_project_create_failed') || 'Failed to create the project.', "danger");
     }
 };
 
@@ -7768,6 +8007,9 @@ window.showEditOrderModal = async (id) => {
     document.getElementById('editOrderInvoiceAmount').value = order.invoice_amount || '';
     document.getElementById('editOrderProjectStatus').value = order.project_status || 'Not Confirmed';
     document.getElementById('editOrderNotes').value = order.notes || '';
+    document.getElementById('editOrderEventDate').value = order.event_date || '';
+    document.getElementById('editOrderPaidAmount').value = order.paid_amount || '';
+    document.getElementById('editOrderUninstallationDate').value = order.uninstallation_date || '';
 
     document.getElementById('editOrderModal').classList.add('show');
     if (window.lucide) window.lucide.createIcons();
@@ -7788,6 +8030,9 @@ window.handleEditOrderSubmit = async (e) => {
         invoice_amount: parseFloat(document.getElementById('editOrderInvoiceAmount').value) || 0,
         project_status: document.getElementById('editOrderProjectStatus').value || 'Not Confirmed',
         notes: document.getElementById('editOrderNotes').value || null,
+        event_date: document.getElementById('editOrderEventDate').value || null,
+        paid_amount: parseFloat(document.getElementById('editOrderPaidAmount').value) || 0,
+        uninstallation_date: document.getElementById('editOrderUninstallationDate').value || null,
     };
 
     const res = await db.updateOrder(id, orderData);
@@ -8107,32 +8352,13 @@ window.printOrder = async (orderId) => {
 
 // Department Modals
 window.showDepartmentModal = async (dept = null) => {
-    // Populate head dropdown
     try {
         if (db.fetchAllProfiles) {
             const profiles = await db.fetchAllProfiles();
             window.departmentProfilesCache = profiles;
             const headSelect = document.getElementById('departmentHead');
             headSelect.innerHTML = '<option value="">Select a head...</option>' +
-                profiles.map(p => `<option value="${p.id}">${escapeHTML(p.full_name || 'Employee')} — ${escapeHTML(p.job_title || 'No job title')}</option>`).join('');
-
-            const empSelect = document.getElementById('departmentEmployees');
-            empSelect.classList.add('department-employee-select');
-            empSelect.innerHTML = profiles.map(p => {
-                const isSelected = dept && p.department_id === dept.id ? 'selected' : '';
-                return `<option value="${p.id}" ${isSelected}>${escapeHTML(p.full_name || 'Employee')} — ${escapeHTML(p.job_title || 'No job title')}</option>`;
-            }).join('');
-            if (!empSelect.dataset.toggleSelectionReady) {
-                empSelect.addEventListener('mousedown', event => {
-                    const option = event.target.closest('option');
-                    if (!option) return;
-                    event.preventDefault();
-                    option.selected = !option.selected;
-                    empSelect.focus();
-                    empSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                });
-                empSelect.dataset.toggleSelectionReady = 'true';
-            }
+                profiles.map(p => `<option value="${p.id}">${escapeHTML(window.formatEmployeeName(p) || 'Employee')} - ${escapeHTML(p.job_title || 'No job title')} (${escapeHTML(p.employee_id || p.email)})</option>`).join('');
         }
     } catch (e) {
         console.error("Error loading profiles for department head:", e);
@@ -8140,30 +8366,25 @@ window.showDepartmentModal = async (dept = null) => {
 
     if (dept) {
         document.getElementById('departmentId').value = dept.id;
-        document.getElementById('departmentName').value = dept.name || '';
-        document.getElementById('departmentDescription').value = dept.description || '';
+        document.getElementById('departmentNameEn').value = dept.name || '';
+        document.getElementById('departmentNameAr').value = dept.name_ar || '';
         document.getElementById('departmentHead').value = dept.head_id || '';
         document.getElementById('departmentModalTitle').innerText = 'Edit Department';
         document.getElementById('departmentSubmitBtn').innerText = 'Save Changes';
+        const map = db.getJobTitlesMap() || {};
+        window.currentDepartmentJobTitles = [...(map[dept.name] || [])];
     } else {
         document.getElementById('departmentId').value = '';
-        document.getElementById('departmentName').value = '';
-        document.getElementById('departmentDescription').value = '';
+        document.getElementById('departmentNameEn').value = '';
+        document.getElementById('departmentNameAr').value = '';
         document.getElementById('departmentHead').value = '';
-
-        // Clear multi-select manually
-        const empSelect = document.getElementById('departmentEmployees');
-        for (let i = 0; i < empSelect.options.length; i++) {
-            empSelect.options[i].selected = false;
-        }
-
         document.getElementById('departmentModalTitle').innerText = 'New Department';
         document.getElementById('departmentSubmitBtn').innerText = 'Create Department';
+        window.currentDepartmentJobTitles = [];
     }
 
-    window.currentDepartmentJobTitles = dept && db.getJobTitlesMap()[dept.name] ? [...db.getJobTitlesMap()[dept.name]] : [];
-    document.getElementById('departmentJobTitleInput').value = '';
-    if (window.renderDepartmentJobTitlesList) window.renderDepartmentJobTitlesList();
+    if(document.getElementById('departmentJobTitleInput')) document.getElementById('departmentJobTitleInput').value = '';
+    window.renderDepartmentJobTitlesList();
 
     document.getElementById('departmentModal').classList.add('show');
 };
@@ -8202,9 +8423,8 @@ window.closeConfirmModal = () => {
 window.editDepartment = async (id) => {
     const depts = await db.fetchDepartments();
     const dept = depts.find(d => d.id === id);
-    if (dept) {
-        showDepartmentModal(dept);
-    }
+    if (!dept) return;
+    window.showDepartmentModal(dept);
 };
 
 window.deleteDepartment = (id) => {
@@ -8230,7 +8450,7 @@ window.renderDepartmentJobTitlesList = () => {
     list.innerHTML = (window.currentDepartmentJobTitles || []).map((title, idx) => `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem; background:rgba(255,255,255,0.05); border-radius:4px; margin-bottom:0.25rem;">
             <span>${escapeHTML(title)}</span>
-            <button type="button" class="btn btn-icon" style="color:var(--color-danger); width:24px; height:24px;" onclick="removeDepartmentJobTitleDraft(${idx})">
+            <button type="button" class="btn btn-icon" style="color:var(--color-danger); width:24px; height:24px;" onclick="window.removeDepartmentJobTitleDraft(${idx})">
                 <i data-lucide="x" style="width:14px; height:14px;"></i>
             </button>
         </div>
@@ -8268,77 +8488,66 @@ window.removeDepartmentJobTitleDraft = (idx) => {
 window.handleCreateDepartment = async (e) => {
     e.preventDefault();
     const id = document.getElementById('departmentId').value;
-    const departmentName = document.getElementById('departmentName').value.trim();
-    if (!departmentName) {
-        showToast('Department name is required.', 'danger');
+    const deptEn = document.getElementById('departmentNameEn').value.trim();
+    const deptAr = document.getElementById('departmentNameAr').value.trim();
+    const jobTitles = window.currentDepartmentJobTitles || [];
+    
+    if (!deptEn) {
+        showToast('Department (EN) is required.', 'danger');
         return;
     }
     const data = {
-        name: departmentName,
-        description: document.getElementById('departmentDescription').value,
-        head_id: document.getElementById('departmentHead').value || null
+        name: deptEn,
+        name_ar: deptAr,
+        head_id: document.getElementById('departmentHead').value || null,
+        is_active: true
     };
 
-    const empSelect = document.getElementById('departmentEmployees');
-    const selectedEmployeeIds = Array.from(empSelect.selectedOptions).map(opt => opt.value);
-
-    const allowedTitles = window.currentDepartmentJobTitles && window.currentDepartmentJobTitles.length > 0 ? window.currentDepartmentJobTitles : null;
-    const selectedProfiles = (window.departmentProfilesCache || []).filter(profile => selectedEmployeeIds.includes(profile.id));
-    const incompatibleEmployees = allowedTitles ? selectedProfiles.filter(profile => !allowedTitles.includes(profile.job_title)) : [];
-    if (incompatibleEmployees.length) {
-        const names = incompatibleEmployees.map(profile => `${profile.full_name || 'Employee'} (${profile.job_title || 'no job title'})`).join(', ');
-        showToast(`Cannot assign: ${names}. Select a job title that belongs to ${data.name} first.`, 'danger');
-        return;
-    }
-    const selectedHead = (window.departmentProfilesCache || []).find(profile => profile.id === data.head_id);
-    if (selectedHead && allowedTitles && !allowedTitles.includes(selectedHead.job_title)) {
-        showToast(`${selectedHead.full_name || 'The selected head'} has the job title “${selectedHead.job_title || 'Not set'}”, which does not belong to ${data.name}.`, 'danger');
-        return;
-    }
+    const submitBtn = document.getElementById('departmentSubmitBtn');
+    submitBtn.disabled = true;
 
     let res;
     let newDeptId = id;
-    if (id) {
-        res = await db.updateDepartment(id, data, selectedEmployeeIds);
-    } else {
-        const existingDepartment = (await db.fetchDepartments()).find(department => department.name.toLowerCase() === data.name.toLowerCase());
-        if (existingDepartment) {
-            newDeptId = existingDepartment.id;
-            res = await db.updateDepartment(existingDepartment.id, data, selectedEmployeeIds);
+    try {
+        if (id) {
+            res = await db.updateDepartment(id, data, null);
+            if (res.success) {
+                const map = db.getJobTitlesMap() || {};
+                const existingTitles = map[deptEn] || [];
+                const toAdd = jobTitles.filter(t => !existingTitles.includes(t));
+                // We do not delete removed titles here to prevent accidental data loss for existing employees.
+                for (const title of toAdd) {
+                    await db.createJobTitle({ name: title, name_ar: title, department_id: id, is_active: true });
+                }
+            }
         } else {
-            res = await db.createDepartment(data, selectedEmployeeIds);
-            if (res.success && res.data) newDeptId = res.data.id;
+            res = await db.createDepartment(data, []);
+            if (res.success && res.data) {
+                newDeptId = res.data.id;
+                for (const title of jobTitles) {
+                    await db.createJobTitle({ name: title, name_ar: title, department_id: res.data.id, is_active: true });
+                }
+            }
         }
-    }
 
-    if (res.success && newDeptId) {
-        // Sync Job Titles
-        const oldTitles = id ? (db.getJobTitlesMap()[data.name] || []) : [];
-        const newTitles = window.currentDepartmentJobTitles || [];
-
-        const toDelete = oldTitles.filter(t => !newTitles.includes(t));
-        const toCreate = newTitles.filter(t => !oldTitles.includes(t));
-
-        if (toDelete.length || toCreate.length) {
-            const allDbTitles = await db.fetchJobTitles(true) || [];
-            for (const t of toDelete) {
-                const rec = allDbTitles.find(r => r.name === t && r.department_id === newDeptId);
-                if (rec) await db.deleteJobTitle(rec.id);
-            }
-            for (const t of toCreate) {
-                await db.createJobTitle({ name: t, department_id: newDeptId, is_active: true });
-            }
+        if (res.success) {
+            await db.fetchDepartments(true);
             await db.fetchJobTitles(true); // force refresh
+            showToast(id ? "Department updated" : "Department created", "success");
+            window.closeDepartmentModal();
+            e.target.reset();
+            if (typeof currentView !== 'undefined' && currentView === 'departments') {
+                if (typeof renderView === 'function') renderView('departments');
+            }
+            if (typeof updateSelectOptions === 'function') await updateSelectOptions();
+        } else {
+            throw res.error || new Error('Unknown error');
         }
-    }
-
-    if (res.success) {
-        showToast(id ? "Department updated" : "Department created", "success");
-        closeDepartmentModal();
-        e.target.reset();
-        if (currentView === 'departments') renderView('departments');
-    } else {
-        showToast(res.error?.message || t('toast_error_saving_department'), "danger");
+    } catch (err) {
+        console.error(err);
+        showToast(err.message || t('toast_error_saving_department'), "danger");
+    } finally {
+        submitBtn.disabled = false;
     }
 };
 
@@ -8431,7 +8640,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     const assigneeSelect = document.getElementById('crmDealAssignee');
     if (assigneeSelect) {
         assigneeSelect.innerHTML = '<option value="">Unassigned</option>' +
-            users.map(u => `<option value="${u.id}">${u.full_name} (${u.role})</option>`).join('');
+            users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
     }
 
     document.getElementById('crmDealId').value = id || '';
@@ -8452,7 +8661,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     }
 
     // Toggle disabled state for all inputs
-    const inputs = ['crmDealTitle', 'crmDealClient', 'crmDealAmount', 'crmDealClosingDate', 'crmDealAssignee', 'crmDealLostReason', 'crmDealEventType', 'crmDealFirstContactDate', 'crmDealContactMethod', 'crmDealLeadSource'];
+    const inputs = ['crmDealTitle', 'crmDealClient', 'crmDealAmount', 'crmDealClosingDate', 'crmDealAssignee', 'crmDealLostReason', 'crmDealEventType', 'crmDealFirstContactDate', 'crmDealContactMethod', 'crmDealLeadSource', 'crmDealTechnicalDescription'];
     inputs.forEach(inputId => {
         const el = document.getElementById(inputId);
         if (el) el.disabled = isViewOnly;
@@ -8471,6 +8680,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
             if (document.getElementById('crmDealFirstContactDate')) document.getElementById('crmDealFirstContactDate').value = deal.first_contact_date || '';
             if (document.getElementById('crmDealContactMethod')) document.getElementById('crmDealContactMethod').value = deal.contact_method || '';
             if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = deal.lead_source || '';
+            document.getElementById('crmDealTechnicalDescription').value = deal.technical_description || '';
 
             if (assigneeSelect) assigneeSelect.value = deal.assigned_to || '';
 
@@ -8490,6 +8700,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
         if (document.getElementById('crmDealFirstContactDate')) document.getElementById('crmDealFirstContactDate').value = '';
         if (document.getElementById('crmDealContactMethod')) document.getElementById('crmDealContactMethod').value = '';
         if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = '';
+        document.getElementById('crmDealTechnicalDescription').value = '';
         if (assigneeSelect) assigneeSelect.value = '';
         document.getElementById('crmDealLostReasonGroup').style.display = 'none';
     }
@@ -8521,6 +8732,7 @@ window.handleCreateDeal = async (e) => {
         first_contact_date: (firstContactDateEl && firstContactDateEl.value) ? firstContactDateEl.value : null,
         contact_method: (contactMethodEl && contactMethodEl.value) ? contactMethodEl.value : null,
         lead_source: (leadSourceEl && leadSourceEl.value) ? leadSourceEl.value : null,
+        technical_description: document.getElementById('crmDealTechnicalDescription').value || null,
         assigned_to: assigneeVal ? assigneeVal : currentUser.id
     };
     if (!id) data.stage = 'LEAD'; // Only set stage on creation
@@ -8738,9 +8950,10 @@ async function initApp() {
             'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
             'archived_contracts', 'messages', 'notifications', 'performance',
             'documents', 'profile', 'projects', 'approvals', 'tasks',
-            'departments', 'translations', 'clients', 'crm', 'orders', 'integrations', 'custody_handover'
+            'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover'
         ]);
-        const savedView = localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view');
+        const requestedView = new URLSearchParams(window.location.search).get('view');
+        const savedView = requestedView || localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view');
         currentView = restorableViews.has(savedView) ? savedView : 'dashboard';
 
         // Do not restore a sidebar page that is hidden for this user's role.
@@ -8873,10 +9086,10 @@ async function renderRequests() {
 
     const profilesMap = {};
     allProfiles.forEach(profile => {
-        profilesMap[profile.id] = profile.full_name || 'Unknown User';
+        profilesMap[profile.id] = window.formatEmployeeName(profile) || 'Unknown User';
     });
     requestDirectory.forEach(person => {
-        profilesMap[person.employee_id] = person.full_name || profilesMap[person.employee_id] || 'Unknown User';
+        profilesMap[person.employee_id] = window.formatEmployeeName(person) || profilesMap[person.employee_id] || 'Unknown User';
     });
     const emailMap = Object.fromEntries((requestDirectory || []).map(person => [person.employee_id, person.email || '']));
 
@@ -9121,7 +9334,7 @@ async function renderArchivedRequests() {
     let profilesMap = {};
     const allProfiles = await db.fetchAllProfiles();
     allProfiles.forEach(p => {
-        profilesMap[p.id] = p.full_name || 'Unknown User';
+        profilesMap[p.id] = window.formatEmployeeName(p) || 'Unknown User';
     });
 
     // Normalize requests
@@ -9229,6 +9442,14 @@ async function renderProjects() {
         projects.forEach(p => {
             window.projectCache[p.id] = p;
             const tagsHtml = (p.project_tags || []).map(t => `<span class="badge" style="background: var(--color-primary); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-weight: 500;">${t}</span>`).join(' ');
+            const wonDealDetails = p.source === 'WON_DEAL' ? `
+                <div class="project-deal-summary">
+                    ${p.crm_clients?.name ? `<span><i data-lucide="building-2"></i>${escapeHTML(p.crm_clients.name)}</span>` : ''}
+                    ${p.event_date ? `<span><i data-lucide="calendar"></i>${escapeHTML(p.event_date)}</span>` : ''}
+                    ${p.event_location ? `<a href="${escapeHTML(p.event_location)}" target="_blank" rel="noopener"><i data-lucide="map-pin"></i>${t('ui_location') || 'Location'}</a>` : ''}
+                    <span><i data-lucide="wallet"></i>${t('crm_project_amount') || 'Project'}: SAR ${Number(p.project_amount || 0).toLocaleString()}</span>
+                    <span><i data-lucide="badge-dollar-sign"></i>${t('crm_paid_amount_short') || 'Paid'}: SAR ${Number(p.paid_amount || 0).toLocaleString()}</span>
+                </div>` : '';
             html += `
                 <div class="card" style="display: flex; flex-direction: column; gap: 0.5rem; position: relative;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -9241,6 +9462,7 @@ async function renderProjects() {
                     </div>
                     <p style="color: var(--color-text-secondary); margin: 0; font-size: 0.9rem;">${p.project_type}</p>
                     <p style="margin: 0.5rem 0; flex-grow: 1;">${p.description || 'No description provided.'}</p>
+                    ${wonDealDetails}
                     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">${tagsHtml}</div>
                 </div>
             `;
@@ -9263,7 +9485,7 @@ window.openProjectModal = async function () {
 
     const profiles = await db.fetchAllProfiles();
     if (profiles && profiles.length > 0) {
-        assigneesSelect.innerHTML = profiles.map(p => `<option value="${p.id}">${p.full_name || p.id}</option>`).join('');
+        assigneesSelect.innerHTML = profiles.map(p => `<option value="${p.id}">${window.formatEmployeeName(p) || p.id}</option>`).join('');
     } else {
         assigneesSelect.innerHTML = '<option value="">No users found</option>';
     }
@@ -9362,7 +9584,7 @@ window.openEditProjectModal = async function (id) {
     const profiles = await db.fetchAllProfiles();
     if (profiles && profiles.length > 0) {
         assigneesSelect.innerHTML = profiles.map(p =>
-            `<option value="${p.id}" ${(project.assigned_people || []).includes(p.id) ? 'selected' : ''}>${p.full_name || p.id}</option>`
+            `<option value="${p.id}" ${(project.assigned_people || []).includes(p.id) ? 'selected' : ''}>${window.formatEmployeeName(p) || p.id}</option>`
         ).join('');
     } else {
         assigneesSelect.innerHTML = '<option value="">No users found</option>';
@@ -9438,7 +9660,7 @@ async function renderApprovals() {
             detailsString = `Loan — SAR ${Number(workflow.manual_amount || 0).toLocaleString()}`;
         }
 
-        return `<tr><td><strong>${escapeHTML(employee?.full_name || 'Employee')}</strong></td><td>${escapeHTML(workflow.request_type || 'Employee Request')}</td><td>${escapeHTML(detailsString)}</td><td><span class="status-badge warning">${escapeHTML(REQUEST_STAGE_LABELS[step?.stage_key] || 'Pending approval')}</span></td><td>${workflow.created_at ? new Date(workflow.created_at).toLocaleDateString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
+        return `<tr><td><strong>${escapeHTML(window.formatEmployeeName(employee) || 'Employee')}</strong></td><td>${escapeHTML(workflow.request_type || 'Employee Request')}</td><td>${escapeHTML(detailsString)}</td><td><span class="status-badge warning">${escapeHTML(REQUEST_STAGE_LABELS[step?.stage_key] || 'Pending approval')}</span></td><td>${workflow.created_at ? new Date(workflow.created_at).toLocaleDateString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
     }).join('');
 
     const departmentNames = new Set(managedDepartments.map(department => department.name));
@@ -9455,7 +9677,7 @@ async function renderApprovals() {
         const department = (departments || []).find(item => item.name === task.department);
         const canDecide = department?.head_id === currentUser?.id;
         const title = task.title_i18n?.[currentLang] || task.title_i18n?.en || task.title || 'Untitled task';
-        return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(assignee?.full_name || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleTaskApprovalDecision('${task.id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleTaskApprovalDecision('${task.id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Watcher access · View only</span>'}</td></tr>`;
+        return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(window.formatEmployeeName(assignee) || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleTaskApprovalDecision('${task.id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleTaskApprovalDecision('${task.id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Watcher access · View only</span>'}</td></tr>`;
     }).join('');
 
     return `<div class="page-header"><div><h1 class="page-title">${t('ui_approvals_dashboard')}</h1><p class="page-subtitle">Requests and task completions waiting for management approval.</p></div></div>
@@ -9521,7 +9743,7 @@ window.handleApprovalAction = async function (taskId, newStatus) {
                 showToast(t('toast_failed_to_update_task'), 'danger');
             } else {
                 if (taskData.assignee_id) {
-                    await db.createNotification(taskData.assignee_id, `Your Designing task "${taskData.title}" was rejected by the manager. Reason: ${reason}`);
+                    await db.createNotification(taskData.assignee_id, `Your Designing task "${taskData.title}" was rejected by the manager. Reason: ${reason}`, taskId);
                 }
                 await db.addTaskComment(taskId, currentUser.id, `Manager Rejection Reason: ${reason}`);
                 showToast('Task rejected and sent back to In Progress', 'success');
@@ -9551,7 +9773,7 @@ window.handleApprovalAction = async function (taskId, newStatus) {
                 showToast(t('toast_failed_to_update_task'), 'danger');
             } else {
                 if (taskData.assignee_id) {
-                    await db.createNotification(taskData.assignee_id, `Your task "${taskData.title}" was approved.`);
+                    await db.createNotification(taskData.assignee_id, `Your task "${taskData.title}" was approved.`, taskId);
                 }
                 showToast(t('toast_task') + ' approved', 'success');
                 renderView('approvals');
