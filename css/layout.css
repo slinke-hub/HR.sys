@@ -1021,8 +1021,9 @@ textarea,
   inset: 0;
   z-index: 2147483000;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(calc(72px + env(safe-area-inset-bottom)), 1rem) max(1rem, env(safe-area-inset-left));
 }
 
 .mobile-navigation-backdrop {
@@ -1038,14 +1039,14 @@ textarea,
 
 .mobile-navigation-panel {
   position: relative;
-  width: 100%;
-  max-height: min(76dvh, 680px);
-  padding: .5rem max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  width: min(720px, 100%);
+  max-height: min(calc(100dvh - 104px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 680px);
+  padding: .75rem 1rem 1rem;
   border: 1px solid var(--color-border);
-  border-radius: 24px 24px 0 0;
+  border-radius: 24px;
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
-  box-shadow: 0 -24px 60px rgba(3, 12, 27, .28);
+  box-shadow: 0 24px 60px rgba(3, 12, 27, .32);
   overflow-y: auto;
   overscroll-behavior: contain;
   animation: mobileSheetIn .22s ease-out;
@@ -1123,7 +1124,7 @@ textarea,
 }
 
 @keyframes mobileSheetIn {
-  from { transform: translateY(100%); }
+  from { transform: translateY(24px) scale(.97); opacity: 0; }
   to { transform: translateY(0); }
 }
 

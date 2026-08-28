@@ -1019,7 +1019,7 @@ button.btn-icon [data-lucide] {
 
 .task-v2-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(150px, 190px) repeat(4, max-content);
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 220px) repeat(2, max-content);
   align-items: center;
   gap: .75rem;
   padding: .75rem;
@@ -1131,10 +1131,6 @@ button.btn-icon [data-lucide] {
   border-bottom-color: var(--task-v2-accent);
   color: var(--task-v2-accent);
   font-weight: 700;
-}
-
-.task-v2-quick-filter {
-  min-width: 190px;
 }
 
 .deal-workflow-button {
@@ -1774,13 +1770,13 @@ button.btn-icon [data-lucide] {
 }
 
 .side-panel.task-v2-detail {
-  right: -1100px;
+  right: 0;
   width: min(1000px, calc(100vw - 255px));
   background: var(--color-bg-base);
 }
 
 .side-panel.task-v2-detail.active {
-  right: 0;
+  transform: translateX(0);
 }
 
 .side-panel.task-v2-detail .side-panel-body {
@@ -2038,7 +2034,7 @@ button.btn-icon [data-lucide] {
 .side-panel {
   position: fixed;
   top: 0;
-  right: -600px;
+  right: 0;
   width: 600px;
   max-width: 100vw;
   height: 100%;
@@ -2048,14 +2044,15 @@ button.btn-icon [data-lucide] {
   background: var(--color-bg-base);
   z-index: 99999;
   box-shadow: -10px 0 40px rgba(0, 0, 0, 0.3);
-  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateX(calc(100% + 2px));
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
   border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .side-panel.active {
-  right: 0;
+  transform: translateX(0);
 }
 
 .side-panel-header {
@@ -2501,13 +2498,13 @@ input,
 
 .side-panel.teamwork-task-detail {
   width: min(1040px, calc(100vw - 250px));
-  right: -1100px;
+  right: 0;
   background: var(--color-bg-surface);
   color: var(--color-text);
 }
 
 .side-panel.teamwork-task-detail.active {
-  right: 0;
+  transform: translateX(0);
 }
 
 .side-panel.task-v2-detail.teamwork-task-detail {

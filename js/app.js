@@ -762,15 +762,12 @@ window.closeMobileNavigation = function () {
     document.body.classList.remove('mobile-navigation-open');
 };
 
-window.openMobileNavigation = function () {
+window.openMobileNavigation = async function () {
     window.closeMobileNavigation();
-    const sourceItems = [...document.querySelectorAll('.sidebar-nav > .nav-item[data-view]')]
-        .filter(item => {
-            const view = item.dataset.view;
-            if (!view || ['dashboard', 'tasks', 'requests', 'time'].includes(view)) return false;
-            const style = window.getComputedStyle(item);
-            return style.display !== 'none' && style.visibility !== 'hidden';
-        });
+    const candidates = [...document.querySelectorAll('.sidebar-nav > .nav-item[data-view]')]
+        .filter(item => item.dataset.view && !['dashboard', 'tasks', 'requests', 'time'].includes(item.dataset.view));
+    const accessResults = await Promise.all(candidates.map(item => canCurrentUserAccessView(item.dataset.view)));
+    const sourceItems = candidates.filter((item, index) => accessResults[index]);
     const sheet = document.createElement('div');
     sheet.id = 'mobileNavigationSheet';
     sheet.className = 'mobile-navigation-sheet';
@@ -5014,10 +5011,8 @@ async function renderTasksV2() {
             <div class="task-v2-toolbar" role="search">
                 <label class="task-v2-search"><i data-lucide="search"></i><input type="search" id="taskV2Search" placeholder="${t('task_search_placeholder')}" oninput="filterTasksV2()" aria-label="${t('task_search')}"></label>
                 <select id="taskV2Status" class="form-control" onchange="filterTasksV2()" aria-label="Filter by status">
-                    <option value="">${t('task_all_statuses')}</option><option value="Pending Approval">${t('ui_awaiting_approval')}</option><option value="todo">${t('task_to_do')}</option><option value="in_progress">${t('task_in_progress')}</option><option value="review">${t('task_review')}</option><option value="completed">${t('task_done')}</option>
+                    <option value="">${t('task_all_statuses')}</option><option value="__overdue">${t('task_late')}</option><option value="__week">${t('task_due_week')}</option><option value="Pending Approval">${t('ui_awaiting_approval')}</option><option value="todo">${t('task_to_do')}</option><option value="in_progress">${t('task_in_progress')}</option><option value="review">${t('task_review')}</option><option value="completed">${t('task_done')}</option>
                 </select>
-                <button class="btn btn-secondary task-v2-quick-filter" data-filter="overdue" type="button" onclick="setTaskV2QuickFilter('overdue')">${t('task_late')}</button>
-                <button class="btn btn-secondary task-v2-quick-filter" data-filter="week" type="button" onclick="setTaskV2QuickFilter('week')">${t('task_due_week')}</button>
                 <button class="btn btn-secondary" type="button" onclick="clearTaskV2Filters()">${t('task_clear')}</button>
                 ${canCreateTask ? `<button class="btn btn-primary" type="button" onclick="toggleTaskV2Create()"><i data-lucide="plus"></i> ${t('task_add')}</button>` : ''}
             </div>
@@ -5034,10 +5029,11 @@ async function renderTasksV2() {
 
 window.filterTasksV2 = function () {
     const query = (document.getElementById('taskV2Search')?.value || '').trim().toLowerCase();
-    const status = document.getElementById('taskV2Status')?.value || '';
+    const selectedFilter = document.getElementById('taskV2Status')?.value || '';
+    const status = selectedFilter.startsWith('__') ? '' : selectedFilter;
     const projectId = window.taskV2SelectedProject || 'all';
     const listId = window.taskV2SelectedList || '';
-    const quickFilter = window.taskV2QuickFilter || '';
+    const temporalFilter = selectedFilter.startsWith('__') ? selectedFilter : '';
     const now = new Date(new Date().toDateString());
     let visibleCount = 0;
     const visibleIds = new Set(window.visibleTaskIds || []);
@@ -5050,10 +5046,10 @@ window.filterTasksV2 = function () {
         const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, project?.project_name, privateList?.name, task.parent_task_id ? 'subtask' : 'parent task', parentTask?.displayTitle, parentTask?.title].filter(Boolean).join(' ').toLowerCase();
         const due = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
         const days = due ? (due - now) / 86400000 : null;
-        const matchesQuick = !quickFilter || (quickFilter === 'overdue' && days < 0 && task.status !== 'completed') || (quickFilter === 'week' && days >= 0 && days <= 7 && task.status !== 'completed');
+        const matchesTemporal = !temporalFilter || (temporalFilter === '__overdue' && days < 0 && task.status !== 'completed') || (temporalFilter === '__week' && days >= 0 && days <= 7 && task.status !== 'completed');
         const matchesProject = listId ? true : (projectId === 'all' || (projectId === 'none' ? !task.project_id : task.project_id === projectId));
         const matchesList = !listId || task.task_list_id === listId;
-        const visible = (!query || searchable.includes(query)) && (!status || task.status === status) && matchesProject && matchesList && matchesQuick;
+        const visible = (!query || searchable.includes(query)) && (!status || task.status === status) && matchesProject && matchesList && matchesTemporal;
         row.style.display = visible ? '' : 'none';
         if (visible) visibleCount += 1;
     });
@@ -5142,12 +5138,6 @@ window.selectTaskV2Project = function (projectId) {
     window.filterTasksV2();
 };
 
-window.setTaskV2QuickFilter = function (filter) {
-    window.taskV2QuickFilter = window.taskV2QuickFilter === filter ? '' : filter;
-    document.querySelectorAll('.task-v2-quick-filter').forEach(button => button.classList.toggle('active', button.dataset.filter === window.taskV2QuickFilter));
-    window.filterTasksV2();
-};
-
 window.taskV2ToggleComplete = async function (taskId, status) {
     await window.handleUpdateTaskStatus(taskId, status);
     await renderView('tasks_v2');
@@ -5172,9 +5162,7 @@ window.clearTaskV2Filters = function () {
     const status = document.getElementById('taskV2Status');
     if (search) search.value = '';
     if (status) status.value = '';
-    window.taskV2QuickFilter = '';
     window.taskV2SelectedProject = 'all';
-    document.querySelectorAll('.task-v2-quick-filter').forEach(button => button.classList.remove('active'));
     document.querySelectorAll('.task-v2-list-link').forEach((button, index) => button.classList.toggle('active', index === 0));
     window.filterTasksV2();
 };
@@ -7376,7 +7364,7 @@ window.renderView = async function (viewId, isBack = false) {
     const isTaskManagerView = viewId === 'tasks';
     const taskPanel = document.getElementById('taskSidePanel');
     const taskPanelOverlay = document.getElementById('taskSidePanelOverlay');
-    if (!isTaskManagerView) window.closeTaskDetailsModal?.();
+    window.closeTaskDetailsModal?.();
     if (taskPanel) taskPanel.hidden = !isTaskManagerView;
     if (taskPanelOverlay) taskPanelOverlay.hidden = !isTaskManagerView;
 
