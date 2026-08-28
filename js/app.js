@@ -234,7 +234,7 @@ window.refreshUserRowInPlace = async function (userId, knownUpdates = null) {
     const row = document.querySelector(`[data-user-row="${userId}"]`);
     if (!row) return;
     const details = row.querySelector('[data-user-details]');
-    if (details) details.innerHTML = `<div style="font-weight:bold;color:var(--primary-color);">EMP-${escapeHTML(String(user.emp_index || 'New'))}</div><div style="font-weight:bold;">${escapeHTML(window.formatEmployeeName(user) || 'N/A')}</div><div style="font-size:.8rem;color:var(--text-light);">ID: <span title="${user.id}">${user.id.substring(0, 8)}...</span><br>Iqama: ${escapeHTML(user.iqama_number || 'N/A')}<br>Phone: ${escapeHTML(user.phone_number || 'N/A')}</div>`;
+    if (details) details.innerHTML = `<div style="font-weight:bold;color:var(--primary-color);">MQ-${escapeHTML(String(user.emp_index || 'New'))}</div><div style="font-weight:bold;">${escapeHTML(window.formatEmployeeName(user) || 'N/A')}</div><div style="font-size:.8rem;color:var(--text-light);">ID: <span title="${user.id}">${user.id.substring(0, 8)}...</span><br>Iqama: ${escapeHTML(user.iqama_number || 'N/A')}<br>Phone: ${escapeHTML(user.phone_number || 'N/A')}</div>`;
     const badge = row.querySelector('[data-user-role-badge]');
     if (badge) {
         badge.className = `status-badge ${user.role === 'ADMIN' ? 'success' : 'info'}`;
@@ -304,7 +304,7 @@ window.showAdminPasswordResetModal = (userId) => {
     const form = document.getElementById('adminPasswordResetForm');
     form.reset();
     document.getElementById('adminPasswordResetUserId').value = user.id;
-    document.getElementById('adminPasswordResetUserName').textContent = window.formatEmployeeName(user) || `EMP-${user.emp_index || ''}`;
+    document.getElementById('adminPasswordResetUserName').textContent = window.formatEmployeeName(user) || `MQ-${user.emp_index || ''}`;
     document.getElementById('adminNewPassword').type = 'password';
     document.getElementById('adminConfirmPassword').type = 'password';
     document.getElementById('adminPasswordResetModal').classList.add('show');
@@ -3311,7 +3311,6 @@ async function renderUsers() {
                                 <th>${t('users_job_title')}</th>
                                 <th>${t('users_assign_role')}</th>
                                 <th>${t('users_assign_mgr')}</th>
-                                <th>${t('users_contract')}</th>
                                 <th>${t('ui_actions')}</th>
                             </tr>
                         </thead>
@@ -3319,7 +3318,7 @@ async function renderUsers() {
                             ${users.map(u => `
                                 <tr data-user-row="${u.id}">
                                     <td data-user-details>
-                                        <div style="font-weight: bold; color: var(--primary-color);">EMP-${u.emp_index || 'New'}</div>
+                                        <div style="font-weight: bold; color: var(--primary-color);">MQ-${u.emp_index || 'New'}</div>
                                         <div style="font-weight: bold;">${window.formatEmployeeName(u) || 'N/A'}</div>
                                         <div style="font-size: 0.8rem; color: var(--text-light);">
                                             ID: <span title="${u.id}">${u.id.substring(0, 8)}...</span><br/>
@@ -3352,12 +3351,10 @@ async function renderUsers() {
                                         </select>
                                     </td>
                                     <td>
-                                        <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap;" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')">
-                                            <i data-lucide="file-signature" style="width:14px;height:14px;margin-right:4px;"></i> ${t('users_contract')}
-                                        </button>
-                                    </td>
-                                    <td>
-                                        <div style="display: flex; gap: 0.5rem; flex-wrap: nowrap;">
+                                        <div style="display: flex; gap: 0.5rem; flex-wrap: nowrap; align-items: center;">
+                                            <button class="btn-secondary" style="padding: 0.4rem;" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="${t('users_contract')}">
+                                                <i data-lucide="file-signature" style="width:14px;height:14px;"></i>
+                                            </button>
                                             <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem;" onclick="showEditUserModal('${u.id}')" title="Edit User">
                                                 <i data-lucide="edit" style="width:14px;height:14px;"></i>
                                             </button>
@@ -4677,7 +4674,7 @@ async function renderTasks() {
 
             <!-- Create Task Modal -->
             <div class="modal" id="createTaskModal">
-                <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
                     <div class="modal-header">
                         <h2><i data-lucide="plus"></i> <span>${t('add_new_task') || 'Add New Task'}</span></h2>
                         <button type="button" class="icon-btn" onclick="document.getElementById('createTaskModal').classList.remove('active')">
@@ -5371,7 +5368,8 @@ window.handleCreateTask = async function (e) {
     const supervisorId = supervisorSelect && !supervisorSelect.disabled
         ? supervisorSelect.value
         : (window.taskDepartmentSupervisors?.[0]?.id || null);
-    const effectiveAssignee = taskListId ? currentUser.id : assignee;
+    const selectedPrivateList = taskListId ? (window.taskListsCache || []).find(list => list.id === taskListId) : null;
+    const effectiveAssignee = taskListId ? (selectedPrivateList?.owner_id || currentUser.id) : assignee;
     const effectiveSupervisor = taskListId ? null : supervisorId;
 
     // Check if assignee is in Designing
@@ -5427,7 +5425,7 @@ window.handleCreateTask = async function (e) {
         document.getElementById('taskDue').value = document.getElementById('taskDesignDeadline')?.value || due;
     }
     let watchers = [];
-    if (!taskListId && document.getElementById('enableWatchers') && document.getElementById('enableWatchers').checked) {
+    if (document.getElementById('enableWatchers') && document.getElementById('enableWatchers').checked) {
         watchers = Array.from(document.getElementById('taskWatchers').selectedOptions).map(opt => opt.value);
     }
     const parentTaskId = document.getElementById('taskParentId') ? document.getElementById('taskParentId').value || null : null;
@@ -6203,14 +6201,14 @@ async function renderEmployeesDirectory() {
                     <table class="data-table" id="employeeDirectoryTable">
                         <thead>
                             <tr>
-                                <th>ID</th><th>${t('emp_name')}</th><th>Role</th><th>Department</th><th>Job Title</th><th>Assign Role</th><th>Assign Manager</th><th>${t('users_contract') || 'Contract'}</th>
+                                <th>ID</th><th>${t('emp_name')}</th><th>Role</th><th>Department</th><th>Job Title</th><th>Assign Role</th><th>Assign Manager</th>
                                 <th>${t('actions') || 'Actions'}</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${visibleUsers.map(u => `
                                 <tr>
-                                    <td style="font-weight: bold; color: var(--color-primary);">EMP-${u.emp_index || '-'}</td>
+                                    <td style="font-weight: bold; color: var(--color-primary);">MQ-${u.emp_index || '-'}</td>
                                     <td>
                                         <div style="font-weight: 600;">${window.formatEmployeeName(u) || t('emp_na')}</div>
                                     </td>
@@ -6221,15 +6219,17 @@ async function renderEmployeesDirectory() {
                                     <td>${escapeHTML(u.job_title || t('emp_no_title'))}</td>
                                     <td>${canEditContracts ? `<select class="form-control directory-inline-select" data-directory-role="${u.id}"><option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>ADMIN</option><option value="MANAGER" ${u.role === 'MANAGER' ? 'selected' : ''}>MANAGER</option><option value="SUPERVISOR" ${u.role === 'SUPERVISOR' ? 'selected' : ''}>SUPERVISOR</option><option value="EMPLOYEE" ${u.role === 'EMPLOYEE' ? 'selected' : ''}>EMPLOYEE</option></select>` : u.role}</td>
                                     <td>${canEditContracts ? `<select class="form-control directory-inline-select" data-directory-manager="${u.id}"><option value="">${t('no_manager') || 'No Manager'}</option>${users.filter(manager => manager.id !== u.id && ['ADMIN','MANAGER','SUPERVISOR'].includes(manager.role)).map(manager => `<option value="${manager.id}" ${manager.id === u.manager_id ? 'selected' : ''}>${escapeHTML(window.formatEmployeeName(manager))}</option>`).join('')}</select>` : escapeHTML(users.find(manager => manager.id === u.manager_id)?.full_name || t('emp_na'))}</td>
-                                    <td><button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')"><i data-lucide="file-signature"></i> ${t('users_contract') || 'Contract'}</button></td>
+                                    <td><button class="btn-secondary btn-sm" style="padding: 0.5rem;" onclick="handlePrintContract('${u.id}')" title="${t('users_contract') || 'Contract'}"><i data-lucide="file-signature"></i></button></td>
                                     <td>
-                                        ${canEditContracts ? `
-                                        <button class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="Edit Contract">
-                                            <i data-lucide="file-pen-line"></i> Edit Contract
-                                        </button>` : ''}
-                                        ${u.id === currentUser.id && !canEditContracts ? '' : `<button class="btn-secondary btn-sm" onclick="handlePrintContract('${u.id}')" title="${t('ui_print_contract') || 'Print Contract'}">
-                                            <i data-lucide="printer"></i> ${t('ui_print_contract') || 'Print Contract'}
-                                        </button>`}
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            ${canEditContracts ? `
+                                            <button class="btn-secondary btn-sm" style="padding: 0.5rem;" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="Edit Contract">
+                                                <i data-lucide="file-pen-line"></i>
+                                            </button>` : ''}
+                                            ${u.id === currentUser.id && !canEditContracts ? '' : `<button class="btn-secondary btn-sm" style="padding: 0.5rem;" onclick="handlePrintContract('${u.id}')" title="${t('ui_print_contract') || 'Print Contract'}">
+                                                <i data-lucide="printer"></i>
+                                            </button>`}
+                                        </div>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -6267,7 +6267,7 @@ window.handlePrintContract = async (employeeId) => {
     const isSelf = employee.id === currentUser?.id;
     const isManager = currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR';
     const isUnderManagement = employee.manager_id === currentUser?.id;
-    const isAdmin = currentUserRole === 'ADMIN';
+    const isAdmin = currentUserRole === 'ADMIN' || window.canCurrentUserEditContracts(currentUserProfile);
     window.canViewFullContractIdentity = isAdmin;
 
     if (isSelf && !isAdmin && !window.canCurrentUserEditContracts(currentUserProfile)) {
@@ -7571,7 +7571,7 @@ async function renderArchivedContracts() {
             <tbody>${contracts.length ? contracts.map(contract => `
                 <tr>
                     <td><strong>${escapeHTML(contract.former_employee_name || 'Former employee')}</strong><br><small>${escapeHTML(contract.former_employee_email || '')}</small></td>
-                    <td>${escapeHTML(contract.former_employee_number ? `EMP-${contract.former_employee_number}` : '—')}</td>
+                    <td>${escapeHTML(contract.former_employee_number ? `MQ-${contract.former_employee_number}` : '—')}</td>
                     <td>${escapeHTML(contract.start_date || '—')} – ${escapeHTML(contract.end_date || 'Open-ended')}</td>
                     <td><span class="status-badge info">${escapeHTML(contract.status || 'Archived')}</span></td>
                     <td>${contract.archived_at ? new Date(contract.archived_at).toLocaleString() : '—'}</td>
@@ -7899,11 +7899,12 @@ window.handlePrivateTaskListSelection = function (listId) {
         if (isPrivate) assignee.value = currentUser.id;
         assignee.disabled = isPrivate || currentUserRole === 'EMPLOYEE';
     }
-    if (watchers) {
-        if (isPrivate) watchers.checked = false;
-        watchers.disabled = isPrivate;
+    if (watchers) watchers.disabled = false;
+    if (watchersGroup && isPrivate && watchers?.checked) watchersGroup.style.display = 'block';
+    if (isPrivate && assignee) {
+        const list = (window.taskListsCache || []).find(item => item.id === listId);
+        assignee.value = list?.owner_id || currentUser.id;
     }
-    if (watchersGroup && isPrivate) watchersGroup.style.display = 'none';
 };
 
 window.openTaskListModal = function (listId = '') {

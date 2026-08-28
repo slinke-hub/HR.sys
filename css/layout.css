@@ -1223,6 +1223,7 @@ body.modal-open {
 
   #createTaskModal .modal-content {
     padding: 1rem !important;
+    max-height: calc(100dvh - 2rem);
   }
 
   #createTaskModal form > div:last-child {
