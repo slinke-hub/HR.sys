@@ -29,8 +29,8 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
-    <link rel="stylesheet" href="css/layout.css?v=9">
-    <link rel="stylesheet" href="css/components.css?v=44">
+    <link rel="stylesheet" href="css/layout.css?v=10">
+    <link rel="stylesheet" href="css/components.css?v=46">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -41,15 +41,6 @@
             }
         }
     
-        /* Custom requested style for Contracts in Dark Mode */
-        [data-theme="dark"] .sidebar-nav .nav-item[data-view="employees"] {
-            background-color: #FFFFFF !important;
-            color: #000000 !important;
-        }
-        [data-theme="dark"] .sidebar-nav .nav-item[data-view="employees"] span,
-        [data-theme="dark"] .sidebar-nav .nav-item[data-view="employees"] i {
-            color: #000000 !important;
-        }
     </style>
 
     <!-- payroll-modal-color-fix -->
@@ -79,6 +70,7 @@
                 <a href="#" class="nav-item" data-view="projects"><i data-lucide="folder"></i><span data-i18n="nav_projects">Projects</span></a>
                 <a href="#" class="nav-item" data-view="schedule"><i data-lucide="calendar-clock"></i><span data-i18n="nav_schedule">Schedule & Reminders</span></a>
                 <a href="#" class="nav-item" data-view="time"><i data-lucide="clock"></i><span data-i18n="nav_time">Time & Attendance</span></a>
+                <button type="button" class="nav-item mobile-more-nav" id="mobileMoreNav" onclick="window.openMobileNavigation()" aria-label="More navigation"><i data-lucide="menu"></i><span data-i18n="nav_more">More</span></button>
 
                 <a href="#" class="nav-item" id="navApprovals" style="display:none" data-view="approvals"><i data-lucide="check-circle"></i><span data-i18n="nav_approvals">Approvals</span></a>
                 <a href="#" class="nav-item" data-view="admin" style="display:none"><i data-lucide="shield-check"></i><span data-i18n="nav_admin">Admin Overview</span></a>
@@ -1599,7 +1591,7 @@
     <script src="js/data.js?v=27"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=117"></script>
+    <script src="js/app.js?v=118"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

@@ -1013,6 +1013,7 @@ textarea,
   color: inherit;
   background: transparent;
   cursor: pointer;
+  font-family: inherit;
 }
 
 .mobile-navigation-sheet {
@@ -1046,6 +1047,7 @@ textarea,
   color: var(--color-text-primary);
   box-shadow: 0 -24px 60px rgba(3, 12, 27, .28);
   overflow-y: auto;
+  overscroll-behavior: contain;
   animation: mobileSheetIn .22s ease-out;
 }
 
@@ -1074,6 +1076,12 @@ textarea,
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: .65rem;
+}
+
+@media (max-width: 430px) {
+  .mobile-navigation-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .mobile-navigation-item {

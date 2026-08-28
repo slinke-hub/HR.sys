@@ -1018,7 +1018,8 @@ button.btn-icon [data-lucide] {
 }
 
 .task-v2-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 190px) repeat(4, max-content);
   align-items: center;
   gap: .75rem;
   padding: .75rem;
@@ -1026,6 +1027,16 @@ button.btn-icon [data-lucide] {
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-bg-surface);
+}
+
+.task-v2-toolbar > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.task-v2-toolbar > .btn {
+  width: auto;
+  white-space: nowrap;
 }
 
 .task-v2-search {
@@ -1060,12 +1071,35 @@ button.btn-icon [data-lucide] {
   margin: 0;
 }
 
+@media (max-width: 1100px) {
+  .task-v2-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-v2-search {
+    grid-column: 1 / -1;
+  }
+
+  .task-v2-toolbar > .btn,
+  .task-v2-toolbar > select {
+    width: 100%;
+  }
+}
+
 @media (max-width: 768px) {
 
-  .task-v2-header,
-  .task-v2-toolbar {
+  .task-v2-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .task-v2-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .task-v2-search {
+    grid-column: auto;
   }
 
   .task-v2-stats {
@@ -3200,6 +3234,11 @@ textarea::placeholder {
 [data-theme="dark"] [aria-selected="true"],
 [data-theme="dark"] [aria-current="page"] {
   background-color: rgba(255, 255, 255, .10);
+}
+
+[data-theme="dark"] .sidebar-nav .nav-item[data-view="employees"] {
+  background: transparent !important;
+  color: var(--sidebar-text) !important;
 }
 
 [data-theme="light"] .nav-item.active i,

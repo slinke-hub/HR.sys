@@ -1,11 +1,16 @@
 // App State
 let currentLang = localStorage.getItem('app_lang') || 'ar';
+window.currentLang = currentLang;
 let currentTheme = 'light';
 let currentView = 'login';
 let loginMode = 'login';
 let currentUser = null;
 let viewHistory = [];
 const defaultTranslationsSnapshot = typeof i18n !== 'undefined' ? JSON.parse(JSON.stringify(i18n)) : { en: {}, ar: {} };
+if (typeof i18n !== 'undefined') {
+    i18n.en.nav_more = 'More';
+    i18n.ar.nav_more = 'المزيد';
+}
 
 // XSS Protection Utility
 function escapeHTML(str) {
@@ -22,8 +27,9 @@ window.escapeHTML = escapeHTML;
 
 function getProfileDisplayName(profile) {
     const candidates = [
-        profile?.display_name,
+        currentLang === 'ar' ? profile?.display_name_ar : null,
         profile?.full_name,
+        profile?.display_name,
         currentUser?.email?.split('@')[0],
         t('role_employee')
     ];
@@ -735,6 +741,7 @@ window.formatEmployeeName = (profile) => {
 
 window.toggleLanguage = function () {
     currentLang = currentLang === 'en' ? 'ar' : 'en';
+    window.currentLang = currentLang;
     localStorage.setItem('app_lang', currentLang);
     htmlElement.setAttribute('dir', currentLang === 'ar' ? 'rtl' : 'ltr');
     htmlElement.setAttribute('lang', currentLang);
@@ -749,6 +756,46 @@ window.toggleLanguage = function () {
     const dropdown = document.getElementById('profileDropdown');
     if (dropdown) dropdown.style.display = 'none';
 }
+
+window.closeMobileNavigation = function () {
+    document.getElementById('mobileNavigationSheet')?.remove();
+    document.body.classList.remove('mobile-navigation-open');
+};
+
+window.openMobileNavigation = function () {
+    window.closeMobileNavigation();
+    const sourceItems = [...document.querySelectorAll('.sidebar-nav > .nav-item[data-view]')]
+        .filter(item => {
+            const view = item.dataset.view;
+            if (!view || ['dashboard', 'tasks', 'requests', 'time'].includes(view)) return false;
+            const style = window.getComputedStyle(item);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+        });
+    const sheet = document.createElement('div');
+    sheet.id = 'mobileNavigationSheet';
+    sheet.className = 'mobile-navigation-sheet';
+    const closeLabel = t('ui_close') || (currentLang === 'ar' ? 'إغلاق' : 'Close');
+    const moreLabel = t('nav_more') || (currentLang === 'ar' ? 'المزيد' : 'More');
+    sheet.innerHTML = `
+        <button type="button" class="mobile-navigation-backdrop" onclick="window.closeMobileNavigation()" aria-label="${escapeHTML(closeLabel)}"></button>
+        <section class="mobile-navigation-panel" role="dialog" aria-modal="true" aria-labelledby="mobile-navigation-title">
+            <div class="mobile-navigation-handle"></div>
+            <div class="mobile-navigation-header">
+                <h2 id="mobile-navigation-title">${escapeHTML(moreLabel)}</h2>
+                <button type="button" class="icon-btn" onclick="window.closeMobileNavigation()" aria-label="${escapeHTML(closeLabel)}"><i data-lucide="x"></i></button>
+            </div>
+            <div class="mobile-navigation-grid">
+                ${sourceItems.map(item => {
+                    const icon = item.querySelector('[data-lucide]')?.getAttribute('data-lucide') || 'circle';
+                    const label = item.querySelector('span')?.textContent?.trim() || item.dataset.view;
+                    return `<button type="button" class="mobile-navigation-item ${currentView === item.dataset.view ? 'active' : ''}" onclick="window.closeMobileNavigation(); renderView('${escapeHTML(item.dataset.view)}')"><i data-lucide="${escapeHTML(icon)}"></i><span>${escapeHTML(label)}</span></button>`;
+                }).join('')}
+            </div>
+        </section>`;
+    document.body.appendChild(sheet);
+    document.body.classList.add('mobile-navigation-open');
+    if (window.lucide) window.lucide.createIcons();
+};
 
 function updateTranslations() {
 
