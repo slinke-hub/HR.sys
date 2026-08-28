@@ -2269,6 +2269,15 @@ window.openTaskDetailsModal = async function (id) {
     const task = window.taskCache[id];
     if (!task) return;
 
+    if (currentView !== 'tasks' && currentView !== 'tasks_v2') {
+        await renderView('tasks');
+    }
+
+    const taskPanel = document.getElementById('taskSidePanel');
+    const taskPanelOverlay = document.getElementById('taskSidePanelOverlay');
+    if (taskPanel) taskPanel.hidden = false;
+    if (taskPanelOverlay) taskPanelOverlay.hidden = false;
+
     document.getElementById('detailsTaskId').value = task.id;
     document.getElementById('detailsTaskTitle').textContent = task.displayTitle || task.title;
     document.getElementById('detailsTaskAssignee').textContent = window.formatEmployeeName(task.assignee) || 'Unassigned';
@@ -7363,6 +7372,13 @@ window.renderView = async function (viewId, isBack = false) {
         viewId = 'dashboard';
         currentView = 'dashboard';
     }
+
+    const isTaskManagerView = viewId === 'tasks';
+    const taskPanel = document.getElementById('taskSidePanel');
+    const taskPanelOverlay = document.getElementById('taskSidePanelOverlay');
+    if (!isTaskManagerView) window.closeTaskDetailsModal?.();
+    if (taskPanel) taskPanel.hidden = !isTaskManagerView;
+    if (taskPanelOverlay) taskPanelOverlay.hidden = !isTaskManagerView;
 
     if (viewId !== 'login') {
         localStorage.setItem('muqam_hr_last_view', viewId);

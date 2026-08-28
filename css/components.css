@@ -2030,6 +2030,11 @@ button.btn-icon [data-lucide] {
   opacity: 1;
 }
 
+.side-panel[hidden],
+.side-panel-overlay[hidden] {
+  display: none !important;
+}
+
 .side-panel {
   position: fixed;
   top: 0;
