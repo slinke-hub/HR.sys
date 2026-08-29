@@ -4588,11 +4588,8 @@ window.handleUpdateProfileDetails = async function (e) {
 
 
 async function renderTasks() {
-    console.log("renderTasks: Starting...");
+    console.log("renderTasks: Fetching data for V2...");
     const tasksPromise = db.fetchTasks();
-
-    console.log("renderTasks: Fetching users and tasks...");
-    // Fetch users, tasks, and the signed-in user's department manager in parallel
     const [allUsers, fetchedTasks, departmentSupervisors, allDepartments, taskLists] = await Promise.all([
         db.fetchUsers(),
         tasksPromise,
@@ -4600,26 +4597,24 @@ async function renderTasks() {
         db.fetchDepartments(),
         db.fetchTaskLists()
     ]);
-    console.log("renderTasks: Fetched users and tasks.", { usersCount: allUsers.length, tasksCount: fetchedTasks.length });
-    let tasks = fetchedTasks;
+    
     window.taskDepartmentSupervisors = departmentSupervisors || [];
     const marketingDepartmentRecord = allDepartments.find(department => department.name === 'Marketing & Sales');
     window.isMarketingDepartmentManager = !!currentUser && [marketingDepartmentRecord?.head_id, marketingDepartmentRecord?.manager_id].includes(currentUser.id);
     window.taskDepartmentManagerByName = Object.fromEntries(allDepartments.map(department => [department.name, department.head_id || department.manager_id || null]));
-
     window.taskCache = {};
-    window.taskAssigneeOptionsCache = ''; // Default empty string
-
-    // Normalize status and add relationships manually
-    tasks = tasks.map(t => {
+    window.taskAssigneeOptionsCache = ''; 
+    window.taskAllUsersCache = allUsers;
+    window.taskDepartmentsCache = allDepartments;
+    window.taskListsCache = taskLists || [];
+    
+    let tasks = fetchedTasks.map(t => {
         const assignee = allUsers.find(u => u.id === t.assignee_id);
         const creator = allUsers.find(u => u.id === t.created_by);
-
         let displayTitle = t.title;
         if (t.title_i18n && typeof t.title_i18n === 'object') {
             displayTitle = t.title_i18n[currentLang] || t.title_i18n['en'] || t.title;
         }
-
         const taskObj = {
             ...t,
             displayTitle,
@@ -4632,27 +4627,12 @@ async function renderTasks() {
         window.taskCache[t.id] = taskObj;
         return taskObj;
     });
-
-    window.visibleTaskIds = tasks.map(task => task.id);
-
-    const pending = tasks.filter(t => t.status === 'Pending Approval');
-    const todo = tasks.filter(t => t.status === 'todo' || t.status === 'Approved' || t.status === 'Rejected');
-    const inProgress = tasks.filter(t => t.status === 'in_progress');
-    const review = tasks.filter(t => t.status === 'review');
-    const done = tasks.filter(t => t.status === 'completed');
-
-    console.log("renderTasks: Fetching projects...");
+    
+    window.visibleTaskIds = tasks.map(task => String(task.id));
+    
     const projects = await db.fetchProjects(currentUser.id);
-    console.log("renderTasks: Fetched projects.", { projectsCount: projects.length });
-    const projectOptions = projects.map(p => `<option value="${p.id}">${p.project_name}</option>`).join('');
-    window.projectOptionsCache = projectOptions;
     window.projectsCache = projects;
-
-    // Build department options dynamically from DB
-    const departmentOptions = allDepartments.map(d => `<option value="${escapeHTML(d.name)}">${escapeHTML(d.name)}</option>`).join('');
-
-    let adminForm = '';
-    let canCreateTask = !!currentUser;
+    window.projectOptionsCache = projects.map(p => `<option value="${p.id}">${p.project_name}</option>`).join('');
 
     let teamIds = [currentUser.id];
     if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
@@ -4660,7 +4640,6 @@ async function renderTasks() {
         const indirectReports = allUsers.filter(u => directReports.includes(u.manager_id)).map(u => u.id);
         teamIds = [currentUser.id, ...directReports, ...indirectReports];
     }
-
     let users = allUsers;
     const isRegularEmployee = currentUserRole === 'EMPLOYEE';
     if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
@@ -4668,31 +4647,244 @@ async function renderTasks() {
     } else if (isRegularEmployee) {
         users = users.filter(u => u.id === currentUser.id);
     }
-    const userOptions = users.map(u => {
+    window.taskAssigneeOptionsCache = users.map(u => {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
         const selected = (isRegularEmployee && u.id === currentUser.id) ? 'selected' : '';
         return `<option value="${escapeHTML(u.id)}" ${selected}>${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
     }).join('');
-    window.taskAssigneeOptionsCache = userOptions;
-    window.taskAllUsersCache = allUsers;
-    window.taskDepartmentsCache = allDepartments;
-    window.taskListsCache = taskLists || [];
+
     const ownTaskLists = (taskLists || []).filter(list => list.owner_id === currentUser.id);
     const currentProfile = allUsers.find(user => user.id === currentUser.id) || currentUser;
     window.taskListShareCandidates = allUsers.filter(user => user.id !== currentUser.id && (
         user.department_id === currentProfile.department_id || user.id === currentProfile.manager_id
     ));
-    const taskListOptions = ownTaskLists.map(list => `<option value="${escapeHTML(list.id)}">${escapeHTML(list.name)}</option>`).join('');
     window.taskWatcherOptionsCache = allUsers.map(u => {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
         return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
     }).join('');
+    
+    return ''; 
+}
+
+function renderTaskCard(task) {
+    const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
+    const canManageTask = task.task_list_id
+        ? taskList?.owner_id === currentUser?.id
+        : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
+    const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
+    let prioColor = 'var(--color-border)';
+    if (task.priority === 'medium') prioColor = 'var(--color-primary)';
+    if (task.priority === 'high' || task.priority === 'urgent') prioColor = 'var(--color-warning)';
+    if (task.priority === 'critical') prioColor = 'var(--color-danger)';
+    
+    return `
+        <div class="card task-item-card" data-task-id="${task.id}" id="task-card-${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" draggable="${canManageTask}" ${canManageTask ? `ondragstart="handleTaskDragStart(event, '${task.id}')"` : ''} onclick="openTaskDetailsModal('${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${prioColor}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: pointer; background: var(--color-surface); position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 3rem; gap: 0.5rem;">
+                <h4 style="margin: 0; font-size: 0.95rem; line-height: 1.4; color: var(--color-text); font-weight: 500; word-break: break-word;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${escapeHTML(task.displayTitle)}</h4>
+            </div>
+            ${canManageTask ? `<button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1rem; right: 0.75rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 4px; border-radius: var(--radius-sm);" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>` : ''}
+            <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0; display: flex; flex-direction: column; gap: 0.35rem;">
+                <div style="display: flex; align-items: center;"><i data-lucide="calendar" style="width: 12px; height: 12px; margin-right: 4px;"></i> Due: ${task.due_date || t('task_no_date') || 'No Date'}</div>
+                ${task.start_date ? `<div style="display: flex; align-items: center;"><i data-lucide="play" style="width: 12px; height: 12px; margin-right: 4px;"></i> Start: ${escapeHTML(task.start_date)}</div>` : ''}
+                <div style="display: flex; align-items: center;"><i data-lucide="user" style="width: 12px; height: 12px; margin-right: 4px;"></i> ${window.formatEmployeeName(task.assignee) || t('task_unknown') || 'Unassigned'}</div>
+                ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> Subtask of: ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
+                ${task.estimated_time ? `<div style="display: flex; align-items: center;"><i data-lucide="clock" style="width: 12px; height: 12px; margin-right: 4px;"></i> Est: ${escapeHTML(task.estimated_time)}</div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+async function renderTasksV2() {
+    console.log("renderTasksV2: Loading tasks natively...");
+    await renderTasks();
+
+    const visibleIds = new Set(window.visibleTaskIds || []);
+    const tasks = Object.values(window.taskCache || {}).filter(task => visibleIds.has(String(task.id)));
+    
+    const openCount = tasks.filter(task => task.status !== 'completed').length;
+    const dueSoonCount = tasks.filter(task => {
+        if (!task.due_date || task.status === 'completed') return false;
+        const days = (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000;
+        return days >= 0 && days <= 7;
+    }).length;
+    const overdueCount = tasks.filter(task => task.due_date && task.status !== 'completed' && new Date(`${task.due_date}T23:59:59`) < new Date()).length;
+    
+    const projects = window.projectsCache || [];
+    const taskLists = window.taskListsCache || [];
+    const canCreateTask = !!currentUser;
+    const selectedProject = window.taskV2SelectedProject || 'all';
+    
+    const projectItems = projects.map(p => `
+        <li class="${selectedProject === String(p.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('${p.id}')">
+            <i data-lucide="folder"></i>
+            <span>${escapeHTML(p.project_name)}</span>
+        </li>
+    `).join('');
+
+    const ownTaskLists = taskLists.filter(list => list.owner_id === currentUser.id);
+    const sharedTaskLists = taskLists.filter(list => list.shared_with && list.shared_with.includes(currentUser.id));
+    
+    let personalListItems = '';
+    if (ownTaskLists.length > 0) {
+        personalListItems += `<div class="task-v2-sidebar-section-title">My Lists</div><ul>`;
+        personalListItems += ownTaskLists.map(list => `
+            <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')">
+                <i data-lucide="list-todo"></i>
+                <span>${escapeHTML(list.name)}</span>
+            </li>
+        `).join('');
+        personalListItems += `</ul>`;
+    }
+    if (sharedTaskLists.length > 0) {
+        personalListItems += `<div class="task-v2-sidebar-section-title">Shared Lists</div><ul>`;
+        personalListItems += sharedTaskLists.map(list => {
+            const owner = window.taskAllUsersCache?.find(u => u.id === list.owner_id);
+            const ownerName = owner ? owner.full_name.split(' ')[0] : 'Unknown';
+            return `
+            <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')">
+                <i data-lucide="users"></i>
+                <span title="Shared by ${ownerName}">${escapeHTML(list.name)}</span>
+            </li>
+            `;
+        }).join('');
+        personalListItems += `</ul>`;
+    }
+
+    const taskRows = tasks.map(task => {
+        const canManageTask = task.task_list_id
+            ? taskLists.find(l => l.id === task.task_list_id)?.owner_id === currentUser?.id
+            : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id);
+        const prioColor = task.priority === 'high' || task.priority === 'urgent' ? 'var(--color-warning)' : (task.priority === 'critical' ? 'var(--color-danger)' : 'var(--color-text-secondary)');
+        const isCompleted = task.status === 'completed';
+        
+        const taskList = taskLists.find(list => list.id === task.task_list_id);
+        const listName = taskList?.name || (task.project_id ? (projects.find(project => project.id === task.project_id)?.project_name || 'Project tasks') : 'Personal tasks');
+        const childCount = tasks.filter(child => child.parent_task_id === task.id).length;
+        const dueClass = task.due_date && task.status !== 'completed' && new Date(`${task.due_date}T23:59:59`) < new Date() ? ' overdue' : '';
+        return `
+            <article class="task-v2-row ${isCompleted ? 'completed' : ''}" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}">
+                <div class="task-v2-row-left">
+                    ${childCount ? `<button class="task-v2-subtask-toggle" type="button" aria-label="Show ${childCount} subtasks" onclick="event.stopPropagation(); openTaskDetailsModal('${task.id}')"><i data-lucide="chevron-right"></i><span>${childCount}</span></button>` : '<span class="task-v2-subtask-spacer"></span>'}
+                    <button class="task-v2-check-btn" onclick="window.taskV2ToggleComplete('${task.id}', event)" ${!canManageTask ? 'disabled' : ''}>
+                        <i data-lucide="check-circle-2" style="color: ${isCompleted ? 'var(--color-success)' : (task.status === 'in_progress' ? 'var(--color-warning)' : 'var(--color-border)')}"></i>
+                    </button>
+                    <div class="task-v2-row-content" onclick="openTaskDetailsModal('${task.id}')" style="cursor:pointer;">
+                        <h4 style="${isCompleted ? 'text-decoration: line-through; opacity: 0.6;' : ''}">
+                            ${task.parent_task_id ? '<span class="task-relation-badge is-subtask">Subtask</span> ' : ''}
+                            ${escapeHTML(task.displayTitle)}
+                        </h4>
+                        <div class="task-v2-meta">
+                            <span class="task-v2-context"><i data-lucide="list"></i> ${escapeHTML(listName)}</span>
+                            <span style="color: ${prioColor}"><i data-lucide="flag"></i> ${escapeHTML(task.priority)}</span>
+                            <span><i data-lucide="user"></i> ${window.formatEmployeeName(task.assignee) || 'Unassigned'}</span>
+                            ${task.due_date ? `<span class="${dueClass}"><i data-lucide="calendar"></i> ${task.due_date}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="task-v2-row-actions">
+                    ${canManageTask ? `<select class="task-v2-stage-select" aria-label="Change task stage" onclick="event.stopPropagation()" onchange="window.taskV2ChangeStage('${task.id}', this.value)">
+                        <option value="todo" ${task.status === 'todo' ? 'selected' : ''}>To do</option>
+                        <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>In progress</option>
+                        <option value="review" ${task.status === 'review' ? 'selected' : ''}>Review</option>
+                        <option value="completed" ${task.status === 'completed' ? 'selected' : ''}>Done</option>
+                        <option value="Pending Approval" ${task.status === 'Pending Approval' ? 'selected' : ''}>Awaiting approval</option>
+                    </select>` : ''}
+                    ${canManageTask ? `
+                        <button class="icon-btn" onclick="openEditTaskModal('${task.id}')"><i data-lucide="edit-2"></i></button>
+                    ` : ''}
+                </div>
+            </article>
+        `;
+    }).join('');
+
+    const pending = tasks.filter(t => t.status === 'Pending Approval');
+    const todo = tasks.filter(t => t.status === 'todo');
+    const inProgress = tasks.filter(t => t.status === 'in_progress');
+    const review = tasks.filter(t => t.status === 'review');
+    const done = tasks.filter(t => t.status === 'completed');
+    
+    // Add additional statuses like Approved/Rejected if used
+    const approved = tasks.filter(t => t.status === 'Approved');
+    const rejected = tasks.filter(t => t.status === 'Rejected');
+
+    const boardHTML = `
+        <div id="tasks-view-board" style="display: block; padding-top: 1rem;">
+            <div class="task-board-wrapper">
+                <div class="task-board" style="display: flex; overflow-x: auto; gap: 1rem; padding-bottom: 1rem;">
+                    <div class="task-board-column" style="flex: 0 0 300px;">
+                        <div class="card" style="background: rgba(139, 92, 246, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid #8b5cf6;">
+                            <div class="card-title" style="padding: 1rem 1rem 0;">Awaiting Approval <span id="badge-pending" class="badge" style="background: #8b5cf6; color: #fff;">${pending.length}</span></div>
+                            <div id="col-Pending Approval" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'Pending Approval')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
+                                ${pending.map(renderTaskCard).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="task-board-column" style="flex: 0 0 300px;">
+                        <div class="card" style="background: rgba(59, 130, 246, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-primary);">
+                            <div class="card-title" style="padding: 1rem 1rem 0;">To do <span id="badge-todo" class="badge bg-primary text-white">${todo.length}</span></div>
+                            <div id="col-todo" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'todo')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
+                                ${todo.map(renderTaskCard).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="task-board-column" style="flex: 0 0 300px;">
+                        <div class="card" style="background: rgba(245, 158, 11, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-warning);">
+                            <div class="card-title" style="padding: 1rem 1rem 0;">In progress <span id="badge-in_progress" class="badge bg-warning text-white">${inProgress.length}</span></div>
+                            <div id="col-in_progress" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'in_progress')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
+                                ${inProgress.map(renderTaskCard).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="task-board-column" style="flex: 0 0 300px;">
+                        <div class="card" style="background: rgba(236, 72, 153, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid #ec4899;">
+                            <div class="card-title" style="padding: 1rem 1rem 0;">Review <span id="badge-review" class="badge" style="background: #ec4899; color: #fff;">${review.length}</span></div>
+                            <div id="col-review" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'review')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
+                                ${review.map(renderTaskCard).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="task-board-column" style="flex: 0 0 300px;">
+                        <div class="card" style="background: rgba(16, 185, 129, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-success);">
+                            <div class="card-title" style="padding: 1rem 1rem 0;">Done <span id="badge-completed" class="badge bg-success text-white">${done.length}</span></div>
+                            <div id="col-completed" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'completed')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
+                                ${done.map(renderTaskCard).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${approved.length > 0 || rejected.length > 0 ? `
+                        <div class="task-board-column" style="flex: 0 0 300px;">
+                            <div class="card" style="background: rgba(16, 185, 129, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-success);">
+                                <div class="card-title" style="padding: 1rem 1rem 0;">Approved <span id="badge-approved" class="badge bg-success text-white">${approved.length}</span></div>
+                                <div id="col-Approved" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'Approved')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
+                                    ${approved.map(renderTaskCard).join('')}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="task-board-column" style="flex: 0 0 300px;">
+                            <div class="card" style="background: rgba(239, 68, 68, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-danger);">
+                                <div class="card-title" style="padding: 1rem 1rem 0;">Rejected <span id="badge-rejected" class="badge bg-danger text-white">${rejected.length}</span></div>
+                                <div id="col-Rejected" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'Rejected')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
+                                    ${rejected.map(renderTaskCard).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+
+    const isRegularEmployee = currentUserRole === 'EMPLOYEE';
+    const departmentOptions = window.taskDepartmentsCache.map(d => `<option value="${escapeHTML(d.name)}">${escapeHTML(d.name)}</option>`).join('');
+    const projectOptions = window.projectOptionsCache || '';
+    const taskListOptions = ownTaskLists.map(list => `<option value="${escapeHTML(list.id)}">${escapeHTML(list.name)}</option>`).join('');
 
     let departmentSelectHTML = '';
     let isMarketing = false;
 
     if (isRegularEmployee) {
-        const currentDeptObj = allDepartments.find(d => d.id === currentUser.department_id);
+        const currentDeptObj = window.taskDepartmentsCache.find(d => d.id === currentUser.department_id);
         const deptName = currentDeptObj ? escapeHTML(currentDeptObj.name) : '';
         isMarketing = (currentDeptObj && currentDeptObj.name === 'Marketing & Sales');
 
@@ -4716,446 +4908,416 @@ async function renderTasks() {
         `;
     }
 
-    if (canCreateTask) {
-        adminForm = `
-            <div class="card col-span-12" style="margin-bottom: 1rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <div class="card-title" style="margin-bottom: 0;">${t('task_assign_new') || 'Assign New Task'}</div>
-                    <button class="btn btn-primary btn-sm" onclick="document.getElementById('createTaskModal').classList.add('active'); document.getElementById('taskTitle').focus();">${t('add_new_task') || '+ Add new task'}</button>
+    const adminForm = canCreateTask ? `
+        <!-- Create Task Modal -->
+        <div class="modal" id="createTaskModal">
+            <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+                <div class="modal-header">
+                    <h2><i data-lucide="plus"></i> <span>${t('add_new_task') || 'Add New Task'}</span></h2>
+                    <button type="button" class="icon-btn" onclick="document.getElementById('createTaskModal').classList.remove('active')">
+                        <i data-lucide="x"></i>
+                    </button>
                 </div>
-            </div>
+                <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm" style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+                    <input type="hidden" id="taskParentId" value="">
 
-            <!-- Create Task Modal -->
-            <div class="modal" id="createTaskModal">
-                <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
-                    <div class="modal-header">
-                        <h2><i data-lucide="plus"></i> <span>${t('add_new_task') || 'Add New Task'}</span></h2>
-                        <button type="button" class="icon-btn" onclick="document.getElementById('createTaskModal').classList.remove('active')">
-                            <i data-lucide="x"></i>
+                    <!-- Fluid Flexbox Layout for responsiveness -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                        <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
+                            <label class="form-label">${t('task_title') || 'Task Title'}</label>
+                            <input type="text" autocomplete="off" id="taskTitle" class="form-control" required placeholder="">
+                        </div>
+
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                            <label class="form-label">${t('task_due') || 'Due Date'}</label>
+                            <input type="date" id="taskDue" class="form-control">
+                        </div>
+
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                            <label class="form-label">${t('ui_project') || 'Project'}</label>
+                            <select id="taskProject" class="form-control" onchange="handleTaskProjectChange('new')">
+                                <option value=""></option>
+                                ${projectOptions}
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                            <label class="form-label">${t('task_private_list')}</label>
+                            <select id="taskListId" class="form-control" onchange="handlePrivateTaskListSelection(this.value)">
+                                <option value="">${t('task_no_private_list')}</option>
+                                ${taskListOptions}
+                            </select>
+                            <small class="text-muted">${t('task_private_list_help')}</small>
+                        </div>
+                        
+                        ${departmentSelectHTML}
+
+                        <div class="form-group" id="taskSubTypeGroup" style="flex: 1 1 150px; margin-bottom: 0; display: ${isMarketing ? 'block' : 'none'};">
+                            <label class="form-label">${t('ui_task_type') || 'Task Type'}</label>
+                            <select id="taskSubType" class="form-control" onchange="handleMarketingTaskTypeChange('new', this.value)" ${isMarketing ? 'required' : ''}>
+                                <option value=""></option>
+                                <option value="Daily Tasks">Daily Tasks</option>
+                                <option value="Designing Task">Designing Task</option>
+                            </select>
+                        </div>
+
+                        <div id="newMarketingDesignFields" class="marketing-design-fields" style="display: none; flex: 1 1 100%;">
+                            ${renderMarketingDesignFields('new')}
+                        </div>
+
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                            <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
+                            <select id="taskAssignee" class="form-control" onchange="handleTaskAssigneeChange('new')" required ${isRegularEmployee ? 'disabled' : ''}>
+                                ${!isRegularEmployee ? `<option value="">${t('task_sel_emp') || 'Select Employee'}</option>` : ''}
+                                ${window.taskAssigneeOptionsCache}
+                            </select>
+                        </div>
+                        
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0; display: none;" id="taskSupervisorGroup">
+                            <label class="form-label">${t('task_supervisor') || 'Supervisor (Optional)'}</label>
+                            <select id="taskSupervisor" class="form-control">
+                                <option value="">${t('task_none') || 'None'}</option>
+                                <!-- Populated dynamically based on department -->
+                            </select>
+                            <small class="text-muted">${t('task_supervisor_help') || 'Supervisor can view and approve the task'}</small>
+                        </div>
+
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                            <label class="form-label">${t('task_status') || 'Status'}</label>
+                            <select id="taskStatus" class="form-control">
+                                <option value="todo">To do</option>
+                                <option value="in_progress">In progress</option>
+                                <option value="review">Review</option>
+                                <option value="completed">Done</option>
+                                <option value="Pending Approval">Pending Approval</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
+                            <label class="form-label">${t('task_priority') || 'Priority'}</label>
+                            <select id="taskPriority" class="form-control">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                                <option value="critical">Critical</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
+                            <label class="form-label">${t('task_watchers') || 'Watchers'}</label>
+                            <select id="taskWatchers" class="form-control" multiple size="4">
+                                ${window.taskWatcherOptionsCache}
+                            </select>
+                            <small class="text-muted">${t('task_watchers_help') || 'Watchers receive notifications about task updates (Hold Ctrl/Cmd to select multiple)'}</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">${t('task_desc') || 'Description'}</label>
+                        <textarea id="taskDesc" class="form-control" rows="4"></textarea>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('createTaskModal').classList.remove('active')">${t('cancel') || 'Cancel'}</button>
+                        <button type="submit" class="btn btn-primary">${t('save') || 'Save Task'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Task List Management Modal -->
+        <div class="modal" id="taskListModal">
+            <div class="modal-content task-list-modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h2 id="taskListModalTitle">${t('task_list_new')}</h2>
+                        <p>${t('task_list_intro')}</p>
+                    </div>
+                    <button type="button" class="icon-btn" onclick="window.closeTaskListModal()">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+                <form onsubmit="window.handleSaveTaskList(event)">
+                    <input type="hidden" id="taskListEditId">
+                    <div class="form-group">
+                        <label class="form-label">${t('task_list_name')}</label>
+                        <input id="taskListName" class="form-control" maxlength="80" required placeholder="${t('task_list_name_placeholder')}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">${t('task_list_view_access')}</label>
+                        <p class="task-list-help">${t('task_list_view_help')}</p>
+                        <div id="taskListViewerPicker" class="task-list-viewer-picker"></div>
+                    </div>
+                    <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+                        <button type="button" class="btn btn-secondary" onclick="window.closeTaskListModal()">${t('btn_cancel')}</button>
+                        <button class="btn btn-primary" type="submit">${t('task_list_save')}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    ` : '';
+
+    return `
+        <div class="task-v2-shell fade-in-up">
+            <div class="task-v2-workspace">
+                <aside class="task-v2-lists">
+                    <div class="task-v2-sidebar-header">
+                    <h3>Tasks</h3>
+                    ${canCreateTask ? `<button class="icon-btn" onclick="window.toggleTaskV2Create()" title="Create Task"><i data-lucide="plus"></i></button>` : ''}
+                </div>
+                
+                <div class="task-v2-sidebar-section-title">Projects</div>
+                <ul>
+                    <li class="${selectedProject === 'all' ? 'active' : ''}" onclick="window.selectTaskV2Project('all')">
+                        <i data-lucide="inbox"></i>
+                        <span>All Tasks</span>
+                    </li>
+                    ${projectItems}
+                </ul>
+                
+                ${personalListItems}
+                
+                <div style="margin-top: auto; padding-top: 1rem;">
+                    <button class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center;" onclick="window.openTaskListModal()">
+                        <i data-lucide="settings" style="width: 14px; height: 14px; margin-right: 4px;"></i> Manage Lists
+                    </button>
+                </div>
+            </aside>
+            
+            <section class="task-v2-list-pane">
+                <header class="task-v2-toolbar">
+                    <div class="task-v2-toolbar-left">
+                        <div class="task-v2-search">
+                            <i data-lucide="search"></i>
+                            <input type="text" id="taskV2Search" placeholder="Search tasks..." onkeyup="window.filterTasksV2()">
+                        </div>
+                        <select id="taskV2StatusFilter" class="form-control" onchange="window.filterTasksV2()">
+                            <option value="all">All Status</option>
+                            <option value="open">Open Tasks</option>
+                            <option value="todo">To Do</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="review">Review</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                        <select id="taskV2PriorityFilter" class="form-control" onchange="window.filterTasksV2()">
+                            <option value="all">All Priorities</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                        <button class="icon-btn" onclick="window.clearTaskV2Filters()" title="Clear Filters">
+                            <i data-lucide="x-circle"></i>
                         </button>
                     </div>
-                    <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm" style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
-                        <input type="hidden" id="taskParentId" value="">
-
-                        <!-- Fluid Flexbox Layout for responsiveness -->
-                        <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
-                            <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
-                                <label class="form-label">${t('task_title') || 'Task Title'}</label>
-                                <input type="text" autocomplete="off" id="taskTitle" class="form-control" required placeholder="">
-                            </div>
-
-                            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
-                                <label class="form-label">${t('task_due') || 'Due Date'}</label>
-                                <input type="date" id="taskDue" class="form-control">
-                            </div>
-
-                            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
-                                <label class="form-label">${t('ui_project') || 'Project'}</label>
-                                <select id="taskProject" class="form-control" onchange="handleTaskProjectChange('new')">
-                                    <option value=""></option>
-                                    ${projectOptions}
-                                </select>
-                            </div>
-
-                            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
-                                <label class="form-label">${t('task_private_list')}</label>
-                                <select id="taskListId" class="form-control" onchange="handlePrivateTaskListSelection(this.value)">
-                                    <option value="">${t('task_no_private_list')}</option>
-                                    ${taskListOptions}
-                                </select>
-                                <small class="text-muted">${t('task_private_list_help')}</small>
-                            </div>
-                            
-                            ${departmentSelectHTML}
-
-                            <div class="form-group" id="taskSubTypeGroup" style="flex: 1 1 150px; margin-bottom: 0; display: ${isMarketing ? 'block' : 'none'};">
-                                <label class="form-label">${t('ui_task_type') || 'Task Type'}</label>
-                                <select id="taskSubType" class="form-control" onchange="handleMarketingTaskTypeChange('new', this.value)" ${isMarketing ? 'required' : ''}>
-                                    <option value=""></option>
-                                    <option value="Daily Tasks">Daily Tasks</option>
-                                    <option value="Designing Task">Designing Task</option>
-                                </select>
-                            </div>
-
-                            <div id="newMarketingDesignFields" class="marketing-design-fields" style="display: none; flex: 1 1 100%;">
-                                ${renderMarketingDesignFields('new')}
-                            </div>
-
-                            <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
-                                <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
-                                <select id="taskAssignee" class="form-control" onchange="handleTaskAssigneeChange('new')" required ${isRegularEmployee ? 'disabled' : ''}>
-                                    ${!isRegularEmployee ? `<option value="">${t('task_sel_emp') || 'Select Employee'}</option>` : ''}
-                                    ${userOptions}
-                                </select>
-                            </div>
-
-                            <div class="form-group" style="flex: 1 1 150px; margin-bottom: 0;">
-                                <label class="form-label">${t('ui_priority') || 'Priority'}</label>
-                                <select id="taskPriority" class="form-control">
-                                    <option value="urgent">${t('priority_critical') || 'Critical'}</option>
-                                    <option value="high">${t('priority_high') || 'High'}</option>
-                                    <option value="medium" selected>${t('priority_medium')}</option>
-                                    <option value="low">${t('priority_low')}</option>
-                                </select>
-                            </div>
-
-                            <div class="form-group" style="flex: 1 1 100%; margin-bottom: 0;">
-                                <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                    <input type="checkbox" id="enableWatchers" onchange="document.getElementById('taskWatchersGroup').style.display = this.checked ? 'block' : 'none'; if (this.checked) populateTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache || '', Array.from(document.getElementById('taskWatchers').selectedOptions).map(option => option.value))">
-                                    ${t('ui_add_watcher') || 'Add Watchers'}
-                                </label>
-                                <div id="taskWatchersGroup" style="display: none; margin-top: 0.5rem;">
-                                    ${renderTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache)}
-                                </div>
-                            </div>
+                    <div class="task-v2-toolbar-right">
+                        <div class="task-v2-view-toggles">
+                            <button class="view-toggle-btn" id="btn-v2-list" onclick="window.setTaskV2Mode('list')">
+                                <i data-lucide="list"></i> List
+                            </button>
+                            <button class="view-toggle-btn active" id="btn-v2-board" onclick="window.setTaskV2Mode('board')">
+                                <i data-lucide="kanban"></i> Board
+                            </button>
                         </div>
-
-                        <div style="text-align: right; margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
-                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('createTaskModal').classList.remove('active');">${t('btn_cancel')}</button>
-                            <button type="submit" class="btn btn-primary">${t('task_assign_btn') || 'Create Task'}</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <div class="modal" id="taskListModal">
-                <div class="modal-content task-list-modal-content">
-                    <div class="modal-header"><div><h2 id="taskListModalTitle">${t('task_list_new')}</h2><p>${t('task_list_intro')}</p></div><button type="button" class="icon-btn" onclick="closeTaskListModal()"><i data-lucide="x"></i></button></div>
-                    <form onsubmit="handleSaveTaskList(event)">
-                        <input type="hidden" id="taskListEditId">
-                        <div class="form-group"><label class="form-label">${t('task_list_name')}</label><input id="taskListName" class="form-control" maxlength="80" required placeholder="${t('task_list_name_placeholder')}"></div>
-                        <div class="form-group"><label class="form-label">${t('task_list_view_access')}</label><p class="task-list-help">${t('task_list_view_help')}</p><div id="taskListViewerPicker" class="task-list-viewer-picker"></div></div>
-                        <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeTaskListModal()">${t('btn_cancel')}</button><button class="btn btn-primary" type="submit">${t('task_list_save')}</button></div>
-                    </form>
-                </div>
-
-            </div>
-        `;
-    }
-
-    function renderTaskCard(task) {
-        const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
-        const canManageTask = task.task_list_id
-            ? taskList?.owner_id === currentUser?.id
-            : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
-        const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
-        let prioColor = 'var(--color-border)';
-        if (task.priority === 'medium') prioColor = 'var(--color-primary)';
-        if (task.priority === 'high') prioColor = 'var(--color-warning)';
-        if (task.priority === 'critical') prioColor = 'var(--color-danger)';
-        if (task.priority === 'urgent') prioColor = 'var(--color-danger)'; // legacy fallback
-
-        return `
-            <div class="card task-item-card" id="task-card-${task.id}" data-status="${task.status}" draggable="${canManageTask}" ${canManageTask ? `ondragstart="handleTaskDragStart(event, '${task.id}')"` : ''} onclick="openTaskDetailsModal('${task.id}')" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${prioColor}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: opacity 0.2s; cursor: pointer; background: var(--color-surface); position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; padding-right: 3rem; gap: 0.5rem;">
-                    <h4 style="margin: 0; font-size: 0.95rem; line-height: 1.4; color: var(--color-text); font-weight: 500; word-break: break-word;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${escapeHTML(task.displayTitle)}</h4>
-                </div>
-                ${canManageTask ? `<button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" style="position: absolute; top: 1rem; right: 0.75rem; background: none; border: none; cursor: pointer; color: var(--color-text-secondary); padding: 4px; border-radius: var(--radius-sm);" title="Edit Task"><i data-lucide="edit-2" style="width: 14px; height: 14px;"></i></button>` : ''}
-                <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0; display: flex; flex-direction: column; gap: 0.35rem;">
-                    <div style="display: flex; align-items: center;"><i data-lucide="calendar" style="width: 12px; height: 12px; margin-right: 4px;"></i> Due: ${task.due_date || t('task_no_date') || 'No Date'}</div>
-                    ${task.start_date ? `<div style="display: flex; align-items: center;"><i data-lucide="play" style="width: 12px; height: 12px; margin-right: 4px;"></i> Start: ${escapeHTML(task.start_date)}</div>` : ''}
-                    <div style="display: flex; align-items: center;"><i data-lucide="user" style="width: 12px; height: 12px; margin-right: 4px;"></i> ${window.formatEmployeeName(task.assignee) || t('task_unknown') || 'Unassigned'}</div>
-                    ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> Subtask of: ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
-                    ${task.estimated_time ? `<div style="display: flex; align-items: center;"><i data-lucide="clock" style="width: 12px; height: 12px; margin-right: 4px;"></i> Est: ${escapeHTML(task.estimated_time)}</div>` : ''}
-                </div>
-            </div>
-        `;
-    }
-
-    let boardHTML = `
-        <div id="tasks-view-board" class="col-span-12" style="display: block;">
-            <div class="task-board-wrapper" style="width: 100%; overflow-x: auto; padding-bottom: 1rem;">
-                <div style="display: flex; gap: 1.5rem; min-width: 1400px;">
-                    <div style="flex: 1; min-width: 280px;">
-                        <div class="card" style="background: rgba(139, 92, 246, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid #8b5cf6;">
-                            <div class="card-title" style="padding: 1rem 1rem 0;">Awaiting Approval <span id="badge-pending" class="badge" style="background: #8b5cf6; color: #fff;">${pending.length}</span></div>
-                            <div id="col-pending" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'Pending Approval')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
-                                ${pending.map(renderTaskCard).join('')}
-                            </div>
-                        </div>
+                        ${canCreateTask ? `<button class="btn btn-primary" onclick="window.toggleTaskV2Create()">New Task</button>` : ''}
                     </div>
-                    <div style="flex: 1; min-width: 280px;">
-                        <div class="card" style="background: rgba(0,0,0,0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-text-secondary);">
-                            <div class="card-title" style="padding: 1rem 1rem 0;">${t('task_todo') || 'To Do'} <span id="badge-todo" class="badge" style="background: var(--color-text-secondary); color: #fff;">${todo.length}</span></div>
-                            <div id="col-todo" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'todo')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
-                                ${todo.map(renderTaskCard).join('')}
-                            </div>
-                        </div>
+                </header>
+                
+                <div class="task-v2-stats">
+                    <div class="stat-card">
+                        <div class="stat-value">${tasks.length}</div>
+                        <div class="stat-label">Total Tasks</div>
                     </div>
-                    <div style="flex: 1; min-width: 280px;">
-                        <div class="card" style="background: rgba(59, 130, 246, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-primary);">
-                            <div class="card-title" style="padding: 1rem 1rem 0;">${t('status_in_progress') || 'In Progress'} <span id="badge-in_progress" class="badge" style="background: var(--color-primary); color: #fff;">${inProgress.length}</span></div>
-                            <div id="col-in_progress" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'in_progress')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
-                                ${inProgress.map(renderTaskCard).join('')}
-                            </div>
-                        </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${openCount}</div>
+                        <div class="stat-label">Open</div>
                     </div>
-                    <div style="flex: 1; min-width: 280px;">
-                        <div class="card" style="background: rgba(245, 158, 11, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-warning);">
-                            <div class="card-title" style="padding: 1rem 1rem 0;">${t('status_review') || 'Review'} <span id="badge-review" class="badge" style="background: var(--color-warning); color: #fff;">${review.length}</span></div>
-                            <div id="col-review" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'review')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
-                                ${review.map(renderTaskCard).join('')}
-                            </div>
-                        </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: var(--color-warning);">${dueSoonCount}</div>
+                        <div class="stat-label">Due Soon</div>
                     </div>
-                    <div style="flex: 1; min-width: 280px;">
-                        <div class="card" style="background: rgba(16, 185, 129, 0.02); height: 100%; border: 1px solid var(--color-border); border-top: 3px solid var(--color-success);">
-                            <div class="card-title" style="padding: 1rem 1rem 0;">${t('task_done') || 'Done'} <span id="badge-completed" class="badge" style="background: var(--color-success); color: #fff;">${done.length}</span></div>
-                            <div id="col-completed" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, 'completed')" style="min-height: 400px; padding: 1rem; padding-bottom: 2rem; height: calc(100% - 30px);">
-                                ${done.map(renderTaskCard).join('')}
-                            </div>
-                        </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: var(--color-danger);">${overdueCount}</div>
+                        <div class="stat-label">Overdue</div>
                     </div>
                 </div>
-            </div>
+
+                <div class="task-v2-rows" id="task-v2-rows-container" style="display: none;">
+                    ${taskRows || '<div class="empty-state">No tasks found.</div>'}
+                </div>
+                
+                ${boardHTML}
+                
+                ${adminForm}
+            </section>
         </div>
-    `;
-
-    return `
-        <div class="page-header">
-            <div>
-                <h1 class="page-title">${t('nav_tasks') || 'Tasks'}</h1>
-                <p class="page-subtitle">${t('task_sub') || 'Manage team tasks'}</p>
-            </div>
-        </div>
-        <div class="dashboard-grid fade-in-up" style="grid-template-columns: repeat(12, 1fr);">
-            ${adminForm}
-            ${boardHTML}
-        </div>
-    `;
-}
-
-async function renderTasksV2() {
-    const legacyHTML = await renderTasks();
-    const visibleIds = new Set(window.visibleTaskIds || []);
-    const tasks = Object.values(window.taskCache || {}).filter(task => visibleIds.has(task.id));
-    const openCount = tasks.filter(task => task.status !== 'completed').length;
-    const dueSoonCount = tasks.filter(task => {
-        if (!task.due_date || task.status === 'completed') return false;
-        const days = (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000;
-        return days >= 0 && days <= 7;
-    }).length;
-    const overdueCount = tasks.filter(task => task.due_date && task.status !== 'completed' && new Date(`${task.due_date}T23:59:59`) < new Date()).length;
-    const gridStart = legacyHTML.indexOf('<div class="dashboard-grid');
-    const taskContent = gridStart >= 0 ? legacyHTML.slice(gridStart) : legacyHTML;
-    const projects = window.projectsCache || [];
-    const taskLists = window.taskListsCache || [];
-    const canCreateTask = !!currentUser;
-    const selectedProject = window.taskV2SelectedProject || 'all';
-    const statusLabels = { 'Pending Approval': 'Awaiting approval', todo: 'To do', in_progress: 'In progress', review: 'Review', completed: 'Done', Approved: 'Approved', Rejected: 'Rejected' };
-
-    const projectItems = [
-        `<button class="task-v2-list-link ${selectedProject === 'all' ? 'active' : ''}" onclick="selectTaskV2Project('all')"><span>${t('task_all_tasks')}</span><b>${tasks.length}</b></button>`,
-        ...projects.map(project => {
-            const count = tasks.filter(task => task.project_id === project.id).length;
-            return `<button class="task-v2-list-link ${selectedProject === project.id ? 'active' : ''}" onclick="selectTaskV2Project('${project.id}')"><span>${escapeHTML(project.project_name)}</span><b>${count}</b></button>`;
-        }),
-        `<button class="task-v2-list-link ${selectedProject === 'none' ? 'active' : ''}" onclick="selectTaskV2Project('none')"><span>${t('task_no_project')}</span><b>${tasks.filter(task => !task.project_id).length}</b></button>`
-    ].join('');
-
-    const personalListItems = taskLists.map(list => {
-        const count = tasks.filter(task => task.task_list_id === list.id).length;
-        const isOwner = list.owner_id === currentUser?.id;
-        const active = window.taskV2SelectedList === list.id;
-        return `<div class="task-v2-private-list-row"><button class="task-v2-list-link ${active ? 'active' : ''}" onclick="selectTaskV2PrivateList('${list.id}')"><span><i data-lucide="${isOwner ? 'lock-keyhole' : 'eye'}"></i>${escapeHTML(list.name)}</span><b>${count}</b></button>${isOwner ? `<button class="task-list-share-button" type="button" title="Share view-only access" aria-label="Share ${escapeHTML(list.name)}" onclick="openTaskListModal('${list.id}')"><i data-lucide="user-round-plus"></i></button>` : ''}</div>`;
-    }).join('');
-
-    const taskRows = tasks.map(task => {
-        const taskList = taskLists.find(list => list.id === task.task_list_id);
-        const canManageTask = task.task_list_id
-            ? taskList?.owner_id === currentUser?.id
-            : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
-        const project = projects.find(item => item.id === task.project_id);
-        const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
-        const dueDate = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
-        const overdue = dueDate && task.status !== 'completed' && dueDate < new Date(new Date().toDateString());
-        const isCompleted = task.status === 'completed';
-        const isPendingApproval = task.status === 'Pending Approval';
-        const checkIconClass = isCompleted ? 'complete' : (isPendingApproval ? 'pending-approval' : '');
-        const checkAriaLabel = isCompleted ? 'Reopen' : (isPendingApproval ? 'Pending Approval' : 'Mark complete');
-        const checkOnClickStatus = isCompleted ? 'todo' : 'completed';
-
-        return `<article class="task-v2-row" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-due="${task.due_date || ''}">
-            <button class="task-v2-complete ${checkIconClass}" type="button" aria-label="${canManageTask ? checkAriaLabel : 'View only'}" ${canManageTask ? `onclick="event.stopPropagation(); taskV2ToggleComplete('${task.id}', '${checkOnClickStatus}')"` : 'disabled'}><i data-lucide="${canManageTask ? 'check' : 'eye'}"></i></button>
-            <button class="task-v2-avatar" type="button" title="${escapeHTML(window.formatEmployeeName(task.assignee) || 'Unassigned')}">${escapeHTML((window.formatEmployeeName(task.assignee) || '?').charAt(0).toUpperCase())}</button>
-            <button class="task-v2-row-main" type="button" onclick="openTaskDetailsModal('${task.id}')">
-                <span class="task-v2-row-title"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Parent task'}</span>${task.task_list_id ? `<span class="task-private-badge"><i data-lucide="${canManageTask ? 'lock-keyhole' : 'eye'}"></i>${canManageTask ? 'Private' : 'View only'}</span>` : ''}${escapeHTML(task.displayTitle || task.title)}</span>
-                <span class="task-v2-row-context">${task.parent_task_id ? `Subtask of: ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')} · ` : ''}${escapeHTML(taskList?.name || project?.project_name || 'No project')} · ${escapeHTML(task.category || 'General')}</span>
-            </button>
-            <span class="task-v2-status task-v2-status-${String(task.status).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}">${escapeHTML(statusLabels[task.status] || task.status)}</span>
-            <span class="task-v2-priority task-v2-priority-${escapeHTML(task.priority || 'medium')}">${escapeHTML(task.priority || 'medium')}</span>
-            <button class="task-v2-date ${overdue ? 'overdue' : ''}" type="button" ${canManageTask ? `onclick="openEditTaskModal('${task.id}')"` : 'disabled'}><i data-lucide="calendar"></i>${task.due_date || 'No due date'}</button>
-            ${canManageTask ? `<button class="task-v2-more" type="button" aria-label="Edit ${escapeHTML(task.displayTitle || task.title)}" onclick="openEditTaskModal('${task.id}')"><i data-lucide="more-horizontal"></i></button>` : '<span></span>'}
-        </article>`;
-    }).join('');
-
-    return `
-        <section class="task-v2-shell" aria-labelledby="task-v2-title">
-            <div class="task-v2-header">
-                <div>
-                    <div class="task-v2-eyebrow">${t('task_work_management')}</div>
-                    <h1 class="page-title" id="task-v2-title">${t('nav_task_manager')}</h1>
-                    <p class="page-subtitle">${t('task_manager_subtitle')}</p>
-                </div>
-            </div>
-            <nav class="task-v2-tabs" aria-label="Task views">
-                <button class="active" data-task-v2-mode="list" onclick="setTaskV2Mode('list')">${t('task_list_view')}</button>
-                <button data-task-v2-mode="board" onclick="setTaskV2Mode('board')">${t('task_board_view')}</button>
-            </nav>
-            <div class="task-v2-stats" aria-label="Task summary">
-                <div><strong>${tasks.length}</strong><span>${t('task_total')}</span></div>
-                <div><strong>${openCount}</strong><span>${t('task_open')}</span></div>
-                <div><strong>${dueSoonCount}</strong><span>${t('task_due_week')}</span></div>
-                <div class="${overdueCount ? 'is-alert' : ''}"><strong>${overdueCount}</strong><span>${t('task_overdue')}</span></div>
-            </div>
-            <div class="task-v2-toolbar" role="search">
-                <label class="task-v2-search"><i data-lucide="search"></i><input type="search" id="taskV2Search" placeholder="${t('task_search_placeholder')}" oninput="filterTasksV2()" aria-label="${t('task_search')}"></label>
-                <select id="taskV2Status" class="form-control" onchange="filterTasksV2()" aria-label="Filter by status">
-                    <option value="">${t('task_all_statuses')}</option><option value="__overdue">${t('task_late')}</option><option value="__week">${t('task_due_week')}</option><option value="Pending Approval">${t('ui_awaiting_approval')}</option><option value="todo">${t('task_to_do')}</option><option value="in_progress">${t('task_in_progress')}</option><option value="review">${t('task_review')}</option><option value="completed">${t('task_done')}</option>
-                </select>
-                <button class="btn btn-secondary" type="button" onclick="clearTaskV2Filters()">${t('task_clear')}</button>
-                ${canCreateTask ? `<button class="btn btn-primary" type="button" onclick="toggleTaskV2Create()"><i data-lucide="plus"></i> ${t('task_add')}</button>` : ''}
-            </div>
-            <div class="task-v2-workspace">
-                <aside class="task-v2-lists"><div class="task-v2-list-section-title"><h3>${t('task_private_lists')}</h3><button type="button" onclick="openTaskListModal()" aria-label="${t('task_create_private_list')}" title="${t('task_create_private_list')}"><i data-lucide="plus"></i></button></div>${personalListItems || `<p class="task-list-sidebar-empty">${t('task_private_lists_empty')}</p>`}<h3 class="task-v2-projects-heading">${t('nav_projects')}</h3>${projectItems}</aside>
-                <main class="task-v2-list-pane">
-                    <div class="task-v2-list-heading"><div><h2>${t('nav_tasks')}</h2><span id="taskV2VisibleCount">${tasks.length}</span></div><span>${tasks.reduce((sum, task) => sum + (parseFloat(task.estimated_time) || 0), 0)} ${t('task_hours_estimated')}</span></div>
-                    <div id="taskV2Rows" class="task-v2-rows">${taskRows || `<div class="task-v2-empty">${t('task_no_tasks_view')}</div>`}</div>
-                </main>
-            </div>
-            <div class="task-v2-legacy-host">${taskContent}</div>
-        </section>`;
+    </div>`;
 }
 
 window.filterTasksV2 = function () {
     const query = (document.getElementById('taskV2Search')?.value || '').trim().toLowerCase();
-    const selectedFilter = document.getElementById('taskV2Status')?.value || '';
-    const status = selectedFilter.startsWith('__') ? '' : selectedFilter;
-    const projectId = window.taskV2SelectedProject || 'all';
-    const listId = window.taskV2SelectedList || '';
-    const temporalFilter = selectedFilter.startsWith('__') ? selectedFilter : '';
-    const now = new Date(new Date().toDateString());
-    let visibleCount = 0;
+    const status = document.getElementById('taskV2StatusFilter')?.value || 'all';
+    const priority = document.getElementById('taskV2PriorityFilter')?.value || 'all';
+    const project = window.taskV2SelectedProject || 'all';
+    
     const visibleIds = new Set(window.visibleTaskIds || []);
-    Object.values(window.taskCache || {}).filter(task => visibleIds.has(task.id)).forEach(task => {
-        const row = document.querySelector(`.task-v2-row[data-task-id="${task.id}"]`);
-        if (!row) return;
-        const project = (window.projectsCache || []).find(item => item.id === task.project_id);
-        const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
-        const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
-        const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, project?.project_name, privateList?.name, task.parent_task_id ? 'subtask' : 'parent task', parentTask?.displayTitle, parentTask?.title].filter(Boolean).join(' ').toLowerCase();
-        const due = task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
-        const days = due ? (due - now) / 86400000 : null;
-        const matchesTemporal = !temporalFilter || (temporalFilter === '__overdue' && days < 0 && task.status !== 'completed') || (temporalFilter === '__week' && days >= 0 && days <= 7 && task.status !== 'completed');
-        const matchesProject = listId ? true : (projectId === 'all' || (projectId === 'none' ? !task.project_id : task.project_id === projectId));
-        const matchesList = !listId || task.task_list_id === listId;
-        const visible = (!query || searchable.includes(query)) && (!status || task.status === status) && matchesProject && matchesList && matchesTemporal;
-        row.style.display = visible ? '' : 'none';
-        if (visible) visibleCount += 1;
+    
+    document.querySelectorAll('.task-v2-row, .task-item-card').forEach(el => {
+        const taskId = el.getAttribute('data-task-id');
+        const task = window.taskCache[taskId];
+        if (!task || !visibleIds.has(taskId)) {
+            el.style.display = 'none';
+            return;
+        }
+        
+        let matchesSearch = true;
+        if (query) {
+            const projectObj = (window.projectsCache || []).find(item => item.id === task.project_id);
+            const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
+            const privateList = (window.taskListsCache || []).find(l => l.id === task.task_list_id);
+            const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, projectObj?.project_name, privateList?.name, parentTask?.displayTitle].filter(Boolean).join(' ').toLowerCase();
+            matchesSearch = searchable.includes(query);
+        }
+        
+        const matchesStatus = (status === 'all') || (status === 'open' && task.status !== 'completed') || (task.status === status);
+        const matchesPriority = (priority === 'all') || (task.priority === priority);
+        
+        let matchesProject = true;
+        if (project !== 'all') {
+            if (project.startsWith('list_')) {
+                matchesProject = String(task.task_list_id) === project.substring(5);
+            } else {
+                matchesProject = String(task.project_id) === project;
+            }
+        }
+        
+        if (matchesSearch && matchesStatus && matchesPriority && matchesProject) {
+            el.style.display = '';
+        } else {
+            el.style.display = 'none';
+        }
     });
-    const count = document.getElementById('taskV2VisibleCount');
-    if (count) count.textContent = visibleCount;
-};
-
-window.handleNewUserNationalityChange = function (nationality) {
-    const isSaudi = nationality === 'Saudi';
-    const label = document.getElementById('newIdentityLabel');
-    const input = document.getElementById('newIqama');
-    if (label) label.textContent = isSaudi ? 'National ID' : 'Iqama Number';
-    if (input) input.placeholder = isSaudi ? 'Enter National ID' : 'Enter Iqama Number';
-};
-
-window.openInlineSubtaskComposer = function () {
-    const parentId = document.getElementById('detailsTaskId')?.value;
-    const list = document.getElementById('taskDetailSubtaskHost') || document.getElementById('taskSubTasksList');
-    if (!parentId || !list || document.getElementById('inlineSubtaskForm')) return;
-    const parent = window.taskCache?.[parentId];
-    if (!parent) return;
-    const privateList = (window.taskListsCache || []).find(list => list.id === parent.task_list_id);
-    if (parent.task_list_id && privateList?.owner_id !== currentUser?.id) return;
-    list.insertAdjacentHTML('afterbegin', `
-        <form id="inlineSubtaskForm" class="inline-subtask-form" onsubmit="handleInlineSubtaskSubmit(event, '${parentId}')">
-            <div class="inline-subtask-title-row">
-                <span class="inline-subtask-avatar">${escapeHTML((window.formatEmployeeName(currentUser) || currentUser?.email || '?').charAt(0).toUpperCase())}</span>
-                <input id="inlineSubtaskTitle" class="form-control" type="text" placeholder="Write a task name or type / for commands" aria-label="Subtask name" required autofocus>
-                <label class="inline-subtask-date"><i data-lucide="calendar"></i><input id="inlineSubtaskDue" type="date" aria-label="Subtask due date"></label>
-            </div>
-            <div class="inline-subtask-options">
-                <i data-lucide="calendar-days" aria-hidden="true"></i>
-                <select id="inlineSubtaskAssignee" class="form-control inline-subtask-compact" aria-label="Subtask assignee" title="Assignee">
-                    <option value="">Unassigned</option>${window.taskAssigneeOptionsCache || ''}
-                </select>
-                <select id="inlineSubtaskPriority" class="form-control inline-subtask-compact" aria-label="Priority" title="Priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option><option value="urgent">Critical</option></select>
-                <label class="inline-subtask-estimate"><i data-lucide="hourglass"></i><input id="inlineSubtaskEstimate" type="text" placeholder="Estimate" aria-label="Estimated time"></label>
-                <label class="inline-subtask-notify" title="Task notifications are required by the workflow"><input type="checkbox" checked disabled> Notify</label>
-                <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('inlineSubtaskForm')?.remove()">Cancel</button>
-                <button class="btn btn-primary btn-sm" type="submit">Add subtask</button>
-            </div>
-        </form>`);
-    const assignee = document.getElementById('inlineSubtaskAssignee');
-    if (assignee) assignee.value = parent.assignee_id || currentUser.id;
-    document.getElementById('inlineSubtaskTitle')?.focus();
-    lucide.createIcons();
-};
-
-window.handleInlineSubtaskSubmit = async function (event, parentId) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const submit = form.querySelector('button[type="submit"]');
-    const parent = window.taskCache?.[parentId];
-    if (!parent) return;
-    const title = document.getElementById('inlineSubtaskTitle').value.trim();
-    const assigneeId = document.getElementById('inlineSubtaskAssignee').value || currentUser.id;
-    const dueDate = document.getElementById('inlineSubtaskDue').value || null;
-    const priority = document.getElementById('inlineSubtaskPriority').value || parent.priority || 'medium';
-    const estimatedTime = document.getElementById('inlineSubtaskEstimate').value.trim() || null;
-    if (!title) return;
-    submit.disabled = true;
-    const result = await db.createTask(
-        title, '', assigneeId, dueDate, currentUser.id, priority,
-        parent.category || 'General', { en: title }, {}, null, null, estimatedTime,
-        parent.visibility || 'public', parent.project_id || null, parent.tags || [],
-        parent.visible_to || [], null, null, null, 'todo', parent.supervisor_id || null,
-        parent.department || null, parent.sub_type || null, parent.watchers || [], parentId,
-        parent.marketing_department || null, parent.content_links || [], parent.submission_links || [],
-        parent.delivery_status || null, parent.task_list_id || null
-    );
-    if (!result.success) {
-        submit.disabled = false;
-        showToast(result.error?.message || 'Failed to create subtask', 'danger');
-        return;
-    }
-    showToast('Subtask created successfully', 'success');
-    await db.triggerWebhooks('task_created', { title, assignee_id: assigneeId, parent_task_id: parentId });
-    await renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
-    await openTaskDetailsModal(parentId);
 };
 
 window.selectTaskV2Project = function (projectId) {
-    window.taskV2SelectedList = '';
     window.taskV2SelectedProject = projectId;
-    document.querySelectorAll('.task-v2-list-link').forEach(button => button.classList.toggle('active', button.getAttribute('onclick').includes(`'${projectId}'`)));
+    document.querySelectorAll('.task-v2-lists li').forEach(li => {
+        if (li.getAttribute('onclick')?.includes(`'${projectId}'`)) {
+            li.classList.add('active');
+        } else {
+            li.classList.remove('active');
+        }
+    });
     window.filterTasksV2();
 };
 
-window.taskV2ToggleComplete = async function (taskId, status) {
-    await window.handleUpdateTaskStatus(taskId, status);
-    await renderView('tasks_v2');
+window.taskV2ToggleComplete = async function (taskId, event) {
+    if (event) event.stopPropagation();
+    const task = window.taskCache[taskId];
+    if (!task) return;
+    const newStatus = task.status === 'completed' ? 'todo' : 'completed';
+    await window.taskV2ChangeStage(taskId, newStatus);
+};
+
+window.openInlineSubtaskComposer = function () {
+    const task = window.activeTaskDetail;
+    const host = document.getElementById('taskDetailSubtaskHost');
+    if (!task || !host) return;
+    host.innerHTML = `<form class="inline-subtask-form" onsubmit="window.submitInlineSubtask(event)">
+        <input class="form-control" id="inlineSubtaskTitle" required maxlength="180" placeholder="Subtask name">
+        <input class="form-control inline-subtask-date" id="inlineSubtaskDue" type="date">
+        <div class="inline-subtask-actions"><button type="button" class="btn btn-secondary" onclick="setTaskDetailInfoTab('overview')">Cancel</button><button class="btn btn-primary" type="submit">Add subtask</button></div>
+    </form>`;
+    document.getElementById('inlineSubtaskTitle')?.focus();
+};
+
+window.submitInlineSubtask = async function (event) {
+    event.preventDefault();
+    const parent = window.activeTaskDetail;
+    const title = document.getElementById('inlineSubtaskTitle')?.value.trim();
+    const due = document.getElementById('inlineSubtaskDue')?.value || null;
+    if (!parent || !title) return;
+    const submit = event.target.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    const result = await db.createTask(title, '', parent.assignee_id || currentUser.id, due, currentUser.id, parent.priority || 'medium', parent.category || 'General', { en: title, ar: `${title} (مترجم)` }, {}, null, null, null, parent.visibility || 'public', parent.project_id || null, [], parent.visible_to || [], null, null, null, 'todo', parent.supervisor_id || null, parent.department || null, parent.sub_type || null, [], parent.id, parent.marketing_department || null, [], [], null, parent.task_list_id || null);
+    if (!result.success) {
+        showToast(t('toast_failed_to_create_task') + (result.error?.message || ''), 'danger');
+        if (submit) submit.disabled = false;
+        return;
+    }
+    showToast('Subtask added', 'success');
+    if (result.data) window.taskCache[result.data.id] = { ...result.data, displayTitle: result.data.title, status: result.data.status || 'todo', priority: result.data.priority || 'medium' };
+    setTaskDetailInfoTab('overview');
+};
+
+window.taskV2ChangeStage = async function (taskId, requestedStatus) {
+    const task = window.taskCache?.[taskId];
+    if (!task || task.status === requestedStatus) return;
+    const previousStatus = task.status;
+    const result = await window.handleUpdateTaskStatus(taskId, requestedStatus);
+    if (result?.error) return;
+    const actualStatus = result.status || requestedStatus;
+    task.status = actualStatus;
+    document.querySelectorAll(`[data-task-id="${taskId}"]`).forEach(node => {
+        node.dataset.status = actualStatus;
+        const select = node.querySelector('.task-v2-stage-select');
+        if (select) select.value = actualStatus;
+        if (node.id === `task-card-${taskId}`) {
+            const target = document.getElementById(`col-${actualStatus === 'Pending Approval' ? 'pending' : actualStatus}`);
+            if (target) target.appendChild(node);
+        }
+    });
+    if (previousStatus !== actualStatus) {
+        const oldBadge = document.getElementById(`badge-${previousStatus === 'Pending Approval' ? 'pending' : previousStatus}`);
+        const newBadge = document.getElementById(`badge-${actualStatus === 'Pending Approval' ? 'pending' : actualStatus}`);
+        if (oldBadge) oldBadge.textContent = Math.max(0, Number(oldBadge.textContent || 0) - 1);
+        if (newBadge) newBadge.textContent = Number(newBadge.textContent || 0) + 1;
+    }
 };
 
 window.setTaskV2Mode = function (mode) {
-    document.querySelectorAll('[data-task-v2-mode]').forEach(button => button.classList.toggle('active', button.dataset.taskV2Mode === mode));
-    document.querySelector('.task-v2-workspace')?.classList.toggle('hidden', mode !== 'list');
-    document.querySelector('.task-v2-legacy-host')?.classList.toggle('v2-board-active', mode === 'board');
+    document.getElementById('btn-v2-list')?.classList.toggle('active', mode === 'list');
+    document.getElementById('btn-v2-board')?.classList.toggle('active', mode === 'board');
+    
+    const listContainer = document.getElementById('task-v2-rows-container');
+    const boardContainer = document.getElementById('tasks-view-board');
+    
+    if (mode === 'list') {
+        if (listContainer) listContainer.style.display = '';
+        if (boardContainer) boardContainer.style.display = 'none';
+    } else {
+        if (listContainer) listContainer.style.display = 'none';
+        if (boardContainer) boardContainer.style.display = 'block';
+    }
+};
+
+window.clearTaskV2Filters = function () {
+    const search = document.getElementById('taskV2Search');
+    const status = document.getElementById('taskV2StatusFilter');
+    const priority = document.getElementById('taskV2PriorityFilter');
+    if (search) search.value = '';
+    if (status) status.value = 'all';
+    if (priority) priority.value = 'all';
+    window.selectTaskV2Project('all'); 
 };
 
 window.toggleTaskV2Create = function () {
     const modal = document.getElementById('createTaskModal');
-    if (modal) {
-        modal.classList.add('active');
-        document.getElementById('taskTitle')?.focus();
+    if (!modal) return;
+    
+    if (modal.parentNode !== document.body) {
+        document.body.appendChild(modal);
     }
+    
+    modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
+    modal.scrollTop = 0;
+    requestAnimationFrame(() => document.getElementById('taskTitle')?.focus());
 };
+
+
 
 window.clearTaskV2Filters = function () {
     const search = document.getElementById('taskV2Search');
@@ -5404,7 +5566,7 @@ window.handleCreateTask = async function (e) {
 
     const title = document.getElementById('taskTitle').value;
     const assignee = document.getElementById('taskAssignee').value;
-    const due = document.getElementById('taskDue').value;
+    const due = document.getElementById('taskDue').value || null;
     const priority = document.getElementById('taskPriority').value;
     const taskListId = document.getElementById('taskListId')?.value || null;
     const projectId = taskListId ? null : (document.getElementById('taskProject').value || null);
@@ -5466,7 +5628,7 @@ window.handleCreateTask = async function (e) {
         contentType = document.getElementById('taskContentType')?.value || null;
         sourceLink = contentLinks[0] || null;
         uploadLink = submissionLinks[0] || null;
-        document.getElementById('taskDue').value = document.getElementById('taskDesignDeadline')?.value || due;
+        document.getElementById('taskDue').value = document.getElementById('taskDesignDeadline')?.value || due || '';
     }
     let watchers = [];
     if (document.getElementById('enableWatchers') && document.getElementById('enableWatchers').checked) {
@@ -5474,15 +5636,15 @@ window.handleCreateTask = async function (e) {
     }
     const parentTaskId = document.getElementById('taskParentId') ? document.getElementById('taskParentId').value || null : null;
 
-    const finalDue = isMarketingDesign ? document.getElementById('taskDesignDeadline').value : due;
-    const { success, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, taskListId ? 'private' : 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId);
+    const finalDue = isMarketingDesign ? (document.getElementById('taskDesignDeadline').value || null) : due;
+    const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, taskListId ? 'private' : 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId);
     if (success) {
         showToast(t('toast_task_created_successfully'), "success");
         await db.triggerWebhooks('task_created', { title, assignee_id: effectiveAssignee, supervisor_id: effectiveSupervisor, due_date: due, priority, project_id: projectId, task_list_id: taskListId });
         if (status === 'Pending Approval') {
             const hussain = allUsers.find(u => u.full_name && u.full_name.toLowerCase().includes('hussain') || u.email && u.email.toLowerCase().includes('hussain'));
             if (hussain) {
-                await db.createNotification(hussain.id, `A new task requires your approval: ${title}`, taskId);
+                await db.createNotification(hussain.id, `A new task requires your approval: ${title}`, createdTask?.id || null);
             }
             showToast(t('toast_task_sent_to_hussain_for_approval'), "info");
         }
@@ -5518,6 +5680,7 @@ window.handleUpdateTaskStatus = async function (id, status) {
             showToast('Task moved to Awaiting Approval. The department manager has been notified.', 'info');
         }
     }
+    return { error, status: actualStatus };
 };
 
 window.handleTaskDragStart = function (e, id) {
@@ -5573,7 +5736,8 @@ window.handleTaskDrop = async function (e, status) {
     }
 
     const finalStatus = taskCard ? taskCard.getAttribute('data-status') : status;
-    await window.handleUpdateTaskStatus(id, finalStatus);
+    const result = await window.handleUpdateTaskStatus(id, finalStatus);
+    if (!result?.error && window.taskCache?.[id]) window.taskCache[id].status = result.status || finalStatus;
 };
 
 window.openEditTaskModal = async function (id) {
@@ -6865,7 +7029,6 @@ window.handleBulkUpload = async function (event) {
                 dept_ar: String(r['Department (AR)'] || '').trim(),
                 job_en: String(r['Job Title (EN)'] || '').trim(),
                 job_ar: String(r['Job Title (AR)'] || '').trim(),
-                head: String(r['Head'] || '').trim(),
                 head: String(r['Head'] || '').trim()
             })).filter(item => item.dept_en);
             
@@ -10286,6 +10449,8 @@ window.handleApprovalRequestDecision = async function (sourceTable, sourceId, de
 };
 
 window.handleTaskApprovalDecision = async function (taskId, decision) {
+    const { data: taskData } = await window.supabaseClient.from('tasks').select('id,title,assignee_id,created_by').eq('id', taskId).single();
+    if (!taskData) return showToast('Task not found.', 'danger');
     if (decision === 'APPROVED') {
         await window.approveTaskCompletion(taskId);
         if (currentView === 'approvals') renderView('approvals');
@@ -10296,6 +10461,8 @@ window.handleTaskApprovalDecision = async function (taskId, decision) {
     const result = await db.updateTask(taskId, { status: 'in_progress', completion_requested_by: null, completion_requested_at: null });
     if (!result.success) return showToast(result.error?.message || 'Unable to return this task.', 'danger');
     await db.addTaskComment(taskId, currentUser.id, `Completion rejected: ${reason.trim()}`);
+    const recipients = [...new Set([taskData.assignee_id, taskData.created_by].filter(id => id && id !== currentUser.id))];
+    await Promise.all(recipients.map(id => db.createNotification(id, `Task "${taskData.title}" was returned to In Progress by the department manager.`, taskId)));
     showToast('Task returned to In Progress.', 'success');
     renderView('approvals');
 };

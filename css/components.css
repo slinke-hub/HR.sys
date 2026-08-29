@@ -978,13 +978,208 @@ button.btn-icon [data-lucide] {
   padding: 3px 7px;
   border-radius: 999px;
   background: rgba(37, 99, 235, .14);
+  padding: 1rem;
+  box-sizing: border-box;
+  backdrop-filter: blur(2px);
+}
+
+.modal.show {
+  display: flex;
+}
+
+.modal-content {
+  background: var(--color-bg-surface);
+  padding: 2rem;
+  border-radius: var(--radius-md);
+  width: 90%;
+  max-width: 500px;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  position: relative;
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.close-modal {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+/* Global Icon Styling */
+[data-lucide] {
+  vertical-align: middle;
+  stroke-width: 2px;
+}
+
+.btn [data-lucide] {
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  transition: transform 0.2s ease, stroke 0.2s ease;
+}
+
+.btn-icon [data-lucide] {
+  margin-right: 0;
+}
+
+#createTaskModal,
+#employeeDocumentUploadModal { align-items: center; justify-content: center; padding: 1rem; }
+#createTaskModal .modal-content {
+  width: min(920px, calc(100vw - 2rem));
+  max-width: 920px;
+  max-height: min(82dvh, 820px) !important;
+  overflow: hidden !important;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  margin-block: auto;
+  padding: 1.5rem 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+}
+#createTaskModal .modal-header { flex: 0 0 auto; margin-bottom: .75rem; }
+#createTaskModal #standardTaskForm {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0 !important;
+  overflow: hidden;
+}
+#createTaskModal #standardTaskForm > div:first-of-type {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: start;
+  gap: 1rem;
+  min-height: 0;
+  padding: .25rem .25rem 1rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+#createTaskModal #standardTaskForm > div:first-of-type > .form-group:first-child,
+#createTaskModal #standardTaskForm > div:first-of-type > .form-group:last-child,
+#createTaskModal #standardTaskForm .marketing-design-fields { grid-column: 1 / -1; }
+#createTaskModal .task-watcher-dropdown {
+  position: static;
+  width: 100%;
+  max-height: min(270px, 32dvh);
+  margin-top: .5rem;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+#createTaskModal .task-watcher-options { max-height: min(190px, 22dvh); }
+#createTaskModal #standardTaskForm > div:last-child {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 5;
+  margin: 0 -1.5rem;
+  padding: .85rem 1.5rem max(.85rem, env(safe-area-inset-bottom));
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border);
+}
+@media (max-width: 980px) {
+  #createTaskModal #standardTaskForm > div:first-of-type { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  #createTaskModal { padding: max(.5rem, env(safe-area-inset-top)) .5rem max(.5rem, env(safe-area-inset-bottom)); }
+  #createTaskModal .modal-content { width: 100%; max-height: calc(100dvh - 1rem) !important; padding: 1rem 1rem 0 !important; }
+  #createTaskModal #standardTaskForm > div:first-of-type { grid-template-columns: 1fr; padding-inline: 0; }
+  #createTaskModal #standardTaskForm > div:last-child { margin: 0 -1rem; padding-inline: 1rem; }
+}
+#employeeDocumentUploadModal .modal-content {
+  width: min(1120px, calc(100vw - 2rem));
+  max-width: 1120px;
+  max-height: min(90dvh, 860px);
+  box-sizing: border-box;
+}
+
+/* Keep compact action controls large enough for their icon and stroke. */
+.btn.btn-icon,
+button.btn-icon {
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  line-height: 1;
+}
+
+.btn.btn-icon [data-lucide],
+button.btn-icon [data-lucide] {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex: 0 0 22px;
+}
+
+.action-btn > :is(i, svg) {
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
+  padding: 8px;
+  flex: 0 0 36px;
+}
+
+.btn:hover [data-lucide] {
+  transform: scale(1.1);
+}
+
+/* Teamwork Task Manager Styles */
+.nav-beta-badge {
+  margin-inline-start: auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, .16);
+  color: #60a5fa;
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.task-v2-shell {
+  --task-v2-accent: #2563eb;
+  max-width: 1800px;
+  margin: 0 auto;
+}
+
+.task-v2-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.task-v2-eyebrow {
+  margin-bottom: .4rem;
+  color: var(--color-text-secondary);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .11em;
+}
+
+.task-v2-eyebrow span {
+  margin-inline-start: .45rem;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, .14);
   color: #60a5fa;
   letter-spacing: .04em;
 }
 
-.task-v2-stats {
+\.task-v2-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: .75rem;
   margin-bottom: 1rem;
 }
@@ -993,10 +1188,14 @@ button.btn-icon [data-lucide] {
   display: flex;
   flex-direction: column;
   gap: .2rem;
-  padding: 1rem 1.1rem;
+  padding: 1rem;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-bg-surface);
+  aspect-ratio: 1 / 1;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .task-v2-stats strong {
@@ -1017,9 +1216,10 @@ button.btn-icon [data-lucide] {
   color: var(--color-danger);
 }
 
-.task-v2-toolbar {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(150px, 220px) repeat(2, max-content);
+\.task-v2-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
   gap: .75rem;
   padding: .75rem;
@@ -1028,6 +1228,55 @@ button.btn-icon [data-lucide] {
   border-radius: 10px;
   background: var(--color-bg-surface);
 }
+
+.task-v2-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  flex: 1 1 auto;
+}
+
+
+.task-v2-view-toggles {
+  display: flex;
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px;
+  align-items: center;
+}
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+.view-toggle-btn.active {
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.view-toggle-btn i {
+  width: 16px;
+  height: 16px;
+}
+
+.task-v2-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  flex: 0 0 auto;
+}
+
 
 .task-v2-toolbar > * {
   min-width: 0;
@@ -1073,16 +1322,26 @@ button.btn-icon [data-lucide] {
 
 @media (max-width: 1100px) {
   .task-v2-toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .task-v2-toolbar-left,
+  .task-v2-toolbar-right {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .task-v2-search {
-    grid-column: 1 / -1;
+    width: 100%;
   }
 
-  .task-v2-toolbar > .btn,
-  .task-v2-toolbar > select {
+  .task-v2-toolbar .btn,
+  .task-v2-toolbar select,
+  .task-v2-toolbar .task-v2-view-toggles {
     width: 100%;
+    justify-content: center;
   }
 }
 
@@ -1094,20 +1353,15 @@ button.btn-icon [data-lucide] {
   }
 
   .task-v2-toolbar {
-    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
+    align-items: stretch;
     overflow: hidden;
   }
 
-  .task-v2-search {
-    grid-column: auto;
-  }
+  
 
   .task-v2-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .task-v2-toolbar>select {
-    width: 100%;
   }
 }
 
@@ -1434,6 +1688,142 @@ button.btn-icon [data-lucide] {
   background: rgba(148, 163, 184, .055);
 }
 
+/* Teamwork-inspired task list: compact rows, subtle separators, and quick
+   properties that become more prominent on hover. */
+.task-v2-workspace {
+  grid-template-columns: 232px minmax(0, 1fr);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+.task-v2-lists {
+  padding: 1rem .6rem;
+  background: #f7f9fc;
+}
+.task-v2-lists h3 {
+  margin: .2rem .75rem 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.task-v2-sidebar-section-title {
+  padding: .8rem .75rem .35rem;
+  color: var(--color-text-secondary);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.task-v2-lists li {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  min-height: 36px;
+  padding: .5rem .75rem;
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: .82rem;
+}
+.task-v2-lists li:hover,
+.task-v2-lists li.active {
+  background: #e7efff;
+  color: #2563eb;
+}
+.task-v2-lists li svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.task-v2-lists > ul { display: flex; flex-direction: column; gap: .2rem; width: 100%; margin: 0; padding: 0; list-style: none; }
+.task-v2-lists > .task-v2-sidebar-section-title { display: block; width: 100%; }
+.task-v2-lists { min-width: 0; overflow: hidden; }
+.task-v2-lists li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-v2-toolbar-left, .task-v2-toolbar-right { min-width: 0; }
+.task-v2-list-pane { background: #fff; }
+.task-v2-workspace,
+.task-v2-list-pane,
+.task-v2-list-pane h3,
+.task-v2-list-pane h4,
+.task-v2-list-pane span,
+.task-v2-list-pane button { color: #172033; }
+.task-v2-list-pane .task-v2-meta,
+.task-v2-list-pane .task-v2-context,
+.task-v2-list-pane .task-v2-subtask-toggle,
+.task-v2-list-pane .task-v2-subtask-spacer { color: #667085; }
+.task-v2-list-pane .task-v2-check-btn { color: #667085; }
+.task-v2-list-pane .task-v2-row.completed h4 { color: #667085; }
+.task-v2-toolbar {
+  margin: 0;
+  padding: .75rem 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: #fff;
+}
+.task-v2-stats { display: none; }
+.task-v2-rows { min-height: 360px; }
+.task-v2-row {
+  grid-template-columns: 28px 28px minmax(220px, 1fr) auto;
+  min-height: 60px;
+  padding: .6rem 1rem;
+  gap: .75rem;
+}
+.task-v2-row-left { display: contents; }
+.task-v2-row-content { min-width: 0; }
+.task-v2-row-content h4 { margin: 0; font-size: .86rem; font-weight: 600; }
+.task-v2-meta { display: flex; align-items: center; gap: .8rem; margin-top: .3rem; color: var(--color-text-secondary); font-size: .72rem; }
+.task-v2-meta span { display: inline-flex; align-items: center; gap: .25rem; white-space: nowrap; }
+.task-v2-meta svg { width: 13px; height: 13px; }
+.task-v2-context { color: var(--color-text-secondary); }
+.task-v2-subtask-toggle, .task-v2-subtask-spacer { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 1px; border: 0; background: transparent; color: var(--color-text-secondary); font-size: .68rem; }
+.task-v2-subtask-toggle { cursor: pointer; }
+.task-v2-subtask-toggle svg { width: 15px; height: 15px; }
+.task-v2-row:hover .task-v2-row-actions { opacity: 1; }
+.task-v2-row-actions { opacity: .35; transition: opacity .15s ease; }
+.task-v2-stage-select { min-width: 112px; padding: .35rem .45rem; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg-surface); color: var(--color-text-primary); font-size: .72rem; cursor: pointer; }
+.task-v2-stage-select:focus { outline: 2px solid color-mix(in srgb, var(--task-v2-accent) 35%, transparent); }
+.task-v2-meta .overdue { color: var(--color-danger); font-weight: 700; }
+.task-v2-lists h3,
+.task-v2-lists .task-v2-sidebar-section-title,
+.task-v2-row-content h4,
+.task-v2-row-content h4 span,
+.task-v2-row-actions button { color: #172033 !important; }
+.task-v2-row-content h4 span.task-relation-badge { color: inherit !important; }
+
+/* Task manager dark mode */
+[data-theme="dark"] .task-v2-workspace { background: #101d31; border-color: rgba(255,255,255,.14); }
+[data-theme="dark"] .task-v2-lists { background: #0d1a2c; border-color: rgba(255,255,255,.12); }
+[data-theme="dark"] .task-v2-list-pane { background: #101d31; }
+[data-theme="dark"] .task-v2-toolbar { background: #101d31; border-color: rgba(255,255,255,.12); }
+[data-theme="dark"] .task-v2-search { background: #0b192c; border-color: rgba(255,255,255,.18); }
+[data-theme="dark"] .task-v2-search input,
+[data-theme="dark"] .task-v2-toolbar select { color: #f8fafc; }
+[data-theme="dark"] .task-v2-toolbar select { background-color: #0b192c; border-color: rgba(255,255,255,.18); }
+[data-theme="dark"] .task-v2-lists h3,
+[data-theme="dark"] .task-v2-row-content h4,
+[data-theme="dark"] .task-v2-row-actions button { color: #f8fafc !important; }
+[data-theme="dark"] .task-v2-lists li { color: #cbd5e1; }
+[data-theme="dark"] .task-v2-lists li:hover,
+[data-theme="dark"] .task-v2-lists li.active { background: rgba(59,130,246,.2); color: #93c5fd; }
+[data-theme="dark"] .task-v2-row { border-color: rgba(255,255,255,.1); }
+[data-theme="dark"] .task-v2-row:hover { background: rgba(255,255,255,.045); }
+[data-theme="dark"] .task-v2-meta,
+[data-theme="dark"] .task-v2-context,
+[data-theme="dark"] .task-v2-subtask-toggle,
+[data-theme="dark"] .task-v2-subtask-spacer { color: #94a3b8; }
+[data-theme="dark"] .task-v2-view-toggles { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); }
+[data-theme="dark"] .view-toggle-btn { color: #cbd5e1; }
+[data-theme="dark"] .view-toggle-btn.active { background: #263b59; color: #fff; }
+[data-theme="dark"] #tasks-view-board .card { background: #15253d !important; border-color: rgba(255,255,255,.14) !important; }
+[data-theme="dark"] .task-v2-shell h1,
+[data-theme="dark"] .task-v2-shell h2,
+[data-theme="dark"] .task-v2-shell h3,
+[data-theme="dark"] .task-v2-shell h4,
+[data-theme="dark"] .task-v2-shell .card-title,
+[data-theme="dark"] .task-v2-shell .task-v2-sidebar-section-title,
+[data-theme="dark"] .task-v2-shell .task-v2-list-heading,
+[data-theme="dark"] .task-v2-shell .task-v2-row-content h4,
+[data-theme="dark"] .task-v2-shell .task-board-column .card-title { color: #fff !important; }
+[data-theme="dark"] .teamwork-task-detail h1,
+[data-theme="dark"] .teamwork-task-detail h2,
+[data-theme="dark"] .teamwork-task-detail h3,
+[data-theme="dark"] .teamwork-task-detail h4 { color: #fff !important; }
+
 .task-v2-complete {
   display: grid;
   place-items: center;
@@ -1750,24 +2140,13 @@ button.btn-icon [data-lucide] {
   opacity: .72;
 }
 
-.task-v2-legacy-host .dashboard-grid>.card,
-.task-v2-legacy-host #tasks-view-board {
-  display: none !important;
-}
 
-.task-v2-legacy-host.show-form .dashboard-grid>.card {
-  display: block !important;
-  margin-top: 1rem;
-}
+/* A transformed ancestor becomes the containing block for fixed descendants.
+   The legacy grid contains the create-task modal, so its entrance animation
+   otherwise positions the modal near the grid's off-screen location. */
 
-.task-v2-legacy-host.show-form #taskFormContainer {
-  display: block !important;
-}
 
-.task-v2-legacy-host.v2-board-active #tasks-view-board {
-  display: block !important;
-  margin-top: 1rem;
-}
+
 
 .side-panel.task-v2-detail {
   right: 0;
@@ -1847,7 +2226,7 @@ button.btn-icon [data-lucide] {
   }
 
   .inline-subtask-options .form-control {
-    flex: 1 1 100%;
+    flex: 1 1 100% !important;
     width: 100%;
   }
 
@@ -1994,6 +2373,51 @@ button.btn-icon [data-lucide] {
   border-radius: 12px;
   padding: 1rem;
   border: 1px solid var(--color-border);
+}
+
+/* Task manager board: keep horizontal scrolling inside the board instead of
+   forcing the whole application wider than the viewport. */
+.task-create-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.task-board-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: .25rem .25rem 1rem;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.task-board {
+  display: flex;
+  align-items: stretch;
+  gap: 1rem;
+  width: max-content;
+  min-width: 100%;
+}
+
+.task-board > .task-board-column {
+  flex: 0 0 clamp(260px, 24vw, 320px);
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.task-board > .task-board-column > .card {
+  min-width: 0;
+}
+
+.task-board .task-column {
+  min-width: 0;
 }
 
 .task-item-card {
@@ -4084,6 +4508,52 @@ textarea {
 }
 
 @media (max-width: 767px) {
+  .task-v2-shell {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .task-v2-tabs {
+    gap: 1rem;
+    overflow-x: auto;
+  }
+
+  .task-v2-tabs button {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .task-create-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .task-create-card-header .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .task-board-wrapper {
+    margin-inline: -.25rem;
+    padding-inline: .25rem;
+    scroll-snap-type: x mandatory;
+  }
+
+  .task-board > .task-board-column {
+    flex-basis: min(86vw, 320px);
+    scroll-snap-align: start;
+  }
+
+  .task-board .task-column {
+    min-height: 280px !important;
+    padding: .75rem !important;
+  }
+
+  .task-board .task-item-card {
+    margin-bottom: .75rem !important;
+  }
+
   .crm-client-directory-card {
     overflow: visible;
   }
@@ -4334,11 +4804,15 @@ textarea {
 }
 
 @media (max-width: 380px) {
-  .card {
-    padding: .8rem;
+  .task-v2-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .modal {
+  .task-board > .task-board-column {
+    flex-basis: calc(100vw - 2rem);
+  }
+
+  .card {
     padding-inline: 0;
   }
 
@@ -4598,8 +5072,8 @@ h1, h2, h3, h4, h5, h6, p, span, .nav-item span, label {
     }
 
     .kanban-col, .task-board-column {
-        min-width: 85vw !important;
-        flex: 0 0 85vw !important;
+        min-width: min(85vw, 320px) !important;
+        flex: 0 0 min(85vw, 320px) !important;
         scroll-snap-align: start;
     }
 
@@ -5182,29 +5656,48 @@ input.btn-primary,
 
 /* --- Create Task Modal Custom Mobile Styles --- */
 @media (max-width: 768px) {
+  #createTaskModal,
+  #createTaskModal.active,
+  #createTaskModal.show {
+    position: fixed;
+    inset: 0;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    padding: max(.5rem, env(safe-area-inset-top)) .5rem max(.5rem, env(safe-area-inset-bottom)) !important;
+    overflow: hidden;
+  }
+
   #createTaskModal .modal-content {
     width: 95vw !important;
     height: auto !important;
-    max-height: 90vh !important;
-    margin: auto !important;
+    max-height: calc(100dvh - max(1rem, env(safe-area-inset-top) + env(safe-area-inset-bottom))) !important;
+    margin: 0 auto !important;
     padding: 1rem !important;
     display: flex;
     flex-direction: column;
+    overflow: hidden !important;
   }
   
   #createTaskModal .modal-header {
     flex-shrink: 0;
   }
 
-  #standardTaskForm {
+  #createTaskModal #standardTaskForm {
     display: flex;
     flex-direction: column;
     flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  #createTaskModal #standardTaskForm > div:first-of-type {
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
   }
 
-  #standardTaskForm > div:last-child {
+  #createTaskModal #standardTaskForm > div:last-child {
     position: sticky;
     bottom: 0;
     background: var(--color-bg-surface);

@@ -1,6 +1,7 @@
 supabase/.env
 supabase/.env.*
 !supabase/.env.example
+supabase/.temp/
 www/
 android/.gradle/
 android/app/build/

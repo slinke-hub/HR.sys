@@ -1155,7 +1155,7 @@ const db = {
             await this.flushTaskNotificationEmails();
             return { success: true, data };
         } catch (error) {
-            console.error("createTask Error:", error);
+            console.error("createTask Error:", error?.message || error, error?.details || '', error?.code || '');
             return { success: false, error };
         }
     },
