@@ -5180,3 +5180,38 @@ input.btn-primary,
   }
 }
 
+/* --- Create Task Modal Custom Mobile Styles --- */
+@media (max-width: 768px) {
+  #createTaskModal .modal-content {
+    width: 95vw !important;
+    height: auto !important;
+    max-height: 90vh !important;
+    margin: auto !important;
+    padding: 1rem !important;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  #createTaskModal .modal-header {
+    flex-shrink: 0;
+  }
+
+  #standardTaskForm {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  #standardTaskForm > div:last-child {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-bg-surface);
+    padding: 1rem 0;
+    margin-bottom: 0 !important;
+    border-top: 1px solid var(--color-border);
+    z-index: 10;
+  }
+}
+
