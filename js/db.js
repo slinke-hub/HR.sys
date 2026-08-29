@@ -716,7 +716,8 @@ const db = {
             return { data, error: null };
         } catch (error) {
             console.error("createUser Error:", error);
-            return { data: null, error };
+            const errMsg = error?.message || error?.details || error?.hint || (typeof error === 'string' ? error : "Unknown error occurred");
+            return { data: null, error: new Error(errMsg) };
         }
     },
     async updateUserRole(userId, newRole) {

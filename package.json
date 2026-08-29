@@ -5,15 +5,23 @@
   "main": "index.js",
   "scripts": {
     "dev": "serve",
-    "start": "serve"
+    "start": "serve",
+    "mobile:web": "node scripts/build-mobile.mjs",
+    "mobile:sync": "npm run mobile:web && node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor sync android",
+    "mobile:open": "node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor open android",
+    "mobile:build:debug": "node scripts/build-android.mjs debug",
+    "mobile:build:release": "node scripts/build-android.mjs release"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "serve": "^14.2.4"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@supabase/supabase-js": "^2.112.4",
     "chart.js": "^4.5.0",
     "eslint": "^8.57.1",

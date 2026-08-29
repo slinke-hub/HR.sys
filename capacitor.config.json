@@ -1,0 +1,14 @@
+{
+  "appId": "net.muqam.hr",
+  "appName": "MUQAM HR",
+  "webDir": "www",
+  "backgroundColor": "#0b192c",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0b192c",
+    "webContentsDebuggingEnabled": false
+  }
+}

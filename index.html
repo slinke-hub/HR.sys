@@ -5,9 +5,12 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <script>
+        if (/Android/i.test(navigator.userAgent)) document.documentElement.dataset.platform = 'android';
+    </script>
     <title>MUQAM HR</title>
-    
+
     <!-- PWA Meta Tags -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#1e3e62">
@@ -20,7 +23,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <!-- Touch Drag and Drop Polyfill -->
     <script src="js/DragDropTouch.js"></script>
     
@@ -31,6 +34,7 @@
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/layout.css?v=11">
     <link rel="stylesheet" href="css/components.css?v=49">
+    <link rel="stylesheet" href="css/android.css?v=1">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -691,58 +695,7 @@
     </div>
 
     <!-- User Modal -->
-    <div class="modal" id="addUserModal">
-        <div class="modal-content fade-in-up">
-            <div class="modal-header">
-                <h2><i data-lucide="user-plus"></i> Add New User</h2>
-                <button class="icon-btn" onclick="closeAddUserModal()">
-                    <i data-lucide="x"></i>
-                </button>
-            </div>
-            <form autocomplete="off" onsubmit="handleCreateUser(event)" id="addUserForm">
-                <div class="form-group">
-                    <label class="form-label">Employee ID</label>
-                    <input type="text" autocomplete="off" id="newEmployeeId" class="form-control" value="MQ-" placeholder="MQ-XXXX" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Full Name</label>
-                    <input type="text" autocomplete="off" id="newFullName" class="form-control" placeholder="Enter full name" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Full Name in Arabic</label>
-                    <input type="text" autocomplete="off" id="newFullNameAr" class="form-control" placeholder="Enter full name in Arabic">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Email</label>
-                    <input type="email" autocomplete="off" id="newEmail" class="form-control" placeholder="Enter email address (Optional)">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Phone</label>
-                    <input type="tel" autocomplete="off" id="newPhone" class="form-control" placeholder="Enter phone number (Optional)">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Temp Password</label>
-                    <input type="text" autocomplete="off" id="newPassword" class="form-control" placeholder="Enter temporary password" required>
-                </div>
-                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                    <button type="button" class="btn btn-secondary w-full" onclick="closeAddUserModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary w-full">Add User</button>
-                </div>
-            </form>
-        </div>
-                    <div style="display:flex; align-items:center; gap:1rem;">
-                        <img id="editAvatarPreview" alt="Employee profile preview" hidden style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--color-border);">
-                        <input type="file" id="editAvatarFile" class="form-control" accept="image/*" onchange="previewEditUserPhoto(this)">
-                    </div>
-                    <small>Upload a JPG, PNG, or other image from your device.</small>
-                </div>
-                <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('editUserModal').classList.remove('active')" data-i18n="html_cancel">Cancel</button>
-                    <button type="submit" class="btn btn-primary" data-i18n="html_save_changes">Save Changes</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    
 
     
     <!-- Payroll Processing Modal -->
