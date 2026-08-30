@@ -84,6 +84,7 @@ window.hideSupervisorTooltip = function () {
 let currentUserRole = null;
 let currentUserProfile = null;
 const isTaskAdmin = () => ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(String(currentUserRole || '').trim().toUpperCase());
+const canInteractWithTask = task => !!task && (isTaskAdmin() || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
 let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
 let recentLoginsChannel = null;
@@ -2274,8 +2275,22 @@ async function renderTime() {
 }
 
 window.openTaskDetailsModal = async function (id) {
-    const task = window.taskCache[id];
+    let task = window.taskCache?.[id];
+    // The action can be clicked before the task cache finishes hydrating.
+    // Resolve the task once more instead of silently doing nothing.
+    if (!task) {
+        const fetchedTasks = await db.fetchTasksWithProfiles();
+        task = (fetchedTasks || []).find(item => String(item.id) === String(id));
+        if (task) {
+            window.taskCache = window.taskCache || {};
+            window.taskCache[task.id] = task;
+        }
+    }
     if (!task) return;
+    if (!canInteractWithTask(task)) {
+        showToast('You do not have access to this task.', 'warning');
+        return;
+    }
 
     // Keep the two task modals mutually exclusive when switching actions.
     document.getElementById('editTaskModal')?.classList.remove('active');
@@ -2388,14 +2403,23 @@ function prepareTeamworkTaskDetail(task) {
             grid.insertAdjacentElement('afterend', content);
         }
         const links = [...(task.content_links || []), ...(task.submission_links || [])].filter(Boolean);
-        const canUploadFiles = !!currentUser && (task.task_list_id ? canManagePrivateTask : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser.id) || (task.watchers || []).includes(currentUser.id));
+        const imageExtensions = /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i;
+        const fileNameFromUrl = link => decodeURIComponent(String(link).split('?')[0].split('/').pop() || 'Attachment');
+        const attachmentHTML = links.length ? links.map(link => {
+            const safeLink = escapeHTML(link);
+            const label = escapeHTML(fileNameFromUrl(link));
+            return imageExtensions.test(String(link))
+                ? `<a class="task-detail-image-attachment" href="${safeLink}" target="_blank" rel="noopener" title="Open ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></a>`
+                : `<a href="${safeLink}" target="_blank" rel="noopener"><i data-lucide="download"></i>${label}</a>`;
+        }).join('') : '<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>No files or links have been added</span></div>';
+        const canUploadFiles = canInteractWithTask(task);
         content.innerHTML = `
             <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : '<span>Add a description</span>'}</p></section>
             <nav class="task-detail-tabs" aria-label="Task information"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">Details</button><button type="button" data-task-info-tab="custom-fields" onclick="setTaskDetailInfoTab('custom-fields')">Custom fields</button><button type="button" data-task-info-tab="dependencies" onclick="setTaskDetailInfoTab('dependencies')">Dependencies</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">Proofs</button></nav>
             <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
             <section class="task-detail-files">
                 <div class="task-detail-files-heading"><h3>Files & links</h3>${canUploadFiles ? `<button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> Upload file(s)</button><input id="taskAttachmentInput" type="file" multiple style="display: none;" onchange="uploadTaskAttachment(this)">` : ''}</div>
-                <div id="taskDetailFileList">${links.length ? `<div class="task-detail-link-list">${links.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : '<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>No files or links have been added</span></div>'}</div>
+                <div id="taskDetailFileList"><div class="task-detail-link-list">${attachmentHTML}</div></div>
             </section>`;
     }
     const commentsHeading = Array.from(panel.querySelectorAll('h3')).find(item => item.textContent.includes('Activity') || item.textContent.includes('Comments'));
@@ -2415,7 +2439,7 @@ function prepareTeamworkTaskDetail(task) {
     const legacySubtaskList = document.getElementById('taskSubTasksList');
     if (legacySubtaskList) legacySubtaskList.style.display = 'none';
     const commentForm = document.getElementById('taskCommentInput')?.closest('form');
-    if (commentForm) commentForm.style.display = canManagePrivateTask ? 'flex' : 'none';
+    if (commentForm) commentForm.style.display = canInteractWithTask(task) ? 'flex' : 'none';
     setTaskDetailInfoTab('details');
     setTaskActivityTab('comments');
     if (window.lucide) window.lucide.createIcons();
@@ -2448,7 +2472,10 @@ window.clearAttendanceFilters = function () {
 window.uploadTaskAttachment = async function (input) {
     const files = Array.from(input?.files || []);
     const task = window.activeTaskDetail;
-    if (files.length === 0 || !task || !currentUser?.id) return;
+    if (files.length === 0 || !canInteractWithTask(task) || !currentUser?.id) {
+        if (files.length && task && !canInteractWithTask(task)) showToast('You do not have access to this task.', 'warning');
+        return;
+    }
     const button = document.querySelector('.task-file-upload-button');
     const original = button?.innerHTML;
     if (button) {
@@ -2681,6 +2708,10 @@ window.handleTaskCommentSubmit = async function (e) {
     const input = document.getElementById('taskCommentInput');
     const content = input.value;
     if (!content.trim() || !id) return;
+    if (!canInteractWithTask(window.activeTaskDetail) || String(window.activeTaskDetail?.id) !== String(id)) {
+        showToast('You do not have access to this task.', 'warning');
+        return;
+    }
 
     input.disabled = true;
     const { success } = await db.addTaskComment(id, currentUser.id, content);
@@ -4717,10 +4748,10 @@ function renderTaskCard(task) {
     return `
         <article class="task-item-card task-pipeline-card priority-${escapeHTML(task.priority)} ${isOverdue ? 'is-overdue' : ''}" data-task-id="${task.id}" id="task-card-${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" draggable="${canManageTask}" ${canManageTask ? `ondragstart="handleTaskDragStart(event, '${task.id}')"` : ''} onclick="openTaskDetailsModal('${task.id}')">
             <div class="task-pipeline-card-head">
-                <h4><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Task'}</span>${escapeHTML(task.displayTitle)}</h4>
+                <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="cursor:pointer;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Task'}</span>${escapeHTML(task.displayTitle)}</h4>
             </div>
             <div class="task-pipeline-actions" onclick="event.stopPropagation();">
-                <button type="button" class="task-pipeline-action" onclick="event.preventDefault(); event.stopImmediatePropagation(); openTaskDetailsModal('${task.id}')" title="Open task details" aria-label="Open task details"><i data-lucide="message-square"></i></button>
+                <button type="button" class="task-pipeline-action" data-task-action="view" data-task-id="${escapeHTML(task.id)}" onclick="event.preventDefault(); event.stopPropagation(); window.openTaskDetailsModal(this.dataset.taskId)" title="View task" aria-label="View task"><i data-lucide="eye"></i></button>
                 <button type="button" class="task-pipeline-action ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator can edit this task'}" aria-label="${canEditTask ? 'Edit task' : 'Edit task (creator only)'}"><i data-lucide="pencil"></i></button>
                 <button type="button" class="task-pipeline-action task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" aria-label="Delete task"><i data-lucide="trash-2"></i></button>
             </div>
@@ -4816,6 +4847,13 @@ async function renderTasksV2() {
         const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id;
         const prioColor = task.priority === 'high' || task.priority === 'urgent' ? 'var(--color-warning)' : (task.priority === 'critical' ? 'var(--color-danger)' : 'var(--color-text-secondary)');
         const isCompleted = task.status === 'completed';
+        const stageCheckColor = {
+            in_progress: '#f59e0b',
+            review: '#2563eb',
+            'Pending Approval': '#7c3aed',
+            completed: '#059669',
+            Approved: '#059669'
+        }[task.status] || 'var(--color-text-secondary)';
         
         const taskList = taskLists.find(list => list.id === task.task_list_id);
         const listName = taskList?.name || (task.project_id ? (projects.find(project => project.id === task.project_id)?.project_name || 'Project tasks') : 'Personal tasks');
@@ -4830,10 +4868,10 @@ async function renderTasksV2() {
             <article class="task-v2-row ${isCompleted ? 'completed' : ''}" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="cursor:pointer; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--color-border); background: var(--color-surface); transition: background 0.2s; flex-wrap: wrap; gap: 0.5rem;">
                 <div class="task-v2-row-left" style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
                     <button class="task-v2-check-btn" onclick="event.stopPropagation(); window.taskV2ToggleComplete('${task.id}', event)" ${!canManageTask ? 'disabled' : ''} style="background:none; border:none; cursor:pointer; display:flex; align-items:center; padding:0;">
-                        <i data-lucide="check-circle-2" style="width: 20px; height: 20px; color: ${isCompleted ? 'var(--color-success)' : 'var(--color-text-secondary)'};"></i>
+                        <i data-lucide="check-circle-2" style="width: 20px; height: 20px; color: ${stageCheckColor};"></i>
                     </button>
                     <div class="task-v2-row-content" style="display: flex; flex-direction: column;">
-                        <h4 style="margin: 0; font-size: 0.95rem; font-weight: 500; ${isCompleted ? 'text-decoration: line-through; opacity: 0.6;' : 'color: var(--color-text);'}">
+                        <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="margin: 0; font-size: 0.95rem; font-weight: 500; cursor: pointer; ${isCompleted ? 'text-decoration: line-through; opacity: 0.6;' : 'color: var(--color-text);'}">
                             ${task.parent_task_id ? '<span class="task-relation-badge is-subtask">Subtask</span> ' : ''}
                             ${escapeHTML(task.displayTitle)}
                         </h4>
@@ -4844,7 +4882,7 @@ async function renderTasksV2() {
                     ${avatarHTML}
                     ${task.due_date ? `<span class="${dueClass}" style="display:flex; align-items: center; gap:4px; font-size:0.8rem; color:var(--color-text-secondary); white-space:nowrap; flex-shrink:0;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date}</span>` : ''}
                     ${task.category && task.category !== 'General' ? `<span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--color-primary); font-size: 0.75rem;">${escapeHTML(task.category)}</span>` : ''}
-                    <button class="icon-btn" onclick="event.stopPropagation(); openTaskDetailsModal('${task.id}')" style="color:var(--color-text-secondary);"><i data-lucide="message-square" style="width:16px;height:16px;"></i></button>
+                    <button class="icon-btn" data-task-action="view" data-task-id="${escapeHTML(task.id)}" onclick="event.preventDefault(); event.stopPropagation(); window.openTaskDetailsModal(this.dataset.taskId)" title="View task" aria-label="View task" style="color:var(--color-text-secondary);"><i data-lucide="eye" style="width:16px;height:16px;"></i></button>
                     <button class="icon-btn ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.stopPropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator or an administrator can edit this task'}" style="color:var(--color-text-secondary);"><i data-lucide="pencil" style="width:16px;height:16px;"></i></button>
                     <button class="icon-btn task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.stopPropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" style="color:var(--color-danger);"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
                 </div>
@@ -5494,11 +5532,13 @@ window.handleTaskProjectChange = function (prefix = 'new') {
 };
 
 window.handleTaskDepartmentChange = function (prefix = 'new', value = '', selectedAssigneeId = '') {
-    updateTaskAssigneeOptions(prefix, value, selectedAssigneeId);
+    const selectedDepartment = (window.taskDepartmentsCache || []).find(item => item.id === value || item.name === value);
+    const departmentName = selectedDepartment?.name || value;
+    updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId);
     const subTypeGroup = document.getElementById(prefix === 'new' ? 'taskSubTypeGroup' : 'editTaskSubTypeGroup');
     if (!subTypeGroup) return;
 
-    if (isMarketingTaskDepartment(value)) {
+    if (isMarketingTaskDepartment(departmentName)) {
         subTypeGroup.style.display = 'block';
         const select = document.getElementById(prefix === 'new' ? 'taskSubType' : 'editTaskSubType');
         if (select) select.required = true;
@@ -6000,6 +6040,14 @@ window.openEditTaskModal = async function (id) {
             assigneeSelect.value = task.assignee_id || '';
         }
 
+        const watchersSelect = document.getElementById('editTaskWatchers');
+        if (watchersSelect) {
+            const selectedWatchers = new Set(Array.isArray(task.watchers) ? task.watchers : []);
+            watchersSelect.innerHTML = (window.taskAllUsersCache || []).map(user =>
+                `<option value="${escapeHTML(user.id)}" ${selectedWatchers.has(user.id) ? 'selected' : ''}>${escapeHTML(window.formatEmployeeName(user) || user.id)}</option>`
+            ).join('');
+        }
+
         // Update project options
         let selectProject = document.getElementById('editTaskProject');
         selectProject.innerHTML = `<option value="">No Project / Independent</option>`;
@@ -6018,12 +6066,13 @@ window.openEditTaskModal = async function (id) {
         let customDeptSelect = document.getElementById('editTaskDepartment');
         if (customDeptSelect) {
             customDeptSelect.innerHTML = `<option value="">None</option>`;
-            (window.departmentsCache || []).forEach(d => {
-                let isSelected = task.task_department_id === d.id ? 'selected' : '';
+            (window.taskDepartmentsCache || window.departmentsCache || []).forEach(d => {
+                const isSelected = task.task_department_id === d.id || task.department === d.name ? 'selected' : '';
                 customDeptSelect.innerHTML += `<option value="${d.id}" ${isSelected}>${escapeHTML(d.name)}</option>`;
             });
             setTimeout(() => {
-                window.handleTaskDepartmentChange('edit', task.task_department_id || '');
+                const selectedDepartment = (window.taskDepartmentsCache || []).find(d => d.id === task.task_department_id || d.name === task.department);
+                window.handleTaskDepartmentChange('edit', selectedDepartment?.id || '', task.assignee_id || '');
                 if (task.task_sub_type) {
                     let subTypeSelect = document.getElementById('editTaskSubType');
                     if (subTypeSelect) {
@@ -11022,18 +11071,18 @@ window.updateEditTaskWatchersUI = function(selectElem) {
     }
 };
 
-window.editTaskPromptEstimate = function() {
+window.editTaskPromptEstimate = async function() {
     const el = document.getElementById('editTaskEstimate');
-    const val = prompt('Enter estimated time (e.g., 4h, 1d):', el.value);
+    const val = await window.showPromptModal('Enter estimated time (e.g., 4h, 1d):', 'Estimated time', { value: el.value });
     if(val !== null) {
         el.value = val;
         document.querySelector('.estimate-ui-value').textContent = val || 'Not set';
     }
 };
 
-window.editTaskPromptCategory = function() {
+window.editTaskPromptCategory = async function() {
     const el = document.getElementById('editTaskCategory');
-    const val = prompt('Enter tags (comma separated):', el.value);
+    const val = await window.showPromptModal('Enter tags (comma separated):', 'Task tags', { value: el.value });
     if(val !== null) {
         el.value = val;
         document.querySelector('.category-ui-value').textContent = val || 'No tags';

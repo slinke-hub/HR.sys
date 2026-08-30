@@ -34,7 +34,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/layout.css?v=14">
-    <link rel="stylesheet" href="css/components.css?v=75">
+    <link rel="stylesheet" href="css/components.css?v=80">
     <link rel="stylesheet" href="css/android.css?v=1">
     <style>
         @media (hover: none) and (pointer: coarse) {
@@ -1214,11 +1214,19 @@
                     <div class="edit-task-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem 1rem;">
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;">Assignee</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="if (event.target.tagName !== 'SELECT') try{this.querySelector('select').showPicker()}catch(e){}">
                                 <i data-lucide="user" style="width: 16px; height: 16px;"></i>
                                 <select id="editTaskAssignee" onchange="window.updateEditTaskSelectUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
                                 </select>
                                 <span class="select-ui-value" style="font-size: 0.9rem;">Anyone</span>
+                            </div>
+                        </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Department</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="if (event.target.tagName !== 'SELECT') try{this.querySelector('select').showPicker()}catch(e){}">
+                                <i data-lucide="briefcase" style="width: 16px; height: 16px;"></i>
+                                <select id="editTaskDepartment" onchange="window.handleTaskDepartmentChange('edit', this.value); window.updateEditTaskSelectUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;"></select>
+                                <span class="select-ui-value" style="font-size: 0.9rem;">None</span>
                             </div>
                         </div>
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
@@ -1240,7 +1248,7 @@
                         </div>
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;">Priority</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="if (event.target.tagName !== 'SELECT') try{this.querySelector('select').showPicker()}catch(e){}">
                                 <i data-lucide="flag" style="width: 16px; height: 16px;"></i>
                                 <select id="editTaskPriority" onchange="window.updateEditTaskPriorityUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
                                     <option value="urgent">Critical</option>
@@ -1253,7 +1261,7 @@
                         </div>
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;">Privacy</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="if (event.target.tagName !== 'SELECT') try{this.querySelector('select').showPicker()}catch(e){}">
                                 <i data-lucide="lock" style="width: 16px; height: 16px;"></i>
                                 <select id="editTaskVisibility" onchange="window.updateEditTaskSelectUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
                                     <option value="public">No privacy</option>
@@ -1297,7 +1305,7 @@
                         </div>
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;">Followers</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="if (event.target.tagName !== 'SELECT') try{this.querySelector('select').showPicker()}catch(e){}">
                                 <i data-lucide="eye" style="width: 16px; height: 16px;"></i>
                                 <select id="editTaskWatchers" multiple onchange="window.updateEditTaskWatchersUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
                                 </select>
@@ -1320,22 +1328,13 @@
                             </div>
                         </div>
                         
-                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                            <span style="font-size: 0.85rem; font-weight: 500;">Department</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
-                                <i data-lucide="briefcase" style="width: 16px; height: 16px;"></i>
-                                <select id="editTaskDepartment" onchange="window.handleTaskDepartmentChange('edit', this.value); window.updateEditTaskSelectUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
-                                </select>
-                                <span class="select-ui-value" style="font-size: 0.9rem;">None</span>
-                            </div>
-                        </div>
-                        
                         <div class="property-cell" id="editTaskSubTypeGroupWrap" style="display: none; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;">Task Type</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="if (event.target.tagName !== 'SELECT') try{this.querySelector('select').showPicker()}catch(e){}">
                                 <i data-lucide="layers" style="width: 16px; height: 16px;"></i>
                                 <select id="editTaskSubType" onchange="handleMarketingTaskTypeChange('edit', this.value); window.updateEditTaskSelectUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
                                     <option value="">Select Sub-Type</option>
+                                    <option value="Regular Tasks">Regular Tasks</option>
                                     <option value="Daily Tasks">Daily Tasks</option>
                                     <option value="Designing Task">Designing Task</option>
                                 </select>
@@ -1632,7 +1631,7 @@
     <script src="js/data.js?v=27"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=154"></script>
+    <script src="js/app.js?v=162"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">
