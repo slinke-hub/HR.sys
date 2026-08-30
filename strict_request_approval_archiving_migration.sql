@@ -33,11 +33,18 @@ DECLARE
     normalized TEXT;
     clean_note TEXT;
     display_stage TEXT;
+    actor_is_admin BOOLEAN;
 BEGIN
     normalized:=UPPER(BTRIM(COALESCE(p_decision,'')));
     clean_note:=NULLIF(BTRIM(COALESCE(p_note,'')),'');
     IF normalized NOT IN ('APPROVED','REJECTED') THEN RAISE EXCEPTION 'Decision must be APPROVED or REJECTED'; END IF;
     IF normalized='REJECTED' AND clean_note IS NULL THEN RAISE EXCEPTION 'A rejection reason is required'; END IF;
+
+    SELECT EXISTS(
+        SELECT 1 FROM public.profiles
+        WHERE id=auth.uid()
+          AND UPPER(COALESCE(role,'')) IN ('ADMIN','ROLE_SYSTEM_ADMIN','SYSTEM_ADMIN')
+    ) INTO actor_is_admin;
 
     SELECT * INTO workflow FROM public.request_approval_workflows
     WHERE source_table=p_source_table AND source_id=p_source_id FOR UPDATE;
@@ -48,7 +55,7 @@ BEGIN
     SELECT * INTO current_step FROM public.request_approval_steps
     WHERE workflow_id=workflow.id AND step_order=workflow.current_step FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'The active approval stage is missing'; END IF;
-    IF current_step.approver_id<>auth.uid() THEN
+    IF current_step.approver_id<>auth.uid() AND NOT actor_is_admin THEN
         RAISE EXCEPTION 'This request is awaiting approval from another manager' USING ERRCODE='42501';
     END IF;
     IF current_step.status<>'PENDING' THEN RAISE EXCEPTION 'This approval stage has already been decided'; END IF;

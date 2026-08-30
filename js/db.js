@@ -1026,11 +1026,11 @@ const db = {
             return { success: false, error };
         }
     },
-    async createTaskList(name, ownerId, sharedWith = []) {
+    async createTaskList(name, ownerId, sharedWith = [], payload = {}) {
         if (!supabaseClient) return { success: false, error: new Error('Not connected') };
         try {
             const { data, error } = await supabaseClient.from('task_lists').insert([{
-                name: String(name || '').trim(), owner_id: ownerId, shared_with: sharedWith
+                name: String(name || '').trim(), owner_id: ownerId, shared_with: sharedWith, ...payload
             }]).select().single();
             if (error) throw error;
             return { success: true, data };
@@ -1049,6 +1049,16 @@ const db = {
             return { success: true, data };
         } catch (error) {
             console.error('updateTaskList Error:', error);
+            return { success: false, error };
+        }
+    },
+    async deleteTaskList(listId) {
+        if (!supabaseClient) return { success: false, error: { message: "Not connected" } };
+        try {
+            const { error } = await supabaseClient.from('task_lists').delete().eq('id', listId);
+            return { error };
+        } catch (error) {
+            console.error("deleteTaskList Error:", error);
             return { success: false, error };
         }
     },

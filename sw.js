@@ -1,10 +1,10 @@
-const CACHE_NAME = 'muqam-hr-mobile-v30';
+const CACHE_NAME = 'muqam-hr-mobile-v43';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.json', '/offline.html',
   '/css/variables.css', '/css/layout.css', '/css/components.css', '/css/android.css',
   '/js/DragDropTouch.js', '/js/data.js', '/js/db.js', '/js/contract.js', '/js/payroll.js', '/js/app.js',
   '/js/vendor/lucide.min.js', '/js/vendor/supabase.js', '/js/vendor/chart.umd.min.js', '/js/vendor/xlsx.full.min.js',
-  '/images/logo.png'
+  '/images/logo.png', '/images/logo-dark.png', '/images/favicon.png?v=1'
 ];
 
 self.addEventListener('install', event => {

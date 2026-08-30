@@ -1,0 +1,31 @@
+﻿/* Edit Task V2 Styles */
+.edit-task-v2 .floating-input-group {
+    position: relative;
+}
+.edit-task-v2 .floating-input-group input:placeholder-shown + label {
+    top: 1rem;
+    font-size: 0.95rem;
+    color: var(--color-text-secondary);
+}
+.edit-task-v2 .floating-input-group input:focus + label,
+.edit-task-v2 .floating-input-group input:not(:placeholder-shown) + label {
+    top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--color-primary);
+}
+.edit-task-v2 .floating-input-group label {
+    transition: all 0.2s;
+    pointer-events: none;
+}
+.edit-task-v2 .property-cell {
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+.edit-task-v2 .property-cell:hover {
+    background: var(--color-bg);
+}
+.edit-task-v2 .property-cell .property-value.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}

@@ -17,7 +17,8 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="icon" type="image/png" href="/images/logo.png">
+    <link rel="icon" type="image/png" sizes="any" href="/images/favicon.png?v=1">
+    <link rel="shortcut icon" type="image/png" href="/images/favicon.png?v=1">
     <link rel="apple-touch-icon" href="/images/logo.png">
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,8 +33,8 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
-    <link rel="stylesheet" href="css/layout.css?v=11">
-    <link rel="stylesheet" href="css/components.css?v=58">
+    <link rel="stylesheet" href="css/layout.css?v=14">
+    <link rel="stylesheet" href="css/components.css?v=63">
     <link rel="stylesheet" href="css/android.css?v=1">
     <style>
         @media (hover: none) and (pointer: coarse) {
@@ -102,8 +103,17 @@
                     <button id="globalBackButton" class="btn btn-icon" onclick="window.goBack()" style="display: none; background: transparent; border: none; cursor: pointer; color: var(--color-text); padding: 0.5rem; border-radius: 50%;">
                         <i data-lucide="arrow-left" style="width: 20px; height: 20px;"></i>
                     </button>
-                    <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo">
+                    <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo app-logo-light">
+                    <img src="/images/logo-dark.png" alt="MUQAM HR Logo" class="app-logo app-logo-dark">
                 </div>
+
+                <nav class="header-navigation" aria-label="Primary navigation">
+                    <a href="#" class="header-nav-item nav-item" data-view="dashboard"><i data-lucide="layout-dashboard"></i><span data-i18n="nav_dashboard">Dashboard</span></a>
+                    <a href="#" class="header-nav-item nav-item" data-view="tasks"><i data-lucide="list-checks"></i><span data-i18n="nav_task_manager">Task Manager</span></a>
+                    <a href="#" class="header-nav-item nav-item" data-view="time"><i data-lucide="clock"></i><span data-i18n="nav_time">Time &amp; Attendance</span></a>
+                    <a href="#" class="header-nav-item nav-item" data-view="requests"><i data-lucide="file-signature"></i><span data-i18n="nav_employee_requests">Employee Requests</span></a>
+                    <button type="button" class="header-nav-item header-nav-more nav-item" onclick="window.openMobileNavigation()" aria-label="More navigation"><i data-lucide="menu"></i><span data-i18n="nav_more">More</span></button>
+                </nav>
                 
                 <div class="topbar-actions">
                     <button type="button" class="header-search-trigger" onclick="window.toggleHeaderSearch(true)" data-i18n-title="search_placeholder" aria-label="Search" title="Search"><i data-lucide="search"></i></button>
@@ -860,7 +870,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Temp Password</label>
-                    <input type="text" autocomplete="off" id="newPassword" class="form-control" placeholder="Enter temporary password" required>
+                    <input type="text" autocomplete="off" id="newPassword" class="form-control" required>
                 </div>
                 <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                     <button type="button" class="btn btn-secondary w-full" onclick="closeAddUserModal()">Cancel</button>
@@ -1171,113 +1181,193 @@
     </div>
 
     <!-- Edit Task Modal -->
+        <!-- Edit Task Modal V2 -->
     <div class="modal" id="editTaskModal">
-        <div class="modal-content" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2><i data-lucide="edit"></i> <span data-i18n="html_edit_task">Edit Task</span></h2>
+        <div class="modal-content edit-task-v2" style="max-width: 650px; padding: 0; border-radius: 12px; overflow: hidden;">
+            <div class="modal-header" style="padding: 1.5rem 1.5rem 1rem; border-bottom: none;">
+                <h2 style="font-size: 1.25rem; font-weight: 600;">Edit task</h2>
                 <button type="button" class="icon-btn" onclick="document.getElementById('editTaskModal').classList.remove('active')">
                     <i data-lucide="x"></i>
                 </button>
             </div>
-            <form id="editTaskForm" onsubmit="handleEditTaskSubmit(event)" style="display: flex; flex-direction: column; gap: 1rem;">
-                <input type="hidden" id="editTaskId">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_task_title">Task Title</label>
-                    <input type="text" id="editTaskTitle" class="form-control" required>
-                </div>
-                <div class="form-group edit-task-description" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_description">Description</label>
-                    <textarea id="editTaskDescription" class="form-control" rows="4" placeholder="Add a description" data-i18n-placeholder="ph_add_a_description"></textarea>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_category">Category</label>
-                    <input type="text" id="editTaskCategory" class="form-control">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_priority">Priority</label>
-                    <select id="editTaskPriority" class="form-control">
-                        <option value="urgent">Critical</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_project">Project</label>
-                    <select id="editTaskProject" class="form-control">
-                        <!-- Options populated dynamically -->
-                    </select>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_assign_to">Assign To</label>
-                    <select id="editTaskAssignee" class="form-control" onchange="handleTaskAssigneeChange('edit')" required>
-                        <!-- Options populated dynamically -->
-                    </select>
-                </div>
-                <!-- Department & Sub-Type -->
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_department">Task's Department</label>
-                    <select id="editTaskDepartment" class="form-control" onchange="window.handleTaskDepartmentChange('edit', this.value)">
-                        <!-- Options populated dynamically from Departments page -->
-                    </select>
-                </div>
-                <div class="form-group" id="editTaskSubTypeGroup" style="margin-bottom: 0; display: none;">
-                    <label class="form-label" data-i18n="html_task_type">Task Type</label>
-                    <select id="editTaskSubType" class="form-control" onchange="handleMarketingTaskTypeChange('edit', this.value)">
-                        <option value="">Select Sub-Type</option>
-                        <option value="Daily Tasks">Daily Tasks</option>
-                        <option value="Designing Task">Designing Task</option>
-                    </select>
-                </div>
-                <div id="editMarketingDesignFields" class="marketing-design-fields" style="display:none;"></div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_visibility">Visibility</label>
-                    <select id="editTaskVisibility" class="form-control">
-                        <option value="public" data-i18n="html_public_everyone">Public (Everyone)</option>
-                        <option value="team" data-i18n="html_team_only">Team Only</option>
-                        <option value="private" data-i18n="html_private">Private</option>
-                    </select>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_start_date">Start Date</label>
-                    <input type="date" id="editTaskStart" class="form-control">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_due_date">Due Date</label>
-                    <input type="date" id="editTaskDue" class="form-control">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_end_date">End Date</label>
-                    <input type="date" id="editTaskEnd" class="form-control">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label" data-i18n="html_est_time">Est. Time</label>
-                    <input type="text" id="editTaskEstimate" class="form-control" placeholder="e.g. 5 hours" data-i18n-placeholder="ph_e_g_5_hours">
-                </div>
-                <!-- Watchers -->
-                <div class="form-group edit-task-watchers" style="margin-top: 0.5rem; margin-bottom: 0;">
-                    <label class="form-label">
-                        <input type="checkbox" id="editEnableWatchers" onchange="document.getElementById('editTaskWatchersGroup').style.display = this.checked ? 'block' : 'none'">
-                        <span data-i18n="ui_add_watcher">Add Watcher</span>
-                    </label>
-                    <div id="editTaskWatchersGroup" style="display: none; margin-top: 0.5rem;">
-                        <div class="task-watcher-picker" data-watcher-picker="editTaskWatchers">
-                            <button type="button" class="form-control task-watcher-toggle" onclick="toggleTaskWatcherDropdown('editTaskWatchers')" aria-expanded="false" data-i18n="ui_select_watchers">Select watchers</button>
-                            <div class="task-watcher-dropdown" hidden>
-                                <input type="search" class="form-control task-watcher-search" placeholder="Search employees..." data-i18n-placeholder="ph_search_employees" aria-label="Search employees" oninput="filterTaskWatchers('editTaskWatchers', this.value)">
-                                <div class="task-watcher-options"></div>
-                            </div>
-                            <select id="editTaskWatchers" multiple hidden></select>
-                        </div>
+            
+            <form id="editTaskForm" onsubmit="handleEditTaskSubmit(event)" style="display: flex; flex-direction: column;">
+                <div style="padding: 0 1.5rem;">
+                    <div class="edit-task-list-indicator" style="background: var(--color-surface); padding: 0.5rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 0.5rem;">
+                        Task list <a href="#" id="editTaskListLabel" style="color: var(--color-primary); text-decoration: none; font-weight: 500;">List Name</a>
+                        <select id="editTaskProject" style="display:none;"></select>
+                        <input type="hidden" id="editTaskId">
+                    </div>
+                    
+                    <div class="edit-task-tabs" style="display: flex; background: var(--color-surface); border-radius: 8px; padding: 0.25rem; margin-bottom: 1rem;">
+                        <button type="button" class="edit-task-tab active" onclick="window.switchEditTaskTab('details')" style="flex: 1; padding: 0.5rem; border: none; background: var(--color-bg); border-radius: 6px; font-weight: 500; cursor: pointer; color: var(--color-text);">Details</button>
+                        <button type="button" class="edit-task-tab" onclick="window.switchEditTaskTab('advanced')" style="flex: 1; padding: 0.5rem; border: none; background: transparent; border-radius: 6px; font-weight: 500; cursor: pointer; color: var(--color-text-secondary);">Advanced options</button>
                     </div>
                 </div>
-                <div class="form-group task-assign-btn-group" style="margin-bottom: 0; margin-top: 1rem; display: flex; gap: 1rem;">
-                    <button type="button" class="btn btn-primary" style="background-image: linear-gradient(135deg, #ef4444, #dc2626); border-color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 7px 15px rgba(220,38,38,.3);" onclick="handleDeleteTask(document.getElementById('editTaskId').value)" data-i18n="html_delete">Delete</button>
-                    <button type="submit" class="btn btn-primary" style="flex: 1;" data-i18n="html_save_changes">Save Changes</button>
+
+                <!-- Tab: Details -->
+                <div id="editTaskTabDetails" class="edit-task-tab-content active" style="padding: 0 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;">
+                    <div class="floating-input-group" style="position: relative;">
+                        <input type="text" id="editTaskTitle" class="form-control" required style="width: 100%; padding: 1.25rem 1rem 0.5rem; border-radius: 8px; border: 1px solid var(--color-primary); outline: none;">
+                        <label style="position: absolute; left: 1rem; top: 0.25rem; font-size: 0.75rem; color: var(--color-primary);">Task name</label>
+                    </div>
+
+                    <div class="edit-task-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem 1rem;">
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Assignee</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                                <i data-lucide="user" style="width: 16px; height: 16px;"></i>
+                                <select id="editTaskAssignee" onchange="window.updateEditTaskSelectUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
+                                </select>
+                                <span class="select-ui-value" style="font-size: 0.9rem;">Anyone</span>
+                            </div>
+                        </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Dates</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('input.date-picker').showPicker()}catch(e){}">
+                                <i data-lucide="calendar" style="width: 16px; height: 16px;"></i>
+                                <input type="date" id="editTaskDue" class="date-picker" onchange="window.updateEditTaskDateUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
+                                <input type="hidden" id="editTaskStart">
+                                <span class="date-ui-value" style="font-size: 0.9rem;">Set date</span>
+                            </div>
+                        </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Estimated time</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer;" onclick="window.editTaskPromptEstimate()">
+                                <i data-lucide="hourglass" style="width: 16px; height: 16px;"></i>
+                                <input type="hidden" id="editTaskEstimate">
+                                <span class="estimate-ui-value" style="font-size: 0.9rem;">Not set</span>
+                            </div>
+                        </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Priority</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                                <i data-lucide="flag" style="width: 16px; height: 16px;"></i>
+                                <select id="editTaskPriority" onchange="window.updateEditTaskPriorityUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
+                                    <option value="urgent">Critical</option>
+                                    <option value="high">High</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="low">Low</option>
+                                </select>
+                                <span class="priority-ui-value badge" style="font-size: 0.8rem; background: rgba(239, 68, 68, 0.15); color: var(--color-danger); padding: 0.2rem 0.6rem; border-radius: 12px;">Priority</span>
+                            </div>
+                        </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Privacy</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                                <i data-lucide="lock" style="width: 16px; height: 16px;"></i>
+                                <select id="editTaskVisibility" onchange="window.updateEditTaskSelectUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
+                                    <option value="public">No privacy</option>
+                                    <option value="team">Team Only</option>
+                                    <option value="private">Private</option>
+                                </select>
+                                <span class="select-ui-value" style="font-size: 0.9rem;">No privacy</span>
+                            </div>
+                        </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Tags</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer;" onclick="window.editTaskPromptCategory()">
+                                <i data-lucide="tag" style="width: 16px; height: 16px;"></i>
+                                <input type="hidden" id="editTaskCategory">
+                                <span class="category-ui-value" style="font-size: 0.9rem;">No tags</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="description-area">
+                        <textarea id="editTaskDescription" class="form-control" rows="4" placeholder="Add a description..." style="resize: vertical; min-height: 100px; padding: 1rem; border-radius: 8px; border: 1px solid var(--color-border); font-family: inherit; font-size: 0.95rem; width: 100%;"></textarea>
+                    </div>
+                </div>
+
+                <!-- Tab: Advanced -->
+                <div id="editTaskTabAdvanced" class="edit-task-tab-content" style="padding: 0 1.5rem 1.5rem; display: none; flex-direction: column; gap: 1.5rem;">
+                    <div class="edit-task-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem 1rem;">
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Dependencies</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
+                                <i data-lucide="corner-down-right" style="width: 16px; height: 16px;"></i>
+                                <span style="font-size: 0.9rem;">No dependencies</span>
+                            </div>
+                        </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Reminders</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
+                                <i data-lucide="bell" style="width: 16px; height: 16px;"></i>
+                                <span style="font-size: 0.9rem;">No reminders</span>
+                            </div>
+                        </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Followers</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                                <i data-lucide="eye" style="width: 16px; height: 16px;"></i>
+                                <select id="editTaskWatchers" multiple onchange="window.updateEditTaskWatchersUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
+                                </select>
+                                <span class="watchers-ui-value" style="font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No followers</span>
+                            </div>
+                        </div>
+                        
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Progress</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
+                                <i data-lucide="percent" style="width: 16px; height: 16px;"></i>
+                                <span style="font-size: 0.9rem;">0% <input type="range" disabled style="width: 50px; margin-left: 0.5rem; vertical-align: middle;"></span>
+                            </div>
+                        </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Set to repeat</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
+                                <i data-lucide="repeat" style="width: 16px; height: 16px;"></i>
+                                <span style="font-size: 0.9rem;">Not set</span>
+                            </div>
+                        </div>
+                        
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Department</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                                <i data-lucide="briefcase" style="width: 16px; height: 16px;"></i>
+                                <select id="editTaskDepartment" onchange="window.handleTaskDepartmentChange('edit', this.value); window.updateEditTaskSelectUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
+                                </select>
+                                <span class="select-ui-value" style="font-size: 0.9rem;">None</span>
+                            </div>
+                        </div>
+                        
+                        <div class="property-cell" id="editTaskSubTypeGroupWrap" style="display: none; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Task Type</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
+                                <i data-lucide="layers" style="width: 16px; height: 16px;"></i>
+                                <select id="editTaskSubType" onchange="handleMarketingTaskTypeChange('edit', this.value); window.updateEditTaskSelectUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
+                                    <option value="">Select Sub-Type</option>
+                                    <option value="Daily Tasks">Daily Tasks</option>
+                                    <option value="Designing Task">Designing Task</option>
+                                </select>
+                                <span class="select-ui-value" style="font-size: 0.9rem;">Select Sub-Type</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="editMarketingDesignFields" class="marketing-design-fields" style="display:none; padding: 1rem; border: 1px solid var(--color-border); border-radius: 8px;"></div>
+                    
+                    <div class="files-section" style="margin-top: 1rem;">
+                        <span style="font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 0.5rem;">Files</span>
+                        <div class="file-dropzone" style="border: 2px dashed var(--color-border); border-radius: 8px; padding: 2.5rem; text-align: center; color: var(--color-text-secondary); cursor: pointer; transition: background 0.2s;" onclick="document.getElementById('editTaskFiles').click()" onmouseover="this.style.background='var(--color-surface)'" onmouseout="this.style.background='transparent'">
+                            <i data-lucide="cloud-upload" style="margin-bottom: 0.5rem; width: 24px; height: 24px;"></i>
+                            <p style="margin: 0;">Drag and drop your files here. <span style="color: var(--color-primary);">Browse files</span></p>
+                            <input type="file" id="editTaskFiles" multiple style="display: none;" onchange="window.handleEditTaskFilesSelect(this)">
+                        </div>
+                        <div id="editTaskFilesList" style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;"></div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="modal-footer" style="padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--color-border);">
+                    <button type="button" onclick="document.getElementById('editTaskModal').classList.remove('active')" style="background: none; border: none; color: var(--color-text); font-weight: 500; cursor: pointer; padding: 0.5rem;">Cancel</button>
+                    <div style="display: flex; gap: 1rem;">
+                        <button type="button" id="editTaskDeleteBtn" class="btn btn-primary" style="background-image: linear-gradient(135deg, #ef4444, #dc2626); border-color: transparent; border-radius: 20px; padding: 0.5rem 1.5rem; font-weight: 500;" onclick="handleDeleteTask(document.getElementById('editTaskId').value)" data-i18n="html_delete">Delete</button>
+                        <button type="submit" class="btn btn-primary" style="border-radius: 20px; padding: 0.5rem 1.5rem; font-weight: 500;">Save changes</button>
+                    </div>
                 </div>
             </form>
         </div>
-    </div>
 
     <!-- Task Details & Comments Side Panel -->
     <div class="side-panel-overlay" id="taskSidePanelOverlay" hidden onclick="document.getElementById('taskSidePanel').classList.remove('active'); document.getElementById('taskSidePanelOverlay').classList.remove('active');"></div>
@@ -1296,7 +1386,6 @@
 
                 <div><strong data-i18n="html_start_date">Start Date</strong> <span id="detailsTaskStart"></span></div>
                 <div><strong data-i18n="html_due_date">Due Date</strong> <span id="detailsTaskDue"></span></div>
-                <div><strong data-i18n="html_end_date">End Date</strong> <span id="detailsTaskEnd"></span></div>
                 <div><strong data-i18n="html_est_time">Est. Time</strong> <span id="detailsTaskEstimate"></span></div>
             </div>
             
@@ -1544,7 +1633,7 @@
     <script src="js/data.js?v=27"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=128"></script>
+    <script src="js/app.js?v=136"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">
@@ -1648,4 +1737,5 @@
 
 </body>
 </html>
+
 
