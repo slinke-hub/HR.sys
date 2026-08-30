@@ -5537,42 +5537,6 @@ window.setTaskV2Mode = function (mode) {
 
 window.clearTaskV2Filters = function () {
     const search = document.getElementById('taskV2Search');
-    const status = document.getElementById('taskV2StatusFilter');
-    const priority = document.getElementById('taskV2PriorityFilter');
-    if (search) search.value = '';
-    if (status) status.value = 'all';
-    if (priority) priority.value = 'all';
-    window.selectTaskV2Project('all'); 
-};
-
-window.toggleTaskV2Create = function () {
-    const modal = document.getElementById('createTaskModal');
-    if (!modal) return;
-
-    // New tasks inherit the task list currently selected in the Task Manager
-    // sidebar.  Projects and the aggregate "All tasks" view remain unlisted.
-    const activeSelection = window.taskV2SelectedProject || 'all';
-    const activeListId = activeSelection.startsWith('list_') ? activeSelection.slice(5) : '';
-    const listField = document.getElementById('taskListId');
-    if (listField) listField.value = activeListId;
-    
-    if (modal.parentNode !== document.body) {
-        document.body.appendChild(modal);
-    }
-    
-    modal.classList.add('active');
-    modal.setAttribute('aria-hidden', 'false');
-    if (window.populateTaskWatcherPicker && window.taskWatcherOptionsCache) {
-        window.populateTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache);
-    }
-    modal.scrollTop = 0;
-    requestAnimationFrame(() => document.getElementById('taskTitle')?.focus());
-};
-
-
-
-window.clearTaskV2Filters = function () {
-    const search = document.getElementById('taskV2Search');
     const status = document.getElementById('taskV2Status');
     if (search) search.value = '';
     if (status) status.value = '';
@@ -5642,6 +5606,7 @@ window.handleAICreateTask = async function (e) {
 
 window.handleTaskProjectChange = function (prefix = 'new') {
     // We could filter tags based on the selected project, but for now we'll just log it.
+    requestAnimationFrame(() => document.getElementById('taskTitle')?.focus());
 };
 
 window.handleTaskDepartmentChange = function (prefix = 'new', value = '', selectedAssigneeId = '') {
@@ -5666,11 +5631,16 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '', select
 function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = '') {
     const select = document.getElementById(prefix === 'new' ? 'taskAssignee' : 'editTaskAssignee');
     if (!select || currentUserRole === 'EMPLOYEE') return;
-    const department = (window.taskDepartmentsCache || []).find(item => item.name === departmentName);
-    const employees = department
-        ? (window.taskAllUsersCache || []).filter(user => user.department_id === department.id)
-        : [];
-    select.innerHTML = `<option value="">${department ? (t('task_sel_emp') || 'Select Employee') : 'Select a department first'}</option>` + employees.map(user => {
+    const department = (window.taskDepartmentsCache || []).find(item => item.name === departmentName || item.id === departmentName);
+    
+    let employees = [];
+    if (isTaskAdmin()) {
+        employees = window.taskAllUsersCache || [];
+    } else if (department) {
+        employees = (window.taskAllUsersCache || []).filter(user => user.department_id === department.id);
+    }
+
+    select.innerHTML = `<option value="">${(department || isTaskAdmin()) ? (t('task_sel_emp') || 'Select Employee') : 'Select a department first'}</option>` + employees.map(user => {
         const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
         return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(user.role)})</option>`;
     }).join('');
@@ -5688,7 +5658,6 @@ function renderTaskWatcherPicker(selectId, options = '') {
         <select id="${selectId}" multiple hidden>${options}</select>
     </div>`;
 }
-
 window.populateTaskWatcherPicker = function (selectId, options, selectedIds = []) {
     const select = document.getElementById(selectId);
     if (!select) return;

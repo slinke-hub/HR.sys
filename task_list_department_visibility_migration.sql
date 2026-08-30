@@ -11,7 +11,11 @@ ALTER TABLE public.task_lists
 
 ALTER TABLE public.task_lists
   ADD COLUMN IF NOT EXISTS can_add_users uuid[] NOT NULL DEFAULT '{}'::uuid[],
-  ADD COLUMN IF NOT EXISTS can_delete_users uuid[] NOT NULL DEFAULT '{}'::uuid[];
+  ADD COLUMN IF NOT EXISTS can_delete_users uuid[] NOT NULL DEFAULT '{}'::uuid[],
+  ADD COLUMN IF NOT EXISTS description text,
+  ADD COLUMN IF NOT EXISTS template text NOT NULL DEFAULT 'none',
+  ADD COLUMN IF NOT EXISTS notify_assignee boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS notify_complete boolean NOT NULL DEFAULT false;
 
 UPDATE public.task_lists list
 SET department_id = owner.department_id
