@@ -7,7 +7,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <script>
-        if (/Android/i.test(navigator.userAgent)) document.documentElement.dataset.platform = 'android';
+        const isAppleTouch = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+            || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (/Android/i.test(navigator.userAgent) || isAppleTouch) {
+            // Share the mobile shell rules across Android and iOS.  The
+            // bottom navigation must be fixed above the iPhone home indicator.
+            document.documentElement.dataset.platform = 'android';
+        }
     </script>
     <title>MUQAM HR</title>
 
@@ -33,9 +39,9 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
-    <link rel="stylesheet" href="css/layout.css?v=15">
+    <link rel="stylesheet" href="css/layout.css?v=16">
     <link rel="stylesheet" href="css/components.css?v=92">
-    <link rel="stylesheet" href="css/android.css?v=1">
+    <link rel="stylesheet" href="css/android.css?v=2">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -1633,7 +1639,7 @@
     <script src="js/data.js?v=27"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=172"></script>
+    <script src="js/app.js?v=175"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

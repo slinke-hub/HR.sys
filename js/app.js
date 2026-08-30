@@ -9,7 +9,7 @@ let viewHistory = [];
 const defaultTranslationsSnapshot = typeof i18n !== 'undefined' ? JSON.parse(JSON.stringify(i18n)) : { en: {}, ar: {} };
 if (typeof i18n !== 'undefined') {
     i18n.en.nav_more = 'More';
-    i18n.ar.nav_more = 'Ø§Ù„Ù…Ø²ÙŠØ¯';
+    i18n.ar.nav_more = 'المزيد';
 }
 
 // XSS Protection Utility
@@ -777,14 +777,14 @@ window.closeMobileNavigation = function () {
 window.openMobileNavigation = async function () {
     window.closeMobileNavigation();
     const candidates = [...document.querySelectorAll('.sidebar-nav > .nav-item[data-view]')]
-        .filter(item => item.dataset.view && !['dashboard', 'tasks', 'requests', 'time'].includes(item.dataset.view));
+        .filter(item => item.dataset.view && item.style.display !== 'none' && !['dashboard', 'tasks', 'requests', 'time'].includes(item.dataset.view));
     const accessResults = await Promise.all(candidates.map(item => canCurrentUserAccessView(item.dataset.view)));
     const sourceItems = candidates.filter((item, index) => accessResults[index]);
     const sheet = document.createElement('div');
     sheet.id = 'mobileNavigationSheet';
     sheet.className = 'mobile-navigation-sheet';
     const closeLabel = t('ui_close') || (currentLang === 'ar' ? 'Ø¥ØºÙ„Ø§Ù‚' : 'Close');
-    const moreLabel = t('nav_more') || (currentLang === 'ar' ? 'Ø§Ù„Ù…Ø²ÙŠØ¯' : 'More');
+    const moreLabel = t('nav_more') || (currentLang === 'ar' ? 'المزيد' : 'More');
     sheet.innerHTML = `
         <button type="button" class="mobile-navigation-backdrop" onclick="window.closeMobileNavigation()" aria-label="${escapeHTML(closeLabel)}"></button>
         <section class="mobile-navigation-panel" role="dialog" aria-modal="true" aria-labelledby="mobile-navigation-title">
@@ -1155,6 +1155,9 @@ async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
     if (isAdmin) return true;
+    if (normalizedRole === 'EMPLOYEE') {
+        return new Set(['dashboard', 'requests', 'time', 'tasks', 'documents']).has(viewId);
+    }
     if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
     if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
 
@@ -1182,6 +1185,12 @@ window.updateSidebarVisibility = async function () {
     const clientsNav = document.querySelector('.nav-item[data-view="clients"]');
 
     const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    const employeeAllowedViews = new Set(['dashboard', 'requests', 'time', 'tasks', 'documents']);
+    document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
+        if (normalizedRole === 'EMPLOYEE') {
+            item.style.display = employeeAllowedViews.has(item.dataset.view) ? 'flex' : 'none';
+        }
+    });
     if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
     if (usersNav) usersNav.style.display = isAdmin ? 'flex' : 'none';
     if (analyticsNav) analyticsNav.style.display = 'none';

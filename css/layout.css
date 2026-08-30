@@ -283,6 +283,36 @@
   .topbar .header-search-trigger { display: none; }
 }
 
+/* Compact task rows and header controls on narrow phones. */
+@media (max-width: 560px) {
+  .topbar {
+    min-height: 58px;
+    height: auto;
+    padding-block: .45rem;
+  }
+  .header-logo { min-width: 0; }
+  .header-logo .app-logo { max-width: 112px; }
+  .header-navigation { min-width: 0; overflow: hidden; }
+  .header-navigation .header-nav-item span { display: none; }
+  .header-navigation .header-nav-item { min-width: 34px; padding: .45rem; }
+  .topbar-actions { flex: 0 0 auto; min-width: 0; }
+  .user-info, .user-profile > svg { display: none; }
+  .task-v2-row { align-items: flex-start !important; }
+  .task-v2-row-left { width: 100%; flex: 1 1 100% !important; min-width: 0; }
+  .task-v2-row-content { min-width: 0; }
+  .task-v2-row-content h4 { overflow-wrap: anywhere; }
+  .task-v2-row-actions { width: 100%; flex-wrap: wrap; justify-content: flex-end; gap: .35rem !important; }
+  .task-v2-row-actions > span:not(.task-assignee-avatar-stack),
+  .task-v2-row-actions > .badge { max-width: 42%; overflow: hidden; text-overflow: ellipsis; }
+}
+
+@media (max-width: 380px) {
+  .header-logo .app-logo { max-width: 92px; }
+  .header-navigation { gap: 0 !important; }
+  .task-v2-row-actions > span:not(.task-assignee-avatar-stack),
+  .task-v2-row-actions > .badge { display: none; }
+}
+
 [data-theme="dark"] .topbar {
   --color-bg-base: rgba(21, 31, 52, 0.92);
   --color-bg-surface: rgba(9, 18, 34, 0.88);
