@@ -68,12 +68,17 @@
 
 [data-theme="dark"] .header-logo .app-logo-dark {
   display: block;
+  /* The dark logo file includes more transparent padding than the light
+     variant; scale its visible mark to the same visual size. */
+  transform: scale(1.35);
+  transform-origin: center;
 }
 
 @media (max-width: 767px) {
   .app-logo {
     max-height: 32px;
   }
+  [data-theme="dark"] .header-logo .app-logo-dark { transform: scale(1.22); }
 }
 
 .sidebar-nav {

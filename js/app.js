@@ -25,6 +25,14 @@ function escapeHTML(str) {
 }
 window.escapeHTML = escapeHTML;
 
+function formatEmployeeId(value, fallback = '-') {
+    const raw = String(value ?? '').trim().replace(/^MQ[-\s]*/i, '');
+    if (!raw) return `MQ-${fallback}`;
+    return `MQ-${/^\d+$/.test(raw) ? raw.padStart(2, '0') : raw}`;
+}
+window.formatEmployeeId = formatEmployeeId;
+const isMarketingTaskDepartment = value => /^marketing(?:\s*&\s*sales)?$/i.test(String(value || '').trim());
+
 function getProfileDisplayName(profile) {
     const candidates = [
         currentLang === 'ar' ? profile?.display_name_ar : null,
@@ -75,6 +83,7 @@ window.hideSupervisorTooltip = function () {
 
 let currentUserRole = null;
 let currentUserProfile = null;
+const isTaskAdmin = () => ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(String(currentUserRole || '').trim().toUpperCase());
 let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
 let recentLoginsChannel = null;
@@ -242,7 +251,7 @@ window.refreshUserRowInPlace = async function (userId, knownUpdates = null) {
     const details = row.querySelector('[data-user-details]');
     if (details) details.innerHTML = `<div class="directory-employee-name">${escapeHTML(window.formatEmployeeName(user) || 'N/A')}</div>`;
     const employeeId = row.querySelector('[data-user-id]');
-    if (employeeId) employeeId.innerHTML = `<span class="directory-employee-id">MQ-${escapeHTML(String(user.emp_index || '-'))}</span>`;
+    if (employeeId) employeeId.innerHTML = `<span class="directory-employee-id">${escapeHTML(formatEmployeeId(user.emp_index))}</span>`;
     const badge = row.querySelector('[data-user-role-badge]');
     if (badge) {
         badge.className = `status-badge ${user.role === 'ADMIN' ? 'success' : 'info'}`;
@@ -312,7 +321,7 @@ window.showAdminPasswordResetModal = (userId) => {
     const form = document.getElementById('adminPasswordResetForm');
     form.reset();
     document.getElementById('adminPasswordResetUserId').value = user.id;
-    document.getElementById('adminPasswordResetUserName').textContent = window.formatEmployeeName(user) || `MQ-${user.emp_index || ''}`;
+    document.getElementById('adminPasswordResetUserName').textContent = window.formatEmployeeName(user) || formatEmployeeId(user.emp_index, '');
     document.getElementById('adminNewPassword').type = 'password';
     document.getElementById('adminConfirmPassword').type = 'password';
     document.getElementById('adminPasswordResetModal').classList.add('show');
@@ -917,7 +926,7 @@ function showToast(message, type = 'info', detail = '') {
             if (colMatch) displayDetail = `Unknown column: "${colMatch[1]}". The database may need a migration to be run.`;
         } else if (message && /row-level security|permission denied|not authorized/i.test(message)) {
             displayMessage = 'Permission Denied';
-            displayDetail = 'Your Admin or HR Manager account is not authorized by the database policy. Apply the onboarding permissions migration and try again.';
+            displayDetail = 'The database permissions migration has not been applied. Run onboarding_create_user_permission_repair.sql; for task creation, also run tasks_insert_permission_repair.sql, then try again.';
         } else if (message && message.includes('violates')) {
             displayDetail = 'A database constraint was violated. Please check your input values.';
         } else if (message && message.includes('duplicate')) {
@@ -1272,7 +1281,7 @@ window.handleLoginSubmit = async function (e) {
 
     // Route based on role - restore last view or fallback to dashboard
     const _loginRestorableViews = new Set([
-        'dashboard', 'community', 'time', 'leave', 'requests', 'archived',
+        'dashboard', 'time', 'leave', 'requests', 'archived',
         'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
         'archived_contracts', 'messages', 'notifications', 'performance',
         'documents', 'profile', 'projects', 'approvals', 'tasks',
@@ -2268,6 +2277,9 @@ window.openTaskDetailsModal = async function (id) {
     const task = window.taskCache[id];
     if (!task) return;
 
+    // Keep the two task modals mutually exclusive when switching actions.
+    document.getElementById('editTaskModal')?.classList.remove('active');
+
     if (currentView !== 'tasks' && currentView !== 'tasks_v2') {
         await renderView('tasks');
     }
@@ -2356,7 +2368,7 @@ function prepareTeamworkTaskDetail(task) {
     const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
     const canManagePrivateTask = !task.task_list_id || taskList?.owner_id === currentUser?.id;
     if (header) {
-        const canEdit = task.created_by === currentUser?.id;
+        const canEdit = isTaskAdmin() || task.created_by === currentUser?.id;
         const canApproveCompletion = !task.task_list_id && task.status === 'Pending Approval' && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
         let actions = header.querySelector('.task-detail-actions');
         if (!actions) {
@@ -3341,8 +3353,8 @@ async function renderUsers() {
                 <p class="page-subtitle">${t('users_sub')}</p>
             </div>
             <div style="display: flex; gap: 0.5rem;">
-                <button class="btn btn-primary" id="saveAllUsersButton" onclick="saveAllUserManagementChanges()">
-                    <i data-lucide="save"></i> Save All
+                <button class="btn btn-secondary" type="button" onclick="window.downloadUserDirectoryExcel()" title="Download user directory as Excel">
+                    <i data-lucide="download"></i> Download Excel
                 </button>
                 <input type="file" id="bulkUserUploadUsersPage" accept=".xlsx, .xls" style="display: none;" onchange="handleBulkUpload(event)">
                 <button class="btn btn-secondary" onclick="window.triggerSpecificBulkUpload('employees', 'bulkUserUploadUsersPage')">
@@ -3360,58 +3372,24 @@ async function renderUsers() {
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>${t('users_details')}</th>
+                                <th>ID</th>
+                                <th>Employee Details</th>
                                 <th>${t('users_role')}</th>
-                                <th>${t('users_department')}</th>
-                                <th>${t('users_job_title')}</th>
-                                <th>${t('users_assign_role')}</th>
-                                <th>${t('users_assign_mgr')}</th>
                                 <th>${t('ui_actions')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${users.map(u => `
                                 <tr data-user-row="${u.id}">
-                                    <td data-user-details>
-                                        <div style="font-weight: bold; color: var(--primary-color);">MQ-${u.emp_index || 'New'}</div>
-                                        <div style="font-weight: bold;">${window.formatEmployeeName(u) || 'N/A'}</div>
-                                        <div style="font-size: 0.8rem; color: var(--text-light);">
-                                            ID: <span title="${u.id}">${u.id.substring(0, 8)}...</span><br/>
-                                            Iqama: ${u.iqama_number || 'N/A'}<br/>
-                                            Phone: ${u.phone_number || 'N/A'}
-                                        </div>
-                                    </td>
-                                    <td><span data-user-role-badge class="status-badge ${u.role === 'ADMIN' ? 'success' : 'info'}">${u.role}</span></td>
+                                    <td data-user-id><span class="directory-employee-id">${escapeHTML(formatEmployeeId(u.emp_index))}</span></td>
+                                    <td data-user-details><div class="directory-employee-name">${escapeHTML(window.formatEmployeeName(u) || 'N/A')}</div></td>
+                                    <td data-user-role><span data-user-role-badge class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${escapeHTML(u.role || 'EMPLOYEE')}</span></td>
                                     <td>
-                                        <select data-directory-department class="form-control" style="width: 100%; min-width: 130px; max-width: 200px; padding: 0.25rem;" onchange="handleDirectoryDepartmentChange('${u.id}', this.value, this)">
-                                            <option value="">Select Department</option>
-                                            ${departments.map(department => `<option value="${department.id}" ${u.department_id === department.id ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('')}
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <select data-directory-job-title class="form-control" style="width: 100%; min-width: 130px; max-width: 200px; padding: 0.25rem; font-size: 0.8rem;" onchange="handleChangeJobTitle('${u.id}', this.value, this)" ${u.department_id ? '' : 'disabled'}>${companyJobTitleOptions(u.job_title || '', departments.find(department => department.id === u.department_id)?.name || '')}</select>
-                                    </td>
-                                    <td>
-                                        <select data-user-role-select class="form-control" style="width: 100%; min-width: 100px; max-width: 150px; padding: 0.25rem;" onchange="handleChangeRole('${u.id}', this.value)">
-                                            <option value="EMPLOYEE" ${u.role === 'EMPLOYEE' ? 'selected' : ''}>${t('users_role_emp')}</option>
-                                            <option value="SUPERVISOR" ${u.role === 'SUPERVISOR' ? 'selected' : ''}>Supervisor</option>
-                                            <option value="MANAGER" ${u.role === 'MANAGER' ? 'selected' : ''}>${t('users_role_mgr')}</option>
-                                            <option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>${t('users_role_admin')}</option>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <select data-user-manager-select class="form-control" style="width: 100%; min-width: 120px; max-width: 180px; padding: 0.25rem;" onchange="handleAssignManager('${u.id}', this.value)">
-                                            <option value="">${t('users_no_mgr')}</option>
-                                            ${users.filter(m => (m.role === 'MANAGER' || m.role === 'ADMIN' || m.role === 'SUPERVISOR') && m.id !== u.id).map(m => `<option value="${m.id}" ${u.manager_id === m.id ? 'selected' : ''}>${escapeHTML(window.formatEmployeeName(m) || 'User')} (${m.role})</option>`).join('')}
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <div style="display: flex; gap: 0.5rem; flex-wrap: nowrap; align-items: center;">
+                                        <div class="directory-actions">
+                                            <button type="button" class="btn-secondary btn-sm directory-view-button" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View employee details"><i data-lucide="eye"></i><span>View</span></button>
+                                            <button type="button" class="btn-primary btn-sm directory-edit-button" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>
                                             <button class="btn-secondary" style="padding: 0.4rem;" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="${t('users_contract')}">
                                                 <i data-lucide="file-signature" style="width:14px;height:14px;"></i>
-                                            </button>
-                                            <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem;" onclick="showEditUserModal('${u.id}')" title="Edit User">
-                                                <i data-lucide="edit" style="width:14px;height:14px;"></i>
                                             </button>
                                             <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem; color: var(--color-warning);" onclick="showAdminPasswordResetModal('${u.id}')" title="${t('password_reset_button')}">
                                                 <i data-lucide="key" style="width:14px;height:14px;"></i>
@@ -3430,6 +3408,36 @@ async function renderUsers() {
         </div>
     `;
 }
+
+window.downloadUserDirectoryExcel = function () {
+    if (typeof XLSX === 'undefined') {
+        showToast('Excel export is unavailable. Please reload the page and try again.', 'danger');
+        return;
+    }
+    const users = Array.isArray(window.currentAdminUsers) ? window.currentAdminUsers : [];
+    if (!users.length) {
+        showToast('There are no users to export.', 'info');
+        return;
+    }
+    const managerMap = new Map(users.map(user => [user.id, window.formatEmployeeName(user) || '']));
+    const rows = users.map(user => ({
+        'Employee ID': formatEmployeeId(user.emp_index),
+        'Full Name': window.formatEmployeeName(user) || '',
+        'Role': user.role || '',
+        'Department': user.department_name || user.department || '',
+        'Job Title': user.job_title || '',
+        'Assigned Manager': managerMap.get(user.manager_id) || 'No Manager',
+        'ID / Iqama Number': user.iqama_number || '',
+        'Phone Number': user.phone_number || '',
+        'Email': user.email || ''
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet['!cols'] = [{ wch: 15 }, { wch: 28 }, { wch: 14 }, { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 20 }, { wch: 18 }, { wch: 32 }];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'User Directory');
+    XLSX.writeFile(workbook, `user-directory-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    showToast('User directory downloaded successfully.', 'success');
+};
 
 window.showAddUserModal = async () => {
     document.getElementById('addUserForm').reset();
@@ -4690,10 +4698,11 @@ async function renderTasks() {
 
 function renderTaskCard(task) {
     const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
-    const canManageTask = task.task_list_id
+    const canManageTask = isTaskAdmin() || (task.task_list_id
         ? taskList?.owner_id === currentUser?.id
-        : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager);
-    const canEditTask = task.created_by === currentUser?.id;
+        : [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager));
+    const canEditTask = isTaskAdmin() || task.created_by === currentUser?.id;
+    const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id;
     const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
     const priorityLabel = task.priority === 'urgent' ? 'Urgent' : `${task.priority || 'medium'}`.replace(/^./, value => value.toUpperCase());
     const assigneeName = window.formatEmployeeName(task.assignee) || t('task_unknown') || 'Unassigned';
@@ -4711,8 +4720,9 @@ function renderTaskCard(task) {
                 <h4><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Task'}</span>${escapeHTML(task.displayTitle)}</h4>
             </div>
             <div class="task-pipeline-actions" onclick="event.stopPropagation();">
-                <button type="button" class="task-pipeline-action" onclick="openTaskDetailsModal('${task.id}')" title="Open task details" aria-label="Open task details"><i data-lucide="message-square"></i></button>
-                <button type="button" class="task-pipeline-action ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator can edit this task'}" aria-label="${canEditTask ? 'Edit task' : 'Edit task (creator only)'}"><i data-lucide="pencil"></i></button>
+                <button type="button" class="task-pipeline-action" onclick="event.preventDefault(); event.stopImmediatePropagation(); openTaskDetailsModal('${task.id}')" title="Open task details" aria-label="Open task details"><i data-lucide="message-square"></i></button>
+                <button type="button" class="task-pipeline-action ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator can edit this task'}" aria-label="${canEditTask ? 'Edit task' : 'Edit task (creator only)'}"><i data-lucide="pencil"></i></button>
+                <button type="button" class="task-pipeline-action task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" aria-label="Delete task"><i data-lucide="trash-2"></i></button>
             </div>
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
@@ -4799,9 +4809,11 @@ async function renderTasksV2() {
     }
 
     const taskRows = tasks.map(task => {
-        const canManageTask = task.task_list_id
+        const canManageTask = isTaskAdmin() || (task.task_list_id
             ? taskLists.find(l => l.id === task.task_list_id)?.owner_id === currentUser?.id
-            : currentUserRole === 'ADMIN' || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id);
+            : [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id));
+        const canEditTask = isTaskAdmin() || task.created_by === currentUser?.id;
+        const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id;
         const prioColor = task.priority === 'high' || task.priority === 'urgent' ? 'var(--color-warning)' : (task.priority === 'critical' ? 'var(--color-danger)' : 'var(--color-text-secondary)');
         const isCompleted = task.status === 'completed';
         
@@ -4831,8 +4843,10 @@ async function renderTasksV2() {
                 <div class="task-v2-row-actions" style="display: flex; align-items: center; gap: 1rem; flex-shrink: 0;">
                     ${avatarHTML}
                     ${task.due_date ? `<span class="${dueClass}" style="display:flex; align-items: center; gap:4px; font-size:0.8rem; color:var(--color-text-secondary); white-space:nowrap; flex-shrink:0;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date}</span>` : ''}
-                    <span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--color-primary); font-size: 0.75rem;">${escapeHTML(task.category || 'Task')}</span>
+                    ${task.category && task.category !== 'General' ? `<span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--color-primary); font-size: 0.75rem;">${escapeHTML(task.category)}</span>` : ''}
                     <button class="icon-btn" onclick="event.stopPropagation(); openTaskDetailsModal('${task.id}')" style="color:var(--color-text-secondary);"><i data-lucide="message-square" style="width:16px;height:16px;"></i></button>
+                    <button class="icon-btn ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.stopPropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator or an administrator can edit this task'}" style="color:var(--color-text-secondary);"><i data-lucide="pencil" style="width:16px;height:16px;"></i></button>
+                    <button class="icon-btn task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.stopPropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" style="color:var(--color-danger);"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
                 </div>
             </article>
         `;
@@ -4896,7 +4910,7 @@ async function renderTasksV2() {
     if (isRegularEmployee) {
         const currentDeptObj = window.taskDepartmentsCache.find(d => d.id === currentUser.department_id);
         const deptName = currentDeptObj ? escapeHTML(currentDeptObj.name) : '';
-        isMarketing = (currentDeptObj && currentDeptObj.name === 'Marketing & Sales');
+        isMarketing = !!(currentDeptObj && isMarketingTaskDepartment(currentDeptObj.name));
 
         departmentSelectHTML = `
             <div class="form-group" style="flex: 1 1 200px; margin-bottom: 0;">
@@ -4949,11 +4963,6 @@ async function renderTasksV2() {
 
                         <!-- Row 2: Inline Dropdowns -->
                         <div class="create-task-fields-row">
-                            <div class="form-group">
-                                <label class="form-label">${t('task_due') || 'Deadline'}</label>
-                                <input type="date" id="taskDue" class="form-control">
-                            </div>
-
                             ${isRegularEmployee ? `
                                 <div class="form-group">
                                     <label class="form-label">${t('ui_department') || 'Department'}</label>
@@ -4971,11 +4980,13 @@ async function renderTasksV2() {
                                 </div>
                             `}
 
-                            <div class="form-group" id="taskSubTypeGroup" style="display: ${isMarketing ? 'flex' : 'none'}; align-items: center; margin-bottom: 0;">
-                                <label style="display:flex; align-items:center; gap:0.5rem; margin:0; cursor:pointer; font-weight: 600; font-size: 0.82rem; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">
-                                    <input type="checkbox" id="taskDesigningCheckbox" onchange="window.handleCreateTaskTypeChange(this.checked)" style="width:16px; height:16px; cursor:pointer;">
-                                    Designing
-                                </label>
+                            <div class="form-group" id="taskSubTypeGroup" style="display: ${isMarketing ? 'flex' : 'none'}; margin-bottom: 0;">
+                                <label class="form-label" for="taskSubType">Task Type</label>
+                                <select id="taskSubType" class="form-control" onchange="window.handleCreateTaskTypeChange(this.value)">
+                                    <option value="">Select Task Type</option>
+                                    <option value="Regular Tasks">Regular Tasks</option>
+                                    <option value="Designing Task">Designing</option>
+                                </select>
                             </div>
 
                             <div class="form-group">
@@ -4988,9 +4999,7 @@ async function renderTasksV2() {
                             
                             <div class="form-group">
                                 <label class="form-label">Watchers (Optional)</label>
-                                <select id="taskWatchers" class="form-control" multiple size="3" style="max-height: 80px;">
-                                    ${window.taskWatcherOptionsCache}
-                                </select>
+                                ${renderTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache)}
                             </div>
                         </div>
 
@@ -5005,24 +5014,13 @@ async function renderTasksV2() {
                             <textarea id="taskDesc" class="form-control" rows="5" placeholder="Describe the task..."></textarea>
                         </div>
 
-                        <!-- Collapsible: Attachments (standard) / Saved Drafts (designing) -->
+                        <!-- Attachments -->
                         <div id="createTaskAttachmentsSection">
-                            <button type="button" class="create-task-collapse-header" onclick="window.toggleCreateTaskCollapse(this)">
-                                <i data-lucide="chevron-down"></i>
+                            <div class="create-task-attachments-heading">
+                                <i data-lucide="paperclip"></i>
                                 <span id="createTaskCollapseLabel">Attachments</span>
-                            </button>
-                            <div class="create-task-collapse-body" id="createTaskCollapseBody">
-                                <!-- Saved Drafts (only visible in designing mode) -->
-                                <div id="createTaskDraftsGroup" style="display: none;">
-                                    <label class="form-label" style="font-size: 0.82rem; margin-bottom: 0.25rem;">Saved Drafts</label>
-                                    <select id="taskSavedDrafts" class="form-control create-task-drafts-select" multiple size="3">
-                                        <option value="draft-1">Draft: Weekly social media post</option>
-                                        <option value="draft-2">Draft: Product launch banner</option>
-                                        <option value="draft-3">Draft: Email newsletter template</option>
-                                    </select>
-                                    <small class="text-muted">Hold Ctrl/Cmd to select multiple drafts</small>
-                                </div>
-
+                            </div>
+                            <div class="create-task-collapse-body open" id="createTaskCollapseBody" style="display:flex;">
                                 <!-- Upload Zone -->
                                 <div class="create-task-upload-zone" id="createTaskUploadZone" onclick="document.getElementById('createTaskFileInput').click()">
                                     <i data-lucide="upload-cloud"></i>
@@ -5222,7 +5220,6 @@ async function renderTasksV2() {
                                 <i data-lucide="kanban"></i> Pipeline
                             </button>
                         </div>
-                        ${canCreateTask ? `<button class="btn btn-primary" onclick="window.toggleTaskV2Create()">New Task</button>` : ''}
                     </div>
                 </header>
                 
@@ -5233,6 +5230,7 @@ async function renderTasksV2() {
                     <div class="task-health-item tone-amber"><span class="task-health-dot"></span><strong>${dueSoonCount}</strong><span>due this week</span></div>
                     <div class="task-health-item tone-red"><span class="task-health-dot"></span><strong>${overdueCount}</strong><span>overdue</span></div>
                     <div class="task-health-total"><strong>${tasks.length}</strong><span>total</span></div>
+                    ${canCreateTask ? `<button class="btn btn-primary task-health-new-task" onclick="window.toggleTaskV2Create()"><i data-lucide="plus"></i><span>New Task</span></button>` : ''}
                 </div>
 
                 <div class="task-v2-rows" id="task-v2-rows-container" style="display: ${taskViewMode === 'focus' ? 'block' : 'none'};">
@@ -5242,42 +5240,6 @@ async function renderTasksV2() {
                     </div>
                     ${taskRows || '<div class="empty-state">No tasks found.</div>'}
                     
-                    <div class="quick-add-task-bar" style="margin-top: 1rem; padding: 0.75rem 1rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                        <button class="icon-btn" style="color: var(--color-primary); background: rgba(99, 102, 241, 0.1); padding: 4px;"><i data-lucide="plus" style="width: 18px; height: 18px;"></i></button>
-                        <input type="text" id="quickAddTaskInput" onkeydown="window.handleQuickAddTask(event)" placeholder="Task name or type '/' for commands" style="border: none; background: transparent; flex: 1; font-size: 0.95rem; outline: none; color: var(--color-text);">
-                        
-                        <div class="quick-add-actions" style="display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap;">
-                            <label class="icon-btn" title="Set due date" style="color: var(--color-text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;" onclick="try{this.querySelector('input').showPicker()}catch(e){}">
-                                <i data-lucide="calendar" style="width: 16px; height: 16px; position: relative; z-index: 1;"></i>
-                                <input type="date" id="quickAddDate" style="position: absolute; opacity: 0; width: 100%; height: 100%; top: 0; left: 0; z-index: 2; cursor: pointer;">
-                            </label>
-                            <button class="icon-btn" title="Estimate time" onclick="window.quickAddEstimate = prompt(t('enter_estimate') || 'Enter estimated time (e.g., 2h, 1d):')" style="color: var(--color-text-secondary);"><i data-lucide="clock" style="width: 16px; height: 16px;"></i></button>
-                            <label class="icon-btn" title="Set priority" style="color: var(--color-text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
-                                <i data-lucide="tag" style="width: 16px; height: 16px; position: relative; z-index: 1;"></i>
-                                <select id="quickAddPriority" style="position: absolute; opacity: 0; width: 100%; height: 100%; top: 0; left: 0; z-index: 2; cursor: pointer;">
-                                    <option value="medium">Medium</option>
-                                    <option value="low">Low</option>
-                                    <option value="high">High</option>
-                                    <option value="urgent">Urgent</option>
-                                </select>
-                            </label>
-                            <label class="icon-btn" title="Attach files" style="color: var(--color-text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
-                                <i data-lucide="paperclip" style="width: 16px; height: 16px; position: relative; z-index: 1;"></i>
-                                <input type="file" id="quickAddFiles" multiple style="position: absolute; opacity: 0; width: 100%; height: 100%; top: 0; left: 0; z-index: 2; cursor: pointer;">
-                            </label>
-                            <label class="icon-btn" title="Assign employees" style="color: var(--color-text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;" onclick="try{this.querySelector('select').showPicker()}catch(e){}">
-                                <i data-lucide="user-plus" style="width: 16px; height: 16px; position: relative; z-index: 1;"></i>
-                                <select id="quickAddAssignee" style="position: absolute; opacity: 0; width: 100%; height: 100%; top: 0; left: 0; z-index: 2; cursor: pointer;">
-                                    <option value="">Assign to...</option>
-                                    ${(window.taskAllUsersCache || []).map(u => `<option value="${u.id}">${escapeHTML(window.formatEmployeeName(u))}</option>`).join('')}
-                                </select>
-                            </label>
-                            <div style="width: 1px; height: 20px; background: var(--color-border); margin: 0 4px;"></div>
-                            <label style="display: flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--color-text-secondary); cursor: pointer; margin: 0 8px;">
-                                <input type="checkbox" id="quickAddNotify" checked style="accent-color: var(--color-primary);"> Notify
-                            </label>
-                        </div>
-                    </div>
                 </div>
                 
                 ${boardHTML}
@@ -5449,6 +5411,9 @@ window.toggleTaskV2Create = function () {
     
     modal.classList.add('active');
     modal.setAttribute('aria-hidden', 'false');
+    if (window.populateTaskWatcherPicker && window.taskWatcherOptionsCache) {
+        window.populateTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache);
+    }
     modal.scrollTop = 0;
     requestAnimationFrame(() => document.getElementById('taskTitle')?.focus());
 };
@@ -5533,7 +5498,7 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '', select
     const subTypeGroup = document.getElementById(prefix === 'new' ? 'taskSubTypeGroup' : 'editTaskSubTypeGroup');
     if (!subTypeGroup) return;
 
-    if (value === 'Marketing & Sales') {
+    if (isMarketingTaskDepartment(value)) {
         subTypeGroup.style.display = 'block';
         const select = document.getElementById(prefix === 'new' ? 'taskSubType' : 'editTaskSubType');
         if (select) select.required = true;
@@ -5621,10 +5586,9 @@ function renderMarketingDesignFields(prefix) {
     const id = prefix === 'new' ? 'task' : 'editTask';
     return `
         <div class="marketing-design-grid">
-            <div class="form-group"><label class="form-label">Design Type</label><select id="${id}ContentType" class="form-control" required disabled><option value="">Select Design Type</option><option value="Post">Post</option><option value="Reel">Reel</option><option value="Story">Story</option><option value="Promo Video">Promo Video</option><option value="Cover">Cover</option><option value="Commercial Video">Commercial Video</option><option value="Advertisment Video">Advertisment Video</option><option value="Proposal">Proposal</option></select></div>
-            <div class="form-group"><label class="form-label">Download Source</label><input type="url" id="${id}SourceLink" class="form-control" placeholder="https://..." disabled></div>
-            <div class="form-group"><label class="form-label">Upload Location</label><input type="url" id="${id}UploadLink" class="form-control" placeholder="https://..." disabled></div>
-            <div class="form-group"><label class="form-label">Deadline</label><input type="date" id="${id}DesignDeadline" class="form-control" required disabled></div>
+            <div class="form-group"><label class="form-label">Download Source</label><div id="${id}ContentLinks" class="marketing-links-list"></div><button type="button" class="btn btn-secondary marketing-add-link" onclick="window.addMarketingLink('${id}ContentLinks')" disabled><i data-lucide="plus"></i> Add another URL</button></div>
+            <div class="form-group"><label class="form-label">Upload Source</label><div id="${id}SubmissionLinks" class="marketing-links-list"></div><button type="button" class="btn btn-secondary marketing-add-link" onclick="window.addMarketingLink('${id}SubmissionLinks')" disabled><i data-lucide="plus"></i> Add another URL</button></div>
+            <div class="form-group"><label class="form-label">Design Type</label><select id="${id}ContentType" class="form-control" required disabled><option value="">Select Design Type</option><option value="Post">Post</option><option value="Reel">Reel</option><option value="Story">Story</option><option value="Promo Video">Promo Video</option><option value="Cover">Cover</option><option value="Commercial Video">Commercial Video</option><option value="Advertisement Video">Advertisement Video</option><option value="Proposal">Proposal</option></select></div>
             <div class="form-group"><label class="form-label">Delivery Status</label><select id="${id}DeliveryStatus" class="form-control" data-manager-only="true" disabled><option value="">Awaiting manager review</option><option value="Approved">Approved</option><option value="Edit needed">Edit needed</option></select><small class="text-muted">Only the Marketing department manager can change this field.</small></div>
         </div>`;
 }
@@ -5634,7 +5598,11 @@ window.handleMarketingTaskTypeChange = function (prefix = 'new', value = '') {
     if (!container) return;
     const active = value === 'Designing Task';
     container.style.display = active ? 'block' : 'none';
-    container.querySelectorAll('input, textarea, select').forEach(field => {
+    const contentLinks = container.querySelector(`#${prefix === 'new' ? 'taskContentLinks' : 'editTaskContentLinks'}`);
+    const submissionLinks = container.querySelector(`#${prefix === 'new' ? 'taskSubmissionLinks' : 'editTaskSubmissionLinks'}`);
+    if (active && contentLinks && !contentLinks.children.length) window.addMarketingLink(contentLinks.id);
+    if (active && submissionLinks && !submissionLinks.children.length) window.addMarketingLink(submissionLinks.id);
+    container.querySelectorAll('input, textarea, select, button.marketing-add-link').forEach(field => {
         field.disabled = !active || (field.dataset.managerOnly === 'true' && !window.isMarketingDepartmentManager);
     });
 };
@@ -5793,7 +5761,7 @@ window.handleCreateTask = async function (e) {
 
     const title = document.getElementById('taskTitle').value;
     const assignee = document.getElementById('taskAssignee').value;
-    const due = document.getElementById('taskDue').value || null;
+    const due = document.getElementById('taskDue')?.value || null;
     const priority = 'medium'; // Default priority
     const taskListId = document.getElementById('taskListId')?.value || null;
     const projectId = taskListId ? null : (document.getElementById('taskProject')?.value || null);
@@ -5842,10 +5810,10 @@ window.handleCreateTask = async function (e) {
     const subTypeGroup = document.getElementById('taskSubTypeGroup');
     let subType = null;
     if (subTypeGroup && subTypeGroup.style.display !== 'none') {
-        const checkbox = document.getElementById('taskDesigningCheckbox');
-        if (checkbox && checkbox.checked) subType = 'Designing Task';
+        const taskType = document.getElementById('taskSubType');
+        if (taskType?.value) subType = taskType.value;
     }
-    const isMarketingDesign = department === 'Marketing & Sales' && subType === 'Designing Task';
+    const isMarketingDesign = isMarketingTaskDepartment(department) && subType === 'Designing Task';
     if (isMarketingDesign) status = 'review';
     const description = isMarketingDesign ? (document.getElementById('taskDesignDescription')?.value.trim() || '') : '';
     const marketingDepartment = isMarketingDesign ? document.getElementById('taskMarketingDepartment')?.value : null;
@@ -5856,13 +5824,12 @@ window.handleCreateTask = async function (e) {
         contentType = document.getElementById('taskContentType')?.value || null;
         sourceLink = document.getElementById('taskSourceLink')?.value || contentLinks[0] || null;
         uploadLink = document.getElementById('taskUploadLink')?.value || submissionLinks[0] || null;
-        document.getElementById('taskDue').value = document.getElementById('taskDesignDeadline')?.value || due || '';
     }
     const watchersSelect = document.getElementById('taskWatchers');
     let watchers = watchersSelect ? Array.from(watchersSelect.selectedOptions).map(opt => opt.value) : [];
     const parentTaskId = document.getElementById('taskParentId') ? document.getElementById('taskParentId').value || null : null;
 
-    const finalDue = isMarketingDesign ? (document.getElementById('taskDesignDeadline').value || null) : due;
+    const finalDue = due;
     const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, taskListId ? 'private' : 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId);
     if (success) {
         showToast(t('toast_task_created_successfully'), "success");
@@ -5990,10 +5957,16 @@ window.openEditTaskModal = async function (id) {
             console.error('Task not found in cache for ID:', id);
             return;
         }
-        if (task.created_by !== currentUser?.id) {
-            showToast('Only the task creator can edit this task.', 'warning');
+        if (!isTaskAdmin() && task.created_by !== currentUser?.id) {
+            showToast('Only the task creator or an administrator can edit this task.', 'warning');
             return;
         }
+        document.getElementById('taskSidePanel')?.classList.remove('active');
+        document.getElementById('taskSidePanelOverlay')?.classList.remove('active');
+        const taskPanel = document.getElementById('taskSidePanel');
+        const taskPanelOverlay = document.getElementById('taskSidePanelOverlay');
+        if (taskPanel) taskPanel.hidden = true;
+        if (taskPanelOverlay) taskPanelOverlay.hidden = true;
         
         document.getElementById('editTaskId').value = task.id;
         document.getElementById('editTaskTitle').value = task.title || '';
@@ -6076,7 +6049,7 @@ window.openEditTaskModal = async function (id) {
         document.getElementById('editTaskFiles').value = '';
         document.getElementById('editTaskFilesList').innerHTML = '';
 
-        const canDeleteTask = task.created_by === currentUser?.id;
+        const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id;
         const deleteBtn = document.getElementById('editTaskDeleteBtn');
         if (deleteBtn) {
             deleteBtn.style.display = canDeleteTask ? '' : 'none';
@@ -6109,8 +6082,8 @@ window.handleEditTaskSubmit = async function (e) {
     e.preventDefault();
     const id = document.getElementById('editTaskId').value;
     const taskBeingEdited = window.taskCache?.[id];
-    if (!taskBeingEdited || taskBeingEdited.created_by !== currentUser?.id) {
-        showToast('Only the task creator can edit this task.', 'warning');
+    if (!taskBeingEdited || (!isTaskAdmin() && taskBeingEdited.created_by !== currentUser?.id)) {
+        showToast('Only the task creator or an administrator can edit this task.', 'warning');
         return;
     }
     const title = document.getElementById('editTaskTitle').value;
@@ -6179,7 +6152,6 @@ window.handleEditTaskSubmit = async function (e) {
         updates.submission_links = getMarketingLinks('editTaskSubmissionLinks');
         updates.source_link = updates.content_links[0] || null;
         updates.upload_link = updates.submission_links[0] || null;
-        updates.due_date = document.getElementById('editTaskDesignDeadline').value;
         if (window.isMarketingDepartmentManager) {
             updates.delivery_status = document.getElementById('editTaskDeliveryStatus').value || null;
         }
@@ -6256,8 +6228,8 @@ window.handleEditTaskSubmit = async function (e) {
 
 window.handleDeleteTask = async function (id) {
     const task = window.taskCache?.[id];
-    if (!task || task.created_by !== currentUser?.id) {
-        showToast('Only the task creator can delete this task.', 'warning');
+    if (!task || (!isTaskAdmin() && task.created_by !== currentUser?.id)) {
+        showToast('Only the task creator or an administrator can delete this task.', 'warning');
         return;
     }
     window.showConfirmModal("Delete Task", t('confirm_delete') || "Are you sure you want to delete this task?", async () => {
@@ -6640,6 +6612,7 @@ async function renderEmployeesDirectory() {
             u.id === currentUser.manager_id
         );
     }
+    window.currentAdminUsers = visibleUsers;
 
     return `
         <div class="page-header fade-in-up">
@@ -6650,6 +6623,7 @@ async function renderEmployeesDirectory() {
         </div>
         <div class="card fade-in-up" style="padding: .5rem; margin-bottom: 1rem; display: flex; gap: .5rem;">
             <button class="btn-primary" type="button" aria-current="page"><i data-lucide="users"></i> ${t("active_contracts")}</button>
+            <button class="btn-secondary" type="button" onclick="window.downloadUserDirectoryExcel()" title="Download user directory as Excel"><i data-lucide="download"></i> Download Excel</button>
             ${canEditContracts ? `<button class="btn-secondary" type="button" onclick="renderView('archived_contracts')"><i data-lucide="archive"></i> ${t("archived_contracts")}</button>` : ''}
         </div>
         ${pendingPrintRequests.length ? `
@@ -6679,14 +6653,14 @@ async function renderEmployeesDirectory() {
                     <table class="data-table" id="employeeDirectoryTable">
                         <thead>
                             <tr>
-                                <th>Employee Details</th><th>ID</th><th>Role</th><th>${t('actions') || 'Actions'}</th>
+                                <th>ID</th><th>Employee Details</th><th>Role</th><th>${t('actions') || 'Actions'}</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${visibleUsers.map(u => `
                                 <tr data-user-row="${u.id}">
+                                    <td data-user-id><span class="directory-employee-id">${escapeHTML(formatEmployeeId(u.emp_index))}</span></td>
                                     <td data-user-details><div class="directory-employee-name">${escapeHTML(window.formatEmployeeName(u) || t('emp_na'))}</div></td>
-                                    <td data-user-id><span class="directory-employee-id">MQ-${escapeHTML(String(u.emp_index || '-'))}</span></td>
                                     <td data-user-role><span data-user-role-badge class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${escapeHTML(u.role || 'EMPLOYEE')}</span></td>
                                     <td>
                                         <div class="directory-actions">
@@ -6732,7 +6706,7 @@ window.showEmployeeDetailsCard = async function (userId) {
             <div class="employee-details-grid">
                 <div><span>Full Name</span><strong>${escapeHTML(user.full_name || 'Not provided')}</strong></div>
                 <div><span>Department</span><strong>${escapeHTML(department)}</strong></div>
-                <div><span>ID / Iqama number</span><strong>${escapeHTML(user.iqama_number || `MQ-${user.emp_index || 'Not assigned'}`)}</strong></div>
+                <div><span>ID / Iqama number</span><strong>${escapeHTML(user.iqama_number || formatEmployeeId(user.emp_index, 'Not assigned'))}</strong></div>
                 <div><span>Job Title</span><strong>${escapeHTML(user.job_title || 'Not assigned')}</strong></div>
                 <div><span>Assigned Manager</span><strong>${escapeHTML(manager ? window.formatEmployeeName(manager) : 'No Manager')}</strong></div>
                 <div><span>Role</span><strong>${escapeHTML(user.role || 'EMPLOYEE')}</strong></div>
@@ -7804,6 +7778,8 @@ window.renderView = async function (viewId, isBack = false) {
     // Preserve old bookmarks/notification links while keeping Task Manager as
     // the single canonical destination.
     if (viewId === 'tasks_v2') viewId = 'tasks';
+    // Community has been retired; send old links/bookmarks to the dashboard.
+    if (viewId === 'community') viewId = 'dashboard';
     currentView = viewId;
 
     if (!currentUser && viewId !== 'login') {
@@ -7859,7 +7835,6 @@ window.renderView = async function (viewId, isBack = false) {
             case 'contract': content = await renderContractPage(); break;
             case 'login': content = renderLogin(); break;
             case 'dashboard': content = await renderDashboard(); break;
-            case 'community': content = await renderCommunity(); break;
             case 'time': content = await renderTime(); break;
             case 'leave': content = await renderLeave(); break;
             case 'requests': content = String(currentUserRole || '').toUpperCase() === 'EMPLOYEE' ? await renderMyRequestStatuses() : await renderRequests(); break;
@@ -10073,7 +10048,7 @@ async function initApp() {
         await window.updateSidebarVisibility();
 
         const restorableViews = new Set([
-            'dashboard', 'community', 'time', 'leave', 'requests', 'archived',
+            'dashboard', 'time', 'leave', 'requests', 'archived',
             'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
             'archived_contracts', 'messages', 'notifications', 'performance',
             'documents', 'profile', 'projects', 'approvals', 'tasks',
@@ -11089,14 +11064,14 @@ window.handleCreateTaskDeptChange = function(value) {
     const subTypeGroup = document.getElementById('taskSubTypeGroup');
     if (subTypeGroup) {
         // Show task type for Marketing & Sales department
-        if (value === 'Marketing & Sales') {
+        if (isMarketingTaskDepartment(value)) {
             subTypeGroup.style.display = 'flex';
         } else {
             subTypeGroup.style.display = 'none';
-            const checkbox = document.getElementById('taskDesigningCheckbox');
-            if (checkbox) {
-                checkbox.checked = false;
-                window.handleCreateTaskTypeChange(false);
+            const taskType = document.getElementById('taskSubType');
+            if (taskType) {
+                taskType.value = '';
+                window.handleCreateTaskTypeChange('');
             }
         }
     }
@@ -11105,14 +11080,13 @@ window.handleCreateTaskDeptChange = function(value) {
 // --- Create Task Modal: Task Type Change Handler ---
 window.handleCreateTaskTypeChange = function(checked) {
     const titleLabel = document.getElementById('taskTitleLabel');
-    const draftsGroup = document.getElementById('createTaskDraftsGroup');
     const collapseLabel = document.getElementById('createTaskCollapseLabel');
 
-    if (checked) {
+    const designing = checked === 'Designing Task' || checked === true;
+    if (designing) {
         // Switch to designing mode
         if (titleLabel) titleLabel.textContent = 'Notice Title';
-        if (draftsGroup) draftsGroup.style.display = 'block';
-        if (collapseLabel) collapseLabel.textContent = 'Saved Drafts & Attachments';
+        if (collapseLabel) collapseLabel.textContent = 'Attachments';
         // Show marketing design fields
         if (window.handleMarketingTaskTypeChange) {
             window.handleMarketingTaskTypeChange('new', 'Designing Task');
@@ -11120,7 +11094,6 @@ window.handleCreateTaskTypeChange = function(checked) {
     } else {
         // Standard mode
         if (titleLabel) titleLabel.textContent = 'Task Title';
-        if (draftsGroup) draftsGroup.style.display = 'none';
         if (collapseLabel) collapseLabel.textContent = 'Attachments';
         // Hide marketing design fields
         if (window.handleMarketingTaskTypeChange) {

@@ -1092,13 +1092,18 @@ const db = {
     async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = [], parentTaskId = null, marketingDepartment = null, contentLinks = [], submissionLinks = [], deliveryStatus = null, taskListId = null) {
         if (!supabaseClient) return { success: false };
         try {
+            // RLS policies validate created_by against auth.uid(). Read the
+            // current session directly instead of trusting a possibly stale
+            // profile/UI user object.
+            const { data: authData } = await supabaseClient.auth.getUser();
+            const authUserId = authData?.user?.id || createdBy || null;
             const newTask = { 
                 title, 
                 description, 
                 assignee_id: assigneeId || null, 
                 supervisor_id: supervisorId || null,
                 due_date: dueDate,
-                created_by: createdBy,
+                created_by: authUserId,
                 status: status,
                 priority: priority,
                 category: category,
