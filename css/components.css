@@ -866,6 +866,21 @@ textarea.form-control {
   #createTaskModal .create-task-footer { flex-wrap: wrap; }
   #createTaskModal .create-task-footer > * { flex: 1 1 100%; }
 }
+
+.task-assignee {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+.task-assignee:hover { color: var(--color-primary); }
+.task-row-assignee { padding: 0; display: inline-flex; align-items: center; }
+.task-row-assignee .avatar-circle { pointer-events: none; }
+.task-assignee-picker-content { width: min(440px, calc(100vw - 1.25rem)); max-width: 100%; }
+.task-assignee-picker-content select { min-height: 11rem; }
+.task-assignee-picker-help { margin: -.6rem 0 1rem; color: var(--color-text-secondary); font-size: .85rem; }
 #employeeDocumentUploadModal .modal-content {
   width: min(1120px, calc(100vw - 2rem));
   max-width: 1120px;
@@ -6362,4 +6377,367 @@ input.btn-primary,
   .task-v2-toolbar-left > select.form-control { flex: 0 1 112px; width: 112px !important; min-width: 0 !important; font-size: .7rem !important; }
   .task-v2-toolbar-left > .icon-btn { flex: 0 0 32px; width: 32px; min-width: 32px; height: 32px; }
   .task-v2-toolbar-right { width: 100%; }
+}
+
+/* Small-phone layout pass. Keep every interactive region inside the viewport
+   and let dense task controls stack without forcing horizontal page scroll. */
+@media (max-width: 600px) {
+  html, body { max-width: 100%; overflow-x: hidden; }
+  .view-container { padding-inline: max(.6rem, env(safe-area-inset-left)) max(.6rem, env(safe-area-inset-right)); }
+
+  .task-v2-shell { width: 100%; max-width: 100%; overflow: hidden; }
+  .task-v2-workspace { display: block; min-height: 0; width: 100%; }
+  .task-v2-lists { border-inline-end: 0; border-bottom: 1px solid var(--color-border); }
+  .task-v2-list-pane { width: 100%; min-width: 0; }
+
+  .task-v2-toolbar-left { gap: .3rem; }
+  .task-v2-toolbar-left .task-v2-search { flex: 1 1 auto; min-width: 0; }
+  .task-v2-toolbar-left > select,
+  .task-v2-toolbar-left > select.form-control { flex: 0 1 92px; width: 92px !important; font-size: .68rem !important; }
+  .task-v2-toolbar-right { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem; }
+  .task-v2-toolbar-right > .btn { min-width: 0; max-width: 100%; }
+
+  .task-focus-header { padding: .7rem .65rem; }
+  .task-focus-header h3 { font-size: .92rem; }
+  .task-v2-row-content h4 { font-size: .88rem; line-height: 1.35; }
+  .task-v2-row-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .task-v2-row-actions .icon-btn { margin-inline-start: 0; }
+
+  .task-pipeline-health { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .task-health-item { font-size: .68rem; }
+  .task-health-item strong { font-size: .76rem; }
+  .task-pipeline-view .task-board-column { flex-basis: calc(100vw - 2rem); min-width: calc(100vw - 2rem); }
+
+  /* Edit-task modal: one readable field per row, with a footer that remains
+     reachable while either tab is scrolled. */
+  #editTaskModal { padding: .35rem; }
+  #editTaskModal .modal-content.edit-task-v2 {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - .7rem) !important;
+    border-radius: 12px;
+  }
+  #editTaskModal .modal-header { padding: .85rem .9rem .65rem !important; }
+  #editTaskModal .modal-header h2 { font-size: 1.1rem !important; }
+  #editTaskModal form > div[style*="padding: 0 1.5rem"] { padding-inline: .9rem !important; }
+  #editTaskModal .edit-task-tab-content { padding: 0 .9rem .9rem !important; gap: 1rem !important; }
+  #editTaskModal .edit-task-grid { grid-template-columns: minmax(0, 1fr) !important; gap: .85rem !important; }
+  #editTaskModal .property-cell > span { font-size: .78rem !important; }
+  #editTaskModal .property-cell .select-ui-value,
+  #editTaskModal .property-cell .date-ui-value,
+  #editTaskModal .property-cell .estimate-ui-value,
+  #editTaskModal .property-cell .category-ui-value,
+  #editTaskModal .property-cell .watchers-ui-value { font-size: .86rem !important; }
+  #editTaskModal .description-area textarea { min-height: 92px !important; font-size: .86rem !important; }
+  #editTaskModal .modal-footer { flex-wrap: wrap; padding: .65rem .8rem !important; }
+  #editTaskModal .modal-footer > div { flex: 1 1 auto; justify-content: flex-end; gap: .4rem !important; }
+  #editTaskModal .modal-footer button { min-height: 38px; font-size: .82rem; }
+}
+
+@media (max-width: 380px) {
+  .topbar { padding-inline: .35rem !important; }
+  .header-navigation .header-nav-item { padding-inline: .3rem !important; font-size: .62rem !important; }
+  .topbar-actions .icon-btn { width: 32px; height: 32px; }
+  .task-v2-toolbar-left { display: grid !important; grid-template-columns: minmax(0, 1fr) 84px 32px; }
+  .task-v2-toolbar-left .task-v2-search { grid-column: 1 / -1; }
+  .task-v2-toolbar-left > select,
+  .task-v2-toolbar-left > select.form-control { width: 100% !important; min-width: 0 !important; }
+  .task-v2-toolbar-left > .icon-btn { width: 32px; min-width: 32px; height: 32px; }
+  .task-v2-toolbar-right { grid-template-columns: minmax(0, 1fr); }
+  .task-v2-toolbar-right > .btn { width: 100%; justify-content: center; }
+  .task-pipeline-health { grid-template-columns: minmax(0, 1fr); }
+  .task-health-item, .task-health-new-task { grid-column: 1; }
+  #editTaskModal .modal-footer { flex-direction: column; align-items: stretch; }
+  #editTaskModal .modal-footer > div { width: 100%; justify-content: stretch; }
+  #editTaskModal .modal-footer button { flex: 1 1 0; }
+}
+
+/* Tap-friendly multi-assignee picker (no Ctrl/keyboard gesture required). */
+.task-assignee-picker-options {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  max-height: min(46vh, 20rem);
+  overflow-y: auto;
+  padding: .25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+.task-assignee-picker-option {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  min-height: 42px;
+  padding: .5rem .65rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.task-assignee-picker-option:hover { background: color-mix(in srgb, var(--color-primary) 9%, transparent); }
+.task-assignee-picker-option input { width: 18px; height: 18px; flex: 0 0 18px; accent-color: var(--color-primary); }
+.task-assignee-picker-empty { margin: .75rem; color: var(--color-text-secondary); }
+
+.task-assignee-avatar-stack { display: inline-flex; align-items: center; padding-inline-start: 3px; }
+.task-assignee-avatar-stack .task-avatar,
+.task-assignee-avatar-stack .avatar-circle { margin-inline-start: -5px; border: 2px solid var(--color-bg-surface); }
+.task-assignee-avatar-stack .avatar-circle { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; background: var(--color-primary); color: #fff; font-size: 10px; font-weight: 700; }
+.task-assignee-avatar-stack .task-avatar:first-child,
+.task-assignee-avatar-stack .avatar-circle:first-child { margin-inline-start: 0; }
+.edit-task-assignee-options { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; max-height: 7rem; overflow-y: auto; }
+.edit-task-assignee-options label { display: inline-flex; align-items: center; gap: .3rem; padding: .25rem .4rem; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-text-secondary); font-size: .68rem; cursor: pointer; }
+.edit-task-assignee-options label:has(input:checked) { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-text); }
+.edit-task-assignee-options input { width: 14px; height: 14px; accent-color: var(--color-primary); }
+
+/* Consistent borders for modal surfaces and tab navigation across the app. */
+.modal .modal-content,
+.side-panel,
+.employee-details-card,
+.header-search-dialog {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 32%, var(--color-border)) !important;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, .18), 0 0 0 1px color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+
+.nav-tabs,
+.payroll-tabs,
+.task-v2-tabs,
+.request-status-tabs,
+.modal-tabs,
+.edit-task-tabs,
+.task-detail-tabs,
+.task-comment-tabs,
+.teamwork-edit-tabs {
+  border: 1px solid var(--color-border) !important;
+  border-radius: 10px;
+  padding: .25rem !important;
+  gap: .25rem !important;
+  background: color-mix(in srgb, var(--color-bg-surface) 92%, var(--color-primary));
+}
+
+.nav-tabs > .nav-tab,
+.payroll-tabs > button,
+.task-v2-tabs > button,
+.request-status-tabs > button,
+.modal-tabs > button,
+.edit-task-tabs > button,
+.task-detail-tabs > button,
+.task-comment-tabs > button,
+.teamwork-edit-tabs > button,
+.tab-btn {
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+}
+
+.nav-tabs > .nav-tab.active,
+.payroll-tabs > button.active,
+.task-v2-tabs > button.active,
+.request-status-tabs > button.active,
+.modal-tabs > button.active,
+.edit-task-tabs > button.active,
+.task-detail-tabs > button.active,
+.task-comment-tabs > button.active,
+.teamwork-edit-tabs > button.active,
+.tab-btn.active {
+  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border)) !important;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+[data-theme="dark"] .modal .modal-content,
+[data-theme="dark"] .side-panel,
+[data-theme="dark"] .employee-details-card,
+[data-theme="dark"] .header-search-dialog {
+  border-color: rgba(125, 211, 252, .34) !important;
+}
+
+[data-theme="dark"] .nav-tabs,
+[data-theme="dark"] .payroll-tabs,
+[data-theme="dark"] .task-v2-tabs,
+[data-theme="dark"] .request-status-tabs,
+[data-theme="dark"] .modal-tabs,
+[data-theme="dark"] .edit-task-tabs,
+[data-theme="dark"] .task-detail-tabs,
+[data-theme="dark"] .task-comment-tabs,
+[data-theme="dark"] .teamwork-edit-tabs {
+  border-color: rgba(148, 163, 184, .3) !important;
+}
+
+/* Edit Task fields: labels always sit above their interactive value. */
+#editTaskModal .property-cell {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: .45rem !important;
+  min-width: 0;
+}
+
+#editTaskModal .property-cell > span:first-child {
+  display: block;
+  position: static;
+  width: 100%;
+  margin: 0;
+  line-height: 1.3;
+}
+
+#editTaskModal .property-cell > div {
+  width: 100%;
+  min-height: 30px;
+}
+
+#editTaskModal .priority-ui-value.badge {
+  position: static !important;
+  inset: auto !important;
+  display: inline-flex !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+}
+
+/* Keep all Edit Task actions together on one footer row. */
+@media (max-width: 600px) {
+  #editTaskModal .modal-footer {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: .35rem !important;
+  }
+
+  #editTaskModal .modal-footer > div {
+    display: flex !important;
+    width: auto !important;
+    flex: 1 1 auto;
+    justify-content: flex-end !important;
+    gap: .35rem !important;
+  }
+
+  #editTaskModal .modal-footer button {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    padding-inline: .7rem !important;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 360px) {
+  #editTaskModal .modal-footer { padding-inline: .5rem !important; }
+  #editTaskModal .modal-footer button { padding-inline: .5rem !important; font-size: .74rem !important; }
+}
+
+/* Override the generic responsive form rule that stacks every inline flex row. */
+#editTaskModal .modal-footer,
+#editTaskModal .modal-footer[style] {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: .4rem !important;
+}
+
+#editTaskModal .modal-footer > div,
+#editTaskModal .modal-footer > div[style] {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  width: auto !important;
+  flex: 0 1 auto !important;
+  gap: .4rem !important;
+}
+
+#editTaskModal .modal-footer > button,
+#editTaskModal .modal-footer > div > button {
+  width: auto !important;
+  flex: 0 1 auto !important;
+  white-space: nowrap;
+}
+
+/* Task-list access selectors: readable glass surfaces over the modal. */
+#taskListModal .custom-multi-select-header,
+#taskListModal .custom-multi-select-dropdown {
+  background: rgba(248, 250, 252, .82) !important;
+  border: 1px solid rgba(71, 85, 105, .28) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  backdrop-filter: blur(18px) saturate(145%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65), 0 12px 30px rgba(15, 23, 42, .16);
+}
+
+#taskListModal .custom-multi-select-header {
+  min-height: 42px;
+}
+
+#taskListModal .custom-multi-select.open .custom-multi-select-header {
+  border-color: color-mix(in srgb, var(--color-primary) 58%, var(--color-border)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 13%, transparent), inset 0 1px 0 rgba(255, 255, 255, .55);
+}
+
+#taskListModal .custom-multi-select-dropdown {
+  z-index: 240;
+  padding: .35rem;
+}
+
+#taskListModal .custom-multi-select-option {
+  border-radius: 7px;
+}
+
+#taskListModal .custom-multi-select-option:hover {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent) !important;
+}
+
+[data-theme="dark"] #taskListModal .custom-multi-select-header,
+[data-theme="dark"] #taskListModal .custom-multi-select-dropdown {
+  background: rgba(7, 19, 36, .86) !important;
+  border-color: rgba(125, 211, 252, .25) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 16px 34px rgba(0, 0, 0, .38);
+}
+
+/* Task List Settings positioning and evenly spaced tabs. */
+#taskListModal {
+  align-items: flex-start !important;
+  padding-top: max(1.25rem, env(safe-area-inset-top)) !important;
+}
+
+#taskListModal .task-list-modal-content {
+  max-height: calc(100dvh - max(2.5rem, env(safe-area-inset-top) + 1.25rem)) !important;
+  margin-top: 0 !important;
+}
+
+#taskListModal .modal-tabs {
+  display: flex !important;
+  align-items: center;
+  gap: .4rem !important;
+  padding: .35rem !important;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+#taskListModal .modal-tabs::-webkit-scrollbar { display: none; }
+
+#taskListModal .modal-tabs .task-list-tab {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: .5rem .7rem !important;
+  white-space: nowrap;
+}
+
+@media (min-width: 520px) {
+  #taskListModal { padding-top: clamp(2rem, 7vh, 4rem) !important; }
+  #taskListModal .task-list-modal-content {
+    max-height: calc(100dvh - clamp(3rem, 10vh, 5rem)) !important;
+  }
+  #taskListModal .modal-tabs .task-list-tab { flex: 1 1 0; }
+}
+
+/* Make the bulk permission choice obvious in task-list access dropdowns. */
+#taskListModal .custom-multi-select-option.custom-multi-select-all {
+  margin-bottom: .25rem;
+  padding-bottom: .55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+#taskListModal .custom-multi-select-option.custom-multi-select-all:hover {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent) !important;
 }

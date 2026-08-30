@@ -84,7 +84,7 @@ window.hideSupervisorTooltip = function () {
 let currentUserRole = null;
 let currentUserProfile = null;
 const isTaskAdmin = () => ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(String(currentUserRole || '').trim().toUpperCase());
-const canInteractWithTask = task => !!task && (isTaskAdmin() || [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
+const canInteractWithTask = task => !!task && (isTaskAdmin() || [task.created_by, task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
 let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
 let recentLoginsChannel = null;
@@ -2374,6 +2374,68 @@ window.openTaskDetailsModal = async function (id) {
     }
 };
 
+// Use one explicit action handler for Focus/Pipeline view buttons. Keeping the
+// event cancellation here prevents the row click handler from competing with
+// the eye button, while the catch makes failures visible instead of leaving a
+// seemingly unresponsive control.
+window.handleTaskViewClick = function (event, id) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const taskId = id || event?.currentTarget?.dataset?.taskId;
+    if (!taskId) return;
+    Promise.resolve(window.openTaskDetailsModal(taskId)).catch(error => {
+        console.error('Unable to open task details:', error);
+        showToast('Unable to open task details. Please try again.', 'danger');
+    });
+};
+
+window.openTaskAssigneePicker = function (taskId) {
+    const task = window.taskCache?.[taskId];
+    if (!task || (!isTaskAdmin() && task.created_by !== currentUser?.id)) {
+        showToast('Only the task creator or an administrator can change assignees.', 'warning');
+        return;
+    }
+    let modal = document.getElementById('taskAssigneePickerModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'taskAssigneePickerModal';
+        modal.className = 'modal';
+        modal.style.zIndex = '2147483001';
+        modal.innerHTML = `<div class="modal-content task-assignee-picker-content"><div class="modal-header"><h2>Assign task</h2><button type="button" class="close-modal" data-assignee-cancel aria-label="Close">&times;</button></div><p class="task-assignee-picker-help">Select one or more employees.</p><div id="taskAssigneePickerOptions" class="task-assignee-picker-options" role="group" aria-label="Task assignees"></div><div class="modal-actions"><button type="button" class="btn btn-secondary" data-assignee-cancel>Cancel</button><button type="button" class="btn btn-primary" id="taskAssigneePickerSave">Save assignment</button></div></div>`;
+        document.body.appendChild(modal);
+        modal.querySelectorAll('[data-assignee-cancel]').forEach(button => button.onclick = () => modal.classList.remove('show'));
+        modal.querySelector('#taskAssigneePickerSave').onclick = async () => {
+            const selected = Array.from(modal.querySelectorAll('#taskAssigneePickerOptions input[type="checkbox"]:checked')).map(input => input.value);
+            if (!selected.length) return showToast('Select at least one employee.', 'warning');
+            const save = await db.updateTask(modal.dataset.taskId, { assignee_id: selected[0], assignee_ids: selected });
+            if (!save.success) return showToast(save.error?.message || 'Unable to update assignment.', 'danger');
+            const selectedUsers = (window.taskAllUsersCache || []).filter(user => selected.includes(user.id));
+            const current = window.taskCache?.[modal.dataset.taskId];
+            if (current) {
+                current.assignee_id = selected[0];
+                current.assignee_ids = selected;
+                current.assignee = selectedUsers[0] ? { full_name: selectedUsers[0].full_name } : null;
+            }
+            modal.classList.remove('show');
+            await renderView('tasks');
+            showToast('Task assignment updated.', 'success');
+        };
+    }
+    modal.dataset.taskId = taskId;
+    const selectedIds = new Set(Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean));
+    const options = modal.querySelector('#taskAssigneePickerOptions');
+    options.innerHTML = (window.taskAllUsersCache || []).map((user, index) => {
+        const inputId = `taskAssigneeOption-${index}`;
+        return `<label class="task-assignee-picker-option" for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${selectedIds.has(user.id) ? 'checked' : ''}><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
+    }).join('') || '<p class="task-assignee-picker-empty">No employees available.</p>';
+    modal.classList.add('show');
+};
+window.handleTaskAssigneeClick = function (event, taskId) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    window.openTaskAssigneePicker(taskId);
+};
+
 function prepareTeamworkTaskDetail(task) {
     window.activeTaskDetail = task;
     const panel = document.getElementById('taskSidePanel');
@@ -4631,7 +4693,7 @@ window.handleUpdateProfileDetails = async function (e) {
 async function renderTasks() {
     console.log("renderTasks: Fetching data for V2...");
     const tasksPromise = db.fetchTasks();
-    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments, taskLists] = await Promise.all([
+    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists] = await Promise.all([
         db.fetchUsers(),
         tasksPromise,
         db.fetchMyDepartmentSupervisors(),
@@ -4640,6 +4702,14 @@ async function renderTasks() {
     ]);
     
     window.taskDepartmentSupervisors = departmentSupervisors || [];
+    const viewerProfile = currentUserProfile || allUsers.find(user => user.id === currentUser?.id);
+    const taskLists = (fetchedTaskLists || []).filter(list => {
+        if (isTaskAdmin()) return true;
+        if (list.owner_id === currentUser?.id) return true;
+        if (list.visible_to_all) return true;
+        if (!viewerProfile?.department_id || !list.department_id) return false;
+        return list.department_id === viewerProfile.department_id;
+    });
     const marketingDepartmentRecord = allDepartments.find(department => department.name === 'Marketing & Sales');
     window.isMarketingDepartmentManager = !!currentUser && [marketingDepartmentRecord?.head_id, marketingDepartmentRecord?.manager_id].includes(currentUser.id);
     window.taskDepartmentManagerByName = Object.fromEntries(allDepartments.map(department => [department.name, department.head_id || department.manager_id || null]));
@@ -4658,6 +4728,7 @@ async function renderTasks() {
         }
         const taskObj = {
             ...t,
+            assignee_ids: Array.isArray(t.assignee_ids) && t.assignee_ids.length ? t.assignee_ids : (t.assignee_id ? [t.assignee_id] : []),
             displayTitle,
             status: t.status || 'todo',
             priority: t.priority || 'medium',
@@ -4680,14 +4751,15 @@ async function renderTasks() {
         if (currentUserRole === 'ADMIN') return true;
         if (task.created_by === currentUser.id) return true;
         if (task.assignee_id === currentUser.id) return true;
+        if (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser.id)) return true;
         if (task.supervisor_id === currentUser.id) return true;
         if (task.watchers && task.watchers.includes(currentUser.id)) return true;
         
-        if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') && task.assignee_id && teamIds.includes(task.assignee_id)) return true;
+        if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') && (teamIds.includes(task.assignee_id) || (task.assignee_ids || []).some(id => teamIds.includes(id)))) return true;
         
         if (task.task_list_id) {
             const list = taskLists.find(l => l.id === task.task_list_id);
-            if (list && (list.owner_id === currentUser.id || (list.shared_with && list.shared_with.includes(currentUser.id)))) {
+            if (list && (list.owner_id === currentUser.id || list.visible_to_all || list.department_id === viewerProfile?.department_id || (list.shared_with && list.shared_with.includes(currentUser.id)))) {
                 return true;
             }
         }
@@ -4733,10 +4805,13 @@ function renderTaskCard(task) {
         ? taskList?.owner_id === currentUser?.id
         : [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager));
     const canEditTask = isTaskAdmin() || task.created_by === currentUser?.id;
-    const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id;
+    const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id
+        || (taskList?.can_delete_users || []).includes(currentUser?.id);
     const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
     const priorityLabel = task.priority === 'urgent' ? 'Urgent' : `${task.priority || 'medium'}`.replace(/^./, value => value.toUpperCase());
-    const assigneeName = window.formatEmployeeName(task.assignee) || t('task_unknown') || 'Unassigned';
+    const assigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean);
+    const assignedUsers = (window.taskAllUsersCache || []).filter(user => assigneeIds.includes(user.id));
+    const assigneeName = window.formatEmployeeName(task.assignee) || (assignedUsers[0] ? window.formatEmployeeName(assignedUsers[0]) : '') || t('task_unknown') || 'Unassigned';
     const assigneeInitials = task.assignee
         ? assigneeName.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase()
         : '';
@@ -4751,16 +4826,16 @@ function renderTaskCard(task) {
                 <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="cursor:pointer;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Task'}</span>${escapeHTML(task.displayTitle)}</h4>
             </div>
             <div class="task-pipeline-actions" onclick="event.stopPropagation();">
-                <button type="button" class="task-pipeline-action" data-task-action="view" data-task-id="${escapeHTML(task.id)}" onclick="event.preventDefault(); event.stopPropagation(); window.openTaskDetailsModal(this.dataset.taskId)" title="View task" aria-label="View task"><i data-lucide="eye"></i></button>
+                <button type="button" class="task-pipeline-action" data-task-action="view" data-task-id="${escapeHTML(task.id)}" onclick="window.handleTaskViewClick(event, this.dataset.taskId)" title="View task" aria-label="View task"><i data-lucide="eye"></i></button>
                 <button type="button" class="task-pipeline-action ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator can edit this task'}" aria-label="${canEditTask ? 'Edit task' : 'Edit task (creator only)'}"><i data-lucide="pencil"></i></button>
                 <button type="button" class="task-pipeline-action task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" aria-label="Delete task"><i data-lucide="trash-2"></i></button>
             </div>
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
-                <div class="task-assignee" title="${escapeHTML(assigneeName)}">
-                    <span class="task-avatar">${assigneeInitials || '<i data-lucide="user"></i>'}</span>
-                    <span>${escapeHTML(assigneeName.split(' ')[0])}</span>
-                </div>
+                <button type="button" class="task-assignee" title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">
+                    <span class="task-assignee-avatar-stack">${(assignedUsers.length ? assignedUsers : [task.assignee]).filter(Boolean).slice(0, 4).map(user => { const name = window.formatEmployeeName(user) || 'Employee'; return `<span class="task-avatar" title="${escapeHTML(name)}">${escapeHTML(name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase())}</span>`; }).join('') || '<span class="task-avatar"><i data-lucide="user"></i></span>'}</span>
+                    <span>${escapeHTML(assigneeIds.length > 1 ? `${assigneeName.split(' ')[0]} +${assigneeIds.length - 1}` : assigneeName.split(' ')[0])}</span>
+                </button>
                 <div class="task-card-signals">
                     <span class="task-priority-label"><i></i>${escapeHTML(priorityLabel)}</span>
                     <span class="task-due-date ${isOverdue ? 'is-overdue' : ''}"><i data-lucide="calendar"></i>${escapeHTML(dueLabel)}</span>
@@ -4809,6 +4884,8 @@ async function renderTasksV2() {
 
     const ownTaskLists = taskLists.filter(list => list.owner_id === currentUser.id);
     const sharedTaskLists = taskLists.filter(list => list.shared_with && list.shared_with.includes(currentUser.id));
+    const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
+    const departmentTaskLists = taskLists.filter(list => (list.visible_to_all || (list.department_id && list.department_id === viewerDepartmentId)) && list.owner_id !== currentUser.id && !(list.shared_with || []).includes(currentUser.id));
     
     let personalListItems = '';
     if (ownTaskLists.length > 0) {
@@ -4838,13 +4915,25 @@ async function renderTasksV2() {
             `;
         }).join('');
     }
+    if (departmentTaskLists.length > 0) {
+        personalListItems += departmentTaskLists.map(list => {
+            const listTasksCount = tasks.filter(task => task.task_list_id === list.id).length;
+            return `
+            <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')">
+                <span class="task-list-name" title="Department task list">${escapeHTML(list.name)}</span>
+                <span class="badge task-count-badge" style="margin-left:auto;background:var(--color-surface);color:var(--color-text-secondary);border-radius:4px;padding:.15rem .4rem;font-size:.75rem;">${listTasksCount}</span>
+            </li>`;
+        }).join('');
+    }
 
     const taskRows = tasks.map(task => {
         const canManageTask = isTaskAdmin() || (task.task_list_id
             ? taskLists.find(l => l.id === task.task_list_id)?.owner_id === currentUser?.id
             : [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id));
         const canEditTask = isTaskAdmin() || task.created_by === currentUser?.id;
-        const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id;
+        const taskList = taskLists.find(list => list.id === task.task_list_id);
+        const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id
+            || (taskList?.can_delete_users || []).includes(currentUser?.id);
         const prioColor = task.priority === 'high' || task.priority === 'urgent' ? 'var(--color-warning)' : (task.priority === 'critical' ? 'var(--color-danger)' : 'var(--color-text-secondary)');
         const isCompleted = task.status === 'completed';
         const stageCheckColor = {
@@ -4855,14 +4944,15 @@ async function renderTasksV2() {
             Approved: '#059669'
         }[task.status] || 'var(--color-text-secondary)';
         
-        const taskList = taskLists.find(list => list.id === task.task_list_id);
         const listName = taskList?.name || (task.project_id ? (projects.find(project => project.id === task.project_id)?.project_name || 'Project tasks') : 'Personal tasks');
         const childCount = tasks.filter(child => child.parent_task_id === task.id).length;
         const dueClass = task.due_date && !['completed', 'Approved'].includes(task.status) && new Date(`${task.due_date}T23:59:59`) < new Date() ? ' overdue' : '';
         const daysUntilDue = task.due_date ? (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000 : null;
         const isClosedTask = task.status === 'completed' || task.status === 'Approved';
         const isFocusTask = !isClosedTask && (task.status === 'Rejected' || task.priority === 'urgent' || task.priority === 'critical' || (daysUntilDue !== null && daysUntilDue <= 7));
-        const avatarHTML = task.assignee ? `<div class="avatar-circle" title="${escapeHTML(window.formatEmployeeName(task.assignee))}" style="width:24px;height:24px;background:var(--color-primary);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">${window.formatEmployeeName(task.assignee).substring(0, 2).toUpperCase()}</div>` : `<div class="avatar-circle" title="Unassigned" style="width:24px;height:24px;background:var(--color-border);color:var(--color-text-secondary);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;"><i data-lucide="user" style="width:14px;height:14px;"></i></div>`;
+        const rowAssigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean);
+        const rowAssignedUsers = (window.taskAllUsersCache || []).filter(user => rowAssigneeIds.includes(user.id));
+        const avatarHTML = rowAssignedUsers.length ? `<span class="task-assignee-avatar-stack">${rowAssignedUsers.slice(0, 4).map(user => { const name = window.formatEmployeeName(user) || 'Employee'; return `<span class="avatar-circle" title="${escapeHTML(name)}">${escapeHTML(name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase())}</span>`; }).join('')}</span>` : `<span class="avatar-circle" title="Unassigned"><i data-lucide="user" style="width:14px;height:14px;"></i></span>`;
 
         return `
             <article class="task-v2-row ${isCompleted ? 'completed' : ''}" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="cursor:pointer; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--color-border); background: var(--color-surface); transition: background 0.2s; flex-wrap: wrap; gap: 0.5rem;">
@@ -4879,10 +4969,10 @@ async function renderTasksV2() {
                 </div>
                 
                 <div class="task-v2-row-actions" style="display: flex; align-items: center; gap: 1rem; flex-shrink: 0;">
-                    ${avatarHTML}
+                    <button type="button" class="task-assignee task-row-assignee" title="Change assignee" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">${avatarHTML}</button>
                     ${task.due_date ? `<span class="${dueClass}" style="display:flex; align-items: center; gap:4px; font-size:0.8rem; color:var(--color-text-secondary); white-space:nowrap; flex-shrink:0;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date}</span>` : ''}
                     ${task.category && task.category !== 'General' ? `<span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--color-primary); font-size: 0.75rem;">${escapeHTML(task.category)}</span>` : ''}
-                    <button class="icon-btn" data-task-action="view" data-task-id="${escapeHTML(task.id)}" onclick="event.preventDefault(); event.stopPropagation(); window.openTaskDetailsModal(this.dataset.taskId)" title="View task" aria-label="View task" style="color:var(--color-text-secondary);"><i data-lucide="eye" style="width:16px;height:16px;"></i></button>
+                    <button class="icon-btn" data-task-action="view" data-task-id="${escapeHTML(task.id)}" onclick="window.handleTaskViewClick(event, this.dataset.taskId)" title="View task" aria-label="View task" style="color:var(--color-text-secondary);"><i data-lucide="eye" style="width:16px;height:16px;"></i></button>
                     <button class="icon-btn ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.stopPropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator or an administrator can edit this task'}" style="color:var(--color-text-secondary);"><i data-lucide="pencil" style="width:16px;height:16px;"></i></button>
                     <button class="icon-btn task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.stopPropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" style="color:var(--color-danger);"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
                 </div>
@@ -5123,6 +5213,14 @@ async function renderTasksV2() {
                     
                     <div id="taskListTabAccess" class="task-list-tab-content" style="display: none;">
                         <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label class="form-label" for="taskListDepartment" style="font-weight: 500; margin-bottom: 0.5rem;">Visible to department *</label>
+                            <select id="taskListDepartment" class="form-control" required onchange="window.refreshTaskListDepartmentControls()">
+                                <option value="">Select department</option>
+                                <option value="all">Visible to all departments</option>
+                            </select>
+                            <small class="text-muted" style="display: block; margin-top: 0.5rem;">Employees can only see task lists assigned to their own department.</small>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
                             <label class="form-label" style="font-weight: 500; margin-bottom: 0.5rem;">Shared With</label>
                             <div class="custom-multi-select" id="taskListViewersWrapper" onclick="this.classList.toggle('open')">
                                 <div class="custom-multi-select-header">
@@ -5274,7 +5372,6 @@ async function renderTasksV2() {
                 <div class="task-v2-rows" id="task-v2-rows-container" style="display: ${taskViewMode === 'focus' ? 'block' : 'none'};">
                     <div class="task-focus-header">
                         <div><span class="task-focus-kicker">Needs attention</span><h3>Focus view</h3></div>
-                        <p>Urgent, overdue, rejected, and due-soon tasks in one place.</p>
                     </div>
                     ${taskRows || '<div class="empty-state">No tasks found.</div>'}
                     
@@ -5442,6 +5539,13 @@ window.clearTaskV2Filters = function () {
 window.toggleTaskV2Create = function () {
     const modal = document.getElementById('createTaskModal');
     if (!modal) return;
+
+    // New tasks inherit the task list currently selected in the Task Manager
+    // sidebar.  Projects and the aggregate "All tasks" view remain unlisted.
+    const activeSelection = window.taskV2SelectedProject || 'all';
+    const activeListId = activeSelection.startsWith('list_') ? activeSelection.slice(5) : '';
+    const listField = document.getElementById('taskListId');
+    if (listField) listField.value = activeListId;
     
     if (modal.parentNode !== document.body) {
         document.body.appendChild(modal);
@@ -5733,8 +5837,9 @@ window.handleQuickAddTask = async function(e) {
     // Disable input while processing
     e.target.disabled = true;
     
-    const taskListId = currentListId === 'all' ? null : currentListId;
-    const projectId = taskListId ? null : (currentProjectId === 'all' ? null : currentProjectId);
+    const activeSelection = window.taskV2SelectedProject || 'all';
+    const taskListId = activeSelection.startsWith('list_') ? activeSelection.slice(5) : null;
+    const projectId = taskListId ? null : (activeSelection === 'all' || activeSelection.startsWith('list_') ? null : activeSelection);
     const supervisorId = window.taskDepartmentSupervisors?.[0]?.id || null;
 
     const { success, error, data: createdTask } = await db.createTask(
@@ -6039,6 +6144,14 @@ window.openEditTaskModal = async function (id) {
         if (assigneeSelect) {
             assigneeSelect.value = task.assignee_id || '';
         }
+        const assigneeIds = new Set(Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean));
+        const assigneeOptions = document.getElementById('editTaskAssigneeOptions');
+        if (assigneeOptions) {
+            assigneeOptions.innerHTML = (window.taskAllUsersCache || []).map((user, index) => {
+                const inputId = `editTaskAssigneeOption-${index}`;
+                return `<label for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${assigneeIds.has(user.id) ? 'checked' : ''}><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
+            }).join('');
+        }
 
         const watchersSelect = document.getElementById('editTaskWatchers');
         if (watchersSelect) {
@@ -6098,7 +6211,9 @@ window.openEditTaskModal = async function (id) {
         document.getElementById('editTaskFiles').value = '';
         document.getElementById('editTaskFilesList').innerHTML = '';
 
-        const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id;
+        const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
+        const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id
+            || (taskList?.can_delete_users || []).includes(currentUser?.id);
         const deleteBtn = document.getElementById('editTaskDeleteBtn');
         if (deleteBtn) {
             deleteBtn.style.display = canDeleteTask ? '' : 'none';
@@ -6140,6 +6255,9 @@ window.handleEditTaskSubmit = async function (e) {
 
     const priority = document.getElementById('editTaskPriority').value;
     const assigneeId = document.getElementById('editTaskAssignee').value;
+    const selectedAssigneeIds = Array.from(document.querySelectorAll('#editTaskAssigneeOptions input[type="checkbox"]:checked')).map(input => input.value);
+    const assigneeIds = selectedAssigneeIds.length ? selectedAssigneeIds : (assigneeId ? [assigneeId] : []);
+    const primaryAssigneeId = assigneeIds[0] || assigneeId;
     const dueDate = document.getElementById('editTaskDue').value;
 
     const visibility = document.getElementById('editTaskVisibility').value;
@@ -6164,7 +6282,8 @@ window.handleEditTaskSubmit = async function (e) {
         description: document.getElementById('editTaskDescription').value.trim(),
         category: category || null,
         priority: priority,
-        assignee_id: assigneeId,
+        assignee_id: primaryAssigneeId,
+        assignee_ids: assigneeIds,
         due_date: dueDate,
         visibility: visibility,
         start_date: startDate || null,
@@ -6277,7 +6396,10 @@ window.handleEditTaskSubmit = async function (e) {
 
 window.handleDeleteTask = async function (id) {
     const task = window.taskCache?.[id];
-    if (!task || (!isTaskAdmin() && task.created_by !== currentUser?.id)) {
+    const taskList = task ? (window.taskListsCache || []).find(list => list.id === task.task_list_id) : null;
+    const canDeleteTask = !!task && (isTaskAdmin() || task.created_by === currentUser?.id
+        || (taskList?.can_delete_users || []).includes(currentUser?.id));
+    if (!canDeleteTask) {
         showToast('Only the task creator or an administrator can delete this task.', 'warning');
         return;
     }
@@ -8450,9 +8572,11 @@ window.populateCustomMultiSelect = function(optionsContainerId, textContainerId,
     
     let html = '';
     let selectedCount = 0;
+    let optionCount = 0;
     
     Array.from(temp.options).forEach(opt => {
         if (opt.value) { // Skip empty option if any
+            optionCount++;
             const isChecked = selectedSet.has(opt.value);
             if (isChecked) selectedCount++;
             html += `
@@ -8463,8 +8587,33 @@ window.populateCustomMultiSelect = function(optionsContainerId, textContainerId,
             `;
         }
     });
+    if (optionCount > 0) {
+        const allSelected = selectedCount === optionCount;
+        html = `
+            <label class="custom-multi-select-option custom-multi-select-all" onclick="event.stopPropagation()">
+                <input type="checkbox" data-select-all ${allSelected ? 'checked' : ''} onchange="window.toggleCustomMultiSelectAll('${optionsContainerId}', '${textContainerId}', this)">
+                <span>All employees</span>
+            </label>
+        ` + html;
+    }
     container.innerHTML = html;
     window.updateCustomMultiSelectText(optionsContainerId, textContainerId);
+};
+
+window.refreshTaskListDepartmentControls = function(selectedViewers, selectedAdd, selectedDelete) {
+    const departmentId = document.getElementById('taskListDepartment')?.value || '';
+    const currentSelections = (containerId) => new Set(Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked:not([data-select-all])`)).map(input => input.value));
+    const viewers = selectedViewers instanceof Set ? selectedViewers : currentSelections('taskListViewersOptions');
+    const addUsers = selectedAdd instanceof Set ? selectedAdd : currentSelections('taskListAddUsersOptions');
+    const deleteUsers = selectedDelete instanceof Set ? selectedDelete : currentSelections('taskListDeleteUsersOptions');
+    const departmentUsers = (window.taskAllUsersCache || []).filter(user => user.id !== currentUser?.id && (departmentId === 'all' || user.department_id === departmentId));
+    const options = departmentUsers.map(user => {
+        const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
+        return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(user.role || 'EMPLOYEE')})</option>`;
+    }).join('');
+    window.populateCustomMultiSelect('taskListViewersOptions', 'taskListViewersText', viewers, options);
+    window.populateCustomMultiSelect('taskListAddUsersOptions', 'taskListAddUsersText', addUsers, options);
+    window.populateCustomMultiSelect('taskListDeleteUsersOptions', 'taskListDeleteUsersText', deleteUsers, options);
 };
 
 window.updateCustomMultiSelectText = function(optionsContainerId, textContainerId) {
@@ -8472,14 +8621,31 @@ window.updateCustomMultiSelectText = function(optionsContainerId, textContainerI
     const textContainer = document.getElementById(textContainerId);
     if (!container || !textContainer) return;
     
-    const checked = container.querySelectorAll('input[type="checkbox"]:checked');
+    const checked = container.querySelectorAll('input[type="checkbox"]:checked:not([data-select-all])');
+    const allCheckbox = container.querySelector('input[type="checkbox"][data-select-all]');
+    const total = container.querySelectorAll('input[type="checkbox"]:not([data-select-all])').length;
+    if (allCheckbox) {
+        allCheckbox.checked = total > 0 && checked.length === total;
+        allCheckbox.indeterminate = checked.length > 0 && checked.length < total;
+    }
     if (checked.length === 0) {
         textContainer.textContent = 'Select employees...';
+    } else if (total > 0 && checked.length === total) {
+        textContainer.textContent = 'All employees';
     } else if (checked.length === 1) {
         textContainer.textContent = checked[0].nextElementSibling.textContent;
     } else {
         textContainer.textContent = `${checked.length} selected`;
     }
+};
+
+window.toggleCustomMultiSelectAll = function(optionsContainerId, textContainerId, source) {
+    const container = document.getElementById(optionsContainerId);
+    if (!container) return;
+    container.querySelectorAll('input[type="checkbox"]:not([data-select-all])').forEach(input => {
+        input.checked = !!source.checked;
+    });
+    window.updateCustomMultiSelectText(optionsContainerId, textContainerId);
 };
 
 window.openTaskListModal = function (listId = '') {
@@ -8490,16 +8656,22 @@ window.openTaskListModal = function (listId = '') {
     document.getElementById('taskListName').value = list?.name || '';
     document.getElementById('taskListDescription').value = list?.description || '';
     document.getElementById('taskListModalTitle').textContent = list ? t('task_list_share') : t('task_list_new');
+
+    const departmentSelect = document.getElementById('taskListDepartment');
+    if (departmentSelect) {
+        const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
+        departmentSelect.innerHTML = '<option value="">Select department</option><option value="all">Visible to all departments</option>' + (window.taskDepartmentsCache || []).map(department =>
+            `<option value="${escapeHTML(department.id)}">${escapeHTML(department.name)}</option>`
+        ).join('');
+        departmentSelect.value = list?.visible_to_all ? 'all' : (list?.department_id || viewerDepartmentId);
+        departmentSelect.disabled = !isTaskAdmin();
+    }
     
     // Set selected viewers
     const selected = new Set(list?.shared_with || []);
-    window.populateCustomMultiSelect('taskListViewersOptions', 'taskListViewersText', selected, window.taskWatcherOptionsCache || '');
-
     const selectedAdd = new Set(list?.can_add_users || []);
-    window.populateCustomMultiSelect('taskListAddUsersOptions', 'taskListAddUsersText', selectedAdd, window.taskWatcherOptionsCache || '');
-
     const selectedDelete = new Set(list?.can_delete_users || []);
-    window.populateCustomMultiSelect('taskListDeleteUsersOptions', 'taskListDeleteUsersText', selectedDelete, window.taskWatcherOptionsCache || '');
+    window.refreshTaskListDepartmentControls(selected, selectedAdd, selectedDelete);
     
     // Set selected template
     const templateSelect = document.getElementById('taskListTemplate');
@@ -8522,16 +8694,21 @@ window.handleSaveTaskList = async function (event) {
     const name = document.getElementById('taskListName').value.trim();
     const description = document.getElementById('taskListDescription').value.trim();
     const template = document.getElementById('taskListTemplate').value;
+    const departmentSelection = document.getElementById('taskListDepartment')?.value || '';
+    const departmentId = departmentSelection && departmentSelection !== 'all' ? departmentSelection : null;
     
-    const sharedWith = Array.from(document.querySelectorAll('#taskListViewersOptions input[type="checkbox"]:checked')).map(cb => cb.value);
-    const canAddUsers = Array.from(document.querySelectorAll('#taskListAddUsersOptions input[type="checkbox"]:checked')).map(cb => cb.value);
-    const canDeleteUsers = Array.from(document.querySelectorAll('#taskListDeleteUsersOptions input[type="checkbox"]:checked')).map(cb => cb.value);
+    const sharedWith = Array.from(document.querySelectorAll('#taskListViewersOptions input[type="checkbox"]:checked:not([data-select-all])')).map(cb => cb.value);
+    const canAddUsers = Array.from(document.querySelectorAll('#taskListAddUsersOptions input[type="checkbox"]:checked:not([data-select-all])')).map(cb => cb.value);
+    const canDeleteUsers = Array.from(document.querySelectorAll('#taskListDeleteUsersOptions input[type="checkbox"]:checked:not([data-select-all])')).map(cb => cb.value);
 
     // Also get notifications settings
     const notifyAssignee = document.getElementById('taskListNotifyAssignee')?.checked || false;
     const notifyComplete = document.getElementById('taskListNotifyComplete')?.checked || false;
     
-    if (!name) return;
+    if (!name || !departmentSelection) {
+        showToast('Select the department that can see this task list.', 'warning');
+        return;
+    }
     const submit = event.currentTarget.querySelector('button[type="submit"]');
     submit.disabled = true;
     
@@ -8539,6 +8716,8 @@ window.handleSaveTaskList = async function (event) {
     const payload = { 
         name, 
         shared_with: sharedWith,
+        department_id: departmentId,
+        visible_to_all: departmentSelection === 'all',
         can_add_users: canAddUsers,
         can_delete_users: canDeleteUsers,
         description,
@@ -8553,7 +8732,8 @@ window.handleSaveTaskList = async function (event) {
         
     submit.disabled = false;
     if (!result.success) {
-        showToast(result.error?.message || 'Unable to save the private list.', 'danger');
+        const missingDepartmentColumn = result.error?.code === 'PGRST204' || String(result.error?.message || '').includes('department_id');
+        showToast(missingDepartmentColumn ? 'Run task_list_department_visibility_migration.sql in Supabase, then try again.' : (result.error?.message || 'Unable to save the private list.'), 'danger');
         return;
     }
     showToast(id ? 'Private list sharing updated.' : 'Private task list created.', 'success');
@@ -9551,7 +9731,10 @@ window.showPromptModal = (message, title = t('ui_input_required') || 'Input requ
         modal = document.createElement('div');
         modal.id = 'appPromptModal';
         modal.className = 'modal';
-        modal.style.zIndex = '100002';
+        // Prompt modals can be opened from within Edit Task (for example for
+        // tags or estimated time). Keep them above the parent modal layer so
+        // the prompt is always visible and interactive.
+        modal.style.zIndex = '2147483000';
         modal.innerHTML = `<div class="modal-content" style="max-width:500px"><div class="modal-header"><h2 id="appPromptModalTitle"></h2><button type="button" class="close-modal" data-prompt-cancel>&times;</button></div><form id="appPromptModalForm"><label class="form-label" id="appPromptModalMessage"></label><textarea id="appPromptModalInput" class="form-control" rows="3"></textarea><div class="modal-actions"><button type="button" class="btn btn-secondary" data-prompt-cancel>${t('btn_cancel')}</button><button type="submit" class="btn btn-primary">${t('html_confirm') || 'Confirm'}</button></div></form></div>`;
         document.body.appendChild(modal);
     }

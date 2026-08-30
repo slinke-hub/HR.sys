@@ -33,8 +33,8 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
-    <link rel="stylesheet" href="css/layout.css?v=14">
-    <link rel="stylesheet" href="css/components.css?v=80">
+    <link rel="stylesheet" href="css/layout.css?v=15">
+    <link rel="stylesheet" href="css/components.css?v=92">
     <link rel="stylesheet" href="css/android.css?v=1">
     <style>
         @media (hover: none) and (pointer: coarse) {
@@ -1220,6 +1220,7 @@
                                 </select>
                                 <span class="select-ui-value" style="font-size: 0.9rem;">Anyone</span>
                             </div>
+                            <div id="editTaskAssigneeOptions" class="edit-task-assignee-options" aria-label="Assigned employees"></div>
                         </div>
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;">Department</span>
@@ -1366,6 +1367,7 @@
                 </div>
             </form>
         </div>
+    </div>
 
     <!-- Task Details & Comments Side Panel -->
     <div class="side-panel-overlay" id="taskSidePanelOverlay" hidden onclick="document.getElementById('taskSidePanel').classList.remove('active'); document.getElementById('taskSidePanelOverlay').classList.remove('active');"></div>
@@ -1627,11 +1629,11 @@
     <script src="js/vendor/supabase.js"></script>
     <script src="js/vendor/chart.umd.min.js"></script>
     <script src="js/vendor/xlsx.full.min.js"></script>
-    <script src="js/db.js?v=57"></script>
+    <script src="js/db.js?v=58"></script>
     <script src="js/data.js?v=27"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=162"></script>
+    <script src="js/app.js?v=172"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">
