@@ -1592,6 +1592,17 @@ const db = {
             return null;
         }
     },
+    async deleteContractByEmployeeId(employeeId) {
+        if (!supabaseClient) return { success: false, error: { message: 'Database not initialized' } };
+        try {
+            const { error } = await supabaseClient.from('contracts').delete().eq('employee_id', employeeId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("deleteContractByEmployeeId Error:", error);
+            return { success: false, error };
+        }
+    },
     async upsertContract(contractData) {
         if (!supabaseClient) return { success: false };
         try {

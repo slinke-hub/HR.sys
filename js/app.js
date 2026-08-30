@@ -6415,6 +6415,12 @@ window.handleDeleteTask = async function (id) {
         }
     });
 };
+            await db.triggerWebhooks('task_deleted', { task_id: id });
+            document.getElementById('editTaskModal').classList.remove('active');
+            renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
+        }
+    });
+};
 
 document.addEventListener('dragend', function (e) {
     if (e.target && e.target.classList && e.target.classList.contains('task-item-card')) {
@@ -6426,15 +6432,41 @@ document.addEventListener('dragend', function (e) {
 // ==========================================
 // Employees & Contracts (HR View)
 // ==========================================
-window.navigateToContract = function (employeeId, empName) {
+window.navigateToContract = async function (employeeId, empName) {
     if (!window.canCurrentUserEditContracts()) {
         showToast('Only an HR Manager or Administrator can edit contracts.', 'danger');
         return;
     }
     currentContractEmployeeId = employeeId;
     currentContractEmployeeName = empName;
-    currentView = 'contract';
-    renderView('contract');
+    
+    let modal = document.getElementById('contractEditModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'contractEditModal';
+        modal.className = 'modal';
+        document.body.appendChild(modal);
+    }
+    
+    const htmlContent = await renderContractPage();
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 900px; width: 90%; background: var(--color-bg-surface); padding: 0; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header" style="position: sticky; top: 0; background: var(--color-bg-surface); z-index: 10; padding: 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin:0">${t('users_contract') || 'Contract'} - ${empName}</h2>
+                <button class="close-modal" onclick="document.getElementById('contractEditModal').style.display = 'none'">&times;</button>
+            </div>
+            <div class="modal-body contract-modal-body" style="padding: 1.5rem; padding-top: 0.5rem;">
+                <style>
+                    .contract-modal-body .page-header { display: none !important; }
+                    .contract-modal-body { text-align: left; }
+                </style>
+                ${htmlContent}
+            </div>
+        </div>
+    `;
+    if (window.lucide && lucide.createIcons) lucide.createIcons();
+    modal.style.display = 'block';
 }
 
 window.handleSaveContract = async function (e) {
@@ -6456,7 +6488,7 @@ window.handleSaveContract = async function (e) {
         for (const file of policyFiles) {
             const uploadResult = await db.uploadContractPolicy(currentContractEmployeeId, file);
             if (!uploadResult.success) {
-                showToast(`Unable to upload ${file.name}. ` + (uploadResult.error?.message || ''), 'warning');
+                showToast(\`Unable to upload \${file.name}. \` + (uploadResult.error?.message || ''), 'warning');
             } else {
                 if (!policyUrl) policyUrl = uploadResult.url; // Use the first uploaded one as the main policy url if not set
                 uploadedDocs.push({ url: uploadResult.url, name: file.name });
@@ -6500,7 +6532,7 @@ window.handleSaveContract = async function (e) {
         for (const doc of uploadedDocs) {
             if (savedContract?.id) {
                 const documentResult = await db.addContractDocument(savedContract.id, currentContractEmployeeId, doc.url, doc.name, 'confidentiality_policy', currentUser?.id || null);
-                if (!documentResult.success) showToast(`Contract saved, but ${doc.name} could not be indexed.`, 'warning');
+                if (!documentResult.success) showToast(\`Contract saved, but \${doc.name} could not be indexed.\`, 'warning');
             }
         }
         if (jobTitle) {
@@ -6526,8 +6558,16 @@ window.handleSaveContract = async function (e) {
         delete window.viewHTMLCache.users;
         delete window.viewHTMLCache.employees;
         showToast(t('toast_contract_saved_successfully'), "success");
-        currentView = 'users';
-        renderView('users');
+        if (document.getElementById('contractEditModal') && document.getElementById('contractEditModal').style.display !== 'none') {
+            document.getElementById('contractEditModal').style.display = 'none';
+            if (currentView === 'users' || currentView === 'employees') {
+                renderView(currentView);
+            }
+        } else {
+            currentView = 'users';
+            renderView('users');
+        }
+
     } else {
         showToast(error?.message || "Failed to save contract", "danger");
     }
@@ -6836,7 +6876,9 @@ async function renderEmployeesDirectory() {
                                     <td>
                                         <div class="directory-actions">
                                             <button type="button" class="btn-secondary btn-sm directory-view-button" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View employee details"><i data-lucide="eye"></i><span>View</span></button>
-                                            ${canEditContracts ? `<button type="button" class="btn-primary btn-sm directory-edit-button" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>` : ''}
+                                            ${canEditContracts ? `<button type="button" class="btn-primary btn-sm directory-edit-button" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>
+                                            <button type="button" class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="Edit Contract"><i data-lucide="file-signature"></i><span>Edit Contract</span></button>
+                                            <button type="button" class="btn-secondary btn-sm" style="color:var(--color-danger)" onclick="handleDeleteContract('${u.id}')" title="Delete Contract"><i data-lucide="trash-2"></i><span>Delete Contract</span></button>` : ''}
                                         </div>
                                     </td>
                                 </tr>
@@ -6848,6 +6890,29 @@ async function renderEmployeesDirectory() {
         </div>
     `;
 }
+
+window.handleDeleteContract = async function(employeeId) {
+    const viewerProfile = await db.getUserProfile(currentUser?.id);
+    if (!window.canCurrentUserEditContracts(viewerProfile)) {
+        showToast('Only an HR Manager or Administrator can delete contracts.', 'danger');
+        return;
+    }
+    const contract = await db.fetchContractByEmployeeId(employeeId);
+    if (!contract || !contract.id) {
+        showToast("No active contract found for this employee.", "info");
+        return;
+    }
+    window.showConfirmModal('Delete Contract', 'Are you sure you want to permanently delete this contract? This action cannot be undone.', async () => {
+        const result = await db.deleteContractByEmployeeId(employeeId);
+        if (result.success) {
+            showToast('Contract deleted successfully.', 'success');
+            delete window.viewHTMLCache.employees;
+            renderView('employees');
+        } else {
+            showToast(result.error?.message || 'Failed to delete contract.', 'danger');
+        }
+    });
+};
 
 window.closeEmployeeDetailsCard = function () {
     document.getElementById('employeeDetailsOverlay')?.remove();

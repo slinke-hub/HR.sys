@@ -1,0 +1,1 @@
+const fs = require('fs'); const lines = fs.readFileSync('e:/HR.sys/js/app.js', 'utf8').split('\n'); lines.forEach((l, i) => { if(l.toLowerCase().includes('contract')) console.log('Line ' + (i+1) + ': ' + l.substring(0, 100)); });
