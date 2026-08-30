@@ -6415,12 +6415,6 @@ window.handleDeleteTask = async function (id) {
         }
     });
 };
-            await db.triggerWebhooks('task_deleted', { task_id: id });
-            document.getElementById('editTaskModal').classList.remove('active');
-            renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
-        }
-    });
-};
 
 document.addEventListener('dragend', function (e) {
     if (e.target && e.target.classList && e.target.classList.contains('task-item-card')) {
@@ -6488,7 +6482,7 @@ window.handleSaveContract = async function (e) {
         for (const file of policyFiles) {
             const uploadResult = await db.uploadContractPolicy(currentContractEmployeeId, file);
             if (!uploadResult.success) {
-                showToast(\`Unable to upload \${file.name}. \` + (uploadResult.error?.message || ''), 'warning');
+                showToast(`Unable to upload ${file.name}. ` + (uploadResult.error?.message || ''), 'warning');
             } else {
                 if (!policyUrl) policyUrl = uploadResult.url; // Use the first uploaded one as the main policy url if not set
                 uploadedDocs.push({ url: uploadResult.url, name: file.name });
@@ -6532,7 +6526,7 @@ window.handleSaveContract = async function (e) {
         for (const doc of uploadedDocs) {
             if (savedContract?.id) {
                 const documentResult = await db.addContractDocument(savedContract.id, currentContractEmployeeId, doc.url, doc.name, 'confidentiality_policy', currentUser?.id || null);
-                if (!documentResult.success) showToast(\`Contract saved, but \${doc.name} could not be indexed.\`, 'warning');
+                if (!documentResult.success) showToast(`Contract saved, but ${doc.name} could not be indexed.`, 'warning');
             }
         }
         if (jobTitle) {
