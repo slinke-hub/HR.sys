@@ -1,4 +1,4 @@
-// App State
+﻿// App State
 let currentLang = localStorage.getItem('app_lang') || 'ar';
 window.currentLang = currentLang;
 let currentTheme = 'light';
@@ -1274,7 +1274,7 @@ window.handleLoginSubmit = async function (e) {
     resetInactivityTimeout();
 
     // Show sidebar and topbar again
-    document.querySelector('.sidebar').style.display = 'block';
+    document.querySelector('.sidebar').style.display = '';
     document.querySelector('.topbar').style.display = 'flex';
 
     // Hide/Show Role-Specific Nav Items
@@ -10319,7 +10319,7 @@ async function initApp() {
         updateTopbarProfile(profile);
 
         // Show navigation
-        document.querySelector('.sidebar').style.display = 'block';
+        document.querySelector('.sidebar').style.display = '';
         document.querySelector('.topbar').style.display = 'flex';
 
         // Hide/Show Role-Specific Nav Items
