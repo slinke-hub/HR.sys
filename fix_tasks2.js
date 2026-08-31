@@ -5,10 +5,10 @@ const targetFile = path.join(__dirname, 'js', 'app.js');
 let lines = fs.readFileSync(targetFile, 'utf8').split('\n');
 
 for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes('onclick="window.selectTaskV2Project(\\'list_${list.id}\\')"')) {
+    if (lines[i].includes(`onclick="window.selectTaskV2Project('list_\${list.id}')"`)) {
         // Change the line to include oncontextmenu
         if (!lines[i].includes('oncontextmenu')) {
-            lines[i] = lines[i].replace('">', '" oncontextmenu="window.showTaskListContextMenu(event, \\'${list.id}\\', ${currentUserRole === \\'ADMIN\\'})">');
+            lines[i] = lines[i].replace('">', `" oncontextmenu="window.showTaskListContextMenu(event, '\${list.id}', \${currentUserRole === 'ADMIN'})">`);
         }
         
         // Remove the button lines below it
