@@ -5459,13 +5459,9 @@ function renderTaskCard(task) {
         : (t('task_no_date') || 'No date');
     
     return `
-        <article class="task-item-card task-pipeline-card priority-${escapeHTML(task.priority)} ${isOverdue ? 'is-overdue' : ''}" data-task-id="${task.id}" id="task-card-${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" draggable="${canManageTask}" ${canManageTask ? `ondragstart="handleTaskDragStart(event, '${task.id}')"` : ''} onclick="openTaskDetailsModal('${task.id}')">
+        <article class="task-item-card task-pipeline-card priority-${escapeHTML(task.priority)} ${isOverdue ? 'is-overdue' : ''}" data-task-id="${task.id}" id="task-card-${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" draggable="${canManageTask}" ${canManageTask ? `ondragstart="handleTaskDragStart(event, '${task.id}')"` : ''} onclick="openTaskDetailsModal('${task.id}')" oncontextmenu="window.handleTaskContextMenu(event, '${task.id}', ${canEditTask}, ${canDeleteTask})">
             <div class="task-pipeline-card-head">
                 <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="cursor:pointer;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Task'}</span>${escapeHTML(task.displayTitle)}</h4>
-            </div>
-            <div class="task-pipeline-actions" onclick="event.stopPropagation();">
-                <button type="button" class="task-pipeline-action ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator can edit this task'}" aria-label="${canEditTask ? 'Edit task' : 'Edit task (creator only)'}"><i data-lucide="pencil"></i></button>
-                <button type="button" class="task-pipeline-action task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" aria-label="Delete task"><i data-lucide="trash-2"></i></button>
             </div>
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
@@ -7254,7 +7250,8 @@ window.handleSaveContract = async function (e) {
         primary_workplace: document.getElementById('contractWorkplace').value || null,
         weekly_rest_day: document.getElementById('contractRestDays').value || null,
         confidentiality_policy_url: policyUrl,
-        status: document.getElementById('contractStatus').value
+        status: document.getElementById('contractStatus').value,
+        edited_by: window.formatEmployeeName(currentUserProfile) || null
     };
 
     const existingContract = await db.fetchContractByEmployeeId(currentContractEmployeeId);
@@ -7595,7 +7592,7 @@ async function renderEmployeesDirectory() {
                     <table class="data-table" id="employeeDirectoryTable">
                         <thead>
                             <tr>
-                                <th>ID</th><th>Employee Details</th><th>Role</th><th>${t('actions') || 'Actions'}</th>
+                                <th>ID</th><th>Employee Details</th><th>Role</th><th>${t('edited_by') || 'Edited By'}</th><th>${t('actions') || 'Actions'}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -7604,6 +7601,7 @@ async function renderEmployeesDirectory() {
                                     <td data-user-id><span class="directory-employee-id">${escapeHTML(formatEmployeeId(u.emp_index))}</span></td>
                                     <td data-user-details><div class="directory-employee-name">${escapeHTML(window.formatEmployeeName(u) || t('emp_na'))}</div></td>
                                     <td data-user-role><span data-user-role-badge class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${escapeHTML(u.role || 'EMPLOYEE')}</span></td>
+                                    <td>${escapeHTML(u.contract_edited_by || '-')}</td>
                                     <td>
                                         <div class="directory-actions">
                                             <button type="button" class="btn-secondary btn-sm directory-view-button" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View employee details"><i data-lucide="eye"></i><span>View</span></button>
@@ -11555,7 +11553,7 @@ async function renderArchivedRequests() {
                 <td>${new Date(r.created_at).toLocaleDateString()}</td>
                 <td>${employeeName}</td>
                 <td><strong>${r.type}</strong></td>
-                <td>${escapeHTML(r.details)}${r.rejection_reason ? `<br><strong>Rejection reason:</strong> ${escapeHTML(r.rejection_reason)}` : ''}</td>
+                <td>${escapeHTML(r.details)}${r.rejection_reason ? `<br><strong>${t('ui_rejection_reason')}:</strong> ${escapeHTML(r.rejection_reason)}` : ''}</td>
                 <td><span class="status-badge ${badgeClass}">${r.status}</span> <span style="font-size: 0.7rem; color: var(--color-text-secondary);">${t('req_archived_badge')}</span></td>
             </tr>
         `;
@@ -11936,7 +11934,7 @@ window.handleApprovalAction = async function (taskId, newStatus) {
                 if (taskData.assignee_id) {
                     await db.createNotification(taskData.assignee_id, `Your Designing task "${taskData.title}" was rejected by the manager. Reason: ${reason}`, taskId);
                 }
-                await db.addTaskComment(taskId, currentUser.id, `Manager Rejection Reason: ${reason}`);
+                await db.addTaskComment(taskId, currentUser.id, `${t('ui_rejection_reason')}: ${reason}`);
                 showToast(window.t('msg_toast_54') || 'Task rejected and sent back to In Progress', 'success');
                 renderView('approvals');
             }

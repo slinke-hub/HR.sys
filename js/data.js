@@ -1,5 +1,6 @@
 const i18n = {
   en: {
+    edited_by: "Edited By",
     msg_toast_0: "Enter a valid loan amount greater than zero.",
     msg_toast_1: "Enter a valid number of leave days.",
     msg_toast_2: "Select a reason for the short leave.",
@@ -1212,6 +1213,7 @@ const i18n = {
     ui_new_reminder: "New Reminder",
 },
   ar: {
+    edited_by: "تم التعديل بواسطة",
     msg_toast_0: "الرجاء إدخال مبلغ سلفة صحيح أكبر من الصفر.",
     msg_toast_1: "الرجاء إدخال عدد صحيح لأيام الإجازة.",
     msg_toast_2: "الرجاء اختيار سبب للإجازة القصيرة.",
