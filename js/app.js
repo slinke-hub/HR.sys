@@ -1755,7 +1755,7 @@ window.updateSidebarVisibility = async function () {
     if (templatesNav) templatesNav.style.display = isAdmin ? 'flex' : 'none';
     if (leaveCalculatorNav) leaveCalculatorNav.style.display = (isAdmin || isHrManager) ? 'flex' : 'none';
     const custodyHandoverNav = document.getElementById('navCustodyHandover');
-    if (custodyHandoverNav) custodyHandoverNav.style.display = normalizedRole !== 'EMPLOYEE' ? 'flex' : 'none';
+    if (custodyHandoverNav) custodyHandoverNav.style.display = (isAdmin || isHrManager) ? 'flex' : 'none';
 
     const isAccountantManager = currentUserProfile && /accountant manager|finance manager/i.test(currentUserProfile.job_title || '');
     if (payrollNav) payrollNav.style.display = (isAdmin || isAccountantManager) ? 'flex' : 'none';
@@ -8284,9 +8284,11 @@ window.handleBulkUpload = async function (event) {
 // CUSTODY HANDOVER
 // ==========================================
 async function renderCustodyHandover() {
-    if (currentUserRole === 'EMPLOYEE') return '<div class="page-header"><h1 class="page-title">Unauthorized</h1></div>';
-    // Pre-fill employee name and department if available
     const profile = currentUserProfile || await db.getUserProfile(currentUser?.id);
+    const isAdmin = String(currentUserRole || '').toUpperCase() === 'ADMIN';
+    const isHrManager = String(profile?.job_title || '').trim().toUpperCase() === 'HR MANAGER';
+    if (!isAdmin && !isHrManager) return '<div class="page-header"><h1 class="page-title">Unauthorized</h1></div>';
+    // Pre-fill employee name and department if available
     const fullName = profile?.full_name || '';
     const department = profile?.department_name || '';
     const idNumber = profile?.national_id || '';
