@@ -1927,13 +1927,23 @@ async function renderTeamHierarchyWidget() {
     const isDepartmentEmployee = normalizedRole === 'EMPLOYEE';
     // Employees receive only their department's profiles. This limits the data
     // used by both the hierarchy renderer and its employee lookup cache.
+    let myDeptHeadId = null;
+    if (currentProfile.department_id) {
+        const departments = (await db.fetchDepartments()) || [];
+        const myDept = departments.find(d => d.id === currentProfile.department_id);
+        if (myDept && myDept.head_id) {
+            myDeptHeadId = myDept.head_id;
+        }
+    }
+
     let allUsers = fetchedUsers;
     if (isDepartmentEmployee) {
         allUsers = fetchedUsers.filter(user => 
             user.id === currentProfile.manager_id || 
             user.manager_id === currentProfile.manager_id || 
             (currentProfile.department_id && user.department_id === currentProfile.department_id) ||
-            user.manager_id === currentProfile.id
+            user.manager_id === currentProfile.id ||
+            (myDeptHeadId && user.id === myDeptHeadId)
         );
     }
     if (!allUsers || allUsers.length === 0) {
@@ -1956,9 +1966,14 @@ async function renderTeamHierarchyWidget() {
     } else if (normalizedRole === 'MANAGER') {
         rootUsers = allUsers.filter(u => u.id === currentUser.id);
     } else if (isDepartmentEmployee) {
-        let myMgr = fetchedUsers.find(u => u.id === currentProfile.manager_id);
-        if (myMgr) {
-            rootUsers = [myMgr];
+        let deptHead = myDeptHeadId ? allUsers.find(u => u.id === myDeptHeadId) : null;
+        let myMgr = allUsers.find(u => u.id === currentProfile.manager_id);
+        
+        if (deptHead) {
+            rootUsers = [deptHead];
+        } else if (myMgr) {
+            let parentMgr = allUsers.find(u => u.id === myMgr.manager_id);
+            rootUsers = parentMgr ? [parentMgr] : [myMgr];
         } else {
             rootUsers = [currentProfile];
         }
