@@ -6844,6 +6844,22 @@ html[dir="rtl"] select:not([multiple]) {
   padding-inline-end: .7rem !important;
 }
 
+/* Keep the avatar menu inside the viewport on tablet/mobile breakpoints. The
+   legacy absolute rule otherwise anchors it to the narrow profile wrapper,
+   which can place most of the menu off-screen in RTL layouts. */
+@media (max-width: 1024px) {
+  .profile-dropdown-menu {
+    position: fixed !important;
+    top: calc(56px + env(safe-area-inset-top)) !important;
+    inset-inline: max(.5rem, env(safe-area-inset-left)) max(.5rem, env(safe-area-inset-right)) !important;
+    left: max(.5rem, env(safe-area-inset-left)) !important;
+    right: max(.5rem, env(safe-area-inset-right)) !important;
+    width: auto !important;
+    max-width: none !important;
+    z-index: 2147482000 !important;
+  }
+}
+
 /* The watcher picker is a button-backed dropdown rather than a native select. */
 .task-watcher-toggle {
   position: relative;
