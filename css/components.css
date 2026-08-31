@@ -3354,6 +3354,25 @@ input,
   height: 16px;
 }
 
+.attendance-location-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  color: var(--color-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.attendance-location-link:hover {
+  text-decoration: underline;
+}
+
+.attendance-location-link svg {
+  width: 15px;
+  height: 15px;
+}
+
 .contract-documents-card>h3 {
   margin: 0 0 1rem;
   padding-bottom: .75rem;

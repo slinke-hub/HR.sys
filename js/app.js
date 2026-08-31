@@ -735,7 +735,7 @@ window.openMobileNavigation = async function () {
     const sheet = document.createElement('div');
     sheet.id = 'mobileNavigationSheet';
     sheet.className = 'mobile-navigation-sheet';
-    const closeLabel = t('ui_close') || (currentLang === 'ar' ? 'Ø¥ØºÙ„Ø§Ù‚' : 'Close');
+    const closeLabel = t('ui_close') || (currentLang === 'ar' ? 'إغلاق' : 'Close');
     const moreLabel = t('nav_more') || (currentLang === 'ar' ? 'المزيد' : 'More');
     sheet.innerHTML = `
         <button type="button" class="mobile-navigation-backdrop" onclick="window.closeMobileNavigation()" aria-label="${escapeHTML(closeLabel)}"></button>
@@ -790,6 +790,8 @@ function updateTranslations() {
             el.setAttribute('placeholder', text.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
         }
     });
+
+    translateArabicInterface(document);
 }
 
 // --- NAVIGATION & VIEWS ---
@@ -813,6 +815,525 @@ function t(key) {
         return text.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     }
     return key;
+}
+
+// Localize newer or server-generated UI copy that is not yet represented by a
+// data-i18n key. This deliberately targets controls, system feedback, modal
+// copy and table headings; employee-entered task titles and descriptions are
+// left unchanged.
+const arabicRuntimeUiText = Object.freeze({
+    'Close': 'إغلاق',
+    'More': 'المزيد',
+    'Confirm': 'تأكيد',
+    'Confirming...': 'جارٍ التأكيد...',
+    'Cancel': 'إلغاء',
+    'Save': 'حفظ',
+    'Save changes': 'حفظ التغييرات',
+    'Delete': 'حذف',
+    'Edit': 'تعديل',
+    'View': 'عرض',
+    'Send': 'إرسال',
+    'OK': 'حسنًا',
+    'Notice': 'تنبيه',
+    'Input required': 'الإدخال مطلوب',
+    'Unknown': 'غير معروف',
+    'Unknown user': 'مستخدم غير معروف',
+    'Unknown employee': 'موظف غير معروف',
+    'Employee': 'موظف',
+    'Team Member': 'عضو فريق',
+    'You': 'أنت',
+    'ADMIN': 'مسؤول النظام',
+    'SYSTEM ADMIN': 'مسؤول النظام',
+    'ROLE_SYSTEM_ADMIN': 'مسؤول النظام',
+    'MANAGER': 'مدير',
+    'SUPERVISOR': 'مشرف',
+    'EMPLOYEE': 'موظف',
+    'CEO': 'الرئيس التنفيذي',
+    'GM': 'المدير العام',
+    'Marketing Manager': 'مدير التسويق',
+    'Operations Manager': 'مدير العمليات',
+    'IT Manager': 'مدير تقنية المعلومات',
+    'Account Manager': 'مدير حساب',
+    'Production Supervisor': 'مشرف الإنتاج',
+    'Operations Assistant': 'مساعد عمليات',
+    'Sales Representative': 'مندوب مبيعات',
+    'Customer Services': 'خدمة العملاء',
+    'Graphic Designer': 'مصمم جرافيك',
+    'Photographer': 'مصور',
+    'Technician': 'فني',
+    'Barista': 'باريستا',
+    'No profile photo': 'لا توجد صورة شخصية',
+    'Profile photo unavailable': 'الصورة الشخصية غير متاحة',
+    'Close employee information': 'إغلاق معلومات الموظف',
+    'Employee information is unavailable.': 'معلومات الموظف غير متاحة.',
+    'Nationality': 'الجنسية',
+    'Iqama / ID Number': 'رقم الهوية / الإقامة',
+    'Phone Number': 'رقم الهاتف',
+    'Latest Login': 'آخر تسجيل دخول',
+    'Not provided': 'غير متوفر',
+    'No login recorded': 'لا يوجد تسجيل دخول مسجل',
+    'Marketing': 'التسويق',
+    'Sales': 'المبيعات',
+    'Designing': 'التصميم',
+    'Operations': 'العمليات',
+    'Search tasks...': 'ابحث في المهام...',
+    'All Status': 'جميع الحالات',
+    'Open Tasks': 'المهام المفتوحة',
+    'All Priorities': 'جميع الأولويات',
+    'Clear Filters': 'مسح عوامل التصفية',
+    'Focus': 'التركيز',
+    'Pipeline': 'مسار العمل',
+    'Pipeline health summary': 'ملخص حالة مسار العمل',
+    'Pipeline health': 'حالة مسار العمل',
+    'waiting': 'بانتظار البدء',
+    'active': 'نشطة',
+    'due this week': 'مستحقة هذا الأسبوع',
+    'overdue': 'متأخرة',
+    'total': 'الإجمالي',
+    'New Task': 'مهمة جديدة',
+    'Needs attention': 'تحتاج إلى اهتمام',
+    'NEEDS ATTENTION': 'تحتاج إلى اهتمام',
+    'Focus view': 'عرض التركيز',
+    'No tasks found.': 'لم يتم العثور على مهام.',
+    'Completed': 'مكتملة',
+    'Sub-Tasks': 'المهام الفرعية',
+    'Edit List': 'تعديل القائمة',
+    'Delete List': 'حذف القائمة',
+    'View task': 'عرض المهمة',
+    'Delete task': 'حذف المهمة',
+    'You do not have permission to add tasks to this list.': 'ليس لديك صلاحية لإضافة مهام إلى هذه القائمة.',
+    'Created Date': 'تاريخ الإنشاء',
+    'Enter task title': 'أدخل عنوان المهمة',
+    'Select': 'اختيار',
+    'Administrative': 'الإدارة',
+    'IT': 'تقنية المعلومات',
+    'Operations and Production': 'العمليات والإنتاج',
+    'Select Task Type': 'اختر نوع المهمة',
+    'Regular Tasks': 'مهام اعتيادية',
+    'Watchers (Optional)': 'المتابعون (اختياري)',
+    'Select watchers': 'اختر المتابعين',
+    'Change assignee': 'تغيير المعيّن',
+    'Change assignees': 'تغيير المعيّنين',
+    'Search employees...': 'ابحث عن موظفين...',
+    'Search employees': 'ابحث عن موظفين',
+    'Download Source': 'مصدر التنزيل',
+    'Add another URL': 'إضافة رابط آخر',
+    'Upload Source': 'مصدر الرفع',
+    'Design Type': 'نوع التصميم',
+    'Select Design Type': 'اختر نوع التصميم',
+    'Post': 'منشور',
+    'Reel': 'ريلز',
+    'Story': 'قصة',
+    'Promo Video': 'فيديو ترويجي',
+    'Cover': 'غلاف',
+    'Commercial Video': 'فيديو تجاري',
+    'Advertisement Video': 'فيديو إعلاني',
+    'Proposal': 'مقترح',
+    'Delivery Status': 'حالة التسليم',
+    'Awaiting manager review': 'بانتظار مراجعة المدير',
+    'Approved': 'تمت الموافقة',
+    'Edit needed': 'بحاجة إلى تعديل',
+    'task_desc': 'وصف المهمة',
+    'Describe the task...': 'صف المهمة...',
+    'Attachments': 'المرفقات',
+    'Attachment option with drag and drop feature to upload multi files, photos, and videos': 'خيار المرفقات مع السحب والإفلات لرفع ملفات وصور وفيديوهات متعددة',
+    'Open map': 'فتح الخريطة',
+    'Location': 'الموقع',
+    'Clocking in...': 'جارٍ تسجيل الحضور...',
+    'Waiting for location permission...': 'بانتظار إذن الموقع...',
+    'Location received — opening camera...': 'تم استلام الموقع — جارٍ فتح الكاميرا...',
+    'Uploading photo…': 'جارٍ رفع الصورة…',
+    'Photo received — clocking out…': 'تم استلام الصورة — جارٍ تسجيل الانصراف…',
+    'Unassigned': 'غير معيّن',
+    'No Manager': 'لا يوجد مدير',
+    'No job title': 'لا يوجد مسمى وظيفي',
+    'No department': 'لا يوجد قسم',
+    'No project': 'لا يوجد مشروع',
+    'Not set': 'غير محدد',
+    'Public': 'عام',
+    'public': 'عام',
+    'Private': 'خاص',
+    'private': 'خاص',
+    'General': 'عام',
+    'Details': 'التفاصيل',
+    'Custom fields': 'الحقول المخصصة',
+    'Dependencies': 'التبعيات',
+    'Proofs': 'الإثباتات',
+    'Priority': 'الأولوية',
+    'Status': 'الحالة',
+    'Low': 'منخفضة',
+    'Medium': 'متوسطة',
+    'High': 'عالية',
+    'Urgent': 'عاجلة',
+    'Critical': 'حرجة',
+    'Todo': 'قيد الانتظار',
+    'To do': 'قيد الانتظار',
+    'In progress': 'قيد التنفيذ',
+    'Review': 'المراجعة',
+    'Awaiting approval': 'بانتظار الموافقة',
+    'Done': 'مكتملة',
+    'Add a description': 'أضف وصفًا',
+    'Add a description...': 'أضف وصفًا...',
+    'Assign task': 'تعيين المهمة',
+    'Task assignees': 'الموظفون المعيّنون للمهمة',
+    'Select one or more employees.': 'اختر موظفًا واحدًا أو أكثر.',
+    'Select at least one employee.': 'اختر موظفًا واحدًا على الأقل.',
+    'Save assignment': 'حفظ التعيين',
+    'No employees available.': 'لا يوجد موظفون متاحون.',
+    'Task assignment updated.': 'تم تحديث تعيين المهمة.',
+    'Unable to update assignment.': 'تعذر تحديث تعيين المهمة.',
+    'You do not have access to this task.': 'ليس لديك صلاحية للوصول إلى هذه المهمة.',
+    'Unable to open task details. Please try again.': 'تعذر فتح تفاصيل المهمة. يرجى المحاولة مرة أخرى.',
+    'Only the task creator or an administrator can change assignees.': 'يمكن لمنشئ المهمة أو مسؤول النظام فقط تغيير الموظفين المعيّنين.',
+    'Only the task creator or an administrator can edit this task.': 'يمكن لمنشئ المهمة أو مسؤول النظام فقط تعديل هذه المهمة.',
+    'Only the task creator or an administrator can delete this task.': 'يمكن لمنشئ المهمة أو مسؤول النظام فقط حذف هذه المهمة.',
+    'Task created successfully.': 'تم إنشاء المهمة بنجاح.',
+    'Task updated': 'تم تحديث المهمة.',
+    'Task approved and moved to Done.': 'تم اعتماد المهمة ونقلها إلى مكتملة.',
+    'Task returned to In Progress.': 'تمت إعادة المهمة إلى قيد التنفيذ.',
+    'Task not found.': 'المهمة غير موجودة.',
+    'Task not found': 'المهمة غير موجودة',
+    'Subtask added': 'تمت إضافة المهمة الفرعية',
+    'Delete Task': 'حذف المهمة',
+    'Delete Task List': 'حذف قائمة المهام',
+    'Are you sure you want to delete this task?': 'هل أنت متأكد من حذف هذه المهمة؟',
+    'Are you sure you want to delete this task list and all its tasks?': 'هل أنت متأكد من حذف قائمة المهام وجميع مهامها؟',
+    'Task list deleted successfully.': 'تم حذف قائمة المهام بنجاح.',
+    'Failed to delete task list.': 'تعذر حذف قائمة المهام.',
+    'Enter estimated time (e.g., 4h, 1d):': 'أدخل الوقت المقدر (مثال: 4 ساعات أو يوم واحد):',
+    'Estimated time': 'الوقت المقدر',
+    'Enter tags (comma separated):': 'أدخل الوسوم مفصولة بفواصل:',
+    'Task tags': 'وسوم المهمة',
+    'Edit task': 'تعديل المهمة',
+    'Task list': 'قائمة المهام',
+    'List Name': 'اسم القائمة',
+    'Advanced options': 'خيارات متقدمة',
+    'Task name': 'اسم المهمة',
+    'Assignee': 'الموظف المعيّن',
+    'Department': 'القسم',
+    'ID / Iqama number': 'رقم الهوية / الإقامة',
+    'Job Title': 'المسمى الوظيفي',
+    'Assigned Manager': 'المدير المعيّن',
+    'Employee profile': 'ملف الموظف',
+    'Not assigned': 'غير معيّن',
+    'Dates': 'التواريخ',
+    'Set date': 'تحديد التاريخ',
+    'Anyone': 'أي موظف',
+    'None': 'لا شيء',
+    'Assigned employees': 'الموظفون المعيّنون',
+    'Privacy': 'الخصوصية',
+    'No privacy': 'بدون خصوصية',
+    'Team Only': 'الفريق فقط',
+    'Tags': 'الوسوم',
+    'No tags': 'لا توجد وسوم',
+    'Reminders': 'التذكيرات',
+    'No reminders': 'لا توجد تذكيرات',
+    'Followers': 'المتابعون',
+    'No followers': 'لا يوجد متابعون',
+    'Progress': 'التقدم',
+    'Set to repeat': 'تعيين التكرار',
+    'Task Type': 'نوع المهمة',
+    'Select Sub-Type': 'اختر النوع الفرعي',
+    'Regular Tasks': 'مهام اعتيادية',
+    'Daily Tasks': 'مهام يومية',
+    'Designing Task': 'مهمة تصميم',
+    'Files': 'الملفات',
+    'Drag and drop your files here.': 'اسحب الملفات وأفلتها هنا.',
+    'Browse files': 'تصفح الملفات',
+    'Success': 'تم بنجاح',
+    'Action completed successfully.': 'تم تنفيذ الإجراء بنجاح.',
+    'Error opening edit modal. Check console for details.': 'تعذر فتح نافذة تعديل المهمة. يرجى المحاولة مرة أخرى.',
+    'Date': 'التاريخ',
+    'Employee Name': 'اسم الموظف',
+    'ID Number': 'رقم الهوية',
+    'Search employee name': 'ابحث باسم الموظف',
+    'Search Iqama / ID': 'ابحث برقم الإقامة أو الهوية',
+    'Clear': 'مسح',
+    'Attendance filters': 'مرشحات الحضور',
+    'No attendance records match these filters.': 'لا توجد سجلات حضور مطابقة لهذه المرشحات.',
+    'Permission Denied': 'تم رفض الإذن',
+    'Connection Error': 'خطأ في الاتصال',
+    'Session Expired': 'انتهت الجلسة',
+    'The camera is not ready yet.': 'الكاميرا غير جاهزة بعد.',
+    'Unable to capture the photo. Please try again.': 'تعذر التقاط الصورة. يرجى المحاولة مرة أخرى.',
+    'Please capture an image.': 'يرجى التقاط صورة.',
+    'Take a photo before continuing.': 'التقط صورة قبل المتابعة.',
+    'Location sharing is not supported by this device.': 'هذا الجهاز لا يدعم مشاركة الموقع.',
+    'Please fill in all required fields.': 'يرجى تعبئة جميع الحقول المطلوبة.',
+    'A required field is missing. Please fill in all required fields.': 'يوجد حقل مطلوب غير مكتمل. يرجى تعبئة جميع الحقول المطلوبة.',
+    'This record already exists. Please use a unique value.': 'هذا السجل موجود بالفعل. يرجى استخدام قيمة فريدة.',
+    'A database constraint was violated. Please check your input values.': 'تعذر حفظ البيانات بسبب أحد قيود قاعدة البيانات. يرجى التحقق من القيم المدخلة.',
+    'Cannot reach the server. Please check your internet connection and try again.': 'تعذر الوصول إلى الخادم. تحقق من اتصال الإنترنت ثم حاول مرة أخرى.',
+    'Your session has expired. Please log in again.': 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.',
+    'You do not have permission to perform this action. Please contact your administrator.': 'ليس لديك صلاحية لتنفيذ هذا الإجراء. يرجى التواصل مع مسؤول النظام.',
+    'You do not have permission to create tasks.': 'ليس لديك صلاحية لإنشاء المهام.',
+    'Employee information is unavailable.': 'بيانات الموظف غير متاحة.',
+    'Excel export is unavailable. Please reload the page and try again.': 'تصدير Excel غير متاح. أعد تحميل الصفحة ثم حاول مرة أخرى.',
+    'There are no users to export.': 'لا يوجد مستخدمون للتصدير.',
+    'User directory downloaded successfully.': 'تم تنزيل دليل المستخدمين بنجاح.',
+    'Failed to update role.': 'تعذر تحديث الدور.',
+    'Failed to update department.': 'تعذر تحديث القسم.',
+    'Department updated successfully.': 'تم تحديث القسم بنجاح.',
+    'Failed to assign manager.': 'تعذر تعيين المدير.',
+    'Reminder created!': 'تم إنشاء التذكير!',
+    'Error creating reminder.': 'حدث خطأ أثناء إنشاء التذكير.',
+    'Error updating reminder.': 'حدث خطأ أثناء تحديث التذكير.',
+    'Error deleting reminder.': 'حدث خطأ أثناء حذف التذكير.',
+    'Delete Contract': 'حذف العقد',
+    'Contract deleted successfully.': 'تم حذف العقد بنجاح.',
+    'Failed to delete contract.': 'تعذر حذف العقد.',
+    'Employee details could not be loaded.': 'تعذر تحميل تفاصيل الموظف.',
+    'No active contract found for this employee.': 'لا يوجد عقد نشط لهذا الموظف.',
+    'Only an HR Manager or Administrator can edit contracts.': 'يمكن لمدير الموارد البشرية أو مسؤول النظام فقط تعديل العقود.',
+    'Only an HR Manager or Administrator can delete contracts.': 'يمكن لمدير الموارد البشرية أو مسؤول النظام فقط حذف العقود.',
+    'You do not have access to this page.': 'ليس لديك صلاحية للوصول إلى هذه الصفحة.',
+    'All translations saved successfully': 'تم حفظ جميع الترجمات بنجاح',
+    'Some translations could not be saved.': 'تعذر حفظ بعض الترجمات.',
+    'Translation key is required': 'مفتاح الترجمة مطلوب',
+    'Translation key added successfully!': 'تمت إضافة مفتاح الترجمة بنجاح!',
+    'Translation key removed': 'تمت إزالة مفتاح الترجمة',
+    'Failed to parse JSON file': 'تعذر قراءة ملف JSON',
+    'Translations imported and saved successfully!': 'تم استيراد الترجمات وحفظها بنجاح!',
+    'Job title already exists in this department': 'المسمى الوظيفي موجود بالفعل في هذا القسم',
+    'Department (EN) is required.': 'اسم القسم باللغة الإنجليزية مطلوب.',
+    'A rejection reason is required.': 'سبب الرفض مطلوب.',
+    'Failed to update request approval.': 'تعذر تحديث اعتماد الطلب.',
+    'Unable to record this approval.': 'تعذر تسجيل هذا الاعتماد.',
+    'Unable to return this task.': 'تعذر إعادة هذه المهمة.',
+    'Project deleted successfully': 'تم حذف المشروع بنجاح',
+    'Failed to delete project': 'تعذر حذف المشروع',
+    'Create a new Tasks List': 'إنشاء قائمة مهام جديدة',
+    'General': 'عام',
+    'Access': 'الوصول',
+    'Notification': 'الإشعارات',
+    'Custom Fields': 'الحقول المخصصة',
+    'Name *': 'الاسم *',
+    'Name': 'الاسم',
+    'Template *': 'القالب *',
+    '-- None --': '-- لا شيء --',
+    'Blank list': 'قائمة فارغة',
+    'Kanban board': 'لوحة كانبان',
+    'Scrum sprint': 'دورة سكرم',
+    'Description': 'الوصف',
+    'Enter description': 'أدخل الوصف',
+    'Visible to department *': 'مرئية للقسم *',
+    'Select department': 'اختر القسم',
+    'Visible to all departments': 'مرئية لجميع الأقسام',
+    'Employees can only see task lists assigned to their own department.': 'يمكن للموظفين رؤية قوائم المهام المخصصة لقسمهم فقط.',
+    'Shared With': 'مشاركة مع',
+    'Select employees...': 'اختر الموظفين...',
+    'All employees': 'جميع الموظفين',
+    'Who can add tasks': 'من يمكنه إضافة المهام',
+    'Who can delete tasks': 'من يمكنه حذف المهام',
+    'Select employees who can view and interact with this task list.': 'اختر الموظفين الذين يمكنهم عرض قائمة المهام والتفاعل معها.',
+    'Select employees allowed to add tasks.': 'اختر الموظفين المسموح لهم بإضافة المهام.',
+    'Select employees allowed to delete tasks (other than their own).': 'اختر الموظفين المسموح لهم بحذف المهام غير مهامهم.',
+    'Notify assignees on new tasks': 'إشعار الموظفين المعيّنين بالمهام الجديدة',
+    'Notify me when tasks are completed': 'إشعاري عند اكتمال المهام',
+    'Custom fields allow you to add specific metadata to tasks in this list. (Coming soon)': 'تتيح لك الحقول المخصصة إضافة بيانات محددة لمهام هذه القائمة. (قريبًا)',
+    'Add Custom Field': 'إضافة حقل مخصص',
+    'Save & Create': 'حفظ وإنشاء',
+    'Task lists': 'قوائم المهام',
+    'All lists': 'جميع القوائم',
+    'Add new list': 'إضافة قائمة جديدة'
+    ,'1 Hour': 'ساعة واحدة'
+    ,'15 Minutes': '15 دقيقة'
+    ,'2 Hours': 'ساعتان'
+    ,'3 Hours': 'ثلاث ساعات'
+    ,'Actual Sales Amount (SAR)': 'مبلغ المبيعات الفعلي (ر.س)'
+    ,'Add': 'إضافة'
+    ,'Add New User': 'إضافة مستخدم جديد'
+    ,'Add User': 'إضافة المستخدم'
+    ,'Assign People *': 'تعيين الموظفين *'
+    ,'Category': 'الفئة'
+    ,'Date of Absence *': 'تاريخ الغياب *'
+    ,'Delete Project': 'حذف المشروع'
+    ,'Department (AR)': 'القسم (بالعربية)'
+    ,'Department (EN) *': 'القسم (بالإنجليزية) *'
+    ,'Document Details': 'تفاصيل المستند'
+    ,'Duration': 'المدة'
+    ,'Edit User': 'تعديل المستخدم'
+    ,'Email': 'البريد الإلكتروني'
+    ,'Employee *': 'الموظف *'
+    ,'Employee ID': 'رقم الموظف'
+    ,'End Date': 'تاريخ الانتهاء'
+    ,'Enter email address (Optional)': 'أدخل البريد الإلكتروني (اختياري)'
+    ,'Enter full name': 'أدخل الاسم الكامل'
+    ,'Enter full name in Arabic': 'أدخل الاسم الكامل بالعربية'
+    ,'Enter job title and press Add': 'أدخل المسمى الوظيفي ثم اضغط إضافة'
+    ,'Enter number of days': 'أدخل عدد الأيام'
+    ,'Enter phone number (Optional)': 'أدخل رقم الهاتف (اختياري)'
+    ,"Event's Location (Google Maps URL)": 'موقع الفعالية (رابط خرائط Google)'
+    ,'Excused Absence': 'غياب بعذر'
+    ,'Full Name': 'الاسم الكامل'
+    ,'Full Name (Arabic)': 'الاسم الكامل (بالعربية)'
+    ,'Full Name in Arabic': 'الاسم الكامل بالعربية'
+    ,'I am running late to the office.': 'سأتأخر عن الوصول إلى المكتب.'
+    ,'I need to attend an urgent family matter.': 'لدي ظرف عائلي طارئ.'
+    ,'I will be out for a meeting.': 'سأكون خارج المكتب لحضور اجتماع.'
+    ,'Initial Tasks (One per line)': 'المهام الأولية (مهمة واحدة في كل سطر)'
+    ,'Invoice Amount': 'مبلغ الفاتورة'
+    ,'Invoice Amount *': 'مبلغ الفاتورة *'
+    ,'Job Titles': 'المسميات الوظيفية'
+    ,'Loan Amount (SAR)': 'مبلغ القرض (ر.س)'
+    ,'Log Monthly Sales': 'تسجيل المبيعات الشهرية'
+    ,'Lost Reason': 'سبب الخسارة'
+    ,'Month / Year': 'الشهر / السنة'
+    ,'Monthly Installment (SAR) *': 'القسط الشهري (ر.س) *'
+    ,'More navigation': 'المزيد من عناصر التنقل'
+    ,'New Request': 'طلب جديد'
+    ,'Note': 'ملاحظة'
+    ,'Number of Days': 'عدد الأيام'
+    ,'Phone': 'الهاتف'
+    ,'Primary navigation': 'التنقل الرئيسي'
+    ,'Profile Photo': 'الصورة الشخصية'
+    ,'Project Name *': 'اسم المشروع *'
+    ,'Project Status': 'حالة المشروع'
+    ,'Project Status *': 'حالة المشروع *'
+    ,'Project Tags': 'وسوم المشروع'
+    ,'Project Type *': 'نوع المشروع *'
+    ,'Search': 'بحث'
+    ,'Select Department first': 'اختر القسم أولًا'
+    ,'Select reason': 'اختر السبب'
+    ,'Short Leave': 'استئذان قصير'
+    ,'Short Leave Reason': 'سبب الاستئذان القصير'
+    ,'Starting Date': 'تاريخ البدء'
+    ,'Starting Date *': 'تاريخ البدء *'
+    ,'Switch language': 'تبديل اللغة'
+    ,'Task 1\nTask 2': 'المهمة 1\nالمهمة 2'
+    ,'Temp Password': 'كلمة المرور المؤقتة'
+    ,'Total Loan Amount (SAR) *': 'إجمالي مبلغ القرض (ر.س) *'
+    ,'Account locked due to multiple failed attempts. Please contact Admin.': 'تم قفل الحساب بسبب تكرار محاولات الدخول الفاشلة. يرجى التواصل مع مسؤول النظام.'
+    ,'Announcement published successfully.': 'تم نشر الإعلان بنجاح.'
+    ,'Archived contract permanently deleted.': 'تم حذف العقد المؤرشف نهائيًا.'
+    ,'Are you sure you want to delete this client?': 'هل أنت متأكد من حذف هذا العميل؟'
+    ,'Are you sure you want to delete this department?': 'هل أنت متأكد من حذف هذا القسم؟'
+    ,'Are you sure you want to permanently delete this contract? This action cannot be undone.': 'هل أنت متأكد من حذف هذا العقد نهائيًا؟ لا يمكن التراجع عن هذا الإجراء.'
+    ,'Delete Client': 'حذف العميل'
+    ,'Delete Department': 'حذف القسم'
+    ,'Delete Translation Key': 'حذف مفتاح الترجمة'
+    ,'Delete Webhook': 'حذف رابط Webhook'
+    ,'Delete archived contract': 'حذف العقد المؤرشف'
+    ,'Delete this webhook?': 'هل تريد حذف رابط Webhook هذا؟'
+    ,'Enter a valid loan amount greater than zero.': 'أدخل مبلغ قرض صحيحًا أكبر من صفر.'
+    ,'Enter a valid number of leave days.': 'أدخل عددًا صحيحًا لأيام الإجازة.'
+    ,'Error generating template. Please make sure XLSX library is loaded.': 'تعذر إنشاء القالب. تأكد من تحميل مكتبة XLSX.'
+    ,'Excel support is unavailable. Please refresh or check your internet connection.': 'دعم Excel غير متاح. حدّث الصفحة أو تحقق من اتصال الإنترنت.'
+    ,'Failed to add translation to database': 'تعذرت إضافة الترجمة إلى قاعدة البيانات'
+    ,'Failed to remove translation from database': 'تعذرت إزالة الترجمة من قاعدة البيانات'
+    ,'Failed to submit short leave request.': 'تعذر إرسال طلب الاستئذان القصير.'
+    ,'No contract is available for this employee.': 'لا يوجد عقد متاح لهذا الموظف.'
+    ,'No files were successfully uploaded.': 'لم يتم رفع أي ملف بنجاح.'
+    ,'Notification sent to assignee.': 'تم إرسال الإشعار إلى الموظف المعيّن.'
+    ,'Only an administrator can delete archived contracts.': 'يمكن لمسؤول النظام فقط حذف العقود المؤرشفة.'
+    ,'Only this task’s department manager can approve completion.': 'يمكن لمدير قسم هذه المهمة فقط اعتماد اكتمالها.'
+    ,'Select a reason for the short leave.': 'اختر سبب الاستئذان القصير.'
+    ,'Select the department that can see this task list.': 'اختر القسم الذي يمكنه رؤية قائمة المهام هذه.'
+    ,'Short leave request submitted successfully.': 'تم إرسال طلب الاستئذان القصير بنجاح.'
+    ,'Task moved to Awaiting Approval. The department manager has been notified.': 'تم نقل المهمة إلى بانتظار الموافقة وإشعار مدير القسم.'
+    ,'Task rejected and sent back to In Progress': 'تم رفض المهمة وإعادتها إلى قيد التنفيذ'
+    ,'This permanently deletes the archived contract and cannot be undone.': 'سيتم حذف العقد المؤرشف نهائيًا ولا يمكن التراجع عن ذلك.'
+    ,'This permanently removes the user and their data. Their contract will be moved to Archived Contracts.': 'سيتم حذف المستخدم وبياناته نهائيًا، ونقل عقده إلى العقود المؤرشفة.'
+    ,'This task is no longer available or you do not have access.': 'هذه المهمة لم تعد متاحة أو ليس لديك صلاحية للوصول إليها.'
+    ,'Unauthorized: You do not have permission to view this contract.': 'غير مصرح: ليس لديك صلاحية لعرض هذا العقد.'
+    ,'Unknown template type': 'نوع القالب غير معروف'
+    ,'The database permissions migration has not been applied. Run onboarding_create_user_permission_repair.sql; for task creation, also run tasks_insert_permission_repair.sql, then try again.': 'لم يتم تطبيق ترحيل صلاحيات قاعدة البيانات. شغّل onboarding_create_user_permission_repair.sql، ولإنشاء المهام شغّل أيضًا tasks_insert_permission_repair.sql، ثم حاول مرة أخرى.'
+});
+const arabicRuntimeUiTextLower = Object.freeze(Object.fromEntries(
+    Object.entries(arabicRuntimeUiText).map(([key, value]) => [key.toLocaleLowerCase('en'), value])
+));
+
+function localizeRuntimeText(value) {
+    const source = String(value ?? '');
+    if (currentLang !== 'ar' || !source.trim()) return source;
+    const trimmed = source.trim();
+    if (arabicRuntimeUiText[trimmed]) return arabicRuntimeUiText[trimmed];
+    const caseInsensitiveMatch = arabicRuntimeUiTextLower[trimmed.toLocaleLowerCase('en')];
+    if (caseInsensitiveMatch) return caseInsensitiveMatch;
+
+    const normalizedStatus = {
+        APPROVED: 'تمت الموافقة على الطلب',
+        REJECTED: 'تم رفض الطلب',
+        PENDING: 'الطلب قيد الانتظار'
+    };
+    const requestStatus = trimmed.match(/^Request\s+(APPROVED|REJECTED|PENDING)$/i);
+    if (requestStatus) return normalizedStatus[requestStatus[1].toUpperCase()];
+    const employeeInfo = trimmed.match(/^View\s+(.+)\s+information$/i);
+    if (employeeInfo) return `عرض معلومات ${employeeInfo[1]}`;
+    const uploaded = trimmed.match(/^(\d+) file\(s\) uploaded successfully\.$/);
+    if (uploaded) return `تم رفع ${uploaded[1]} ملف بنجاح.`;
+    const documents = trimmed.match(/^(\d+) document\(s\) saved successfully\.$/);
+    if (documents) return `تم حفظ ${documents[1]} مستند بنجاح.`;
+    const savedUsers = trimmed.match(/^Saved changes for (\d+) users\.$/);
+    if (savedUsers) return `تم حفظ تغييرات ${savedUsers[1]} مستخدم.`;
+    const initialTasks = trimmed.match(/^(\d+) initial tasks created\.$/);
+    if (initialTasks) return `تم إنشاء ${initialTasks[1]} مهمة أولية.`;
+    const unableUpload = trimmed.match(/^Unable to upload (.+)\.$/);
+    if (unableUpload) return `تعذر رفع ${unableUpload[1]}.`;
+    const unknownColumn = trimmed.match(/^Unknown column: (.+)\. The database may need a migration to be run\.$/);
+    if (unknownColumn) return `عمود غير معروف: ${unknownColumn[1]}. قد تحتاج قاعدة البيانات إلى تشغيل ملف ترحيل.`;
+    return source;
+}
+
+function localizeNotificationMessage(value) {
+    const source = String(value ?? '');
+    if (currentLang !== 'ar' || !source.trim()) return source;
+    const rules = [
+        [/^Your leave request has been (.+)\.$/i, match => `تم تحديث طلب إجازتك إلى: ${taskDetailValue(match[1], 'status')}.`],
+        [/^Your expense request has been (.+)\.$/i, match => `تم تحديث طلب المصروفات إلى: ${taskDetailValue(match[1], 'status')}.`],
+        [/^You have been assigned a new task:\s*(.+)$/i, match => `تم تعيين مهمة جديدة لك: ${match[1]}`],
+        [/^A new task requires your approval:\s*(.+)$/i, match => `توجد مهمة جديدة تتطلب موافقتك: ${match[1]}`],
+        [/^Project created:\s*(.+)$/i, match => `تم إنشاء المشروع: ${match[1]}`],
+        [/^Task "(.+)" was returned to In Progress by the department manager\.$/i, match => `أعاد مدير القسم المهمة «${match[1]}» إلى قيد التنفيذ.`],
+        [/^Your Designing task "(.+)" was rejected by the manager\. Reason:\s*(.+)$/i, match => `رفض المدير مهمة التصميم «${match[1]}». السبب: ${match[2]}`],
+        [/^Your task "(.+)" was rejected and deleted\.$/i, match => `تم رفض مهمتك «${match[1]}» وحذفها.`],
+        [/^Your task "(.+)" was approved\.$/i, match => `تمت الموافقة على مهمتك «${match[1]}».`]
+    ];
+    for (const [pattern, formatter] of rules) {
+        const match = source.match(pattern);
+        if (match) return formatter(match);
+    }
+    const localized = localizeRuntimeText(source);
+    if (localized === source && /[A-Za-z]{2,}/.test(source) && !/[\u0600-\u06FF]/.test(source)) return 'لديك تحديث جديد.';
+    return localized;
+}
+
+function translateArabicInterface(root = document) {
+    if (currentLang !== 'ar' || !root?.querySelectorAll) return;
+    const selectors = [
+        'button', 'label', 'legend', 'th', 'dt', 'option', '[role="tab"]',
+        '.form-label', '.card-title', '.page-subtitle', '.empty-state',
+        '.task-assignee-picker-help', '.task-assignee-picker-empty',
+        '.modal-header h2', '.status-badge', '.property-cell > span',
+        '.hierarchy-square-title', '.hierarchy-employee-card-header p',
+        '.task-health-heading', '.task-health-item', '.task-health-total',
+        '.task-health-new-task', '.task-focus-kicker', '.task-focus-header h3',
+        '.task-v2-view-toggles', '#taskSidePanel h3',
+        '.create-task-attachments-heading', '.create-task-upload-zone span',
+        '.employee-details-kicker', '.employee-details-grid > div > span',
+        '.edit-task-list-indicator', '.select-ui-value', '.date-ui-value',
+        '.estimate-ui-value', '.watchers-ui-value', '.category-ui-value',
+        '.file-dropzone p', '.files-section > span', '.floating-input-group label',
+        '.edit-task-tabs', '.text-muted', '.alert', '.task-list-name',
+        '.task-v2-sidebar-header h3', '.custom-multi-select-header'
+    ].join(',');
+    root.querySelectorAll(selectors).forEach(element => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        nodes.forEach(node => {
+            const translated = localizeRuntimeText(node.nodeValue);
+            if (translated !== node.nodeValue) node.nodeValue = translated;
+        });
+    });
+    root.querySelectorAll('[placeholder], [title], [aria-label]').forEach(element => {
+        ['placeholder', 'title', 'aria-label'].forEach(attribute => {
+            if (!element.hasAttribute(attribute)) return;
+            const value = element.getAttribute(attribute);
+            const translated = localizeRuntimeText(value);
+            if (translated !== value) element.setAttribute(attribute, translated);
+        });
+    });
 }
 
 // Generate Ring SVG
@@ -898,6 +1419,17 @@ function showToast(message, type = 'info', detail = '') {
         }
     }
 
+    displayMessage = localizeRuntimeText(displayMessage);
+    displayDetail = localizeRuntimeText(displayDetail);
+    if (currentLang === 'ar') {
+        if (/[A-Za-z]{2,}/.test(displayMessage) && !/[\u0600-\u06FF]/.test(displayMessage)) {
+            displayMessage = 'حدث خطأ غير متوقع';
+        }
+        if (/[A-Za-z]{2,}/.test(displayDetail) && !/[\u0600-\u06FF]/.test(displayDetail)) {
+            displayDetail = 'يرجى المحاولة مرة أخرى أو التواصل مع مسؤول النظام.';
+        }
+    }
+
     toast.style.borderInlineStartColor = color;
     toast.innerHTML = `
         <div style="display:flex; align-items:flex-start; gap:0.75rem;">
@@ -939,7 +1471,7 @@ window.showFieldError = function (fieldId, message) {
     err.className = '__field-error';
     err.dataset.for = fieldId;
     err.style.cssText = 'color:#ef4444; font-size:0.78rem; margin-top:0.3rem; display:flex; align-items:center; gap:0.3rem; animation: fadeIn 0.2s ease;';
-    err.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${message}`;
+    err.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${localizeRuntimeText(message)}`;
 
     el.parentNode.insertBefore(err, el.nextSibling);
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1575,6 +2107,7 @@ window.openHierarchyEmployeeInfo = function (userId) {
     </div>`;
     modal.addEventListener('click', event => { if (event.target === modal) closeHierarchyEmployeeInfo(); });
     document.body.appendChild(modal);
+    translateArabicInterface(modal);
     if (window.lucide) window.lucide.createIcons();
 };
 
@@ -1585,7 +2118,7 @@ window.closeHierarchyEmployeeInfo = function () {
 async function renderDashboard() {
     // Always use one approved Saudi-Arabic feed. UI language may translate its
     // headlines, but must never change the underlying topics, sources or URLs.
-    const newsQuery = '"Ø§Ù„Ø³Ø¹ÙˆØ¯ÙŠØ©" (Ø£Ø¹Ù…Ø§Ù„ OR "Ù†Ø¸Ø§Ù… Ø§Ù„Ø¹Ù…Ù„")';
+    const newsQuery = '"السعودية" (أعمال OR "نظام العمل")';
     const newsHl = 'ar';
     const newsGl = 'SA';
     const newsCeid = 'SA:ar';
@@ -2050,13 +2583,13 @@ window.handleClockIn = async () => {
     };
 
     if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((position) => {
+            navigator.geolocation.getCurrentPosition((position) => {
             const loc = position.coords.latitude + ',' + position.coords.longitude;
             fallbackClockIn(loc);
         }, (error) => {
             console.warn("Geolocation failed or denied, using fallback location.");
             fallbackClockIn("Location Unavailable");
-        });
+        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
     } else {
         fallbackClockIn("Location Unavailable");
     }
@@ -2079,39 +2612,48 @@ window.executeClockOut = async (type) => {
 
     let locationDetails = null;
     let orderPhotoPath = null;
-    let locationLabel = 'Office';
-    if (type === 'ORDER') {
-        const locationButton = document.getElementById('orderLocationClockOutButton');
-        if (!navigator.geolocation) {
-            showToast('Location sharing is not supported by this device.', 'danger');
+    let locationLabel = 'Location Unavailable';
+    const locationButton = document.getElementById('orderLocationClockOutButton');
+    if (locationButton) {
+        locationButton.disabled = true;
+        locationButton.dataset.originalText = locationButton.textContent;
+        locationButton.textContent = 'Waiting for location permission...';
+    }
+    try {
+        if (!navigator.geolocation) throw Object.assign(new Error('Location sharing is not supported by this device.'), { code: 'UNSUPPORTED' });
+        const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0
+        }));
+        locationDetails = {
+            latitude: Number(position.coords.latitude.toFixed(7)),
+            longitude: Number(position.coords.longitude.toFixed(7)),
+            accuracy: Number(position.coords.accuracy.toFixed(2)),
+            capturedAt: new Date(position.timestamp || Date.now()).toISOString()
+        };
+        locationLabel = `${locationDetails.latitude},${locationDetails.longitude}`;
+    } catch (error) {
+        if (type === 'ORDER') {
+            if (locationButton) {
+                locationButton.disabled = false;
+                locationButton.textContent = locationButton.dataset.originalText || t('attendance_location_order');
+            }
+            showToast(error?.code === 1 ? 'Location permission is required to clock out from an order location.' : error?.message || 'Unable to get your current location.', 'danger');
             return;
         }
-        if (locationButton) {
-            locationButton.disabled = true;
-            locationButton.dataset.originalText = locationButton.textContent;
-            locationButton.textContent = 'Waiting for location permission...';
-        }
+        console.warn('Clock-out location unavailable; saving the punch without coordinates.', error);
+    }
+    if (type === 'ORDER') {
         try {
-            const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: true,
-                timeout: 15000,
-                maximumAge: 0
-            }));
-            locationDetails = {
-                latitude: Number(position.coords.latitude.toFixed(7)),
-                longitude: Number(position.coords.longitude.toFixed(7)),
-                accuracy: Number(position.coords.accuracy.toFixed(2)),
-                capturedAt: new Date(position.timestamp || Date.now()).toISOString()
-            };
-            locationLabel = `${locationDetails.latitude},${locationDetails.longitude}`;
-            if (locationButton) locationButton.textContent = 'Location received â€” opening camera...';
+            if (locationButton) locationButton.textContent = 'Location received — opening camera...';
             const photoBlob = await requestOrderClockOutPhoto();
-            if (locationButton) locationButton.textContent = 'Uploading photoâ€¦';
+            if (locationButton) locationButton.textContent = 'Uploading photo…';
             const uploadResult = await db.uploadAttendanceClockOutPhoto(attendanceId, currentUser.id, photoBlob);
             if (!uploadResult.success || !uploadResult.path) throw uploadResult.error || new Error('The order location photo could not be uploaded.');
             orderPhotoPath = uploadResult.path;
             locationDetails.photoPath = orderPhotoPath;
-            if (locationButton) locationButton.textContent = 'Photo received â€” clocking outâ€¦';
+            if (locationButton) locationButton.textContent = 'Photo received — clocking out…';
         } catch (error) {
             if (locationButton) {
                 locationButton.disabled = false;
@@ -2188,6 +2730,13 @@ async function renderTime() {
     };
     const todayKey = dateKey(new Date());
     const initialVisibleCount = canViewAllAttendance ? punches.filter(punch => dateKey(punch.punch_time) === todayKey).length : punches.length;
+    const mapLink = location => {
+        const match = String(location || '').trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+        if (!match) return '<span class="text-muted">—</span>';
+        const query = `${match[1]},${match[2]}`;
+        const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+        return `<a class="attendance-location-link" href="${href}" target="_blank" rel="noopener noreferrer" title="${escapeHTML(localizeRuntimeText('Open map'))}"><i data-lucide="map-pin"></i><span>${escapeHTML(localizeRuntimeText('Open map'))}</span></a>`;
+    };
 
     let tableRows = punches.map(p => `
         <tr class="attendance-record-row" data-attendance-date="${dateKey(p.punch_time)}" data-employee-name="${escapeHTML(String(window.formatEmployeeName(employeeMap[p.employee_id]) || '').toLowerCase())}" data-employee-id="${escapeHTML(String(employeeMap[p.employee_id]?.iqama_number || p.employee_id || '').toLowerCase())}" ${canViewAllAttendance && dateKey(p.punch_time) !== todayKey ? 'hidden' : ''}>
@@ -2196,11 +2745,12 @@ async function renderTime() {
             ${canViewAllAttendance ? `<td><strong>${escapeHTML(window.formatEmployeeName(employeeMap[p.employee_id]) || 'Unknown employee')}</strong></td><td>${escapeHTML(employeeMap[p.employee_id]?.iqama_number || p.employee_id)}</td>` : ''}
             <td>${p.punch_type}</td>
             <td><span class="status-badge ${p.punch_type === 'IN' ? 'success' : 'info'}">${p.punch_type}</span></td>
+            <td>${mapLink(p.location)}</td>
         </tr>
     `).join('');
 
     if (punches.length === 0) {
-        tableRows = `<tr><td colspan="${canViewAllAttendance ? 6 : 4}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
+        tableRows = `<tr><td colspan="${canViewAllAttendance ? 7 : 5}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
     }
 
     const empName = window.formatEmployeeName(viewerProfile) || window.formatEmployeeName(currentUser?.user_metadata) || 'Employee';
@@ -2230,11 +2780,12 @@ async function renderTime() {
                             ${canViewAllAttendance ? '<th>Employee Name</th><th>ID Number</th>' : ''}
                             <th>${t('time_punch_type')}</th>
                             <th>${t('status')}</th>
+                            <th>Location</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${tableRows}
-                        ${punches.length ? `<tr id="attendanceNoFilterResults" ${initialVisibleCount ? 'hidden' : ''}><td colspan="${canViewAllAttendance ? 6 : 4}" style="text-align:center;padding:2rem;color:var(--color-text-secondary);">No attendance records match these filters.</td></tr>` : ''}
+                        ${punches.length ? `<tr id="attendanceNoFilterResults" ${initialVisibleCount ? 'hidden' : ''}><td colspan="${canViewAllAttendance ? 7 : 5}" style="text-align:center;padding:2rem;color:var(--color-text-secondary);">No attendance records match these filters.</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
@@ -2294,7 +2845,8 @@ window.openTaskDetailsModal = async function (id) {
 
     // Check permission to create tasks
     const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
-    const canCreateTask = !!currentUser && (!task.task_list_id || privateList?.owner_id === currentUser.id);
+    const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
+    const canCreateTask = !!currentUser && (!task.task_list_id || privateList?.owner_id === currentUser.id || privateList?.department_id === viewerDepartmentId);
     const btnCreateSubTask = document.getElementById('btnCreateSubTask');
     if (btnCreateSubTask) {
         btnCreateSubTask.style.display = canCreateTask ? 'inline-block' : 'none';
@@ -2396,6 +2948,7 @@ window.openTaskAssigneePicker = function (taskId) {
         const inputId = `taskAssigneeOption-${index}`;
         return `<label class="task-assignee-picker-option" for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${selectedIds.has(user.id) ? 'checked' : ''}><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
     }).join('') || '<p class="task-assignee-picker-empty">No employees available.</p>';
+    translateArabicInterface(modal);
     modal.classList.add('show');
 };
 window.handleTaskAssigneeClick = function (event, taskId) {
@@ -2713,7 +3266,7 @@ window.approveTaskCompletion = async function (taskId) {
         window.taskDepartmentManagerByName = Object.fromEntries(departments.map(department => [department.name, department.head_id || department.manager_id || null]));
     }
     if (!task || window.taskDepartmentManagerByName?.[task.department] !== currentUser?.id) {
-        showToast('Only this taskâ€™s department manager can approve completion.', 'danger');
+        showToast('Only this task’s department manager can approve completion.', 'danger');
         return;
     }
     const result = await db.updateTaskStatus(taskId, 'completed');
@@ -3681,7 +4234,7 @@ window.generatePerformanceReport = async function () {
         </div>
         <p style="font-size:0.75rem; color:var(--color-text-secondary); margin-top:1rem; padding-top:0.5rem; border-top:1px solid var(--color-border);">
             <i data-lucide="info" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
-            Score = Completion Rate âˆ’ (Overdue Tasks Ã— 5 penalty points). Clamped between 0 and 100.
+            ${taskDetailText('Score = Completion Rate − (Overdue Tasks × 5 penalty points). Clamped between 0 and 100.', 'النتيجة = معدل الإنجاز − (المهام المتأخرة × 5 نقاط جزائية). وتكون النتيجة بين 0 و100.')}
         </p>`;
 
     document.getElementById('perfReportDate').textContent = `Generated: ${new Date().toLocaleString()}`;
@@ -4758,7 +5311,7 @@ async function renderTasks() {
     window.taskAssigneeOptionsCache = users.map(u => {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
         const selected = (isRegularEmployee && u.id === currentUser.id) ? 'selected' : '';
-        return `<option value="${escapeHTML(u.id)}" ${selected}>${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
+        return `<option value="${escapeHTML(u.id)}" ${selected}>${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(u.role || 'EMPLOYEE'))})</option>`;
     }).join('');
 
     const ownTaskLists = (taskLists || []).filter(list => list.owner_id === currentUser.id);
@@ -4768,7 +5321,7 @@ async function renderTasks() {
     ));
     window.taskWatcherOptionsCache = allUsers.map(u => {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
-        return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(u.role)})</option>`;
+        return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(u.role || 'EMPLOYEE'))})</option>`;
     }).join('');
     
     return ''; 
@@ -4839,6 +5392,7 @@ async function renderTasksV2() {
     const selectedProject = window.taskV2SelectedProject || 'all';
     const taskViewMode = window.taskV2Mode || 'focus';
     
+    const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
     let canCreateTask = !!currentUser;
     if (selectedProject.startsWith('list_') && currentUserRole !== 'ADMIN') {
         const listId = selectedProject.substring(5);
@@ -4847,6 +5401,7 @@ async function renderTasksV2() {
             canCreateTask = false;
             if (list.owner_id === currentUser.id) canCreateTask = true;
             else if (list.can_add_users && list.can_add_users.includes(currentUser.id)) canCreateTask = true;
+            else if (list.department_id && viewerDepartmentId && list.department_id === viewerDepartmentId) canCreateTask = true;
         }
     }
     
@@ -4859,7 +5414,6 @@ async function renderTasksV2() {
 
     const ownTaskLists = taskLists.filter(list => list.owner_id === currentUser.id);
     const sharedTaskLists = taskLists.filter(list => list.shared_with && list.shared_with.includes(currentUser.id));
-    const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
     const departmentTaskLists = taskLists.filter(list => (list.visible_to_all || (list.department_id && list.department_id === viewerDepartmentId)) && list.owner_id !== currentUser.id && !(list.shared_with || []).includes(currentUser.id));
     
     let personalListItems = '';
@@ -5408,13 +5962,15 @@ window.filterTasksV2 = function () {
 
 window.selectTaskV2Project = function (projectId) {
     window.taskV2SelectedProject = projectId;
-    document.querySelectorAll('.task-v2-lists li').forEach(li => {
+    document.querySelectorAll('.task-v2-lists li, .task-lists-nav li').forEach(li => {
         if (li.getAttribute('onclick')?.includes(`'${projectId}'`)) {
             li.classList.add('active');
         } else {
             li.classList.remove('active');
         }
     });
+    const taskListInput = document.getElementById('taskListId');
+    if (taskListInput) taskListInput.value = String(projectId).startsWith('list_') ? String(projectId).slice(5) : '';
     window.filterTasksV2();
 };
 
@@ -5446,7 +6002,7 @@ window.submitInlineSubtask = async function (event) {
     if (!parent || !title) return;
     const submit = event.target.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;
-    const result = await db.createTask(title, '', parent.assignee_id || currentUser.id, due, currentUser.id, parent.priority || 'medium', parent.category || 'General', { en: title, ar: `${title} (Ù…ØªØ±Ø¬Ù…)` }, {}, null, null, null, parent.visibility || 'public', parent.project_id || null, [], parent.visible_to || [], null, null, null, 'todo', parent.supervisor_id || null, parent.department || null, parent.sub_type || null, [], parent.id, parent.marketing_department || null, [], [], null, parent.task_list_id || null);
+    const result = await db.createTask(title, '', parent.assignee_id || currentUser.id, due, currentUser.id, parent.priority || 'medium', parent.category || 'General', { en: title, ar: `${title} (مترجم)` }, {}, null, null, null, parent.visibility || 'public', parent.project_id || null, [], parent.visible_to || [], null, null, null, 'todo', parent.supervisor_id || null, parent.department || null, parent.sub_type || null, [], parent.id, parent.marketing_department || null, [], [], null, parent.task_list_id || null);
     if (!result.success) {
         showToast(t('toast_failed_to_create_task') + (result.error?.message || ''), 'danger');
         if (submit) submit.disabled = false;
@@ -5560,7 +6116,7 @@ window.handleAICreateTask = async function (e) {
         }
     }
     const supervisorId = window.taskDepartmentSupervisors?.[0]?.id || null;
-    const { success } = await db.createTask(input, '', assigneeId, dueStr, currentUser.id, priority, 'Auto-parsed', { 'en': input, 'ar': input + ' (Ù…ØªØ±Ø¬Ù…)' }, {}, null, null, null, 'public', null, [], [], null, null, null, 'todo', supervisorId);
+    const { success } = await db.createTask(input, '', assigneeId, dueStr, currentUser.id, priority, 'Auto-parsed', { 'en': input, 'ar': input + ' (مترجم)' }, {}, null, null, null, 'public', null, [], [], null, null, null, 'todo', supervisorId);
     if (success) {
         showToast(t('toast_ai_parsed_and_created_task'), "success");
         await db.triggerWebhooks('task_created', { title: input, assignee_id: assigneeId, due_date: dueStr, priority: priority, is_ai_parsed: true });
@@ -5573,6 +6129,29 @@ window.handleAICreateTask = async function (e) {
 window.handleTaskProjectChange = function (prefix = 'new') {
     // We could filter tags based on the selected project, but for now we'll just log it.
     requestAnimationFrame(() => document.getElementById('taskTitle')?.focus());
+};
+
+// Open the Task Manager's creation modal and carry the currently selected list
+// into the hidden form field. This keeps department task-list creation scoped
+// to the list the employee selected instead of silently creating an unlisted
+// task.
+window.toggleTaskV2Create = function () {
+    const modal = document.getElementById('createTaskModal');
+    if (!modal) return;
+    const selected = String(window.taskV2SelectedProject || 'all');
+    const listId = selected.startsWith('list_') ? selected.slice(5) : '';
+    const list = (window.taskListsCache || []).find(item => item.id === listId);
+    const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
+    const canUseList = !listId || list?.owner_id === currentUser?.id || list?.can_add_users?.includes(currentUser?.id) || (list?.department_id && list.department_id === viewerDepartmentId) || isTaskAdmin();
+    if (!canUseList) {
+        showToast('You do not have permission to add tasks to this list.', 'danger');
+        return;
+    }
+    const listInput = document.getElementById('taskListId');
+    if (listInput) listInput.value = canUseList ? listId : '';
+    modal.classList.add('active');
+    translateArabicInterface(modal);
+    if (window.lucide) window.lucide.createIcons();
 };
 
 window.handleTaskDepartmentChange = function (prefix = 'new', value = '', selectedAssigneeId = '') {
@@ -5608,7 +6187,7 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
 
     select.innerHTML = `<option value="">${(department || isTaskAdmin()) ? (t('task_sel_emp') || 'Select Employee') : 'Select a department first'}</option>` + employees.map(user => {
         const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
-        return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(user.role)})</option>`;
+        return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(user.role || 'EMPLOYEE'))})</option>`;
     }).join('');
     select.value = employees.some(user => user.id === selectedAssigneeId) ? selectedAssigneeId : '';
     handleTaskAssigneeChange(prefix);
@@ -5852,7 +6431,11 @@ window.handleCreateTask = async function (e) {
     const assignee = document.getElementById('taskAssignee').value;
     const due = document.getElementById('taskDue')?.value || null;
     const priority = 'medium'; // Default priority
-    const taskListId = document.getElementById('taskListId')?.value || null;
+    // Always fall back to the active sidebar selection. This covers modal
+    // entry points that do not pass through toggleTaskV2Create first.
+    const activeSelection = String(window.taskV2SelectedProject || 'all');
+    const taskListId = document.getElementById('taskListId')?.value
+        || (activeSelection.startsWith('list_') ? activeSelection.slice(5) : null);
     const projectId = taskListId ? null : (document.getElementById('taskProject')?.value || null);
     const supervisorId = window.taskDepartmentSupervisors?.[0]?.id || null;
     const selectedPrivateList = taskListId ? (window.taskListsCache || []).find(list => list.id === taskListId) : null;
@@ -6166,7 +6749,9 @@ window.openEditTaskModal = async function (id) {
         }
 
         prepareTeamworkEditModal(task);
-        document.getElementById('editTaskModal').classList.add('active');
+        const editTaskModal = document.getElementById('editTaskModal');
+        translateArabicInterface(editTaskModal);
+        editTaskModal.classList.add('active');
         if(window.lucide) window.lucide.createIcons();
     } catch (err) {
         console.error('Error in openEditTaskModal:', err);
@@ -6593,7 +7178,7 @@ async function renderContractPage() {
                     <div class="dashboard-grid">
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">Employee Name (Arabic)</label>
-                            <input type="text" id="contractEmployeeNameAr" class="form-control" value="${escapeHTML(displayNameAr)}" placeholder="Ø§Ù„Ø§Ø³Ù… Ø¨Ø§Ù„Ø¹Ø±Ø¨ÙŠ">
+                            <input type="text" id="contractEmployeeNameAr" class="form-control" value="${escapeHTML(displayNameAr)}" placeholder="الاسم بالعربية">
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('prof_iqama')}</label>
@@ -6889,6 +7474,7 @@ window.showEmployeeDetailsCard = async function (userId) {
             </div>
         </section>`;
     document.body.appendChild(overlay);
+    translateArabicInterface(overlay);
     if (window.lucide) window.lucide.createIcons();
 };
 
@@ -7719,7 +8305,7 @@ async function renderTranslationsPage() {
                     <input type="text" id="trans_en_${keyEscaped}" class="form-control" style="font-size:0.85rem;" value="${enVal}" onchange="queueTranslationAutosave()">
                 </td>
                 <td>
-                    <input type="text" id="trans_ar_${keyEscaped}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}" placeholder="Ø£Ø¯Ø®Ù„ Ø§Ù„ØªØ±Ø¬Ù…Ø© Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©..." onchange="queueTranslationAutosave()">
+                    <input type="text" id="trans_ar_${keyEscaped}" class="form-control" style="font-size:0.85rem; direction: rtl;" value="${arVal}" placeholder="أدخل الترجمة العربية..." onchange="queueTranslationAutosave()">
                 </td>
                 <td>
                     <div style="display: flex; gap: 0.4rem; justify-content: center; flex-wrap: nowrap; min-width: 60px;">
@@ -7924,7 +8510,7 @@ async function renderTranslationsPage() {
                     </div>
                     <div class="form-group">
                         <label class="form-label">${t('trans_ar') || 'Arabic Translation'}</label>
-                        <input type="text" id="newTransAr" class="form-control" required placeholder="Ø§Ù„Ù†Øµ Ø¨Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©" style="direction: rtl;">
+                        <input type="text" id="newTransAr" class="form-control" required placeholder="النص بالعربية" style="direction: rtl;">
                     </div>
                     <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                         <button type="submit" class="btn-primary" style="flex: 1;">${t('ui_save') || 'Save Key'}</button>
@@ -8061,7 +8647,9 @@ window.renderView = async function (viewId, isBack = false) {
         }
     } catch (err) {
         console.error("renderView error:", err);
-        content = `<div class="card" style="color:red; padding: 2rem;"><h3>${t('ui_error_loading_page')}</h3><p>${err.message}</p><pre>${err.stack}</pre></div>`;
+        content = currentLang === 'ar'
+            ? `<div class="card" style="color:red; padding: 2rem;"><h3>${t('ui_error_loading_page')}</h3><p>تعذر تحميل الصفحة. يرجى المحاولة مرة أخرى أو التواصل مع مسؤول النظام.</p></div>`
+            : `<div class="card" style="color:red; padding: 2rem;"><h3>${t('ui_error_loading_page')}</h3><p>${escapeHTML(err.message || '')}</p><pre>${escapeHTML(err.stack || '')}</pre></div>`;
     }
 
     console.log("renderView: finished switch for", viewId, "currentView:", currentView, "content length:", content.length);
@@ -8071,6 +8659,7 @@ window.renderView = async function (viewId, isBack = false) {
         window.viewHTMLCache[viewId] = content;
         // Always update the view with the fresh content!
         viewContainer.innerHTML = content;
+        translateArabicInterface(viewContainer);
         try {
             lucide.createIcons();
         } catch (e) {
@@ -8111,7 +8700,9 @@ function updateTopbarProfile(profile) {
     }
     if (roleSpan) {
         let rawRole = profile.job_title || profile.role;
-        roleSpan.textContent = t('role_' + rawRole.toLowerCase().replace(/\s+/g, '_')) || rawRole;
+        const roleKey = 'role_' + rawRole.toLowerCase().replace(/\s+/g, '_');
+        const translatedRole = t(roleKey);
+        roleSpan.textContent = translatedRole && translatedRole !== roleKey ? translatedRole : localizeRuntimeText(rawRole);
         roleSpan.removeAttribute('data-i18n'); // prevent i18n from overwriting the job title
     }
 }
@@ -8140,7 +8731,7 @@ async function renderNotifications() {
                             <i data-lucide="bell"></i>
                         </div>
                         <div>
-                            <div style="font-weight: 500; font-size: 1rem; color: var(--color-text);">${escapeHTML(n.message)}</div>
+                            <div style="font-weight: 500; font-size: 1rem; color: var(--color-text);">${escapeHTML(localizeNotificationMessage(n.message))}</div>
                             ${renderNotificationDetails(n)}
                             <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(n.created_at).toLocaleString()}</div>
                             ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.65rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')"><i data-lucide="check-circle"></i> Approve</button>` : ''}
@@ -8172,9 +8763,9 @@ function renderNotificationDetails(notification, compact = false) {
     const attachments = Array.isArray(notification?.metadata?.attachment_links) ? notification.metadata.attachment_links.filter(Boolean) : [];
     if (!comment && !attachments.length) return '';
     return `<div class="notification-details ${compact ? 'compact' : ''}" onclick="event.stopPropagation()">
-        ${comment ? `<div class="notification-comment"><strong>Comment:</strong><span>${escapeHTML(comment)}</span></div>` : ''}
-        ${attachments.length ? `<div class="notification-attachments"><strong>Files:</strong>${attachments.map((url, index) => {
-        let name = `Attachment ${index + 1}`;
+        ${comment ? `<div class="notification-comment"><strong>${taskDetailText('Comment:', 'تعليق:')}</strong><span>${escapeHTML(comment)}</span></div>` : ''}
+        ${attachments.length ? `<div class="notification-attachments"><strong>${taskDetailText('Files:', 'الملفات:')}</strong>${attachments.map((url, index) => {
+        let name = taskDetailText(`Attachment ${index + 1}`, `مرفق ${index + 1}`);
         try { name = decodeURIComponent(new URL(url).pathname.split('/').pop() || name).replace(/^\d+-/, ''); } catch (_) { }
         return `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" download><i data-lucide="download"></i>${escapeHTML(name)}</a>`;
     }).join('')}</div>` : ''}
@@ -8208,7 +8799,7 @@ async function pollNotifications() {
         } else {
             dropdown.innerHTML = notifs.map(n => `
                 <div class="notification-item ${!n.is_read ? 'unread' : ''}" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''} style="padding: 10px; border-bottom: 1px solid var(--color-border); ${n.task_id ? 'cursor: pointer;' : ''} ${!n.is_read ? 'background: rgba(var(--color-primary-rgb), 0.05); font-weight: 500;' : ''}">
-                    <div style="font-size: 0.875rem;">${escapeHTML(n.message)}</div>
+                    <div style="font-size: 0.875rem;">${escapeHTML(localizeNotificationMessage(n.message))}</div>
                     ${renderNotificationDetails(n, true)}
                     <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">${new Date(n.created_at).toLocaleDateString()}</div>
                     ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.5rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')">Approve</button>` : ''}
@@ -8379,7 +8970,7 @@ async function renderDepartments() {
                             <h2>${escapeHTML(department.name)}</h2>
                             ${department.catalogOnly ? '<span class="department-catalog-badge">Workbook catalog</span>' : ''}
                         </div>
-                        <p>${roles.length} job titles Â· ${employees.length} employees</p>
+                        <p>${currentLang === 'ar' ? `${roles.length} مسمى وظيفي · ${employees.length} موظف` : `${roles.length} job titles · ${employees.length} employees`}</p>
                     </div>
                     <div class="department-manager-actions">
                         <button class="btn btn-icon" aria-label="Edit department" title="Edit department" onclick="${editAction}"><i data-lucide="edit-3"></i></button>
@@ -8619,7 +9210,7 @@ window.refreshTaskListDepartmentControls = function(selectedViewers, selectedAdd
     const departmentUsers = (window.taskAllUsersCache || []).filter(user => user.id !== currentUser?.id && (departmentId === 'all' || user.department_id === departmentId));
     const options = departmentUsers.map(user => {
         const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
-        return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(user.role || 'EMPLOYEE')})</option>`;
+        return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(user.role || 'EMPLOYEE'))})</option>`;
     }).join('');
     window.populateCustomMultiSelect('taskListViewersOptions', 'taskListViewersText', viewers, options);
     window.populateCustomMultiSelect('taskListAddUsersOptions', 'taskListAddUsersText', addUsers, options);
@@ -8639,13 +9230,13 @@ window.updateCustomMultiSelectText = function(optionsContainerId, textContainerI
         allCheckbox.indeterminate = checked.length > 0 && checked.length < total;
     }
     if (checked.length === 0) {
-        textContainer.textContent = 'Select employees...';
+        textContainer.textContent = localizeRuntimeText('Select employees...');
     } else if (total > 0 && checked.length === total) {
-        textContainer.textContent = 'All employees';
+        textContainer.textContent = localizeRuntimeText('All employees');
     } else if (checked.length === 1) {
         textContainer.textContent = checked[0].nextElementSibling.textContent;
     } else {
-        textContainer.textContent = `${checked.length} selected`;
+        textContainer.textContent = currentLang === 'ar' ? `تم اختيار ${checked.length}` : `${checked.length} selected`;
     }
 };
 
@@ -8690,6 +9281,7 @@ window.openTaskListModal = function (listId = '') {
     // Reset to General tab
     if (window.switchTaskListTab) window.switchTaskListTab('general');
 
+    translateArabicInterface(modal);
     modal.classList.add('active');
     document.getElementById('taskListName').focus();
 };
@@ -9071,7 +9663,7 @@ function renderDealWorkflowContents(workflow) {
         const canDecide = step.status === 'PENDING' && step.id === nextPending?.id && (step.approver_id === currentUser?.id || currentUserRole === 'ADMIN');
         const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
         return `<article class="deal-approval-step ${step.status.toLowerCase()}">
-            <div class="deal-approval-index">${step.status === 'APPROVED' ? 'âœ“' : (step.status === 'REJECTED' ? 'Ã—' : step.step_order)}</div>
+            <div class="deal-approval-index">${step.status === 'APPROVED' ? '✓' : (step.status === 'REJECTED' ? '×' : step.step_order)}</div>
             <div class="deal-approval-copy"><strong>${escapeHTML(label)}</strong><span>${escapeHTML(dealEmployeeName(step.profiles))}</span>${step.decision_note ? `<small>${escapeHTML(step.decision_note)}</small>` : ''}</div>
             ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideDealApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideDealApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${step.status === 'APPROVED' ? 'success' : (step.status === 'REJECTED' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + step.status.toLowerCase()) || step.status)}</span>`}
         </article>`;
@@ -9082,7 +9674,7 @@ function renderDealWorkflowContents(workflow) {
     ).join('') : `<p class="empty-state-inline">${t('crm_no_files') || 'No files uploaded.'}</p>`;
 
     document.getElementById('dealActivityList').innerHTML = workflow.activity.length ? workflow.activity.map(item =>
-        `<div class="deal-activity-item"><span></span><div><strong>${escapeHTML(String(item.action || '').replace(/_/g, ' '))}</strong><small>${escapeHTML(dealEmployeeName(item.profiles))} Â· ${new Date(item.created_at).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-US')}</small>${item.note ? `<p>${escapeHTML(item.note)}</p>` : ''}</div></div>`
+        `<div class="deal-activity-item"><span></span><div><strong>${escapeHTML(String(item.action || '').replace(/_/g, ' '))}</strong><small>${escapeHTML(dealEmployeeName(item.profiles))} · ${new Date(item.created_at).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-US')}</small>${item.note ? `<p>${escapeHTML(item.note)}</p>` : ''}</div></div>`
     ).join('') : `<p class="empty-state-inline">${t('crm_no_activity') || 'No activity recorded yet.'}</p>`;
 }
 
@@ -9695,8 +10287,8 @@ window.showConfirmModal = (title, message, onConfirm) => {
     const modal = document.getElementById('confirmModal');
     if (!modal) return;
 
-    document.getElementById('confirmModalTitle').innerText = title;
-    document.getElementById('confirmModalMessage').innerText = message;
+    document.getElementById('confirmModalTitle').innerText = localizeRuntimeText(title);
+    document.getElementById('confirmModalMessage').innerText = localizeRuntimeText(message);
 
     const confirmBtn = document.getElementById('confirmModalBtn');
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -9704,10 +10296,10 @@ window.showConfirmModal = (title, message, onConfirm) => {
 
     newConfirmBtn.onclick = async () => {
         newConfirmBtn.disabled = true;
-        newConfirmBtn.innerHTML = 'Confirming...';
+        newConfirmBtn.innerHTML = localizeRuntimeText('Confirming...');
         await onConfirm();
         newConfirmBtn.disabled = false;
-        newConfirmBtn.innerHTML = 'Confirm';
+        newConfirmBtn.innerHTML = localizeRuntimeText('Confirm');
         closeConfirmModal();
     };
 
@@ -9729,8 +10321,8 @@ window.showAppMessageModal = (message, title = t('ui_notice') || 'Notice') => {
         modal.innerHTML = `<div class="modal-content" style="max-width:440px;text-align:center"><div class="modal-header"><h2 id="appMessageModalTitle"></h2><button type="button" class="close-modal" onclick="document.getElementById('appMessageModal').classList.remove('show')">&times;</button></div><p id="appMessageModalText" style="white-space:pre-line;color:var(--color-text-secondary);margin:1rem 0 1.5rem"></p><button type="button" class="btn btn-primary" onclick="document.getElementById('appMessageModal').classList.remove('show')">${t('btn_ok') || 'OK'}</button></div>`;
         document.body.appendChild(modal);
     }
-    document.getElementById('appMessageModalTitle').textContent = title;
-    document.getElementById('appMessageModalText').textContent = String(message || '');
+    document.getElementById('appMessageModalTitle').textContent = localizeRuntimeText(title);
+    document.getElementById('appMessageModalText').textContent = localizeRuntimeText(String(message || ''));
     modal.classList.add('show');
     if (window.lucide) window.lucide.createIcons();
 };
@@ -9749,8 +10341,8 @@ window.showPromptModal = (message, title = t('ui_input_required') || 'Input requ
         document.body.appendChild(modal);
     }
     const input = document.getElementById('appPromptModalInput');
-    document.getElementById('appPromptModalTitle').textContent = title;
-    document.getElementById('appPromptModalMessage').textContent = message;
+    document.getElementById('appPromptModalTitle').textContent = localizeRuntimeText(title);
+    document.getElementById('appPromptModalMessage').textContent = localizeRuntimeText(message);
     input.value = options.value || '';
     input.required = !!options.required;
     const finish = value => { modal.classList.remove('show'); resolve(value); };
