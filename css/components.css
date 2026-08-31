@@ -862,6 +862,24 @@ textarea.form-control {
   #createTaskModal .create-task-footer { gap: .5rem; }
   #createTaskModal .create-task-footer .btn { min-height: 40px; padding-inline: .7rem; font-size: .8rem; }
 }
+
+/* Keep header controls compact and visible when the desktop window is
+   narrowed, without letting the logo or actions collapse out of view. */
+@media (max-width: 900px) {
+  .topbar-actions { gap: .3rem !important; }
+  .topbar-actions .header-search-trigger,
+  .topbar-actions .header-language-switcher,
+  .topbar-actions .icon-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+  }
+  .topbar-actions .header-search-trigger svg,
+  .topbar-actions .header-language-switcher svg,
+  .topbar-actions .icon-btn svg { width: 16px; height: 16px; }
+  #globalBackButton { width: 26px; height: 22px; min-width: 26px; }
+}
 @media (max-width: 380px) {
   #createTaskModal .create-task-footer { flex-wrap: wrap; }
   #createTaskModal .create-task-footer > * { flex: 1 1 100%; }
@@ -6759,4 +6777,196 @@ input.btn-primary,
 
 #taskListModal .custom-multi-select-option.custom-multi-select-all:hover {
   background: color-mix(in srgb, var(--color-primary) 18%, transparent) !important;
+}
+
+/* Final narrow-header sizing override (comes after legacy tablet rules). */
+@media (max-width: 900px) {
+  .topbar-actions .header-search-trigger,
+  .topbar-actions .header-language-switcher,
+  .topbar-actions .icon-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+  }
+  .topbar-actions .header-search-trigger svg,
+  .topbar-actions .header-language-switcher svg,
+  .topbar-actions .icon-btn svg { width: 16px !important; height: 16px !important; }
+}
+
+/* Compact modal layout for small phones: preserve usable controls while
+   reducing chrome and vertical gaps so more of each dialog fits at once. */
+@media (max-width: 600px) {
+  .modal { padding: .3rem !important; }
+  .modal-content,
+  .modal-content[style] {
+    width: min(100%, 560px) !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - .6rem) !important;
+    padding: .75rem !important;
+    border-radius: .7rem !important;
+  }
+  .modal-header {
+    margin: -.75rem -.75rem .65rem !important;
+    padding: .65rem .75rem !important;
+    gap: .5rem;
+  }
+  .modal-header h1,
+  .modal-header h2,
+  .modal-header h3 { font-size: 1.05rem !important; line-height: 1.2; }
+  .modal-content .form-group { margin-bottom: .55rem; }
+  .modal-content .form-label { margin-bottom: .25rem; font-size: .78rem; }
+  .modal-content .form-control,
+  .modal-content select,
+  .modal-content textarea { min-height: 38px; padding: .45rem .6rem; }
+  .modal-content textarea { min-height: 72px; }
+  .modal-content .modal-footer,
+  .modal-content .modal-actions { padding: .6rem .75rem !important; gap: .5rem; }
+}
+
+/* Consistent form controls: keep a clear dropdown affordance even when the
+   browser's native select chrome is suppressed by the app theme. */
+select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-inline-end: 2.25rem !important;
+}
+
+html[dir="rtl"] select:not([multiple]) {
+  background-position: 12px 50%, 17px 50%;
+  padding-inline-start: 2.25rem !important;
+  padding-inline-end: .7rem !important;
+}
+
+/* The watcher picker is a button-backed dropdown rather than a native select. */
+.task-watcher-toggle {
+  position: relative;
+  padding-inline-end: 2.25rem !important;
+}
+.task-watcher-toggle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  inset-inline-end: .9rem;
+  width: .45rem;
+  height: .45rem;
+  border-inline-end: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
+}
+
+/* Keep field titles above their controls and visually centered throughout the
+   application. Checkbox/radio labels remain inline so their controls stay
+   usable and aligned with the text. */
+.form-group > label.form-label,
+.form-group > label:not(:has(input[type="checkbox"])):not(:has(input[type="radio"])) ,
+.floating-input-group > label,
+.field-group > label,
+.form-field > label {
+  display: block;
+  width: 100%;
+  text-align: center;
+  align-self: center;
+  margin-inline: auto;
+  margin-bottom: .35rem;
+}
+
+.form-group > label:has(input[type="checkbox"]),
+.form-group > label:has(input[type="radio"]) {
+  width: auto;
+  display: flex;
+  text-align: start;
+  margin-inline: 0;
+}
+
+/* Loaded after the legacy component rules: reserve a dedicated center column
+   for navigation so it never overlaps profile actions at desktop zoom levels. */
+@media (min-width: 901px) {
+  .topbar {
+    display: grid !important;
+    grid-template-columns: minmax(150px, 1fr) minmax(0, auto) minmax(220px, 1fr) !important;
+    column-gap: clamp(.5rem, 1.5vw, 1.5rem);
+  }
+  .header-logo { justify-self: start; }
+  .header-navigation {
+    position: static !important;
+    transform: none !important;
+    justify-self: center;
+    width: auto;
+    max-width: 100%;
+    margin-inline: 0;
+  }
+  .topbar-actions {
+    justify-self: end;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+}
+
+@media (min-width: 601px) and (max-height: 240px) {
+  .topbar { min-height: 44px; height: auto; padding-block: .2rem; }
+  .header-navigation .header-nav-item { min-height: 30px; padding-block: .25rem; font-size: .68rem; }
+  .header-navigation .header-nav-item svg { width: 14px; height: 14px; }
+  .header-logo .app-logo { max-height: 28px; }
+  .topbar-actions { gap: .25rem; }
+  .topbar-actions .icon-btn,
+  .topbar-actions .header-search-trigger,
+  .topbar-actions .header-language-switcher { width: 30px; height: 30px; }
+  .topbar-actions svg { width: 15px; height: 15px; }
+}
+
+/* Arabic UI direction: keep reading order and field content aligned to the
+   right, while the select indicator remains on the opposite (left) edge. */
+html[dir="rtl"] body,
+html[dir="rtl"] .view-container,
+html[dir="rtl"] .modal-content,
+html[dir="rtl"] .card,
+html[dir="rtl"] .page-header {
+  direction: rtl;
+}
+
+html[dir="rtl"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[dir="rtl"] textarea,
+html[dir="rtl"] select,
+html[dir="rtl"] .form-control {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="rtl"] .form-group > label.form-label,
+html[dir="rtl"] .form-group > label:not(:has(input[type="checkbox"])):not(:has(input[type="radio"])) ,
+html[dir="rtl"] .floating-input-group > label,
+html[dir="rtl"] .field-group > label,
+html[dir="rtl"] .form-field > label {
+  text-align: right;
+}
+
+html[dir="rtl"] input::placeholder,
+html[dir="rtl"] textarea::placeholder {
+  text-align: right;
+}
+
+html[dir="rtl"] .page-title,
+html[dir="rtl"] .page-subtitle,
+html[dir="rtl"] .section-title,
+html[dir="rtl"] .card-title,
+html[dir="rtl"] .modal-header,
+html[dir="rtl"] .modal-header h1,
+html[dir="rtl"] .modal-header h2,
+html[dir="rtl"] .modal-header h3 {
+  text-align: right;
+}
+
+html[dir="rtl"] select:not([multiple]) {
+  background-position: 12px 50%, 17px 50%;
+  padding-inline-start: 2.25rem !important;
+  padding-inline-end: .7rem !important;
 }

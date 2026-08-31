@@ -39,8 +39,8 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
-    <link rel="stylesheet" href="css/layout.css?v=16">
-    <link rel="stylesheet" href="css/components.css?v=93">
+    <link rel="stylesheet" href="css/layout.css?v=20">
+    <link rel="stylesheet" href="css/components.css?v=99">
     <link rel="stylesheet" href="css/android.css?v=3">
     <style>
         @media (hover: none) and (pointer: coarse) {
@@ -104,12 +104,12 @@
         <main class="main-content">
             <!-- Top Bar -->
             <header class="topbar" style="position: relative; z-index: 100;">
-                <div class="header-logo" style="display: flex; align-items: center; gap: 0.5rem;">
-                    <button id="globalBackButton" class="btn btn-icon" onclick="window.goBack()" style="display: none; background: transparent; border: none; cursor: pointer; color: var(--color-text); padding: 0.5rem; border-radius: 50%;">
-                        <i data-lucide="arrow-left" style="width: 20px; height: 20px;"></i>
-                    </button>
+                <div class="header-logo">
                     <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo app-logo-light">
                     <img src="/images/logo-dark.png" alt="MUQAM HR Logo" class="app-logo app-logo-dark">
+                    <button id="globalBackButton" class="btn btn-icon" onclick="window.goBack()" aria-label="Go back">
+                        <i data-lucide="arrow-left"></i>
+                    </button>
                 </div>
 
                 <nav class="header-navigation" aria-label="Primary navigation">
@@ -1639,7 +1639,7 @@
     <script src="js/data.js?v=30"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=189"></script>
+    <script src="js/app.js?v=192"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

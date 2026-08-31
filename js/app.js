@@ -121,18 +121,6 @@ async function syncLegacyLocalProfilePhoto(profile) {
     return profile;
 }
 
-// Inactivity Tracker (5 Minutes)
-let inactivityTimeout;
-function resetInactivityTimeout() {
-    clearTimeout(inactivityTimeout);
-    if (currentUser && currentView !== 'login') {
-        inactivityTimeout = setTimeout(() => {
-            showToast(t('timeout_message') || "Logged out due to inactivity", "warning");
-            window.handleLogout();
-        }, 5 * 60 * 1000); // 5 minutes
-    }
-}
-
 // ==========================================
 // PWA Installation
 // ==========================================
@@ -664,10 +652,6 @@ window.addEventListener('load', () => {
     }
     setTimeout(showInstallBanner, 1000); // Check 1s after load
 });
-['mousemove', 'keydown', 'mousedown', 'touchstart'].forEach(event => {
-    document.addEventListener(event, resetInactivityTimeout);
-});
-
 // DOM Elements
 const htmlElement = document.documentElement;
 const viewContainer = document.getElementById('viewContainer');
@@ -903,6 +887,7 @@ const arabicRuntimeUiText = Object.freeze({
     'Delete task': 'حذف المهمة',
     'You do not have permission to add tasks to this list.': 'ليس لديك صلاحية لإضافة مهام إلى هذه القائمة.',
     'Created Date': 'تاريخ الإنشاء',
+    'Created by': 'أنشأها',
     'Enter task title': 'أدخل عنوان المهمة',
     'Select': 'اختيار',
     'Administrative': 'الإدارة',
@@ -1762,9 +1747,6 @@ window.handleLoginSubmit = async function (e) {
             }
         }
     }
-
-    // Start inactivity tracker
-    resetInactivityTimeout();
 
     // Show sidebar and topbar again
     document.querySelector('.sidebar').style.display = '';
@@ -5310,7 +5292,7 @@ async function renderTasks() {
     }
     window.taskAssigneeOptionsCache = users.map(u => {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
-        const selected = (isRegularEmployee && u.id === currentUser.id) ? 'selected' : '';
+        const selected = u.id === currentUser.id ? 'selected' : '';
         return `<option value="${escapeHTML(u.id)}" ${selected}>${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(u.role || 'EMPLOYEE'))})</option>`;
     }).join('');
 
@@ -5557,15 +5539,18 @@ async function renderTasksV2() {
     `;
 
     const isRegularEmployee = currentUserRole === 'EMPLOYEE';
-    const departmentOptions = window.taskDepartmentsCache.map(d => `<option value="${escapeHTML(d.name)}">${escapeHTML(d.name)}</option>`).join('');
+    const creatorDepartmentId = currentUserProfile?.department_id || currentUser?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
+    const creatorDepartment = window.taskDepartmentsCache.find(d => d.id === creatorDepartmentId);
+    const creatorDepartmentName = creatorDepartment?.name || '';
+    const departmentOptions = window.taskDepartmentsCache.map(d => `<option value="${escapeHTML(d.name)}" ${d.id === creatorDepartmentId ? 'selected' : ''}>${escapeHTML(d.name)}</option>`).join('');
     const projectOptions = window.projectOptionsCache || '';
     const taskListOptions = ownTaskLists.map(list => `<option value="${escapeHTML(list.id)}">${escapeHTML(list.name)}</option>`).join('');
 
     let departmentSelectHTML = '';
-    let isMarketing = false;
+    let isMarketing = !!(creatorDepartment && isMarketingTaskDepartment(creatorDepartment.name));
 
     if (isRegularEmployee) {
-        const currentDeptObj = window.taskDepartmentsCache.find(d => d.id === currentUser.department_id);
+        const currentDeptObj = creatorDepartment;
         const deptName = currentDeptObj ? escapeHTML(currentDeptObj.name) : '';
         isMarketing = !!(currentDeptObj && isMarketingTaskDepartment(currentDeptObj.name));
 
@@ -5609,6 +5594,10 @@ async function renderTasksV2() {
                         <!-- Row 1: Created Date + Title -->
                         <div class="create-task-top-row">
                             <div class="form-group">
+                                <label class="form-label">Created by</label>
+                                <input type="text" class="form-control" value="${escapeHTML(getProfileDisplayName(currentUserProfile || currentUser) || 'Employee')}" readonly aria-readonly="true">
+                            </div>
+                            <div class="form-group">
                                 <label class="form-label">Created Date</label>
                                 <input type="date" id="taskCreatedDate" class="form-control" value="${todayDate}" readonly style="opacity:0.7; cursor:default;">
                             </div>
@@ -5624,7 +5613,7 @@ async function renderTasksV2() {
                                 <div class="form-group">
                                     <label class="form-label">${t('ui_department') || 'Department'}</label>
                                     <select id="taskDepartment" class="form-control" disabled>
-                                        <option value="${escapeHTML(window.taskDepartmentsCache.find(d => d.id === currentUser.department_id)?.name || '')}" selected>${escapeHTML(window.taskDepartmentsCache.find(d => d.id === currentUser.department_id)?.name || 'No Department')}</option>
+                                        <option value="${escapeHTML(creatorDepartmentName)}" selected>${escapeHTML(creatorDepartmentName || 'No Department')}</option>
                                     </select>
                                 </div>
                             ` : `
