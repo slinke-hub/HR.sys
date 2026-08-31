@@ -316,6 +316,7 @@ window.renderContractPrintPreview = async function() {
     const contractId = window.currentContractIdToPrint;
     const employeeId = window.currentEmployeeIdToPrint;
     
+    if (currentUserRole === 'EMPLOYEE' && employeeId !== currentUser?.id) return '<div style="padding: 20px;">Unauthorized</div>';
     if (!contractId || !employeeId) {
         return `<div style="padding: 20px;">Error: No contract selected for printing. <button onclick="renderView('employees')">Back</button></div>`;
     }

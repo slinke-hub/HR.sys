@@ -1740,7 +1740,7 @@ window.updateSidebarVisibility = async function () {
 
     const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
     const isHrManager = normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
-    const employeeAllowedViews = new Set(['dashboard', 'requests', 'time', 'tasks', 'documents']);
+    const employeeAllowedViews = new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'employees']);
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
         if (normalizedRole === 'EMPLOYEE') {
             item.style.display = employeeAllowedViews.has(item.dataset.view) ? 'flex' : 'none';
@@ -1749,11 +1749,13 @@ window.updateSidebarVisibility = async function () {
     if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
     if (usersNav) usersNav.style.display = isAdmin ? 'flex' : 'none';
     if (analyticsNav) analyticsNav.style.display = 'none';
-    if (employeesNav) employeesNav.style.display = normalizedRole !== 'EMPLOYEE' ? 'flex' : 'none';
+    if (employeesNav) employeesNav.style.display = 'flex';
     if (departmentsNav) departmentsNav.style.display = isAdmin ? 'flex' : 'none';
     if (translationsNav) translationsNav.style.display = isAdmin ? 'flex' : 'none';
     if (templatesNav) templatesNav.style.display = isAdmin ? 'flex' : 'none';
     if (leaveCalculatorNav) leaveCalculatorNav.style.display = (isAdmin || isHrManager) ? 'flex' : 'none';
+    const custodyHandoverNav = document.getElementById('navCustodyHandover');
+    if (custodyHandoverNav) custodyHandoverNav.style.display = normalizedRole !== 'EMPLOYEE' ? 'flex' : 'none';
 
     const isAccountantManager = currentUserProfile && /accountant manager|finance manager/i.test(currentUserProfile.job_title || '');
     if (payrollNav) payrollNav.style.display = (isAdmin || isAccountantManager) ? 'flex' : 'none';
@@ -7545,13 +7547,9 @@ async function renderEmployeesDirectory() {
     } else if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR') {
         visibleUsers = users.filter(u => u.manager_id === currentUser.id || u.id === currentUser.id);
     } else {
-        // Employees see themselves, their team members, and their manager
-        visibleUsers = users.filter(u =>
-            u.id === currentUser.id ||
-            (currentUser.manager_id && u.manager_id === currentUser.manager_id) ||
-            u.id === currentUser.manager_id
-        );
-    }
+          // Employees see ONLY themselves
+          visibleUsers = users.filter(u => u.id === currentUser.id);
+      }
     window.currentAdminUsers = visibleUsers;
 
     return `
@@ -8286,6 +8284,7 @@ window.handleBulkUpload = async function (event) {
 // CUSTODY HANDOVER
 // ==========================================
 async function renderCustodyHandover() {
+    if (currentUserRole === 'EMPLOYEE') return '<div class="page-header"><h1 class="page-title">Unauthorized</h1></div>';
     // Pre-fill employee name and department if available
     const profile = currentUserProfile || await db.getUserProfile(currentUser?.id);
     const fullName = profile?.full_name || '';
@@ -11080,7 +11079,7 @@ async function initApp() {
         if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
         if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
         if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
-        if (employeesNav) employeesNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR') || window.canCurrentUserEditContracts(profile)) ? 'flex' : 'none';
+        if (employeesNav) employeesNav.style.display = 'flex';
 
         const canUseApprovals = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile?.job_title || '');
         if (approvalsNav) approvalsNav.style.display = canUseApprovals ? 'flex' : 'none';
