@@ -40,7 +40,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/layout.css?v=22">
-    <link rel="stylesheet" href="css/components.css?v=116">
+    <link rel="stylesheet" href="css/components.css?v=119">
     <link rel="stylesheet" href="css/android.css?v=3">
     <style>
         @media (hover: none) and (pointer: coarse) {
@@ -95,6 +95,7 @@
                 <a href="#" class="nav-item" data-view="archived" style="display:none !important"><i data-lucide="archive"></i><span>Archived Requests</span></a>
                 <a href="#" class="nav-item" data-view="expenses" style="display:none !important"><i data-lucide="receipt"></i><span>Expenses</span></a>
                 <a href="#" class="nav-item" data-view="leave" style="display:none !important"><i data-lucide="calendar-off"></i><span data-i18n="nav_leave">Leave</span></a>
+                <a href="#" class="nav-item" id="navLeaveCalculator" data-view="leave_calculator" style="display:none"><i data-lucide="calculator"></i><span data-i18n="nav_leave_calculator">Leave Calculator</span></a>
                 <a href="#" class="nav-item" data-view="payroll" id="navPayroll"><i data-lucide="banknote"></i><span data-i18n="nav_payroll">Payroll</span></a>
                 <a href="#" class="nav-item" data-view="performance" style="display:none !important"><i data-lucide="target"></i><span data-i18n="nav_performance">Performance</span></a>
             </nav>
@@ -538,6 +539,10 @@
                     <input type="text" autocomplete="off" id="editPhone" class="form-control">
                 </div>
                 <div class="form-group">
+                    <label class="form-label" for="editEmail">Email</label>
+                    <input type="email" autocomplete="off" id="editEmail" class="form-control" required>
+                </div>
+                <div class="form-group">
                     <label class="form-label" data-i18n="users_department">Department</label>
                     <select id="editDepartment" class="form-control" required onchange="syncJobTitlesWithDepartment('editDepartment','editJobTitle')"></select>
                 </div>
@@ -869,7 +874,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Email</label>
-                    <input type="email" autocomplete="off" id="newEmail" class="form-control" placeholder="Enter email address (Optional)">
+                    <input type="email" autocomplete="off" id="newEmail" class="form-control" placeholder="Enter email address" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Phone</label>
@@ -1630,11 +1635,11 @@
     <script src="js/vendor/supabase.js"></script>
     <script src="js/vendor/chart.umd.min.js"></script>
     <script src="js/vendor/xlsx.full.min.js"></script>
-    <script src="js/db.js?v=59"></script>
+    <script src="js/db.js?v=60"></script>
     <script src="js/data.js?v=32"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=207"></script>
+    <script src="js/app.js?v=217"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

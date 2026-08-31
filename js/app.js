@@ -48,7 +48,8 @@ const getCanonicalDepartmentName = department => {
 };
 const getTaskDepartmentLabel = department => {
     const canonicalName = getCanonicalDepartmentName(department);
-    if (currentLang === 'ar' && isMarketingTaskDepartment(canonicalName || department?.name)) return 'التسويق';
+    const rawLabel = String(department?.name || department?.name_ar || '');
+    if (currentLang === 'ar' && (isMarketingTaskDepartment(canonicalName || department?.name) || /مدير\s*تسويق|مشرف\s*مبيعات|مندوب\s*مبيعات|مصمم\s*جرافيك/.test(rawLabel))) return 'التسويق';
     return department?.name || canonicalName;
 };
 
@@ -163,7 +164,10 @@ function showInstallBanner() {
 
 // User Management Actions
 window.showEditUserModal = async (userId) => {
-    const user = await db.getUserProfile(userId);
+    const [user, loginEmailResult] = await Promise.all([
+        db.getUserProfile(userId),
+        db.getUserLoginEmail(userId)
+    ]);
     if (!user) {
         showToast(t('toast_user_not_found'), "danger");
         return;
@@ -173,6 +177,7 @@ window.showEditUserModal = async (userId) => {
     document.getElementById('editFullNameAr').value = user.display_name_ar || '';
     document.getElementById('editIqama').value = user.iqama_number || '';
     document.getElementById('editPhone').value = user.phone_number || '';
+    document.getElementById('editEmail').value = loginEmailResult?.success ? loginEmailResult.data : '';
     const [departments] = await Promise.all([db.fetchDepartments(), db.fetchJobTitles(true)]);
     const departmentSelect = document.getElementById('editDepartment');
     departmentSelect.innerHTML = '<option value="">Select Department</option>' + departments.map(department => `<option value="${department.id}" ${department.id === user.department_id ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('');
@@ -230,6 +235,7 @@ window.refreshUserRowInPlace = async function (userId, knownUpdates = null) {
 window.handleUpdateUser = async (e) => {
     e.preventDefault();
     const userId = document.getElementById('editUserId').value;
+    const email = document.getElementById('editEmail').value.trim().toLowerCase();
     const updates = {
         full_name: document.getElementById('editFullName').value,
         display_name_ar: document.getElementById('editFullNameAr').value,
@@ -254,6 +260,11 @@ window.handleUpdateUser = async (e) => {
             showToast(error.message || 'Unable to process the selected profile photo.', 'danger');
             return;
         }
+    }
+    const loginUpdate = await db.updateUserLoginCredentials(userId, email);
+    if (!loginUpdate.success) {
+        showToast(loginUpdate.error?.message || 'Failed to update the login email.', 'danger');
+        return;
     }
     const res = await db.updateUserProfile(userId, updates);
     if (res.success) {
@@ -901,6 +912,12 @@ const arabicRuntimeUiText = Object.freeze({
     'overdue': 'متأخرة',
     'total': 'الإجمالي',
     'New Task': 'مهمة جديدة',
+    'Task details': 'تفاصيل المهمة',
+    'Start with a clear title and ownership.': 'ابدأ بعنوان واضح وحدد مسؤولية المهمة.',
+    'Team and workflow': 'الفريق وسير العمل',
+    'Choose where the task belongs and who should follow it.': 'حدد القسم والفريق والمتابعين للمهمة.',
+    'Plan the work, choose the team, and share everything needed to begin.': 'خطط للعمل وحدد الفريق وشارك كل ما يلزم للبدء.',
+    'Add the outcome, context, and useful instructions.': 'أضف النتيجة المطلوبة والسياق والتعليمات المفيدة.',
     'Needs attention': 'تحتاج إلى اهتمام',
     'NEEDS ATTENTION': 'تحتاج إلى اهتمام',
     'Focus view': 'عرض التركيز',
@@ -910,6 +927,9 @@ const arabicRuntimeUiText = Object.freeze({
     'Reject': 'رفض',
     'Watcher access · View only': 'صلاحية المتابع · عرض فقط',
     'Completed': 'مكتملة',
+    'Rejected': 'مرفوض',
+    'Submitted': 'مُرسل',
+    'Request pipeline': 'مسار الطلب',
     'Sub-Tasks': 'المهام الفرعية',
     'Edit List': 'تعديل القائمة',
     'Delete List': 'حذف القائمة',
@@ -935,6 +955,11 @@ const arabicRuntimeUiText = Object.freeze({
     'Download Source': 'مصدر التنزيل',
     'Add another URL': 'إضافة رابط آخر',
     'Upload Source': 'مصدر الرفع',
+    'Account': 'الحساب',
+    'Select Account': 'اختر الحساب',
+    'Party': 'بارتي',
+    'Main': 'الرئيسي',
+    'Coffee Corner': 'كوفي كورنر',
     'Design Type': 'نوع التصميم',
     'Select Design Type': 'اختر نوع التصميم',
     'Post': 'منشور',
@@ -1682,6 +1707,7 @@ async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
     if (isAdmin) return true;
+    if (viewId === 'leave_calculator') return normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
     if (normalizedRole === 'EMPLOYEE') {
         return new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'profile']).has(viewId);
     }
@@ -1710,8 +1736,10 @@ window.updateSidebarVisibility = async function () {
     const projectsNav = document.querySelector('.nav-item[data-view="projects"]');
     const crmNav = document.querySelector('.nav-item[data-view="crm"]');
     const clientsNav = document.querySelector('.nav-item[data-view="clients"]');
+    const leaveCalculatorNav = document.getElementById('navLeaveCalculator');
 
     const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    const isHrManager = normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
     const employeeAllowedViews = new Set(['dashboard', 'requests', 'time', 'tasks', 'documents']);
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
         if (normalizedRole === 'EMPLOYEE') {
@@ -1725,6 +1753,7 @@ window.updateSidebarVisibility = async function () {
     if (departmentsNav) departmentsNav.style.display = isAdmin ? 'flex' : 'none';
     if (translationsNav) translationsNav.style.display = isAdmin ? 'flex' : 'none';
     if (templatesNav) templatesNav.style.display = isAdmin ? 'flex' : 'none';
+    if (leaveCalculatorNav) leaveCalculatorNav.style.display = (isAdmin || isHrManager) ? 'flex' : 'none';
 
     const isAccountantManager = currentUserProfile && /accountant manager|finance manager/i.test(currentUserProfile.job_title || '');
     if (payrollNav) payrollNav.style.display = (isAdmin || isAccountantManager) ? 'flex' : 'none';
@@ -3401,6 +3430,33 @@ window.handleCreateSubTaskClick = function () {
     }
 };
 
+async function renderLeaveCalculator() {
+    const role = String(currentUserRole || '').toUpperCase();
+    const allowed = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN', 'HR_MANAGER'].includes(role) || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
+    if (!allowed) return `<div class="card"><h2>${escapeHTML(t('ui_access_denied') || 'Access denied')}</h2></div>`;
+    const [profiles, requests, departments] = await Promise.all([db.fetchAllProfiles(true), db.fetchLeaveRequests(null), db.fetchDepartments()]);
+    const departmentMap = Object.fromEntries((departments || []).map(d => [d.id, d.name || d.name_en || '—']));
+    const year = new Date().getFullYear();
+    const days = (start, end) => start && end ? Math.max(0, Math.ceil((new Date(end) - new Date(start)) / 86400000) + 1) : 0;
+    const rows = (profiles || []).map(profile => {
+        const mine = (requests || []).filter(r => r.employee_id === profile.id && new Date(r.start_date || r.created_at).getFullYear() === year);
+        const sum = (type, status) => mine.filter(r => String(r.leave_type || '').toLowerCase() === type && (!status || String(r.status || '').toUpperCase().startsWith(status))).reduce((n, r) => n + days(r.start_date, r.end_date), 0);
+        const allowance = Number(profile.annual_leave_allowance) > 0 ? Number(profile.annual_leave_allowance) : 30;
+        const requested = mine.filter(r => String(r.status || '').toUpperCase().startsWith('PENDING')).reduce((n, r) => n + days(r.start_date, r.end_date), 0);
+        const approved = mine.filter(r => String(r.status || '').toUpperCase().startsWith('APPROVED')).reduce((n, r) => n + days(r.start_date, r.end_date), 0);
+        return { name: profile.full_name || '—', department: departmentMap[profile.department_id] || '—', allowance, requested, approved, remaining: Math.max(0, allowance - approved), annual: sum('annual leave'), sick: sum('sick leave') };
+    });
+    window.leaveCalculatorRows = rows;
+    const e = value => escapeHTML(String(value ?? ''));
+    return `<section class="page-section leave-calculator-page"><div class="page-header"><div><span class="eyebrow">${e(t('nav_leave_calculator'))}</span><h1 class="page-title">${e(t('leave_report_title') || 'Leave calculator')}</h1><p class="page-subtitle">${e(t('leave_report_subtitle') || 'Detailed leave report for all employees')}</p></div><button class="btn btn-secondary" type="button" onclick="window.downloadLeaveReport()"><i data-lucide="download"></i> ${e(t('download_report') || 'Download report')}</button></div><div class="card leave-calculator-summary"><div><strong>${rows.length}</strong><span>${e(t('employees') || 'Employees')}</span></div><div><strong>${rows.reduce((n,r)=>n+r.approved,0)}</strong><span>${e(t('leave_days_used') || 'Approved days')}</span></div><div><strong>${rows.reduce((n,r)=>n+r.requested,0)}</strong><span>${e(t('leave_days_requested') || 'Requested days')}</span></div></div><div class="card leave-report-card"><div class="table-responsive"><table class="data-table leave-report-table"><thead><tr><th>${e(t('employee_name') || 'Employee')}</th><th>${e(t('department') || 'Department')}</th><th>${e(t('annual_leave') || 'Annual leave')}</th><th>${e(t('leave_days_requested') || 'Requested')}</th><th>${e(t('leave_days_used') || 'Approved')}</th><th>${e(t('leave_remaining') || 'Remaining')}</th><th>${e(t('sick_leave') || 'Sick leave')}</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${e(r.name)}</td><td>${e(r.department)}</td><td>${r.allowance}</td><td>${r.requested}</td><td>${r.approved}</td><td><span class="leave-remaining-badge">${r.remaining}</span></td><td>${r.sick}</td></tr>`).join('') || `<tr><td colspan="7">${e(t('no_data') || 'No data available')}</td></tr>`}</tbody></table></div></div></section>`;
+}
+
+window.downloadLeaveReport = function () {
+    const rows = window.leaveCalculatorRows || [];
+    const csv = [['Employee','Department','Annual allowance','Requested','Approved','Remaining','Sick leave'], ...rows.map(r => [r.name,r.department,r.allowance,r.requested,r.approved,r.remaining,r.sick])].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([`\ufeff${csv}`], {type:'text/csv;charset=utf-8'})); const a = document.createElement('a'); a.href = url; a.download = `leave-report-${new Date().getFullYear()}.csv`; a.click(); URL.revokeObjectURL(url);
+};
+
 async function renderLeave() {
     const isManagerOrAdmin = currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR');
     const profile = await db.getUserProfile(currentUser?.id);
@@ -3930,11 +3986,7 @@ window.handleCreateUser = async function (e) {
     e.preventDefault();
     const employeeId = '';
     const fullName = document.getElementById('newFullName').value;
-    let email = document.getElementById('newEmail').value.trim();
-    if (!email) {
-        const emailStem = fullName.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 24) || 'employee';
-        email = `${emailStem}${Date.now()}@muqam.local`;
-    }
+    const email = document.getElementById('newEmail').value.trim().toLowerCase();
     const password = document.getElementById('newPassword').value;
     const role = 'EMPLOYEE';
     const jobTitle = '';
@@ -5449,7 +5501,7 @@ async function renderTasksV2() {
     
     const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
     let canCreateTask = !!currentUser;
-    if (selectedProject.startsWith('list_') && currentUserRole !== 'ADMIN') {
+    if (selectedProject.startsWith('list_') && !isTaskAdmin()) {
         const listId = selectedProject.substring(5);
         const list = taskLists.find(l => l.id === listId);
         if (list) {
@@ -5467,9 +5519,13 @@ async function renderTasksV2() {
         </li>
     `).join('');
 
+    const viewerIsTaskAdmin = isTaskAdmin();
     const ownTaskLists = taskLists.filter(list => list.owner_id === currentUser.id);
-    const sharedTaskLists = taskLists.filter(list => list.shared_with && list.shared_with.includes(currentUser.id));
-    const departmentTaskLists = taskLists.filter(list => (list.visible_to_all || (list.department_id && list.department_id === viewerDepartmentId)) && list.owner_id !== currentUser.id && !(list.shared_with || []).includes(currentUser.id));
+    const sharedTaskLists = taskLists.filter(list => list.owner_id !== currentUser.id && list.shared_with && list.shared_with.includes(currentUser.id));
+    const departmentTaskLists = taskLists.filter(list => {
+        const isAlreadyGrouped = list.owner_id === currentUser.id || (list.shared_with || []).includes(currentUser.id);
+        return !isAlreadyGrouped && (viewerIsTaskAdmin || list.visible_to_all || (list.department_id && list.department_id === viewerDepartmentId));
+    });
     
     let personalListItems = '';
     if (ownTaskLists.length > 0) {
@@ -5652,9 +5708,15 @@ async function renderTasksV2() {
     const adminForm = canCreateTask ? `
         <!-- Create Task Modal -->
         <div class="modal" id="createTaskModal">
-            <div class="modal-content">
+            <div class="modal-content create-task-modal-content">
                 <div class="modal-header">
-                    <h2><i data-lucide="plus"></i> <span id="createTaskModalTitle">${t('add_new_task') || 'Add New Task'}</span></h2>
+                    <div class="create-task-heading">
+                        <span class="create-task-heading-icon"><i data-lucide="sparkles"></i></span>
+                        <div>
+                            <h2><span id="createTaskModalTitle">${t('add_new_task') || 'Add New Task'}</span></h2>
+                            <p>Plan the work, choose the team, and share everything needed to begin.</p>
+                        </div>
+                    </div>
                     <button type="button" class="icon-btn" onclick="document.getElementById('createTaskModal').classList.remove('active')">
                         <i data-lucide="x"></i>
                     </button>
@@ -5665,8 +5727,10 @@ async function renderTasksV2() {
                     <input type="hidden" id="taskListId" value="">
 
                     <div class="create-task-body">
-                        <!-- Row 1: Created Date + Title -->
-                        <div class="create-task-top-row">
+                        <section class="create-task-section create-task-section-basics">
+                            <div class="create-task-section-heading"><span><i data-lucide="clipboard-list"></i> Task details</span><small>Start with a clear title and ownership.</small></div>
+                            <!-- Row 1: Created Date + Title -->
+                            <div class="create-task-top-row">
                             <div class="form-group">
                                 <label class="form-label">Created by</label>
                                 <input type="text" class="form-control" value="${escapeHTML(getProfileDisplayName(currentUserProfile || currentUser) || 'Employee')}" readonly aria-readonly="true">
@@ -5679,10 +5743,13 @@ async function renderTasksV2() {
                                 <label class="form-label" id="taskTitleLabel">${t('task_title') || 'Task Title'}</label>
                                 <input type="text" autocomplete="off" id="taskTitle" class="form-control" required placeholder="Enter task title">
                             </div>
-                        </div>
+                            </div>
+                        </section>
 
-                        <!-- Row 2: Inline Dropdowns -->
-                        <div class="create-task-fields-row">
+                        <section class="create-task-section create-task-section-team">
+                            <div class="create-task-section-heading"><span><i data-lucide="users"></i> Team and workflow</span><small>Choose where the task belongs and who should follow it.</small></div>
+                            <!-- Row 2: Inline Dropdowns -->
+                            <div class="create-task-fields-row">
                             ${isRegularEmployee ? `
                                 <div class="form-group">
                                     <label class="form-label">${t('ui_department') || 'Department'}</label>
@@ -5721,21 +5788,24 @@ async function renderTasksV2() {
                                 <label class="form-label">Watchers (Optional)</label>
                                 ${renderTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache)}
                             </div>
-                        </div>
+                            </div>
 
-                        <!-- Marketing Design Fields (hidden by default) -->
-                        <div id="newMarketingDesignFields" class="marketing-design-fields" style="display: none;">
-                            ${renderMarketingDesignFields('new')}
-                        </div>
+                            <!-- Marketing Design Fields (hidden by default) -->
+                            <div id="newMarketingDesignFields" class="marketing-design-fields" style="display: none;">
+                                ${renderMarketingDesignFields('new')}
+                            </div>
+                        </section>
 
-                        <!-- Description -->
-                        <div class="form-group create-task-desc-group">
-                            <label class="form-label">${t('task_desc') || "Task's Description"}</label>
-                            <textarea id="taskDesc" class="form-control" rows="5" placeholder="Describe the task..."></textarea>
-                        </div>
+                        <section class="create-task-section create-task-section-content">
+                            <div class="create-task-section-heading"><span><i data-lucide="align-left"></i> Description</span><small>Add the outcome, context, and useful instructions.</small></div>
+                            <div class="form-group create-task-desc-group">
+                                <label class="form-label">${t('task_desc') || "Task's Description"}</label>
+                                <textarea id="taskDesc" class="form-control" rows="5" placeholder="Describe the task..."></textarea>
+                            </div>
+                        </section>
 
                         <!-- Attachments -->
-                        <div id="createTaskAttachmentsSection">
+                        <section id="createTaskAttachmentsSection" class="create-task-section create-task-section-attachments">
                             <div class="create-task-attachments-heading">
                                 <i data-lucide="paperclip"></i>
                                 <span id="createTaskCollapseLabel">Attachments</span>
@@ -5749,7 +5819,7 @@ async function renderTasksV2() {
                                 </div>
                                 <div class="create-task-file-list" id="createTaskFileList"></div>
                             </div>
-                        </div>
+                        </section>
                     </div>
 
                     <!-- Footer -->
@@ -6182,7 +6252,9 @@ window.handleAICreateTask = async function (e) {
             break;
         }
     }
-    const supervisorId = window.taskDepartmentSupervisors?.[0]?.id || null;
+    // Administrators can create tasks in any list and are not constrained to
+    // their own department manager as supervisor.
+    const supervisorId = isTaskAdmin() ? null : (window.taskDepartmentSupervisors?.[0]?.id || null);
     const { success } = await db.createTask(input, '', assigneeId, dueStr, currentUser.id, priority, 'Auto-parsed', { 'en': input, 'ar': input + ' (مترجم)' }, {}, null, null, null, 'public', null, [], [], null, null, null, 'todo', supervisorId);
     if (success) {
         showToast(t('toast_ai_parsed_and_created_task'), "success");
@@ -6358,6 +6430,7 @@ function renderMarketingDesignFields(prefix) {
         <div class="marketing-design-grid">
             <div class="form-group"><label class="form-label">Download Source</label><div id="${id}ContentLinks" class="marketing-links-list"></div><button type="button" class="btn btn-secondary marketing-add-link" onclick="window.addMarketingLink('${id}ContentLinks')" disabled><i data-lucide="plus"></i> Add another URL</button></div>
             <div class="form-group"><label class="form-label">Upload Source</label><div id="${id}SubmissionLinks" class="marketing-links-list"></div><button type="button" class="btn btn-secondary marketing-add-link" onclick="window.addMarketingLink('${id}SubmissionLinks')" disabled><i data-lucide="plus"></i> Add another URL</button></div>
+            <div class="form-group"><label class="form-label">Account</label><select id="${id}MarketingDepartment" class="form-control" required disabled><option value="">Select Account</option><option value="Party">Party</option><option value="Main">Main</option><option value="Coffee Corner">Coffee Corner</option></select></div>
             <div class="form-group"><label class="form-label">Design Type</label><select id="${id}ContentType" class="form-control" required disabled><option value="">Select Design Type</option><option value="Post">Post</option><option value="Reel">Reel</option><option value="Story">Story</option><option value="Promo Video">Promo Video</option><option value="Cover">Cover</option><option value="Commercial Video">Commercial Video</option><option value="Advertisement Video">Advertisement Video</option><option value="Proposal">Proposal</option></select></div>
         </div>`;
 }
@@ -6543,9 +6616,8 @@ window.handleCreateTask = async function (e) {
         || (activeSelection.startsWith('list_') ? activeSelection.slice(5) : null);
     const projectId = taskListId ? null : (document.getElementById('taskProject')?.value || null);
     const supervisorId = window.taskDepartmentSupervisors?.[0]?.id || null;
-    const selectedPrivateList = taskListId ? (window.taskListsCache || []).find(list => list.id === taskListId) : null;
-    const effectiveAssignee = taskListId ? (selectedPrivateList?.owner_id || currentUser.id) : assignee;
-    const effectiveSupervisor = taskListId ? null : supervisorId;
+    const effectiveAssignee = assignee || currentUser.id;
+    const effectiveSupervisor = isTaskAdmin() || taskListId ? null : supervisorId;
 
     // Check if assignee is in Designing
     const allUsers = await db.fetchUsers();
@@ -8736,6 +8808,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'dashboard': content = await renderDashboard(); break;
             case 'time': content = await renderTime(); break;
             case 'leave': content = await renderLeave(); break;
+            case 'leave_calculator': content = await renderLeaveCalculator(); break;
             case 'requests': content = String(currentUserRole || '').toUpperCase() === 'EMPLOYEE' ? await renderMyRequestStatuses() : await renderRequests(); break;
             case 'archived': content = await renderArchivedRequests(); break;
             case 'payroll': content = await renderPayrollModule(); break;
@@ -11057,7 +11130,16 @@ function getRequestWorkflowStage(workflow) {
 
 function renderRequestWorkflowProgress(workflow, approverNames = {}) {
     if (!workflow?.steps?.length) return '';
-    return `<div class="request-workflow-progress">${workflow.steps.map(step => {
+    const total = workflow.steps.length;
+    const completed = workflow.status === 'APPROVED'
+        ? total
+        : workflow.steps.filter(step => step.status === 'APPROVED').length;
+    const progress = workflow.status === 'REJECTED'
+        ? Math.round((completed / total) * 100)
+        : workflow.status === 'APPROVED'
+            ? 100
+            : Math.max(8, Math.round(((completed + .35) / total) * 100));
+    const stepsMarkup = workflow.steps.map(step => {
         const active = workflow.status === 'PENDING' && step.step_order === workflow.current_step;
         const className = step.status === 'APPROVED' ? 'completed' : (step.status === 'REJECTED' ? 'rejected' : (active ? 'active' : 'upcoming'));
         const approverName = approverNames[step.approver_id] || 'Management';
@@ -11065,7 +11147,24 @@ function renderRequestWorkflowProgress(workflow, approverNames = {}) {
             <span class="request-workflow-stage">${escapeHTML(REQUEST_STAGE_LABELS[step.stage_key] || step.stage_key)}</span>
             <small>${escapeHTML(approverName)}</small>
         </span>`;
-    }).join('<i data-lucide="chevron-right"></i>')}</div>`;
+    }).join('<i data-lucide="chevron-right"></i>');
+    return `<div class="request-workflow-progress ${workflow.status === 'REJECTED' ? 'is-rejected' : ''}">
+        <div class="request-workflow-progress-summary"><span>Request pipeline</span><strong>${progress}%</strong></div>
+        <div class="request-workflow-progress-track"><span style="width:${progress}%"></span></div>
+        <div class="request-workflow-progress-steps">${stepsMarkup}</div>
+    </div>`;
+}
+
+function renderRequestPipeline(request, approverNames = {}) {
+    if (request.workflow?.steps?.length) return renderRequestWorkflowProgress(request.workflow, approverNames);
+    const status = String(request.status || 'PENDING').toUpperCase();
+    const progress = status === 'APPROVED' ? 100 : status === 'REJECTED' ? 100 : 35;
+    const label = status === 'APPROVED' ? 'Completed' : status === 'REJECTED' ? 'Rejected' : 'Submitted';
+    return `<div class="request-workflow-progress request-workflow-progress--fallback ${status === 'REJECTED' ? 'is-rejected' : ''}">
+        <div class="request-workflow-progress-summary"><span>Request pipeline</span><strong>${progress}%</strong></div>
+        <div class="request-workflow-progress-track"><span style="width:${progress}%"></span></div>
+        <div class="request-workflow-fallback-label">${escapeHTML(label)}</div>
+    </div>`;
 }
 
 window.handleRequestAction = async function (sourceTable, id, decision) {
@@ -11167,6 +11266,7 @@ async function renderRequests() {
         allRequests.push({
             id: r.id,
             type: 'Leave',
+            leaveType: r.leave_type || '',
             employee_id: r.employee_id,
             details: r.leave_type === 'Short Leave'
                 ? `Short Leave: ${r.short_leave_reason || r.reason || 'No reason'} â€” ${r.short_leave_duration_minutes || 0} minutes`
@@ -11204,12 +11304,13 @@ async function renderRequests() {
 
     genericRequests.forEach(r => allRequests.push({
         id: r.id,
-        type: r.request_type || 'Employee Request',
+        type: /^leave\s*request$/i.test(r.request_type || '') ? 'Leave' : (r.request_type || 'Employee Request'),
+        leaveType: /^leave\s*request$/i.test(r.request_type || '') ? (r.leave_type || '') : '',
         employee_id: r.employee_id,
         details: /^loan/i.test(r.request_type || '')
             ? `Loan amount: ${Number(r.loan_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`
-            : r.request_type === 'Leave Request'
-                ? `${r.leave_type || 'Leave'} â€” ${r.number_of_days || 0} day${Number(r.number_of_days) === 1 ? '' : 's'}`
+            : /^leave\s*request$/i.test(r.request_type || '')
+                ? `${r.number_of_days || 0} day${Number(r.number_of_days) === 1 ? '' : 's'}`
                 : (r.leave_type || r.request_type || 'Employee Request'),
         status: String(r.status || 'PENDING').toUpperCase(),
         created_at: r.created_at,
@@ -11233,6 +11334,8 @@ async function renderRequests() {
         if (r.status === 'REJECTED') badgeClass = 'danger';
 
         const employeeName = showApprovalColumns ? (profilesMap[r.employee_id] || 'Unknown') : 'Me';
+        const isLeaveRequest = r.type === 'Leave' || r.source_table === 'leave_requests';
+        const requestTypeLabel = isLeaveRequest ? (t('req_type_leave') || 'Leave Request') : r.type;
         const currentStep = r.workflow?.steps?.find(step => step.step_order === r.workflow.current_step);
         const canApprove = r.workflow?.status === 'PENDING' && (isAdmin || currentStep?.approver_id === currentUser?.id);
 
@@ -11252,18 +11355,19 @@ async function renderRequests() {
 
         return `
             <tr class="request-row" data-type="${r.type}" data-status="${r.status}" data-emp="${escapeHTML(employeeName.toLowerCase())}" data-email="${escapeHTML(String(emailMap[r.employee_id] || '').toLowerCase())}" data-request-date="${new Date(r.created_at).toISOString().slice(0, 10)}" data-details="${escapeHTML(r.details.toLowerCase())}">
-                <td>${new Date(r.created_at).toLocaleDateString()}</td>
-                ${showApprovalColumns ? `<td>${escapeHTML(employeeName)}</td>` : ''}
-                <td><strong>${r.type}</strong></td>
-                <td>${escapeHTML(r.details)}${renderRequestWorkflowProgress(r.workflow, profilesMap)}</td>
-                <td><span class="status-badge ${badgeClass}">${escapeHTML(getRequestWorkflowStage(r.workflow))}</span></td>
+                <td data-label="${escapeHTML(t('date') || 'Date')}">${new Date(r.created_at).toLocaleDateString()}</td>
+                ${showApprovalColumns ? `<td data-label="${escapeHTML(t('leave_employee') || 'Employee')}">${escapeHTML(employeeName)}</td>` : ''}
+                <td data-label="${escapeHTML(t('req_type') || 'Request Type')}"><strong>${escapeHTML(requestTypeLabel)}</strong></td>
+                <td data-label="${escapeHTML(t('ui_leave_type') || 'Leave Type')}">${isLeaveRequest ? escapeHTML(r.leaveType || '—') : '—'}</td>
+                <td class="request-details-cell" data-label="${escapeHTML(t('req_details') || 'Details')}">${escapeHTML(r.details)}${renderRequestPipeline(r, profilesMap)}</td>
+                <td data-label="${escapeHTML(t('req_status') || 'Status')}"><span class="status-badge ${badgeClass}">${escapeHTML(getRequestWorkflowStage(r.workflow))}</span></td>
                 ${actionsCell}
             </tr>
         `;
     }).join('');
 
     if (allRequests.length === 0) {
-        const colSpan = showApprovalColumns ? 6 : 4;
+        const colSpan = showApprovalColumns ? 7 : 5;
         rowsHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('req_no_found')}</td></tr>`;
     }
 
@@ -11335,7 +11439,7 @@ async function renderRequests() {
             </div>
         </div>
         
-        <div class="card fade-in-up">
+        <div class="card fade-in-up request-directory-card">
             <div class="table-responsive">
                 <table class="data-table">
                     <thead>
@@ -11343,6 +11447,7 @@ async function renderRequests() {
                             <th>${t('date')}</th>
                             ${showApprovalColumns ? `<th>${t('leave_employee')}</th>` : ''}
                             <th>${t('req_type')}</th>
+                            <th>${t('ui_leave_type') || 'Leave Type'}</th>
                             <th>${t('req_details')}</th>
                             <th>${t('req_status')}</th>
                             ${showApprovalColumns ? `<th>${t('leave_actions')}</th>` : ''}

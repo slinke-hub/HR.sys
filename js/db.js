@@ -175,6 +175,32 @@ const db = {
             return { success: false, error };
         }
     },
+    async getUserLoginEmail(userId) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('admin_get_user_email', { target_user_id: userId });
+            if (error) throw error;
+            return { success: true, data: data || '' };
+        } catch (error) {
+            console.error('Error loading user login email:', error);
+            return { success: false, error };
+        }
+    },
+    async updateUserLoginCredentials(userId, email, password = null) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('admin_update_user_credentials', {
+                target_user_id: userId,
+                new_email: email,
+                new_password: password
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('Error updating user login credentials:', error);
+            return { success: false, error };
+        }
+    },
 
     async resetUserPassword(userId, newPassword) {
         if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };

@@ -1,0 +1,3 @@
+-- One-time Abdullah Zeyad login assignment applied on 2026-08-31.
+-- The credential-bearing SQL was intentionally redacted after successful
+-- application so no password remains in source control.
