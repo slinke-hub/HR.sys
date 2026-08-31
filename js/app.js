@@ -487,18 +487,18 @@ window.renderRequests = async () => {
 };
 
 window.showNewRequestModal = async () => {
-    const isEmployee = currentUserRole === 'EMPLOYEE';
-    const users = isEmployee ? [] : await db.fetchUsers();
-
+    const canEdit = window.canCurrentUserEditContracts(currentUserProfile);
+    const users = await db.fetchUsers();
+    
     const empSelect = document.getElementById('requestEmployeeId');
-    if (isEmployee) {
-        empSelect.innerHTML = `<option value="${currentUser.id}">${currentUser.email}</option>`;
+    empSelect.innerHTML = users.map(u => `<option value="${u.id}" ${u.id === currentUser.id ? 'selected' : ''}>${window.formatEmployeeName(u) || u.email}</option>`).join('');
+    
+    if (!canEdit) {
+        empSelect.value = currentUser.id;
         empSelect.disabled = true;
     } else {
-        empSelect.innerHTML = users.map(u => `<option value="${u.id}" ${u.id === currentUser.id ? 'selected' : ''}>${window.formatEmployeeName(u) || u.email}</option>`).join('');
         empSelect.disabled = false;
     }
-
 
     document.getElementById('requestType').value = 'Leave Request';
     document.getElementById('requestLoanAmount').value = '';
@@ -589,11 +589,11 @@ window.handleCreateRequest = async (e) => {
     const loanAmount = isLoan ? Number(document.getElementById('requestLoanAmount').value) : null;
     const numberOfDays = reqType === 'Leave Request' && !isShortLeave ? Number(document.getElementById('requestNumberOfDays').value) : null;
     if (isLoan && (!Number.isFinite(loanAmount) || loanAmount <= 0)) {
-        showToast('Enter a valid loan amount greater than zero.', 'danger');
+        showToast(window.t('msg_toast_0') || 'Enter a valid loan amount greater than zero.', 'danger');
         return;
     }
     if (reqType === 'Leave Request' && !isShortLeave && (!Number.isInteger(numberOfDays) || numberOfDays <= 0)) {
-        showToast('Enter a valid number of leave days.', 'danger');
+        showToast(window.t('msg_toast_1') || 'Enter a valid number of leave days.', 'danger');
         return;
     }
 
@@ -601,7 +601,7 @@ window.handleCreateRequest = async (e) => {
     if (isShortLeave) {
         const shortReason = document.getElementById('requestShortLeaveReason').value;
         const shortDuration = Number(document.getElementById('requestShortLeaveDuration').value);
-        if (!shortReason) return showToast('Select a reason for the short leave.', 'danger');
+        if (!shortReason) return showToast(window.t('msg_toast_2') || 'Select a reason for the short leave.', 'danger');
         const today = new Date().toISOString().slice(0, 10);
         const success = await db.submitLeaveRequest(empId, {
             leave_type: 'Short Leave', start_date: today, end_date: today,
@@ -2163,7 +2163,7 @@ async function translateSaudiNewsTitle(title) {
 window.openHierarchyEmployeeInfo = function (userId) {
     if (!['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').toUpperCase())) return;
     const employee = window.hierarchyProfilesById?.[userId];
-    if (!employee) return showToast('Employee information is unavailable.', 'danger');
+    if (!employee) return showToast(window.t('msg_toast_3') || 'Employee information is unavailable.', 'danger');
     document.getElementById('hierarchyEmployeeInfoModal')?.remove();
     const avatar = employee.avatar_url || localStorage.getItem('user_avatar_' + employee.id) || '';
     const modal = document.createElement('div');
@@ -2483,7 +2483,7 @@ window.handlePostAnnouncement = async (e) => {
         showToast(result.error?.message || 'Failed to publish announcement.', 'danger');
         return;
     }
-    showToast('Announcement published successfully.', 'success');
+    showToast(window.t('msg_toast_4') || 'Announcement published successfully.', 'success');
     closeAnnouncementModal();
     renderView('dashboard');
 };
@@ -2565,7 +2565,7 @@ window.captureOrderClockOutPhoto = function () {
     const video = document.getElementById('orderClockOutCameraVideo');
     const canvas = document.getElementById('orderClockOutCameraCanvas');
     if (!video || !canvas || !video.videoWidth) {
-        showToast('The camera is not ready yet.', 'warning');
+        showToast(window.t('msg_toast_5') || 'The camera is not ready yet.', 'warning');
         return;
     }
     const maxWidth = 1280;
@@ -2574,7 +2574,7 @@ window.captureOrderClockOutPhoto = function () {
     canvas.height = Math.round(video.videoHeight * scale);
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(blob => {
-        if (!blob) return showToast('Unable to capture the photo. Please try again.', 'danger');
+        if (!blob) return showToast(window.t('msg_toast_6') || 'Unable to capture the photo. Please try again.', 'danger');
         showOrderClockOutPhotoPreview(blob);
     }, 'image/jpeg', 0.82);
 };
@@ -2597,7 +2597,7 @@ function showOrderClockOutPhotoPreview(blob) {
 
 window.useOrderClockOutPhotoFile = function (file) {
     if (!file) return;
-    if (!file.type.startsWith('image/')) return showToast('Please capture an image.', 'danger');
+    if (!file.type.startsWith('image/')) return showToast(window.t('msg_toast_7') || 'Please capture an image.', 'danger');
     showOrderClockOutPhotoPreview(file);
 };
 
@@ -2611,7 +2611,7 @@ window.retakeOrderClockOutPhoto = function () {
 };
 
 window.confirmOrderClockOutPhoto = function () {
-    if (!orderClockOutPhotoBlob) return showToast('Take a photo before continuing.', 'warning');
+    if (!orderClockOutPhotoBlob) return showToast(window.t('msg_toast_8') || 'Take a photo before continuing.', 'warning');
     const blob = orderClockOutPhotoBlob;
     stopOrderClockOutCamera();
     document.getElementById('orderClockOutCameraModal')?.classList.remove('show');
@@ -2890,7 +2890,7 @@ window.openTaskDetailsModal = async function (id) {
     }
     if (!task) return;
     if (!canInteractWithTask(task)) {
-        showToast('You do not have access to this task.', 'warning');
+        showToast(window.t('msg_toast_9') || 'You do not have access to this task.', 'warning');
         return;
     }
 
@@ -2988,14 +2988,14 @@ window.handleTaskViewClick = function (event, id) {
     if (!taskId) return;
     Promise.resolve(window.openTaskDetailsModal(taskId)).catch(error => {
         console.error('Unable to open task details:', error);
-        showToast('Unable to open task details. Please try again.', 'danger');
+        showToast(window.t('msg_toast_10') || 'Unable to open task details. Please try again.', 'danger');
     });
 };
 
 window.openTaskAssigneePicker = function (taskId) {
     const task = window.taskCache?.[taskId];
     if (!task || (!isTaskAdmin() && task.created_by !== currentUser?.id)) {
-        showToast('Only the task creator or an administrator can change assignees.', 'warning');
+        showToast(window.t('msg_toast_11') || 'Only the task creator or an administrator can change assignees.', 'warning');
         return;
     }
     let modal = document.getElementById('taskAssigneePickerModal');
@@ -3009,7 +3009,7 @@ window.openTaskAssigneePicker = function (taskId) {
         modal.querySelectorAll('[data-assignee-cancel]').forEach(button => button.onclick = () => modal.classList.remove('show'));
         modal.querySelector('#taskAssigneePickerSave').onclick = async () => {
             const selected = Array.from(modal.querySelectorAll('#taskAssigneePickerOptions input[type="checkbox"]:checked')).map(input => input.value);
-            if (!selected.length) return showToast('Select at least one employee.', 'warning');
+            if (!selected.length) return showToast(window.t('msg_toast_12') || 'Select at least one employee.', 'warning');
             const save = await db.updateTask(modal.dataset.taskId, { assignee_id: selected[0], assignee_ids: selected });
             if (!save.success) return showToast(save.error?.message || 'Unable to update assignment.', 'danger');
             const selectedUsers = (window.taskAllUsersCache || []).filter(user => selected.includes(user.id));
@@ -3021,7 +3021,7 @@ window.openTaskAssigneePicker = function (taskId) {
             }
             modal.classList.remove('show');
             await renderView('tasks');
-            showToast('Task assignment updated.', 'success');
+            showToast(window.t('msg_toast_13') || 'Task assignment updated.', 'success');
         };
     }
     modal.dataset.taskId = taskId;
@@ -3140,7 +3140,7 @@ window.uploadTaskAttachment = async function (input) {
     const files = Array.from(input?.files || []);
     const task = window.activeTaskDetail;
     if (files.length === 0 || !canInteractWithTask(task) || !currentUser?.id) {
-        if (files.length && task && !canInteractWithTask(task)) showToast('You do not have access to this task.', 'warning');
+        if (files.length && task && !canInteractWithTask(task)) showToast(window.t('msg_toast_9') || 'You do not have access to this task.', 'warning');
         return;
     }
     const button = document.querySelector('.task-file-upload-button');
@@ -3174,7 +3174,7 @@ window.uploadTaskAttachment = async function (input) {
             showToast(`${successCount} file(s) uploaded successfully.`, 'success');
         }
     } else if (files.length > 0) {
-        showToast('No files were successfully uploaded.', 'danger');
+        showToast(window.t('msg_toast_14') || 'No files were successfully uploaded.', 'danger');
     }
 
     if (button) { button.disabled = false; button.innerHTML = original; }
@@ -3239,7 +3239,7 @@ window.handleLeaveTypeChange = function (type) {
 window.submitDashboardShortLeave = async function (durationMinutes) {
     const selectedReason = document.querySelector('input[name="dashboardShortLeaveReason"]:checked');
     if (!selectedReason) {
-        showToast('Select a reason for the short leave.', 'danger');
+        showToast(window.t('msg_toast_2') || 'Select a reason for the short leave.', 'danger');
         return;
     }
     const buttons = document.querySelectorAll('.short-leave-duration-button');
@@ -3251,8 +3251,8 @@ window.submitDashboardShortLeave = async function (durationMinutes) {
         short_leave_duration_minutes: durationMinutes
     });
     buttons.forEach(button => button.disabled = false);
-    if (!success) return showToast('Failed to submit short leave request.', 'danger');
-    showToast('Short leave request submitted successfully.', 'success');
+    if (!success) return showToast(window.t('msg_toast_15') || 'Failed to submit short leave request.', 'danger');
+    showToast(window.t('msg_toast_16') || 'Short leave request submitted successfully.', 'success');
     renderView('dashboard');
 };
 
@@ -3351,7 +3351,7 @@ window.approveTaskCompletion = async function (taskId) {
         window.taskDepartmentManagerByName = Object.fromEntries(departments.map(department => [department.name, department.head_id || department.manager_id || null]));
     }
     if (!task || window.taskDepartmentManagerByName?.[task.department] !== currentUser?.id) {
-        showToast('Only this task’s department manager can approve completion.', 'danger');
+        showToast(window.t('msg_toast_17') || 'Only this task’s department manager can approve completion.', 'danger');
         return;
     }
     const result = await db.updateTaskStatus(taskId, 'completed');
@@ -3359,7 +3359,7 @@ window.approveTaskCompletion = async function (taskId) {
         showToast(result.error?.message || 'Unable to approve task completion.', 'danger');
         return;
     }
-    showToast('Task approved and moved to Done.', 'success');
+    showToast(window.t('msg_toast_18') || 'Task approved and moved to Done.', 'success');
     if (currentView === 'tasks') {
         await renderView('tasks');
         if (window.taskCache?.[taskId]) openTaskDetailsModal(taskId);
@@ -3377,7 +3377,7 @@ window.handleTaskCommentSubmit = async function (e) {
     const content = input.value;
     if (!content.trim() || !id) return;
     if (!canInteractWithTask(window.activeTaskDetail) || String(window.activeTaskDetail?.id) !== String(id)) {
-        showToast('You do not have access to this task.', 'warning');
+        showToast(window.t('msg_toast_9') || 'You do not have access to this task.', 'warning');
         return;
     }
 
@@ -4016,7 +4016,7 @@ window.handleChangeRole = async function (id, role) {
         showToast(t('toast_role_updated'), "success");
         await window.refreshUserRowInPlace(id, { role });
     } else {
-        showToast('Failed to update role.', 'danger');
+        showToast(window.t('msg_toast_19') || 'Failed to update role.', 'danger');
         await window.refreshUserRowInPlace(id);
     }
 }
@@ -4056,12 +4056,12 @@ window.handleDirectoryDepartmentChange = async function (userId, departmentId, s
     }
     const result = await db.updateUserProfile(userId, { department_id: departmentId });
     if (!result.success) {
-        showToast('Failed to update department.', 'danger');
+        showToast(window.t('msg_toast_20') || 'Failed to update department.', 'danger');
         await window.refreshUserRowInPlace(userId);
         return;
     }
     await window.refreshUserRowInPlace(userId, { department_id: departmentId });
-    showToast('Department updated successfully.', 'success');
+    showToast(window.t('msg_toast_21') || 'Department updated successfully.', 'success');
 };
 
 async function renderUsers() {
@@ -4135,12 +4135,12 @@ async function renderUsers() {
 
 window.downloadUserDirectoryExcel = function () {
     if (typeof XLSX === 'undefined') {
-        showToast('Excel export is unavailable. Please reload the page and try again.', 'danger');
+        showToast(window.t('msg_toast_22') || 'Excel export is unavailable. Please reload the page and try again.', 'danger');
         return;
     }
     const users = Array.isArray(window.currentAdminUsers) ? window.currentAdminUsers : [];
     if (!users.length) {
-        showToast('There are no users to export.', 'info');
+        showToast(window.t('msg_toast_23') || 'There are no users to export.', 'info');
         return;
     }
     const managerMap = new Map(users.map(user => [user.id, window.formatEmployeeName(user) || '']));
@@ -4160,7 +4160,7 @@ window.downloadUserDirectoryExcel = function () {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'User Directory');
     XLSX.writeFile(workbook, `user-directory-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    showToast('User directory downloaded successfully.', 'success');
+    showToast(window.t('msg_toast_24') || 'User directory downloaded successfully.', 'success');
 };
 
 window.showAddUserModal = async () => {
@@ -4183,7 +4183,7 @@ window.handleAssignManager = async function (id, managerId) {
         showToast(t('toast_manager_assigned'), "success");
         await window.refreshUserRowInPlace(id, { manager_id: managerId || null });
     } else {
-        showToast('Failed to assign manager.', 'danger');
+        showToast(window.t('msg_toast_25') || 'Failed to assign manager.', 'danger');
         await window.refreshUserRowInPlace(id);
     }
 }
@@ -5066,7 +5066,7 @@ window.handleCreateReminder = async (e) => {
     const dueDate = document.getElementById('reminderDueDate').value;
 
     if (!title || !dueDate) {
-        showToast('Please fill in all required fields.', 'danger');
+        showToast(window.t('msg_toast_26') || 'Please fill in all required fields.', 'danger');
         return;
     }
 
@@ -5083,7 +5083,7 @@ window.handleCreateReminder = async (e) => {
     });
 
     if (success) {
-        showToast('Reminder created!', 'success');
+        showToast(window.t('msg_toast_27') || 'Reminder created!', 'success');
         document.getElementById('reminderModal').classList.remove('show');
         renderView('schedule');
     } else {
@@ -6143,7 +6143,7 @@ window.submitInlineSubtask = async function (event) {
         if (submit) submit.disabled = false;
         return;
     }
-    showToast('Subtask added', 'success');
+    showToast(window.t('msg_toast_28') || 'Subtask added', 'success');
     if (result.data) window.taskCache[result.data.id] = { ...result.data, displayTitle: result.data.title, status: result.data.status || 'todo', priority: result.data.priority || 'medium' };
     setTaskDetailInfoTab('overview');
 };
@@ -6285,7 +6285,7 @@ window.toggleTaskV2Create = function () {
     const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
     const canUseList = !listId || list?.owner_id === currentUser?.id || list?.can_add_users?.includes(currentUser?.id) || (list?.department_id && list.department_id === viewerDepartmentId) || isTaskAdmin();
     if (!canUseList) {
-        showToast('You do not have permission to add tasks to this list.', 'danger');
+        showToast(window.t('msg_toast_29') || 'You do not have permission to add tasks to this list.', 'danger');
         return;
     }
     const listInput = document.getElementById('taskListId');
@@ -6723,7 +6723,7 @@ window.handleUpdateTaskStatus = async function (id, status) {
         await db.triggerWebhooks('task_status_updated', { task_id: id, status: actualStatus });
 
         if (needsManagerApproval) {
-            showToast('Task moved to Awaiting Approval. The department manager has been notified.', 'info');
+            showToast(window.t('msg_toast_30') || 'Task moved to Awaiting Approval. The department manager has been notified.', 'info');
         }
     }
     return { error, status: actualStatus };
@@ -6811,7 +6811,7 @@ window.openEditTaskModal = async function (id) {
             return;
         }
         if (!isTaskAdmin() && task.created_by !== currentUser?.id) {
-            showToast('Only the task creator or an administrator can edit this task.', 'warning');
+            showToast(window.t('msg_toast_31') || 'Only the task creator or an administrator can edit this task.', 'warning');
             return;
         }
         document.getElementById('taskSidePanel')?.classList.remove('active');
@@ -6972,7 +6972,7 @@ window.handleEditTaskSubmit = async function (e) {
     const id = document.getElementById('editTaskId').value;
     const taskBeingEdited = window.taskCache?.[id];
     if (!taskBeingEdited || (!isTaskAdmin() && taskBeingEdited.created_by !== currentUser?.id)) {
-        showToast('Only the task creator or an administrator can edit this task.', 'warning');
+        showToast(window.t('msg_toast_31') || 'Only the task creator or an administrator can edit this task.', 'warning');
         return;
     }
     const title = document.getElementById('editTaskTitle').value;
@@ -7125,7 +7125,7 @@ window.handleDeleteTask = async function (id) {
     const canDeleteTask = !!task && (isTaskAdmin() || task.created_by === currentUser?.id
         || (taskList?.can_delete_users || []).includes(currentUser?.id));
     if (!canDeleteTask) {
-        showToast('Only the task creator or an administrator can delete this task.', 'warning');
+        showToast(window.t('msg_toast_32') || 'Only the task creator or an administrator can delete this task.', 'warning');
         return;
     }
     window.showConfirmModal("Delete Task", t('confirm_delete') || "Are you sure you want to delete this task?", async () => {
@@ -7153,7 +7153,11 @@ document.addEventListener('dragend', function (e) {
 // ==========================================
 window.navigateToContract = async function (employeeId, empName) {
     if (!window.canCurrentUserEditContracts()) {
-        showToast('Only an HR Manager or Administrator can edit contracts.', 'danger');
+        if (employeeId === currentUser?.id) {
+            window.handlePrintContract(employeeId);
+        } else {
+            showToast(window.t('msg_toast_33') || 'Only an HR Manager or Administrator can edit contracts.', 'danger');
+        }
         return;
     }
     currentContractEmployeeId = employeeId;
@@ -7204,7 +7208,7 @@ window.handleSaveContract = async function (e) {
     e.preventDefault();
     const viewerProfile = await db.getUserProfile(currentUser?.id);
     if (!window.canCurrentUserEditContracts(viewerProfile)) {
-        showToast('Only an HR Manager or Administrator can edit contracts.', 'danger');
+        showToast(window.t('msg_toast_33') || 'Only an HR Manager or Administrator can edit contracts.', 'danger');
         return;
     }
     const jobTitle = document.getElementById('contractJobTitle')?.value || '';
@@ -7603,9 +7607,9 @@ async function renderEmployeesDirectory() {
                                     <td>
                                         <div class="directory-actions">
                                             <button type="button" class="btn-secondary btn-sm directory-view-button" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View employee details"><i data-lucide="eye"></i><span>View</span></button>
-                                            ${canEditContracts ? `<button type="button" class="btn-primary btn-sm directory-edit-button" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>
-                                            <button type="button" class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="Edit Contract"><i data-lucide="file-signature"></i><span>Edit Contract</span></button>
-                                            <button type="button" class="btn-secondary btn-sm" style="color:var(--color-danger)" onclick="handleDeleteContract('${u.id}')" title="Delete Contract"><i data-lucide="trash-2"></i><span>Delete Contract</span></button>` : ''}
+                                            ${canEditContracts ? `<button type="button" class="btn-primary btn-sm directory-edit-button" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>` : ''}
+                                            <button type="button" class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="${canEditContracts ? 'Edit Contract' : 'View Contract'}"><i data-lucide="file-signature"></i><span>${canEditContracts ? 'Edit Contract' : 'View Contract'}</span></button>
+                                            ${canEditContracts ? `<button type="button" class="btn-secondary btn-sm" style="color:var(--color-danger)" onclick="handleDeleteContract('${u.id}')" title="Delete Contract"><i data-lucide="trash-2"></i><span>Delete Contract</span></button>` : ''}
                                         </div>
                                     </td>
                                 </tr>
@@ -7621,7 +7625,7 @@ async function renderEmployeesDirectory() {
 window.handleDeleteContract = async function(employeeId) {
     const viewerProfile = await db.getUserProfile(currentUser?.id);
     if (!window.canCurrentUserEditContracts(viewerProfile)) {
-        showToast('Only an HR Manager or Administrator can delete contracts.', 'danger');
+        showToast(window.t('msg_toast_34') || 'Only an HR Manager or Administrator can delete contracts.', 'danger');
         return;
     }
     const contract = await db.fetchContractByEmployeeId(employeeId);
@@ -7632,7 +7636,7 @@ window.handleDeleteContract = async function(employeeId) {
     window.showConfirmModal('Delete Contract', 'Are you sure you want to permanently delete this contract? This action cannot be undone.', async () => {
         const result = await db.deleteContractByEmployeeId(employeeId);
         if (result.success) {
-            showToast('Contract deleted successfully.', 'success');
+            showToast(window.t('msg_toast_35') || 'Contract deleted successfully.', 'success');
             delete window.viewHTMLCache.employees;
             renderView('employees');
         } else {
@@ -7648,7 +7652,7 @@ window.closeEmployeeDetailsCard = function () {
 window.showEmployeeDetailsCard = async function (userId) {
     const user = (window.currentAdminUsers || []).find(item => item.id === userId) || await db.getUserProfile(userId);
     if (!user) {
-        showToast('Employee details could not be loaded.', 'danger');
+        showToast(window.t('msg_toast_36') || 'Employee details could not be loaded.', 'danger');
         return;
     }
     const users = window.currentAdminUsers || await db.fetchUsers();
@@ -7936,7 +7940,7 @@ window.saveAllTranslations = async function (silent = false) {
     // Apply changes to the live UI immediately
     if (typeof updateTranslations === 'function') updateTranslations();
 
-    if (!silent) showToast('All translations saved successfully', 'success');
+    if (!silent) showToast(window.t('msg_toast_37') || 'All translations saved successfully', 'success');
 
     if (btn) {
         btn.disabled = false;
@@ -8164,7 +8168,7 @@ window.downloadTemplate = function (type) {
     };
 
         const cols = schemas[type];
-    if (!cols) { showToast('Unknown template type', 'error'); return; }
+    if (!cols) { showToast(window.t('msg_toast_38') || 'Unknown template type', 'error'); return; }
     
     try {
         const data = [
@@ -8177,7 +8181,7 @@ window.downloadTemplate = function (type) {
         showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} template downloaded!`, 'success');
     } catch (e) {
         console.error(e);
-        showToast('Error generating template. Please make sure XLSX library is loaded.', 'error');
+        showToast(window.t('msg_toast_39') || 'Error generating template. Please make sure XLSX library is loaded.', 'error');
     }
 };
 
@@ -8197,7 +8201,7 @@ window.handleBulkUpload = async function (event) {
     if (!file) return;
 
     if (typeof XLSX === 'undefined') {
-        showToast('Excel support is unavailable. Please refresh or check your internet connection.', 'error');
+        showToast(window.t('msg_toast_40') || 'Excel support is unavailable. Please refresh or check your internet connection.', 'error');
         return;
     }
 
@@ -8760,7 +8764,7 @@ window.renderView = async function (viewId, isBack = false) {
     document.body.classList.toggle('login-screen', viewId === 'login');
 
     if (currentUser && viewId !== 'login' && !(await canCurrentUserAccessView(viewId))) {
-        showToast('You do not have access to this page.', 'warning');
+        showToast(window.t('msg_toast_41') || 'You do not have access to this page.', 'warning');
         viewId = 'dashboard';
         currentView = 'dashboard';
     }
@@ -9044,7 +9048,7 @@ async function renderArchivedContracts() {
 
 window.handleDeleteArchivedContract = contractId => {
     if (currentUserRole !== 'ADMIN') {
-        showToast('Only an administrator can delete archived contracts.', 'danger');
+        showToast(window.t('msg_toast_42') || 'Only an administrator can delete archived contracts.', 'danger');
         return;
     }
     window.showConfirmModal('Delete archived contract', 'This permanently deletes the archived contract and cannot be undone.', async () => {
@@ -9053,7 +9057,7 @@ window.handleDeleteArchivedContract = contractId => {
             showToast(result.error?.message || 'Failed to delete the archived contract.', 'danger');
             return;
         }
-        showToast('Archived contract permanently deleted.', 'success');
+        showToast(window.t('msg_toast_43') || 'Archived contract permanently deleted.', 'success');
         renderView('archived_contracts');
     });
 };
@@ -9072,7 +9076,7 @@ window.openTaskNotification = async function (taskId) {
     if (window.taskCache?.[taskId]) {
         openTaskDetailsModal(taskId);
     } else {
-        showToast('This task is no longer available or you do not have access.', 'warning');
+        showToast(window.t('msg_toast_44') || 'This task is no longer available or you do not have access.', 'warning');
     }
 };
 
@@ -9514,7 +9518,7 @@ window.handleSaveTaskList = async function (event) {
     const notifyComplete = document.getElementById('taskListNotifyComplete')?.checked || false;
     
     if (!name || !departmentSelection) {
-        showToast('Select the department that can see this task list.', 'warning');
+        showToast(window.t('msg_toast_45') || 'Select the department that can see this task list.', 'warning');
         return;
     }
     const submit = event.currentTarget.querySelector('button[type="submit"]');
@@ -10605,7 +10609,7 @@ window.addDepartmentJobTitleDraft = () => {
     if (!val) return;
     if (!window.currentDepartmentJobTitles) window.currentDepartmentJobTitles = [];
     if (window.currentDepartmentJobTitles.includes(val)) {
-        showToast('Job title already exists in this department', 'warning');
+        showToast(window.t('msg_toast_46') || 'Job title already exists in this department', 'warning');
         return;
     }
     window.currentDepartmentJobTitles.push(val);
@@ -10634,7 +10638,7 @@ window.handleCreateDepartment = async (e) => {
     const jobTitles = window.currentDepartmentJobTitles || [];
     
     if (!deptEn) {
-        showToast('Department (EN) is required.', 'danger');
+        showToast(window.t('msg_toast_47') || 'Department (EN) is required.', 'danger');
         return;
     }
     const data = {
@@ -11173,7 +11177,7 @@ window.handleRequestAction = async function (sourceTable, id, decision) {
     if (decision === 'REJECTED') {
         note = await window.showPromptModal(t('approval_rejection_reason_prompt'), t('ui_rejected'), { required: true });
         if (note === null) return;
-        if (!note.trim()) return showToast('A rejection reason is required.', 'warning');
+        if (!note.trim()) return showToast(window.t('msg_toast_48') || 'A rejection reason is required.', 'warning');
     }
     const result = await db.decideRequestApproval(sourceTable, id, decision, note);
     if (result.success) {
@@ -11731,10 +11735,10 @@ window.executeDeleteProject = async function () {
     closeDeleteProjectModal();
     const { success } = await db.deleteProject(id);
     if (success) {
-        showToast('Project deleted successfully', 'success');
+        showToast(window.t('msg_toast_49') || 'Project deleted successfully', 'success');
         if (currentView === 'projects') renderView('projects');
     } else {
-        showToast('Failed to delete project', 'error');
+        showToast(window.t('msg_toast_50') || 'Failed to delete project', 'error');
     }
 };
 
@@ -11799,6 +11803,14 @@ window.handleUpdateProject = async function (event) {
 // APPROVALS DASHBOARD
 // ==========================================
 async function renderApprovals() {
+    const profile_auth = currentUserProfile || {};
+    const canUseApprovals = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile_auth?.job_title || '');
+    if (!canUseApprovals) {
+        return `<div class="empty-state">
+                    <i data-lucide="shield-alert"></i>
+                    <p data-i18n="unauthorized_access">You are not authorized to view this page.</p>
+                </div>`;
+    }
     const [allTasks, allUsers, allProjects, departments, workflows, leaves, documents, expenses, genericRequests] = await Promise.all([
         db.fetchTasks(), db.fetchUsers(), db.fetchProjects(), db.fetchDepartments(),
         db.fetchRequestApprovalWorkflows(), db.fetchLeaveRequests(), db.fetchDocuments(),
@@ -11886,7 +11898,7 @@ window.handleApprovalRequestDecision = async function (sourceTable, sourceId, de
 
 window.handleTaskApprovalDecision = async function (taskId, decision) {
     const { data: taskData } = await window.supabaseClient.from('tasks').select('id,title,assignee_id,created_by').eq('id', taskId).single();
-    if (!taskData) return showToast('Task not found.', 'danger');
+    if (!taskData) return showToast(window.t('msg_toast_51') || 'Task not found.', 'danger');
     if (decision === 'APPROVED') {
         await window.approveTaskCompletion(taskId);
         if (currentView === 'approvals') renderView('approvals');
@@ -11899,14 +11911,14 @@ window.handleTaskApprovalDecision = async function (taskId, decision) {
     await db.addTaskComment(taskId, currentUser.id, `Completion rejected: ${reason.trim()}`);
     const recipients = [...new Set([taskData.assignee_id, taskData.created_by].filter(id => id && id !== currentUser.id))];
     await Promise.all(recipients.map(id => db.createNotification(id, `Task "${taskData.title}" was returned to In Progress by the department manager.`, taskId)));
-    showToast('Task returned to In Progress.', 'success');
+    showToast(window.t('msg_toast_52') || 'Task returned to In Progress.', 'success');
     renderView('approvals');
 };
 
 window.handleApprovalAction = async function (taskId, newStatus) {
     const { data: taskData } = await window.supabaseClient.from('tasks').select('*').eq('id', taskId).single();
     if (!taskData) {
-        showToast('Task not found', 'danger');
+        showToast(window.t('msg_toast_53') || 'Task not found', 'danger');
         return;
     }
 
@@ -11925,7 +11937,7 @@ window.handleApprovalAction = async function (taskId, newStatus) {
                     await db.createNotification(taskData.assignee_id, `Your Designing task "${taskData.title}" was rejected by the manager. Reason: ${reason}`, taskId);
                 }
                 await db.addTaskComment(taskId, currentUser.id, `Manager Rejection Reason: ${reason}`);
-                showToast('Task rejected and sent back to In Progress', 'success');
+                showToast(window.t('msg_toast_54') || 'Task rejected and sent back to In Progress', 'success');
                 renderView('approvals');
             }
         } else {
