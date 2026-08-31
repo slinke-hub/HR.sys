@@ -148,6 +148,34 @@ const db = {
             return { success: false, error };
         }
     },
+    
+    async incrementPasswordChangeCount(userId) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            // First get the current count
+            const { data: profile, error: fetchError } = await supabaseClient
+                .from('profiles')
+                .select('password_changes_count')
+                .eq('id', userId)
+                .single();
+            
+            if (fetchError) throw fetchError;
+            
+            const currentCount = profile?.password_changes_count || 0;
+            
+            const { error: updateError } = await supabaseClient
+                .from('profiles')
+                .update({ password_changes_count: currentCount + 1 })
+                .eq('id', userId);
+                
+            if (updateError) throw updateError;
+            return { success: true };
+        } catch (error) {
+            console.error("incrementPasswordChangeCount Error:", error);
+            return { success: false, error };
+        }
+    },
+
     async resetUserPassword(userId, newPassword) {
         if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {

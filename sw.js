@@ -1,4 +1,4 @@
-const CACHE_NAME = 'muqam-hr-mobile-v89';
+const CACHE_NAME = 'muqam-hr-mobile-v91';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.json', '/offline.html',
   '/css/variables.css', '/css/layout.css', '/css/components.css', '/css/android.css',

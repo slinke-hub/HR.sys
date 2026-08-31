@@ -1,4 +1,4 @@
-﻿// App State
+// App State
 let currentLang = localStorage.getItem('app_lang') || 'ar';
 window.currentLang = currentLang;
 let currentTheme = 'light';
@@ -32,6 +32,23 @@ function formatEmployeeId(value, fallback = '-') {
 }
 window.formatEmployeeId = formatEmployeeId;
 const isMarketingTaskDepartment = value => /^marketing(?:\s*&\s*sales)?$/i.test(String(value || '').trim());
+
+const taskDetailText = (english, arabic) => currentLang === 'ar' ? arabic : english;
+const taskDetailValue = (value, type = '') => {
+    const raw = String(value || '').trim();
+    if (!raw) return taskDetailText('Not set', 'غير محدد');
+    const key = raw.toLowerCase().replace(/[\s-]+/g, '_');
+    const maps = {
+        status: { todo: 'قيد الانتظار', in_progress: 'قيد التنفيذ', review: 'قيد المراجعة', pending_approval: 'بانتظار الموافقة', completed: 'مكتملة', approved: 'معتمدة', rejected: 'مرفوضة' },
+        priority: { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة', critical: 'حرجة' },
+        visibility: { public: 'عام', private: 'خاص', team: 'الفريق' }
+    };
+    return currentLang === 'ar' ? (maps[type]?.[key] || raw) : raw;
+};
+const getLocalizedTaskTitle = task => {
+    const localized = task?.title_i18n?.[currentLang] || task?.title_i18n?.en || task?.title || '';
+    return currentLang === 'ar' && /(?:Ø|Ù|Ã|Â)/.test(localized) ? (task?.title || localized) : localized;
+};
 
 function getProfileDisplayName(profile) {
     const candidates = [
@@ -134,72 +151,7 @@ if ('serviceWorker' in navigator) {
 }
 
 function showInstallBanner() {
-    if (localStorage.getItem('pwaPromptDismissed')) return;
-
-    // Don't show if already installed (standalone mode)
-    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
-        return;
-    }
-
-    if (!document.getElementById('pwaInstallBanner')) {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        const banner = document.createElement('div');
-        banner.id = 'pwaInstallBanner';
-        banner.className = 'install-banner';
-
-        let contentHtml = `
-            <div class="install-banner-content">
-                <h4>${t('ui_install_muqam_hr')}</h4>
-                <p>Add to your home screen for quick access</p>
-            </div>
-            <button class="install-banner-btn" id="pwaInstallBtn">${t('ui_install')}</button>
-            <button class="install-banner-close" id="pwaCloseBtn"><i data-lucide="x"></i></button>
-        `;
-
-        if (isIOS) {
-            contentHtml = `
-                <div class="install-banner-content">
-                    <h4>${t('ui_install_muqam_hr')}</h4>
-                    <p>Tap <i data-lucide="share" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"></i> and then "Add to Home Screen"</p>
-                </div>
-                <button class="install-banner-close" id="pwaCloseBtn"><i data-lucide="x"></i></button>
-            `;
-        }
-
-        banner.innerHTML = contentHtml;
-        document.body.appendChild(banner);
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        const installBtn = document.getElementById('pwaInstallBtn');
-        if (installBtn) {
-            installBtn.addEventListener('click', async () => {
-                banner.classList.remove('show');
-                setTimeout(() => banner.remove(), 400); // Wait for transition then remove
-                if (deferredPrompt) {
-                    deferredPrompt.prompt();
-                    const { outcome } = await deferredPrompt.userChoice;
-                    console.log(`User response to the install prompt: ${outcome}`);
-                    deferredPrompt = null;
-                } else {
-                    window.showAppMessageModal("To install, open your browser's menu and select 'Add to Home Screen' or 'Install App'.");
-                }
-                localStorage.setItem('pwaPromptDismissed', 'true');
-            });
-        }
-
-        const closeBtn = document.getElementById('pwaCloseBtn');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                banner.classList.remove('show');
-                setTimeout(() => banner.remove(), 400);
-                localStorage.setItem('pwaPromptDismissed', 'true');
-            });
-        }
-
-        // Slight delay to animate in
-        setTimeout(() => {
-            banner.classList.add('show');
-        }, 2000);
-    }
+    return; // Disabled by user request
 }
 
 // User Management Actions
@@ -1156,7 +1108,7 @@ async function canCurrentUserAccessView(viewId) {
     const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
     if (isAdmin) return true;
     if (normalizedRole === 'EMPLOYEE') {
-        return new Set(['dashboard', 'requests', 'time', 'tasks', 'documents']).has(viewId);
+        return new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'profile']).has(viewId);
     }
     if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
     if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
@@ -1461,9 +1413,15 @@ async function renderTeamHierarchyWidget() {
     const isDepartmentEmployee = normalizedRole === 'EMPLOYEE';
     // Employees receive only their department's profiles. This limits the data
     // used by both the hierarchy renderer and its employee lookup cache.
-    const allUsers = isDepartmentEmployee && currentProfile.department_id
-        ? fetchedUsers.filter(user => user.department_id === currentProfile.department_id)
-        : fetchedUsers;
+    let allUsers = fetchedUsers;
+    if (isDepartmentEmployee) {
+        allUsers = fetchedUsers.filter(user => 
+            user.id === currentProfile.manager_id || 
+            user.manager_id === currentProfile.manager_id || 
+            (currentProfile.department_id && user.department_id === currentProfile.department_id) ||
+            user.manager_id === currentProfile.id
+        );
+    }
     if (!allUsers || allUsers.length === 0) {
         return `
             <div class="card col-span-12">
@@ -1483,12 +1441,13 @@ async function renderTeamHierarchyWidget() {
         rootUsers = allUsers.filter(u => u.role === 'ADMIN' || u.role === 'MANAGER' || !u.manager_id);
     } else if (normalizedRole === 'MANAGER') {
         rootUsers = allUsers.filter(u => u.id === currentUser.id);
-    } else if (isDepartmentEmployee && currentProfile.department_id) {
-        // Show the complete department tree, including colleagues who are not
-        // in the signed-in employee's direct reporting branch.
-        const visibleIds = new Set(allUsers.map(user => user.id));
-        rootUsers = allUsers.filter(user => !user.manager_id || !visibleIds.has(user.manager_id));
-        if (rootUsers.length === 0) rootUsers = [currentProfile];
+    } else if (isDepartmentEmployee) {
+        let myMgr = fetchedUsers.find(u => u.id === currentProfile.manager_id);
+        if (myMgr) {
+            rootUsers = [myMgr];
+        } else {
+            rootUsers = [currentProfile];
+        }
     } else {
         let myMgr = allUsers.find(u => u.id === currentUser.manager_id);
         if (myMgr) {
@@ -2314,20 +2273,20 @@ window.openTaskDetailsModal = async function (id) {
     if (taskPanelOverlay) taskPanelOverlay.hidden = false;
 
     document.getElementById('detailsTaskId').value = task.id;
-    document.getElementById('detailsTaskTitle').textContent = task.displayTitle || task.title;
-    document.getElementById('detailsTaskAssignee').textContent = window.formatEmployeeName(task.assignee) || 'Unassigned';
-    document.getElementById('detailsTaskCreator').textContent = window.formatEmployeeName(task.creator) || 'System';
-    document.getElementById('detailsTaskStatus').textContent = task.status;
-    document.getElementById('detailsTaskPriority').textContent = task.priority;
-    document.getElementById('detailsTaskVisibility').textContent = task.visibility || 'public';
-    document.getElementById('detailsTaskStart').textContent = task.start_date || 'Not set';
-    document.getElementById('detailsTaskDue').textContent = task.due_date || 'Not set';
-    if(document.getElementById('detailsTaskEnd')) document.getElementById('detailsTaskEnd').textContent = task.end_date || 'Not set';
-    document.getElementById('detailsTaskEstimate').textContent = task.estimated_time || 'Not set';
+    document.getElementById('detailsTaskTitle').textContent = getLocalizedTaskTitle(task);
+    document.getElementById('detailsTaskAssignee').textContent = window.formatEmployeeName(task.assignee) || taskDetailText('Unassigned', 'غير معيّن');
+    document.getElementById('detailsTaskCreator').textContent = window.formatEmployeeName(task.creator) || taskDetailText('System', 'النظام');
+    document.getElementById('detailsTaskStatus').textContent = taskDetailValue(task.status, 'status');
+    document.getElementById('detailsTaskPriority').textContent = taskDetailValue(task.priority, 'priority');
+    document.getElementById('detailsTaskVisibility').textContent = taskDetailValue(task.visibility || 'public', 'visibility');
+    document.getElementById('detailsTaskStart').textContent = task.start_date || taskDetailText('Not set', 'غير محدد');
+    document.getElementById('detailsTaskDue').textContent = task.due_date || taskDetailText('Not set', 'غير محدد');
+    if(document.getElementById('detailsTaskEnd')) document.getElementById('detailsTaskEnd').textContent = task.end_date || taskDetailText('Not set', 'غير محدد');
+    document.getElementById('detailsTaskEstimate').textContent = task.estimated_time || taskDetailText('Not set', 'غير محدد');
     prepareTeamworkTaskDetail(task);
 
     const list = document.getElementById('taskCommentsList');
-    list.innerHTML = '<div style="text-align: center; color: var(--color-text-secondary);">Loading comments...</div>';
+    list.innerHTML = `<div style="text-align: center; color: var(--color-text-secondary);">${taskDetailText('Loading comments...', 'جارٍ تحميل التعليقات...')}</div>`;
 
     document.getElementById('taskSidePanel').classList.add('active');
     document.getElementById('taskSidePanelOverlay').classList.add('active');
@@ -2349,18 +2308,18 @@ window.openTaskDetailsModal = async function (id) {
     // Load Subtasks
     const subTasksList = document.getElementById('taskSubTasksList');
     if (subTasksList) {
-        subTasksList.innerHTML = '<div style="text-align: center; color: var(--color-text-secondary);">Loading sub-tasks...</div>';
+        subTasksList.innerHTML = `<div style="text-align: center; color: var(--color-text-secondary);">${taskDetailText('Loading subtasks...', 'جارٍ تحميل المهام الفرعية...')}</div>`;
         const allTasks = Object.values(window.taskCache || {});
         const subTasks = allTasks.filter(t => t.parent_task_id === task.id);
 
         if (subTasks.length === 0) {
-            subTasksList.innerHTML = '<div style="color: var(--color-text-secondary); font-style: italic;">No sub-tasks yet.</div>';
+            subTasksList.innerHTML = `<div style="color: var(--color-text-secondary); font-style: italic;">${taskDetailText('No subtasks yet.', 'لا توجد مهام فرعية بعد.')}</div>`;
         } else {
             subTasksList.innerHTML = subTasks.map(st => `
                 <div style="background: var(--color-surface); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--color-border); cursor: pointer;" onclick="openTaskDetailsModal('${st.id}')">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <strong>${escapeHTML(st.title)}</strong>
-                        <span class="badge" style="font-size: 0.7rem;">${st.status}</span>
+                        <span class="badge" style="font-size: 0.7rem;">${escapeHTML(taskDetailValue(st.status, 'status'))}</span>
                     </div>
                 </div>
             `).join('');
@@ -2369,12 +2328,12 @@ window.openTaskDetailsModal = async function (id) {
 
     const comments = await db.fetchTaskComments(task.id);
     if (comments.length === 0) {
-        list.innerHTML = '<div style="color: var(--color-text-secondary); font-style: italic;">No comments yet.</div>';
+        list.innerHTML = `<div style="color: var(--color-text-secondary); font-style: italic;">${taskDetailText('No comments yet.', 'لا توجد تعليقات بعد.')}</div>`;
     } else {
         list.innerHTML = comments.map(c => `
             <div style="background: var(--color-bg-base); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--color-border); margin-bottom: 0.5rem; box-shadow: var(--shadow-sm);">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
-                    <strong>${escapeHTML(window.formatEmployeeName(c.user) || 'Unknown User')}</strong>
+                    <strong>${escapeHTML(window.formatEmployeeName(c.user) || taskDetailText('Unknown user', 'مستخدم غير معروف'))}</strong>
                     <span style="font-size: 0.75rem; color: var(--color-text-secondary);">${new Date(c.created_at).toLocaleString()}</span>
                 </div>
                 <div>${escapeHTML(c.content)}</div>
@@ -2462,7 +2421,7 @@ function prepareTeamworkTaskDetail(task) {
             actions.className = 'task-detail-actions';
             header.appendChild(actions);
         }
-        actions.innerHTML = `${canApproveCompletion ? `<button type="button" class="btn btn-primary" onclick="approveTaskCompletion('${task.id}')"><i data-lucide="check-circle"></i> Approve</button>` : ''}${canEdit ? '<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById(\'detailsTaskId\').value)"><i data-lucide="pencil"></i> Edit</button>' : ''}<button type="button" class="task-detail-close" aria-label="Close task" onclick="document.getElementById('taskSidePanel').classList.remove('active');document.getElementById('taskSidePanelOverlay').classList.remove('active')">&times;</button>`;
+        actions.innerHTML = `${canApproveCompletion ? `<button type="button" class="btn btn-primary" onclick="approveTaskCompletion('${task.id}')"><i data-lucide="check-circle"></i> ${taskDetailText('Approve', 'اعتماد')}</button>` : ''}${canEdit ? `<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById('detailsTaskId').value)"><i data-lucide="pencil"></i> ${taskDetailText('Edit', 'تعديل')}</button>` : ''}<button type="button" class="task-detail-close" aria-label="${taskDetailText('Close task', 'إغلاق المهمة')}" onclick="document.getElementById('taskSidePanel').classList.remove('active');document.getElementById('taskSidePanelOverlay').classList.remove('active')">&times;</button>`;
         header.querySelector('.close-modal')?.remove();
     }
     const grid = panel.querySelector('.task-details-grid');
@@ -2482,21 +2441,21 @@ function prepareTeamworkTaskDetail(task) {
             return imageExtensions.test(String(link))
                 ? `<a class="task-detail-image-attachment" href="${safeLink}" target="_blank" rel="noopener" title="Open ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></a>`
                 : `<a href="${safeLink}" target="_blank" rel="noopener"><i data-lucide="download"></i>${label}</a>`;
-        }).join('') : '<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>No files or links have been added</span></div>';
+        }).join('') : `<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>${taskDetailText('No files or links have been added', 'لم تتم إضافة ملفات أو روابط')}</span></div>`;
         const canUploadFiles = canInteractWithTask(task);
         content.innerHTML = `
-            <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : '<span>Add a description</span>'}</p></section>
-            <nav class="task-detail-tabs" aria-label="Task information"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">Details</button><button type="button" data-task-info-tab="custom-fields" onclick="setTaskDetailInfoTab('custom-fields')">Custom fields</button><button type="button" data-task-info-tab="dependencies" onclick="setTaskDetailInfoTab('dependencies')">Dependencies</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">Proofs</button></nav>
+            <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : `<span>${taskDetailText('Add a description', 'أضف وصفاً')}</span>`}</p></section>
+            <nav class="task-detail-tabs" aria-label="${taskDetailText('Task information', 'معلومات المهمة')}"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">${taskDetailText('Details', 'التفاصيل')}</button><button type="button" data-task-info-tab="custom-fields" onclick="setTaskDetailInfoTab('custom-fields')">${taskDetailText('Custom fields', 'الحقول المخصصة')}</button><button type="button" data-task-info-tab="dependencies" onclick="setTaskDetailInfoTab('dependencies')">${taskDetailText('Dependencies', 'التبعيات')}</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">${taskDetailText('Proofs', 'الإثباتات')}</button></nav>
             <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
             <section class="task-detail-files">
-                <div class="task-detail-files-heading"><h3>Files & links</h3>${canUploadFiles ? `<button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> Upload file(s)</button><input id="taskAttachmentInput" type="file" multiple style="display: none;" onchange="uploadTaskAttachment(this)">` : ''}</div>
+                <div class="task-detail-files-heading"><h3>${taskDetailText('Files & links', 'الملفات والروابط')}</h3>${canUploadFiles ? `<button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> ${taskDetailText('Upload files', 'رفع الملفات')}</button><input id="taskAttachmentInput" type="file" multiple style="display: none;" onchange="uploadTaskAttachment(this)">` : ''}</div>
                 <div id="taskDetailFileList"><div class="task-detail-link-list">${attachmentHTML}</div></div>
             </section>`;
     }
     const commentsHeading = Array.from(panel.querySelectorAll('h3')).find(item => item.textContent.includes('Activity') || item.textContent.includes('Comments'));
     if (commentsHeading) {
         commentsHeading.className = 'task-comment-tabs';
-        commentsHeading.innerHTML = '<button type="button" class="active" data-task-activity-tab="comments" onclick="setTaskActivityTab(\'comments\')">Comments</button><button type="button" data-task-activity-tab="activity" onclick="setTaskActivityTab(\'activity\')">Activity</button><button type="button" data-task-activity-tab="info" onclick="setTaskActivityTab(\'info\')">Info</button>';
+        commentsHeading.innerHTML = `<button type="button" class="active" data-task-activity-tab="comments" onclick="setTaskActivityTab('comments')">${taskDetailText('Comments', 'التعليقات')}</button><button type="button" data-task-activity-tab="activity" onclick="setTaskActivityTab('activity')">${taskDetailText('Activity', 'النشاط')}</button><button type="button" data-task-activity-tab="info" onclick="setTaskActivityTab('info')">${taskDetailText('Info', 'المعلومات')}</button>`;
         let activityPanel = panel.querySelector('#taskActivityPanel');
         if (!activityPanel) {
             activityPanel = document.createElement('div');
@@ -2705,17 +2664,17 @@ window.setTaskDetailInfoTab = function (tab) {
     const canManageTask = !task.task_list_id || privateList?.owner_id === currentUser?.id;
     if (tab === 'custom-fields') {
         const fields = [
-            ['Department', task.department], ['Task type', task.sub_type], ['Business', task.marketing_department],
-            ['Content type', task.content_type], ['Delivery status', task.delivery_status], ['Category', task.category]
+            [taskDetailText('Department', 'القسم'), task.department], [taskDetailText('Task type', 'نوع المهمة'), task.sub_type], [taskDetailText('Business', 'النشاط'), task.marketing_department],
+            [taskDetailText('Content type', 'نوع المحتوى'), task.content_type], [taskDetailText('Delivery status', 'حالة التسليم'), task.delivery_status], [taskDetailText('Category', 'التصنيف'), task.category]
         ].filter(([, value]) => value);
-        panel.innerHTML = fields.length ? `<div class="task-detail-data-grid">${fields.map(([label, value]) => `<div><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong></div>`).join('')}</div>` : '<div class="task-tab-empty">No custom fields have been set.</div>';
+        panel.innerHTML = fields.length ? `<div class="task-detail-data-grid">${fields.map(([label, value]) => `<div><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong></div>`).join('')}</div>` : `<div class="task-tab-empty">${taskDetailText('No custom fields have been set.', 'لم يتم تعيين حقول مخصصة.')}</div>`;
     } else if (tab === 'dependencies') {
-        panel.innerHTML = `<div class="task-detail-data-grid"><div><span>Parent task</span><strong>${parent ? escapeHTML(parent.displayTitle || parent.title) : 'None'}</strong></div><div><span>Subtasks</span><strong>${subtasks.length}</strong></div><div><span>Blocking dependencies</span><strong>None</strong></div></div>`;
+        panel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Parent task', 'المهمة الرئيسية')}</span><strong>${parent ? escapeHTML(getLocalizedTaskTitle(parent)) : taskDetailText('None', 'لا يوجد')}</strong></div><div><span>${taskDetailText('Subtasks', 'المهام الفرعية')}</span><strong>${subtasks.length}</strong></div><div><span>${taskDetailText('Blocking dependencies', 'التبعيات المانعة')}</span><strong>${taskDetailText('None', 'لا يوجد')}</strong></div></div>`;
     } else if (tab === 'proofs') {
-        panel.innerHTML = proofLinks.length ? `<div class="task-detail-link-list">${proofLinks.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : '<div class="task-tab-empty">No submission proofs have been added.</div>';
+        panel.innerHTML = proofLinks.length ? `<div class="task-detail-link-list">${proofLinks.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : `<div class="task-tab-empty">${taskDetailText('No submission proofs have been added.', 'لم تتم إضافة إثباتات تسليم.')}</div>`;
     } else {
-        panel.innerHTML = `<div class="task-detail-data-grid"><div><span>Status</span><strong>${escapeHTML(task.status || 'Not set')}</strong></div><div><span>Priority</span><strong>${escapeHTML(task.priority || 'Not set')}</strong></div><div><span>Content links</span><strong>${contentLinks.length}</strong></div><div><span>Due date</span><strong>${escapeHTML(task.due_date || 'Not set')}</strong></div></div>
-            <section class="task-detail-inline-subtasks"><div class="task-detail-subtask-heading"><strong>Subtasks <span>${subtasks.length}</span></strong>${canManageTask ? '<button type="button" onclick="openInlineSubtaskComposer()"><i data-lucide="plus"></i> Add a subtask</button>' : '<span class="task-private-badge"><i data-lucide="eye"></i>View only</span>'}</div><div id="taskDetailSubtaskHost">${subtasks.length ? subtasks.map(subtask => `<button type="button" class="task-detail-subtask-row" onclick="openTaskDetailsModal('${subtask.id}')"><i data-lucide="circle"></i><span>${escapeHTML(subtask.displayTitle || subtask.title)}</span><small>${escapeHTML(subtask.due_date || 'No due date')}</small></button>`).join('') : '<div class="task-tab-empty">No subtasks yet.</div>'}</div></section>`;
+        panel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Status', 'الحالة')}</span><strong>${escapeHTML(taskDetailValue(task.status, 'status'))}</strong></div><div><span>${taskDetailText('Priority', 'الأولوية')}</span><strong>${escapeHTML(taskDetailValue(task.priority, 'priority'))}</strong></div><div><span>${taskDetailText('Content links', 'روابط المحتوى')}</span><strong>${contentLinks.length}</strong></div><div><span>${taskDetailText('Due date', 'تاريخ الاستحقاق')}</span><strong>${escapeHTML(task.due_date || taskDetailText('Not set', 'غير محدد'))}</strong></div></div>
+            <section class="task-detail-inline-subtasks"><div class="task-detail-subtask-heading"><strong>${taskDetailText('Subtasks', 'المهام الفرعية')} <span>${subtasks.length}</span></strong>${canManageTask ? `<button type="button" onclick="openInlineSubtaskComposer()"><i data-lucide="plus"></i> ${taskDetailText('Add a subtask', 'إضافة مهمة فرعية')}</button>` : `<span class="task-private-badge"><i data-lucide="eye"></i>${taskDetailText('View only', 'عرض فقط')}</span>`}</div><div id="taskDetailSubtaskHost">${subtasks.length ? subtasks.map(subtask => `<button type="button" class="task-detail-subtask-row" onclick="openTaskDetailsModal('${subtask.id}')"><i data-lucide="circle"></i><span>${escapeHTML(getLocalizedTaskTitle(subtask))}</span><small>${escapeHTML(subtask.due_date || taskDetailText('No due date', 'بدون تاريخ استحقاق'))}</small></button>`).join('') : `<div class="task-tab-empty">${taskDetailText('No subtasks yet.', 'لا توجد مهام فرعية بعد.')}</div>`}</div></section>`;
     }
     if (window.lucide) window.lucide.createIcons();
 };
@@ -2734,9 +2693,9 @@ window.setTaskActivityTab = function (tab) {
     if (composer) composer.style.display = tab === 'comments' && canComment ? '' : 'none';
     activityPanel.style.display = tab === 'comments' ? 'none' : 'block';
     if (tab === 'activity') {
-        activityPanel.innerHTML = `<div class="task-activity-event"><i data-lucide="circle-plus"></i><div><strong>Task created</strong><span>${task.created_at ? new Date(task.created_at).toLocaleString() : 'Date unavailable'}</span></div></div><div class="task-activity-event"><i data-lucide="workflow"></i><div><strong>Current stage: ${escapeHTML(task.status || 'Not set')}</strong><span>Assigned to ${escapeHTML(window.formatEmployeeName(task.assignee) || 'Unassigned')}</span></div></div>`;
+        activityPanel.innerHTML = `<div class="task-activity-event"><i data-lucide="circle-plus"></i><div><strong>${taskDetailText('Task created', 'تم إنشاء المهمة')}</strong><span>${task.created_at ? new Date(task.created_at).toLocaleString(currentLang === 'ar' ? 'ar-SA' : undefined) : taskDetailText('Date unavailable', 'التاريخ غير متاح')}</span></div></div><div class="task-activity-event"><i data-lucide="workflow"></i><div><strong>${taskDetailText('Current stage', 'المرحلة الحالية')}: ${escapeHTML(taskDetailValue(task.status, 'status'))}</strong><span>${taskDetailText('Assigned to', 'مُعيّنة إلى')} ${escapeHTML(window.formatEmployeeName(task.assignee) || taskDetailText('Unassigned', 'غير معيّن'))}</span></div></div>`;
     } else if (tab === 'info') {
-        activityPanel.innerHTML = `<div class="task-detail-data-grid"><div><span>Created by</span><strong>${escapeHTML(window.formatEmployeeName(task.creator) || 'System')}</strong></div><div><span>Assigned to</span><strong>${escapeHTML(window.formatEmployeeName(task.assignee) || 'Unassigned')}</strong></div><div><span>Visibility</span><strong>${escapeHTML(task.visibility || 'public')}</strong></div><div><span>Estimated time</span><strong>${escapeHTML(task.estimated_time || 'Not set')}</strong></div></div>`;
+        activityPanel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Created by', 'أنشأها')}</span><strong>${escapeHTML(window.formatEmployeeName(task.creator) || taskDetailText('System', 'النظام'))}</strong></div><div><span>${taskDetailText('Assigned to', 'مُعيّنة إلى')}</span><strong>${escapeHTML(window.formatEmployeeName(task.assignee) || taskDetailText('Unassigned', 'غير معيّن'))}</strong></div><div><span>${taskDetailText('Visibility', 'الظهور')}</span><strong>${escapeHTML(taskDetailValue(task.visibility || 'public', 'visibility'))}</strong></div><div><span>${taskDetailText('Estimated time', 'الوقت المقدر')}</span><strong>${escapeHTML(task.estimated_time || taskDetailText('Not set', 'غير محدد'))}</strong></div></div>`;
     }
     if (window.lucide) window.lucide.createIcons();
 };
@@ -4515,7 +4474,7 @@ async function renderProfile() {
                 <form autocomplete="off" onsubmit="handleUpdateProfilePhoto(event)" style="margin-bottom: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
                     <div class="form-group" style="text-align: left;">
                         <label class="form-label" style="font-size: 0.85rem;">${t('prof_update_pic')}</label>
-                        <input type="file" id="avatarFile" accept="image/*" hidden required onchange="document.getElementById('avatarFileName').textContent=this.files?.[0]?.name || t('prof_no_file_selected')">
+                        <input type="file" id="avatarFile" accept="image/*" style="display: none;" required onchange="document.getElementById('avatarFileName').textContent=this.files?.[0]?.name || t('prof_no_file_selected')">
                         <label for="avatarFile" class="profile-file-picker"><i data-lucide="image-plus"></i><span>${t('prof_choose_photo')}</span></label>
                         <small id="avatarFileName" class="profile-file-name">${t('prof_no_file_selected')}</small>
                     </div>
@@ -4534,10 +4493,7 @@ async function renderProfile() {
                                 <input type="text" id="profileDisplayName" class="form-control" value="${escapeHTML(displayName)}" placeholder="${t('prof_display_name_ph')}" autocomplete="nickname" required maxlength="100">
                                 <small style="display: block; margin-top: 0.35rem; color: var(--color-text-secondary);">${t('prof_display_name_help')}</small>
                             </div>
-                            <div class="form-group col-span-6">
-                                <label class="form-label">${t('prof_fn')}</label>
-                                <input type="text" id="profileFullName" class="form-control" value="${escapeHTML(profile.full_name || '')}" placeholder="${t('users_fn_ph')}">
-                            </div>
+                            
                             <div class="form-group col-span-6">
                                 <label class="form-label">${t('prof_email')}</label>
                                 <input type="email" class="form-control" value="${currentUser.email}" disabled style="background-color: var(--color-surface); opacity: 0.7; cursor: not-allowed;">
@@ -4659,11 +4615,24 @@ window.handleUpdateProfilePhoto = async function (e) {
 
 window.handleUpdatePassword = async function (e) {
     e.preventDefault();
+    
+    // Check password change limit
+    if (currentUserProfile && (currentUserProfile.password_changes_count || 0) >= 3) {
+        showToast(t('password_change_limit_reached') || "You have reached the maximum number of password changes (3). Please contact an admin to reset your password.", "warning");
+        return;
+    }
+    
     const newPwd = document.getElementById('newPassword').value;
     const { success, error } = await db.updateUserPassword(newPwd);
     if (success) {
         showToast(t('toast_password_updated_successfully'), "success");
         document.getElementById('newPassword').value = '';
+        
+        // Increment count
+        await db.incrementPasswordChangeCount(currentUser.id);
+        if (currentUserProfile) {
+            currentUserProfile.password_changes_count = (currentUserProfile.password_changes_count || 0) + 1;
+        }
     } else {
         showToast(error?.message || "Error updating password.", "danger");
     }
@@ -4672,7 +4641,7 @@ window.handleUpdatePassword = async function (e) {
 window.handleUpdateProfileDetails = async function (e) {
     e.preventDefault();
     const displayName = document.getElementById('profileDisplayName').value.trim();
-    const fullName = document.getElementById('profileFullName').value.trim();
+    const fullName = currentUserProfile?.full_name || '';
     const iqama = document.getElementById('profileIqama').value.trim();
     const phone = document.getElementById('profilePhone').value.trim();
 
@@ -4731,10 +4700,7 @@ async function renderTasks() {
     let tasks = fetchedTasks.map(t => {
         const assignee = allUsers.find(u => u.id === t.assignee_id);
         const creator = allUsers.find(u => u.id === t.created_by);
-        let displayTitle = t.title;
-        if (t.title_i18n && typeof t.title_i18n === 'object') {
-            displayTitle = t.title_i18n[currentLang] || t.title_i18n['en'] || t.title;
-        }
+        const displayTitle = getLocalizedTaskTitle(t);
         const taskObj = {
             ...t,
             assignee_ids: Array.isArray(t.assignee_ids) && t.assignee_ids.length ? t.assignee_ids : (t.assignee_id ? [t.assignee_id] : []),
@@ -5922,10 +5888,12 @@ window.handleCreateTask = async function (e) {
         }
     }
 
-    // Mock translation for title_i18n
+    // Store the entered title without appending a broken placeholder
+    // translation. It remains readable in both language modes until an
+    // explicit localized title is supplied.
     const titleI18n = {
         'en': title,
-        'ar': title + ' (Ù…ØªØ±Ø¬Ù…)' // mock arabic
+        'ar': title
     };
 
     // Get department, sub-type, and watchers
@@ -7994,6 +7962,11 @@ window.renderView = async function (viewId, isBack = false) {
         viewId = 'login';
         currentView = 'login';
     }
+
+    // The mobile shell normally forces its bottom navigation to display.
+    // Mark authentication screens explicitly so iPhone/iPad Safari can keep
+    // that navigation hidden until the user is signed in.
+    document.body.classList.toggle('login-screen', viewId === 'login');
 
     if (currentUser && viewId !== 'login' && !(await canCurrentUserAccessView(viewId))) {
         showToast('You do not have access to this page.', 'warning');

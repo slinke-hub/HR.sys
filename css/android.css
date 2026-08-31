@@ -181,6 +181,15 @@ html[data-platform="android"] textarea {
     box-shadow: 0 -10px 30px rgba(3, 12, 27, .2);
   }
 
+  html[data-platform="android"] body.login-screen .sidebar {
+    display: none !important;
+  }
+
+  html[data-platform="android"] body.login-screen .view-container {
+    height: 100dvh;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
   html[data-platform="android"] .sidebar-header {
     display: none !important;
   }
