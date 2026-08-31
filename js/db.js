@@ -741,7 +741,12 @@ const db = {
                     console.error("Failed to update department_id:", updateError);
                 }
             }
-            return { data, error: null };
+            const { data: createdProfile } = await supabaseClient
+                .from('profiles')
+                .select('id, emp_index')
+                .eq('id', userId)
+                .single();
+            return { data: createdProfile || { id: userId }, error: null };
         } catch (error) {
             console.error("createUser Error:", error);
             const errMsg = error?.message || error?.details || error?.hint || (typeof error === 'string' ? error : "Unknown error occurred");

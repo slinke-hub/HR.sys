@@ -856,7 +856,8 @@
             <form autocomplete="off" onsubmit="handleCreateUser(event)" id="addUserForm">
                 <div class="form-group">
                     <label class="form-label">Employee ID</label>
-                    <input type="text" autocomplete="off" id="newEmployeeId" class="form-control" value="MQ-" placeholder="MQ-XXXX" required>
+                    <input type="text" autocomplete="off" id="newEmployeeId" class="form-control" placeholder="Assigned automatically" readonly aria-readonly="true">
+                    <small class="text-muted">The next MQ number will be assigned when the user is created.</small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Full Name</label>
@@ -1629,11 +1630,11 @@
     <script src="js/vendor/supabase.js"></script>
     <script src="js/vendor/chart.umd.min.js"></script>
     <script src="js/vendor/xlsx.full.min.js"></script>
-    <script src="js/db.js?v=58"></script>
+    <script src="js/db.js?v=59"></script>
     <script src="js/data.js?v=32"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=206"></script>
+    <script src="js/app.js?v=207"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

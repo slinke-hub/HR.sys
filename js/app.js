@@ -1185,6 +1185,8 @@ const arabicRuntimeUiText = Object.freeze({
     ,'Email': 'البريد الإلكتروني'
     ,'Employee *': 'الموظف *'
     ,'Employee ID': 'رقم الموظف'
+    ,'Assigned automatically': 'يُعيّن تلقائيًا'
+    ,'The next MQ number will be assigned when the user is created.': 'سيتم تعيين رقم MQ التالي عند إنشاء المستخدم.'
     ,'End Date': 'تاريخ الانتهاء'
     ,'Enter email address (Optional)': 'أدخل البريد الإلكتروني (اختياري)'
     ,'Enter full name': 'أدخل الاسم الكامل'
@@ -3926,15 +3928,16 @@ async function renderAdmin() {
 // Render User Management (Admin Only)
 window.handleCreateUser = async function (e) {
     e.preventDefault();
-    const employeeId = document.getElementById('newEmployeeId').value;
+    const employeeId = '';
+    const fullName = document.getElementById('newFullName').value;
     let email = document.getElementById('newEmail').value.trim();
     if (!email) {
-        email = `${employeeId.toLowerCase().replace(/[^a-z0-9]/g, '')}@muqam.local`;
+        const emailStem = fullName.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 24) || 'employee';
+        email = `${emailStem}${Date.now()}@muqam.local`;
     }
     const password = document.getElementById('newPassword').value;
     const role = 'EMPLOYEE';
     const jobTitle = '';
-    const fullName = document.getElementById('newFullName').value;
     const fullNameAr = document.getElementById('newFullNameAr').value;
     const iqama = '';
     const phone = document.getElementById('newPhone').value;
@@ -3943,7 +3946,8 @@ window.handleCreateUser = async function (e) {
 
     const { data, error } = await db.createUser(email, password, role, jobTitle, fullName, iqama, phone, departmentId, nationality, fullNameAr, employeeId);
     if (!error) {
-        showToast(t('toast_user_created_successfully'), 'success');
+        const assignedEmployeeId = data?.emp_index ? formatEmployeeId(data.emp_index) : '';
+        showToast(assignedEmployeeId ? `${t('toast_user_created_successfully')} (${assignedEmployeeId})` : t('toast_user_created_successfully'), 'success');
         if (typeof closeAddUserModal === 'function') closeAddUserModal();
         const createdUserId = data?.id || (typeof data === 'string' ? data : null);
         window.navigateToContract(createdUserId, fullName);
