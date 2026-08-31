@@ -222,6 +222,11 @@ window.handleUpdateUser = async (e) => {
         manager_id: document.getElementById('editManagerId').value || null
     };
 
+    if (updates.role === 'OWNER') {
+        updates.role = 'ADMIN';
+        updates.job_title = 'Owner';
+    }
+
     const photoFile = document.getElementById('editAvatarFile')?.files?.[0];
     if (photoFile) {
         try {
@@ -673,7 +678,7 @@ window.toggleTheme = function () {
     if (themeIcon) themeIcon.setAttribute('data-lucide', currentTheme === 'light' ? 'moon' : 'sun');
     lucide.createIcons();
     const dropdown = document.getElementById('profileDropdown');
-    if (dropdown) dropdown.style.display = 'none';
+    if (dropdown) { dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
 }
 
 // --- LANGUAGE MANAGEMENT ---
@@ -702,7 +707,7 @@ window.toggleLanguage = function () {
     updateTranslations();
     renderView(currentView); // Re-render view for updated strings inside
     const dropdown = document.getElementById('profileDropdown');
-    if (dropdown) dropdown.style.display = 'none';
+    if (dropdown) { dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
 }
 
 window.closeMobileNavigation = function () {
@@ -827,6 +832,8 @@ const arabicRuntimeUiText = Object.freeze({
     'Team Member': 'عضو فريق',
     'You': 'أنت',
     'ADMIN': 'مسؤول النظام',
+    'Owner': 'المالك',
+    'OWNER': 'المالك',
     'SYSTEM ADMIN': 'مسؤول النظام',
     'ROLE_SYSTEM_ADMIN': 'مسؤول النظام',
     'MANAGER': 'مدير',
@@ -851,7 +858,7 @@ const arabicRuntimeUiText = Object.freeze({
     'Close employee information': 'إغلاق معلومات الموظف',
     'Employee information is unavailable.': 'معلومات الموظف غير متاحة.',
     'Nationality': 'الجنسية',
-    'Iqama / ID Number': 'رقم الهوية / الإقامة',
+    'ID/Iqama number': 'رقم الهوية / الإقامة',
     'Phone Number': 'رقم الهاتف',
     'Latest Login': 'آخر تسجيل دخول',
     'Not provided': 'غير متوفر',
@@ -1001,7 +1008,7 @@ const arabicRuntimeUiText = Object.freeze({
     'Task name': 'اسم المهمة',
     'Assignee': 'الموظف المعيّن',
     'Department': 'القسم',
-    'ID / Iqama number': 'رقم الهوية / الإقامة',
+    'ID/Iqama number': 'رقم الهوية / الإقامة',
     'Job Title': 'المسمى الوظيفي',
     'Assigned Manager': 'المدير المعيّن',
     'Employee profile': 'ملف الموظف',
@@ -1953,7 +1960,8 @@ async function renderTeamHierarchyWidget() {
     const fetchedUsers = (await db.fetchUsers()) || [];
     const currentProfile = fetchedUsers.find(user => user.id === currentUser?.id) || currentUser || {};
     const normalizedRole = String(currentUserRole || currentProfile.role || '').toUpperCase();
-    const isDepartmentEmployee = normalizedRole === 'EMPLOYEE';
+    const isOwner = normalizedRole === 'OWNER' || /^owner$/i.test(String(currentProfile.job_title || '').trim());
+    const isDepartmentEmployee = normalizedRole === 'EMPLOYEE' && !isOwner;
     // Employees receive only their department's profiles. This limits the data
     // used by both the hierarchy renderer and its employee lookup cache.
     let myDeptHeadId = null;
@@ -1991,7 +1999,9 @@ async function renderTeamHierarchyWidget() {
     const canViewEmployeeInfo = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'SUPERVISOR'].includes(normalizedRole);
     let rootUsers = [];
     if (['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole)) {
-        rootUsers = allUsers.filter(u => u.role === 'ADMIN' || u.role === 'MANAGER' || !u.manager_id);
+        const owners = allUsers.filter(u => /^owner$/i.test(String(u.job_title || '').trim()) || u.role === 'OWNER');
+        const othersNoManager = allUsers.filter(u => !u.manager_id && !owners.some(o => o.id === u.id));
+        rootUsers = [...owners, ...othersNoManager];
     } else if (normalizedRole === 'MANAGER') {
         rootUsers = allUsers.filter(u => u.id === currentUser.id);
     } else if (isDepartmentEmployee) {
@@ -2057,14 +2067,15 @@ async function renderTeamHierarchyWidget() {
                 ${reports.length > 0 ? `
                     <div style="width: 2px; height: 16px; background: var(--color-border); margin: 0.2rem 0;"></div>
                     <div class="hierarchy-level-group">
-                        ${reports.map(r => renderNodeSquare(r, new Set(visited))).join('')}
+                        ${reports.map(r => renderNodeSquare(r, visited)).join('')}
                     </div>
                 ` : ''}
             </div>
         `;
     }
 
-    const treeHTML = rootUsers.map(u => renderNodeSquare(u)).join('');
+    const globalVisited = new Set();
+    const treeHTML = rootUsers.map(u => renderNodeSquare(u, globalVisited)).join('');
 
     return `
         <div class="card col-span-12">
@@ -2126,7 +2137,7 @@ window.openHierarchyEmployeeInfo = function (userId) {
         <dl class="hierarchy-employee-details">
             <div><dt>Full Name</dt><dd>${escapeHTML(window.formatEmployeeName(employee) || 'Not provided')}</dd></div>
             <div><dt>Nationality</dt><dd>${escapeHTML(employee.nationality || 'Not provided')}</dd></div>
-            <div><dt>Iqama / ID Number</dt><dd>${escapeHTML(employee.iqama_number || 'Not provided')}</dd></div>
+            <div><dt>ID/Iqama number</dt><dd>${escapeHTML(employee.iqama_number || 'Not provided')}</dd></div>
             <div><dt>Phone Number</dt><dd>${escapeHTML(employee.phone_number || 'Not provided')}</dd></div>
             <div><dt>Latest Login</dt><dd>${employee.last_login ? escapeHTML(new Date(employee.last_login).toLocaleString()) : 'No login recorded'}</dd></div>
         </dl>
@@ -3205,7 +3216,8 @@ function companyJobTitleOptions(selected = '', departmentName = '') {
     const jobTitlesMap = db.getJobTitlesMap() || {};
     if (!departmentName) return '<option value="">Select Department first</option>';
     const matchedDepartment = Object.keys(jobTitlesMap).find(name => name.trim().toLowerCase() === departmentName.trim().toLowerCase());
-    const titles = matchedDepartment ? jobTitlesMap[matchedDepartment] : [];
+    let titles = matchedDepartment ? jobTitlesMap[matchedDepartment] : [];
+    titles = titles.filter(t => !t.includes('General Manager, Executive Director'));
     return '<option value="">Select Job Title</option>' + titles.map(title =>
         `<option value="${escapeHTML(title)}" ${title === selected ? 'selected' : ''}>${escapeHTML(title)}</option>`
     ).join('');
@@ -4068,7 +4080,7 @@ window.downloadUserDirectoryExcel = function () {
         'Department': user.department_name || user.department || '',
         'Job Title': user.job_title || '',
         'Assigned Manager': managerMap.get(user.manager_id) || 'No Manager',
-        'ID / Iqama Number': user.iqama_number || '',
+        'ID/Iqama number': user.iqama_number || '',
         'Phone Number': user.phone_number || '',
         'Email': user.email || ''
     }));
@@ -5447,7 +5459,7 @@ async function renderTasksV2() {
         personalListItems += ownTaskLists.map(list => {
             const listTasksCount = tasks.filter(t => t.task_list_id === list.id).length;
             return `
-            <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')">
+            <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')" oncontextmenu="window.showTaskListContextMenu(event, '${list.id}', ${currentUserRole === 'ADMIN'})">
                 <span class="task-list-name">${escapeHTML(list.name)}</span>
                 <div style="margin-left: auto; display: flex; gap: 4px; align-items: center;">
                     ${currentUserRole === 'ADMIN' ? `<button class="icon-btn" onclick="event.stopPropagation(); window.openTaskListModal('${list.id}')" style="padding: 2px;" title="Edit List"><i data-lucide="settings" style="width:14px;height:14px;"></i></button>` : ''}
@@ -5463,7 +5475,7 @@ async function renderTasksV2() {
             const owner = window.taskAllUsersCache?.find(u => u.id === list.owner_id);
             const ownerName = owner ? owner.full_name.split(' ')[0] : 'Unknown';
             return `
-            <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')">
+            <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')" oncontextmenu="window.showTaskListContextMenu(event, '${list.id}', ${currentUserRole === 'ADMIN'})">
                 <span class="task-list-name" title="Shared by ${ownerName}">${escapeHTML(list.name)} (Shared)</span>
                 <span class="badge task-count-badge" style="margin-left: auto; background: var(--color-surface); color: var(--color-text-secondary); border-radius: 4px; padding: 0.15rem 0.4rem; font-size: 0.75rem;">${listTasksCount}</span>
             </li>
@@ -5474,7 +5486,7 @@ async function renderTasksV2() {
         personalListItems += departmentTaskLists.map(list => {
             const listTasksCount = tasks.filter(task => task.task_list_id === list.id).length;
             return `
-            <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')">
+            <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')" oncontextmenu="window.showTaskListContextMenu(event, '${list.id}', ${currentUserRole === 'ADMIN'})">
                 <span class="task-list-name" title="Department task list">${escapeHTML(list.name)}</span>
                 <span class="badge task-count-badge" style="margin-left:auto;background:var(--color-surface);color:var(--color-text-secondary);border-radius:4px;padding:.15rem .4rem;font-size:.75rem;">${listTasksCount}</span>
             </li>`;
@@ -7566,7 +7578,7 @@ window.showEmployeeDetailsCard = async function (userId) {
             <div class="employee-details-grid">
                 <div><span>Full Name</span><strong>${escapeHTML(user.full_name || 'Not provided')}</strong></div>
                 <div><span>Department</span><strong>${escapeHTML(department)}</strong></div>
-                <div><span>ID / Iqama number</span><strong>${escapeHTML(user.iqama_number || formatEmployeeId(user.emp_index, 'Not assigned'))}</strong></div>
+                <div><span>ID/Iqama number</span><strong>${escapeHTML(user.iqama_number || formatEmployeeId(user.emp_index, 'Not assigned'))}</strong></div>
                 <div><span>Job Title</span><strong>${escapeHTML(user.job_title || 'Not assigned')}</strong></div>
                 <div><span>Assigned Manager</span><strong>${escapeHTML(manager ? window.formatEmployeeName(manager) : 'No Manager')}</strong></div>
                 <div><span>Role</span><strong>${escapeHTML(user.role || 'EMPLOYEE')}</strong></div>
@@ -9014,7 +9026,7 @@ window.addEventListener('click', function (e) {
 
     if (!e.target.closest('.profile-dropdown-wrapper')) {
         const dropdown = document.getElementById('profileDropdown');
-        if (dropdown) dropdown.style.display = 'none';
+        if (dropdown) { dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
 
         const notifDropdown = document.getElementById('notificationsDropdown');
         if (notifDropdown) {

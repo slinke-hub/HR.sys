@@ -691,6 +691,12 @@ textarea.form-control {
   overflow: hidden;
   transition: background-color var(--transition-normal), color var(--transition-normal), border-color var(--transition-normal);
 }
+.profile-dropdown-menu.show {
+  display: block !important;
+  pointer-events: auto;
+  visibility: visible;
+  opacity: 1;
+}
 
 .profile-dropdown-menu .dropdown-item {
   background: transparent;
@@ -861,6 +867,32 @@ textarea.form-control {
   #createTaskModal .create-task-upload-zone { padding: 1rem .65rem; font-size: .78rem; }
   #createTaskModal .create-task-footer { gap: .5rem; }
   #createTaskModal .create-task-footer .btn { min-height: 40px; padding-inline: .7rem; font-size: .8rem; }
+}
+
+/* Compact all modal surfaces before they can exceed a small phone viewport. */
+@media (max-width: 900px) {
+  .modal { padding: .5rem; align-items: center; }
+  .modal-content,
+  .side-panel.task-v2-detail,
+  .task-detail-modal,
+  .edit-task-modal {
+    width: min(680px, calc(100vw - 1rem)) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100dvh - 1rem) !important;
+  }
+  .modal-content { padding: clamp(.85rem, 2.5vw, 1.35rem); }
+  .modal-header { margin-bottom: .8rem; }
+  .modal-header h1, .modal-header h2, .modal-header h3 { font-size: clamp(1rem, 3.2vw, 1.35rem); }
+  .modal-actions { gap: .5rem; flex-wrap: wrap; }
+  .modal-actions .btn { min-height: 38px; padding: .5rem .8rem; font-size: .82rem; }
+}
+@media (max-width: 480px) {
+  .modal { padding: .25rem; }
+  .modal-content,
+  .side-panel.task-v2-detail,
+  .task-detail-modal,
+  .edit-task-modal { width: calc(100vw - .5rem) !important; max-width: calc(100vw - .5rem) !important; }
+  .modal-content { padding: .7rem; border-radius: 12px; }
 }
 
 /* Keep header controls compact and visible when the desktop window is
@@ -3072,6 +3104,16 @@ input,
 .marketing-links-list {
   display: grid;
   gap: .5rem;
+}
+
+@media (max-width: 900px) {
+  .hierarchy-square-tree { width: 100%; padding: .75rem 0; }
+  .hierarchy-square-tree > div { gap: .85rem !important; }
+  .hierarchy-level-group { gap: .75rem; }
+  .hierarchy-square-card { width: min(145px, 42vw); min-height: 145px; padding: .75rem .55rem; }
+  .hierarchy-square-avatar { width: 46px; height: 46px; }
+  .hierarchy-square-name { font-size: .8rem; }
+  .hierarchy-square-title { font-size: .68rem; }
 }
 
 .marketing-link-row {
@@ -6888,6 +6930,28 @@ html[dir="rtl"] select:not([multiple]) {
   background-position: 12px 50%, 17px 50%;
   padding-inline-start: 2.25rem !important;
   padding-inline-end: .7rem !important;
+}
+
+/* Final compact modal sizing overrides. */
+@media (max-width: 900px) {
+  .modal { padding: .5rem; align-items: center; }
+  .modal-content, .side-panel.task-v2-detail, .task-detail-modal, .edit-task-modal {
+    width: min(680px, calc(100vw - 1rem)) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100dvh - 1rem) !important;
+  }
+  .modal-content { padding: clamp(.85rem, 2.5vw, 1.35rem); }
+  .modal-header { margin-bottom: .8rem; }
+  .modal-header h1, .modal-header h2, .modal-header h3 { font-size: clamp(1rem, 3.2vw, 1.35rem); }
+  .modal-actions { gap: .5rem; flex-wrap: wrap; }
+  .modal-actions .btn { min-height: 38px; padding: .5rem .8rem; font-size: .82rem; }
+}
+@media (max-width: 480px) {
+  .modal { padding: .25rem; }
+  .modal-content, .side-panel.task-v2-detail, .task-detail-modal, .edit-task-modal {
+    width: calc(100vw - .5rem) !important; max-width: calc(100vw - .5rem) !important;
+  }
+  .modal-content { padding: .7rem; border-radius: 12px; }
 }
 
 /* Final compact-window overrides (kept at the end so they win over legacy

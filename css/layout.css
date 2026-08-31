@@ -1549,3 +1549,32 @@ body.modal-open {
   .topbar-actions .header-language-switcher { width: 30px; height: 30px; }
   .topbar-actions svg { width: 15px; height: 15px; }
 }
+
+/* Keep the profile menu from being clipped by the header action group. */
+.topbar-actions { overflow: visible !important; }
+.profile-dropdown-wrapper { position: relative; z-index: 30; flex: 0 0 auto; }
+.user-profile { position: relative; min-height: 40px; min-width: 40px; }
+.profile-dropdown-menu {
+  position: fixed !important;
+  top: calc(var(--topbar-height, 64px) + .5rem) !important;
+  inset-inline-end: max(.5rem, env(safe-area-inset-right)) !important;
+  inset-inline-start: auto !important;
+  width: min(250px, calc(100vw - 1rem)) !important;
+  max-width: calc(100vw - 1rem) !important;
+  z-index: 2147482000 !important;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    height: auto;
+    min-height: 56px;
+    padding-inline: .6rem !important;
+    gap: .35rem !important;
+  }
+  .header-logo { min-width: 0; flex: 0 1 auto; }
+  .header-logo .app-logo { max-width: 120px; max-height: 34px; }
+  .topbar-actions { flex: 0 1 auto !important; gap: .25rem !important; }
+  .topbar-actions .profile-dropdown-wrapper { min-width: 40px; }
+  .user-profile { padding-inline-start: .4rem; gap: .35rem; }
+  .user-profile .avatar { width: 32px; height: 32px; flex-basis: 32px; }
+}
