@@ -40,7 +40,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/layout.css?v=20">
-    <link rel="stylesheet" href="css/components.css?v=100">
+    <link rel="stylesheet" href="css/components.css?v=114">
     <link rel="stylesheet" href="css/android.css?v=3">
     <style>
         @media (hover: none) and (pointer: coarse) {
@@ -1297,13 +1297,6 @@
                 <div id="editTaskTabAdvanced" class="edit-task-tab-content" style="padding: 0 1.5rem 1.5rem; display: none; flex-direction: column; gap: 1.5rem;">
                     <div class="edit-task-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem 1rem;">
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                            <span style="font-size: 0.85rem; font-weight: 500;">Dependencies</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
-                                <i data-lucide="corner-down-right" style="width: 16px; height: 16px;"></i>
-                                <span style="font-size: 0.9rem;">No dependencies</span>
-                            </div>
-                        </div>
-                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;">Reminders</span>
                             <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
                                 <i data-lucide="bell" style="width: 16px; height: 16px;"></i>
@@ -1314,24 +1307,24 @@
                             <span style="font-size: 0.85rem; font-weight: 500;">Followers</span>
                             <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="if (event.target.tagName !== 'SELECT') try{this.querySelector('select').showPicker()}catch(e){}">
                                 <i data-lucide="eye" style="width: 16px; height: 16px;"></i>
-                                <select id="editTaskWatchers" multiple onchange="window.updateEditTaskWatchersUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;">
-                                </select>
+                                <select id="editTaskWatchers" multiple onchange="window.updateEditTaskWatchersUI(this)" style="position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer;"></select>
                                 <span class="watchers-ui-value" style="font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No followers</span>
                             </div>
+                            <div id="editTaskWatchersOptions" class="edit-task-watchers-options" aria-label="Followers"></div>
                         </div>
                         
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;">Progress</span>
                             <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
                                 <i data-lucide="percent" style="width: 16px; height: 16px;"></i>
-                                <span style="font-size: 0.9rem;">0% <input type="range" disabled style="width: 50px; margin-left: 0.5rem; vertical-align: middle;"></span>
+                                <span style="font-size: 0.9rem;"> <output id="editTaskProgressValue">0%</output> <input id="editTaskProgress" type="range" min="0" max="100" value="0" oninput="window.updateEditTaskProgress(this.value)" style="width: 100px; vertical-align: middle;"></span>
                             </div>
                         </div>
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;">Set to repeat</span>
                             <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
                                 <i data-lucide="repeat" style="width: 16px; height: 16px;"></i>
-                                <span style="font-size: 0.9rem;">Not set</span>
+                                <select id="editTaskRepeat" class="form-control" onchange="window.toggleEditTaskRepeatCustom(this.value)" style="min-height: 30px; padding: .25rem .4rem; width: auto;"><option value="NONE">Not set</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option><option value="MONTHLY">Monthly</option><option value="ANNUALLY">Annually</option><option value="CUSTOM">Custom days</option></select><input id="editTaskRepeatDays" type="number" min="1" max="365" placeholder="Days" hidden style="width: 70px; min-height: 30px;">
                             </div>
                         </div>
                         
@@ -1639,7 +1632,7 @@
     <script src="js/data.js?v=30"></script>
     <script src="js/contract.js?v=24"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=192"></script>
+    <script src="js/app.js?v=198"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

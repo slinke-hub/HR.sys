@@ -2090,6 +2090,40 @@ button.btn-icon [data-lucide] {
   text-align: center;
 }
 
+/* Keep the task manager usable in compact desktop/tablet windows (including
+   browser zoomed views) without horizontal clipping or overlapping controls. */
+@media (max-width: 900px) {
+  .task-v2-shell { width: 100%; max-width: 100%; }
+  .task-v2-header { gap: .65rem; margin-bottom: .75rem; }
+  .task-v2-toolbar { gap: .5rem; padding: .55rem; }
+  .task-v2-toolbar-left,
+  .task-v2-toolbar-right { gap: .45rem; }
+  .task-v2-search { min-width: 150px; }
+  .task-v2-toolbar > select { min-width: 108px; max-width: 170px; font-size: .8rem; }
+  .task-v2-workspace { grid-template-columns: 190px minmax(0, 1fr); min-height: 420px; }
+  .task-v2-row {
+    grid-template-columns: 26px 30px minmax(110px, 1fr) 92px 70px 96px 30px;
+    gap: .4rem;
+    padding-inline: .65rem;
+  }
+  .task-v2-row-content h4 { font-size: .85rem; }
+  .task-v2-meta { gap: .4rem; font-size: .68rem; }
+  .task-v2-stage-select { min-width: 88px; font-size: .68rem; }
+  .task-v2-list-heading { padding: .8rem .75rem; }
+}
+
+@media (max-width: 600px) {
+  .task-v2-workspace { display: block; min-height: 0; }
+  .task-v2-lists { border-inline-end: 0; border-bottom: 1px solid var(--color-border); max-height: 180px; overflow: auto; }
+  .task-v2-row { grid-template-columns: 24px minmax(0, 1fr) auto; align-items: start; }
+  .task-v2-row > .task-v2-subtask-spacer,
+  .task-v2-row > .task-v2-subtask-toggle { grid-column: 1; }
+  .task-v2-row-left { grid-column: 2; }
+  .task-v2-row-actions { grid-column: 3; }
+  .task-v2-row-actions > span:not(.task-assignee-avatar-stack),
+  .task-v2-row-actions > .badge { max-width: 90px; }
+}
+
 .inline-subtask-form {
   padding: .9rem;
   border: 1px solid var(--color-primary);
@@ -6115,6 +6149,16 @@ input.btn-primary,
 .task-v2-toolbar-left { display: flex !important; flex-wrap: nowrap !important; align-items: center; gap: .45rem; min-width: 0; }
 .task-v2-toolbar-left .task-v2-search { flex: 0 1 190px; min-width: 120px; padding-inline: .5rem; }
 .task-v2-toolbar-left .task-v2-search input { font-size: .78rem; padding-block: .35rem; }
+.task-v2-toolbar-left .task-v2-date-filter { flex: 0 1 132px; width: 132px !important; min-width: 118px !important; padding: .35rem .45rem !important; font-size: .76rem !important; }
+.task-v2-date-filter {
+  appearance: none;
+  -webkit-appearance: none;
+}
+.task-v2-date-filter::-webkit-calendar-picker-indicator {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
 .task-v2-toolbar-left > select { flex: 0 1 118px; width: 118px !important; min-width: 95px !important; padding: .35rem .45rem !important; font-size: .76rem !important; }
 .task-v2-toolbar-right { gap: .45rem; }
 .task-v2-toolbar-right .view-toggle-btn { padding: .35rem .55rem; font-size: .76rem; }
@@ -6129,6 +6173,7 @@ input.btn-primary,
   .task-v2-toolbar-left { flex-wrap: wrap !important; }
   .task-v2-toolbar-left .task-v2-search { flex: 1 1 150px; }
   .task-v2-toolbar-left > select { flex: 1 1 105px; width: auto !important; }
+  .task-v2-toolbar-left .task-v2-date-filter { flex: 1 1 125px; width: auto !important; min-width: 0 !important; }
   .task-v2-toolbar-right { justify-content: space-between; }
 }
 @media (max-width: 430px) {
@@ -6622,7 +6667,8 @@ input.btn-primary,
   position: static !important;
   inset: auto !important;
   display: inline-flex !important;
-  width: auto !important;
+  width: fit-content !important;
+  max-width: min(100%, 14rem);
   height: auto !important;
   min-width: 0;
   margin: 0;
@@ -6844,6 +6890,195 @@ html[dir="rtl"] select:not([multiple]) {
   padding-inline-end: .7rem !important;
 }
 
+/* Final compact-window overrides (kept at the end so they win over legacy
+   task-manager breakpoints). */
+@media (max-width: 900px) {
+  .task-v2-shell { width: 100%; max-width: 100%; }
+  .task-v2-toolbar { gap: .5rem; padding: .55rem; }
+  .task-v2-toolbar-left, .task-v2-toolbar-right { gap: .45rem; }
+  .task-v2-search { min-width: 150px; }
+  .task-v2-toolbar > select { min-width: 108px; max-width: 170px; font-size: .8rem; }
+  .task-v2-workspace { grid-template-columns: 190px minmax(0, 1fr); min-height: 420px; }
+  .task-v2-row { grid-template-columns: 26px 30px minmax(110px, 1fr) 92px 70px 96px 30px; gap: .4rem; padding-inline: .65rem; }
+}
+@media (max-width: 600px) {
+  .task-v2-workspace { display: block; min-height: 0; }
+  .task-v2-lists { border-inline-end: 0; border-bottom: 1px solid var(--color-border); max-height: 180px; overflow: auto; }
+  .task-v2-row { grid-template-columns: 24px minmax(0, 1fr) auto; align-items: start; }
+  .task-v2-row-left { grid-column: 2; }
+  .task-v2-row-actions { grid-column: 3; }
+  .task-v2-row-actions > span:not(.task-assignee-avatar-stack), .task-v2-row-actions > .badge { max-width: 90px; }
+}
+
+/* Date fields use a custom calendar icon in the property row. Suppress the
+   browser's second calendar glyph (which can render over it at zoomed scales). */
+input.date-picker,
+input[type="date"].date-picker {
+  appearance: none;
+  -webkit-appearance: none;
+}
+input.date-picker::-webkit-calendar-picker-indicator,
+input[type="date"].date-picker::-webkit-calendar-picker-indicator {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.property-cell > div:has(> input.date-picker) {
+  min-width: 0;
+  min-height: 2.2rem;
+  padding-inline: .2rem;
+}
+.property-cell > div:has(> input.date-picker) > .date-ui-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keep compact pipeline metadata inside the card border at narrow widths and
+   high zoom. Long priority labels must truncate instead of escaping the card. */
+.task-pipeline-card {
+  min-width: 0;
+  overflow: hidden;
+}
+.task-pipeline-card-footer,
+.task-card-signals,
+.task-priority-label,
+.task-due-date {
+  min-width: 0;
+  max-width: 100%;
+}
+.task-priority-label,
+.task-due-date {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-pipeline-action {
+  flex: 0 0 25px;
+  width: 25px !important;
+  height: 25px !important;
+  min-width: 25px !important;
+  min-height: 25px !important;
+  padding: 0 !important;
+}
+
+/* Give every editable item in the Edit Task modal a clear contained surface,
+   not just the title and description fields. */
+#editTaskModal .edit-task-v2 .property-cell,
+#editTaskModal .edit-task-v2 .floating-input-group,
+#editTaskModal .edit-task-v2 .edit-task-tab-content > .form-group,
+#editTaskModal .edit-task-v2 .edit-task-assignee-options {
+  border: 1px solid color-mix(in srgb, var(--color-border) 88%, var(--color-primary));
+  border-radius: 10px;
+  padding: .65rem;
+  background: color-mix(in srgb, var(--color-bg-surface) 94%, var(--color-primary));
+}
+
+.edit-task-watchers-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: .35rem;
+  max-height: 8rem;
+  overflow-y: auto;
+  margin-top: .35rem;
+}
+.edit-task-watchers-options label {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  min-width: 0;
+  padding: .35rem .45rem;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  font-size: .72rem;
+  cursor: pointer;
+}
+.edit-task-watchers-options .picker-select-all,
+.edit-task-assignee-options .picker-select-all,
+.task-watcher-options .picker-select-all,
+.task-assignee-picker-options .picker-select-all {
+  grid-column: 1 / -1;
+  font-weight: 700;
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+}
+.edit-task-watchers-options label:has(input:checked) {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+.edit-task-watchers-options span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Status/priority badges in the task detail grid are inline values, not
+   corner notification badges. Keep them in their grid cell. */
+.teamwork-task-detail .task-details-grid > div .badge,
+.task-v2-detail .task-details-grid > div .badge {
+  position: static !important;
+  inset: auto !important;
+  display: inline-flex !important;
+  width: fit-content !important;
+  max-width: min(100%, 14rem);
+  height: auto !important;
+  min-width: 0;
+  padding: .2rem .55rem;
+  border-radius: 999px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+#detailsTaskStatus {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: inherit !important;
+}
+
+#editTaskModal .edit-task-v2 .property-cell > div,
+#editTaskModal .edit-task-v2 .property-cell > textarea,
+#editTaskModal .edit-task-v2 .property-cell > select {
+  min-width: 0;
+}
+
+#editTaskModal .edit-task-v2 .edit-task-tab-content > .form-group {
+  margin-bottom: .75rem;
+}
+
+[data-theme="dark"] #editTaskModal .edit-task-v2 .property-cell,
+[data-theme="dark"] #editTaskModal .edit-task-v2 .floating-input-group,
+[data-theme="dark"] #editTaskModal .edit-task-v2 .edit-task-tab-content > .form-group,
+[data-theme="dark"] #editTaskModal .edit-task-v2 .edit-task-assignee-options {
+  border-color: rgba(125, 211, 252, .28);
+  background: rgba(11, 25, 44, .42);
+}
+
+/* Dropdown values follow the selected UI language, including custom
+   button-backed pickers and the compact task toolbar filters. */
+html[dir="rtl"] select,
+html[dir="rtl"] select option,
+html[dir="rtl"] .task-watcher-toggle,
+html[dir="rtl"] .custom-multi-select-header,
+html[dir="rtl"] .select-ui-value,
+html[dir="rtl"] .watchers-ui-value {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="ltr"] select,
+html[dir="ltr"] select option,
+html[dir="ltr"] .task-watcher-toggle,
+html[dir="ltr"] .custom-multi-select-header,
+html[dir="ltr"] .select-ui-value,
+html[dir="ltr"] .watchers-ui-value {
+  direction: ltr;
+  text-align: left;
+}
+
 /* Keep the avatar menu inside the viewport on tablet/mobile breakpoints. The
    legacy absolute rule otherwise anchors it to the narrow profile wrapper,
    which can place most of the menu off-screen in RTL layouts. */
@@ -6858,6 +7093,34 @@ html[dir="rtl"] select:not([multiple]) {
     max-width: none !important;
     z-index: 2147482000 !important;
   }
+}
+
+/* Final override for Chromium/WebKit date controls in the task toolbar. */
+#taskV2DateFilter::-webkit-calendar-picker-indicator {
+  opacity: 0 !important;
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  margin: 0 !important;
+  -webkit-appearance: none;
+}
+
+/* Task detail tabs: increase separation and make the selected tab unmistakable. */
+.task-detail-tabs,
+.task-comment-tabs {
+  gap: .7rem !important;
+}
+.task-detail-tabs > button,
+.task-comment-tabs > button {
+  padding: .55rem .75rem !important;
+  border-radius: 8px !important;
+}
+.task-detail-tabs > button.active,
+.task-comment-tabs > button.active {
+  background: linear-gradient(135deg, #d4af37, #aa771c) !important;
+  border-color: #d4af37 !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(170, 119, 28, .28);
 }
 
 /* The watcher picker is a button-backed dropdown rather than a native select. */

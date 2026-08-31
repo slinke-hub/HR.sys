@@ -879,6 +879,10 @@ const arabicRuntimeUiText = Object.freeze({
     'NEEDS ATTENTION': 'تحتاج إلى اهتمام',
     'Focus view': 'عرض التركيز',
     'No tasks found.': 'لم يتم العثور على مهام.',
+    'No projects found.': 'لم يتم العثور على مشاريع.',
+    'Approve': 'اعتماد',
+    'Reject': 'رفض',
+    'Watcher access · View only': 'صلاحية المتابع · عرض فقط',
     'Completed': 'مكتملة',
     'Sub-Tasks': 'المهام الفرعية',
     'Edit List': 'تعديل القائمة',
@@ -934,6 +938,7 @@ const arabicRuntimeUiText = Object.freeze({
     'No job title': 'لا يوجد مسمى وظيفي',
     'No department': 'لا يوجد قسم',
     'No project': 'لا يوجد مشروع',
+    'No Project / Independent': 'لا يوجد مشروع / مستقل',
     'Not set': 'غير محدد',
     'Public': 'عام',
     'public': 'عام',
@@ -1017,6 +1022,13 @@ const arabicRuntimeUiText = Object.freeze({
     'No followers': 'لا يوجد متابعون',
     'Progress': 'التقدم',
     'Set to repeat': 'تعيين التكرار',
+    'Does not repeat': 'لا يتكرر',
+    'Daily': 'يوميًا',
+    'Weekly': 'أسبوعيًا',
+    'Monthly': 'شهريًا',
+    'Annually': 'سنويًا',
+    'Custom days': 'أيام مخصصة',
+    'Select repeat pattern': 'اختر نمط التكرار',
     'Task Type': 'نوع المهمة',
     'Select Sub-Type': 'اختر النوع الفرعي',
     'Regular Tasks': 'مهام اعتيادية',
@@ -1025,6 +1037,8 @@ const arabicRuntimeUiText = Object.freeze({
     'Files': 'الملفات',
     'Drag and drop your files here.': 'اسحب الملفات وأفلتها هنا.',
     'Browse files': 'تصفح الملفات',
+    'Select files': 'اختر الملفات',
+    'No files selected': 'لم يتم اختيار ملفات',
     'Success': 'تم بنجاح',
     'Action completed successfully.': 'تم تنفيذ الإجراء بنجاح.',
     'Error opening edit modal. Check console for details.': 'تعذر فتح نافذة تعديل المهمة. يرجى المحاولة مرة أخرى.',
@@ -1107,6 +1121,9 @@ const arabicRuntimeUiText = Object.freeze({
     'Employees can only see task lists assigned to their own department.': 'يمكن للموظفين رؤية قوائم المهام المخصصة لقسمهم فقط.',
     'Shared With': 'مشاركة مع',
     'Select employees...': 'اختر الموظفين...',
+    'Select all employees': 'اختيار جميع الموظفين',
+    'Select all followers': 'اختيار جميع المتابعين',
+    'Select one or more employees': 'اختر موظفًا واحدًا أو أكثر',
     'All employees': 'جميع الموظفين',
     'Who can add tasks': 'من يمكنه إضافة المهام',
     'Who can delete tasks': 'من يمكنه حذف المهام',
@@ -1166,6 +1183,16 @@ const arabicRuntimeUiText = Object.freeze({
     ,'Month / Year': 'الشهر / السنة'
     ,'Monthly Installment (SAR) *': 'القسط الشهري (ر.س) *'
     ,'More navigation': 'المزيد من عناصر التنقل'
+    ,'Dashboard': 'لوحة التحكم'
+    ,'Time and Attendance': 'الحضور والانصراف'
+    ,'Employee Requests': 'طلبات الموظفين'
+    ,'Task Manager': 'إدارة المهام'
+    ,'Documents': 'المستندات'
+    ,'Logout': 'تسجيل الخروج'
+    ,'Log out': 'تسجيل الخروج'
+    ,'Settings': 'الإعدادات'
+    ,'Notifications': 'الإشعارات'
+    ,'Community': 'المجتمع'
     ,'New Request': 'طلب جديد'
     ,'Note': 'ملاحظة'
     ,'Number of Days': 'عدد الأيام'
@@ -1251,6 +1278,8 @@ function localizeRuntimeText(value) {
     if (documents) return `تم حفظ ${documents[1]} مستند بنجاح.`;
     const savedUsers = trimmed.match(/^Saved changes for (\d+) users\.$/);
     if (savedUsers) return `تم حفظ تغييرات ${savedUsers[1]} مستخدم.`;
+    const selectedCount = trimmed.match(/^(\d+) (employees|watchers) selected$/i);
+    if (selectedCount) return `تم اختيار ${selectedCount[1]} ${selectedCount[2].toLowerCase() === 'watchers' ? 'متابعين' : 'موظفين'}`;
     const initialTasks = trimmed.match(/^(\d+) initial tasks created\.$/);
     if (initialTasks) return `تم إنشاء ${initialTasks[1]} مهمة أولية.`;
     const unableUpload = trimmed.match(/^Unable to upload (.+)\.$/);
@@ -2941,10 +2970,11 @@ window.openTaskAssigneePicker = function (taskId) {
     modal.dataset.taskId = taskId;
     const selectedIds = new Set(Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean));
     const options = modal.querySelector('#taskAssigneePickerOptions');
-    options.innerHTML = (window.taskAllUsersCache || []).map((user, index) => {
+    options.innerHTML = `<label class="picker-select-all task-assignee-picker-option" for="taskAssigneeSelectAll"><input id="taskAssigneeSelectAll" type="checkbox" onchange="window.toggleTaskAssigneePickerAll(this.checked)"><span>Select all employees</span></label>` + (window.taskAllUsersCache || []).map((user, index) => {
         const inputId = `taskAssigneeOption-${index}`;
-        return `<label class="task-assignee-picker-option" for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${selectedIds.has(user.id) ? 'checked' : ''}><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
+        return `<label class="task-assignee-picker-option" for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${selectedIds.has(user.id) ? 'checked' : ''} onchange="window.updateTaskAssigneePickerSelectAll()"><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
     }).join('') || '<p class="task-assignee-picker-empty">No employees available.</p>';
+    window.updateTaskAssigneePickerSelectAll();
     translateArabicInterface(modal);
     modal.classList.add('show');
 };
@@ -2995,7 +3025,7 @@ function prepareTeamworkTaskDetail(task) {
         const canUploadFiles = canInteractWithTask(task);
         content.innerHTML = `
             <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : `<span>${taskDetailText('Add a description', 'أضف وصفاً')}</span>`}</p></section>
-            <nav class="task-detail-tabs" aria-label="${taskDetailText('Task information', 'معلومات المهمة')}"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">${taskDetailText('Details', 'التفاصيل')}</button><button type="button" data-task-info-tab="custom-fields" onclick="setTaskDetailInfoTab('custom-fields')">${taskDetailText('Custom fields', 'الحقول المخصصة')}</button><button type="button" data-task-info-tab="dependencies" onclick="setTaskDetailInfoTab('dependencies')">${taskDetailText('Dependencies', 'التبعيات')}</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">${taskDetailText('Proofs', 'الإثباتات')}</button></nav>
+            <nav class="task-detail-tabs" aria-label="${taskDetailText('Task information', 'معلومات المهمة')}"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">${taskDetailText('Details', 'التفاصيل')}</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">${taskDetailText('Proofs', 'الإثباتات')}</button></nav>
             <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
             <section class="task-detail-files">
                 <div class="task-detail-files-heading"><h3>${taskDetailText('Files & links', 'الملفات والروابط')}</h3>${canUploadFiles ? `<button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> ${taskDetailText('Upload files', 'رفع الملفات')}</button><input id="taskAttachmentInput" type="file" multiple style="display: none;" onchange="uploadTaskAttachment(this)">` : ''}</div>
@@ -5351,7 +5381,6 @@ function renderTaskCard(task) {
                 <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="cursor:pointer;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Task'}</span>${escapeHTML(task.displayTitle)}</h4>
             </div>
             <div class="task-pipeline-actions" onclick="event.stopPropagation();">
-                <button type="button" class="task-pipeline-action" data-task-action="view" data-task-id="${escapeHTML(task.id)}" onclick="window.handleTaskViewClick(event, this.dataset.taskId)" title="View task" aria-label="View task"><i data-lucide="eye"></i></button>
                 <button type="button" class="task-pipeline-action ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator can edit this task'}" aria-label="${canEditTask ? 'Edit task' : 'Edit task (creator only)'}"><i data-lucide="pencil"></i></button>
                 <button type="button" class="task-pipeline-action task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.preventDefault(); event.stopImmediatePropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" aria-label="Delete task"><i data-lucide="trash-2"></i></button>
             </div>
@@ -5498,7 +5527,6 @@ async function renderTasksV2() {
                     <button type="button" class="task-assignee task-row-assignee" title="Change assignee" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">${avatarHTML}</button>
                     ${task.due_date ? `<span class="${dueClass}" style="display:flex; align-items: center; gap:4px; font-size:0.8rem; color:var(--color-text-secondary); white-space:nowrap; flex-shrink:0;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date}</span>` : ''}
                     ${task.category && task.category !== 'General' ? `<span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--color-primary); font-size: 0.75rem;">${escapeHTML(task.category)}</span>` : ''}
-                    <button class="icon-btn" data-task-action="view" data-task-id="${escapeHTML(task.id)}" onclick="window.handleTaskViewClick(event, this.dataset.taskId)" title="View task" aria-label="View task" style="color:var(--color-text-secondary);"><i data-lucide="eye" style="width:16px;height:16px;"></i></button>
                     <button class="icon-btn ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.stopPropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator or an administrator can edit this task'}" style="color:var(--color-text-secondary);"><i data-lucide="pencil" style="width:16px;height:16px;"></i></button>
                     <button class="icon-btn task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.stopPropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" style="color:var(--color-danger);"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
                 </div>
@@ -5876,9 +5904,7 @@ async function renderTasksV2() {
                             <option value="urgent">Urgent</option>
                             <option value="critical">Critical</option>
                         </select>
-                        <button class="icon-btn" onclick="window.clearTaskV2Filters()" title="Clear Filters">
-                            <i data-lucide="x-circle"></i>
-                        </button>
+                        <input type="date" id="taskV2DateFilter" class="form-control task-v2-date-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}" title="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}">
                     </div>
                     <div class="task-v2-toolbar-right">
                         <div class="task-v2-view-toggles">
@@ -5922,6 +5948,7 @@ window.filterTasksV2 = function () {
     const query = (document.getElementById('taskV2Search')?.value || '').trim().toLowerCase();
     const status = document.getElementById('taskV2StatusFilter')?.value || 'all';
     const priority = document.getElementById('taskV2PriorityFilter')?.value || 'all';
+    const dateFilter = document.getElementById('taskV2DateFilter')?.value || '';
     const project = window.taskV2SelectedProject || 'all';
     
     const visibleIds = new Set(window.visibleTaskIds || []);
@@ -5945,6 +5972,7 @@ window.filterTasksV2 = function () {
         
         const matchesStatus = (status === 'all') || (status === 'open' && task.status !== 'completed') || (task.status === status);
         const matchesPriority = (priority === 'all') || (task.priority === priority);
+        const matchesDate = !dateFilter || String(task.due_date || '').slice(0, 10) === dateFilter;
         
         let matchesProject = true;
         if (project !== 'all') {
@@ -5956,7 +5984,7 @@ window.filterTasksV2 = function () {
         }
         
         const matchesMode = window.taskV2Mode !== 'focus' || el.classList.contains('task-item-card') || el.dataset.focus === 'true';
-        if (matchesSearch && matchesStatus && matchesPriority && matchesProject && matchesMode) {
+        if (matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesProject && matchesMode) {
             el.style.display = '';
         } else {
             el.style.display = 'none';
@@ -6063,9 +6091,13 @@ window.setTaskV2Mode = function (mode) {
 
 window.clearTaskV2Filters = function () {
     const search = document.getElementById('taskV2Search');
-    const status = document.getElementById('taskV2Status');
+    const status = document.getElementById('taskV2StatusFilter');
+    const priority = document.getElementById('taskV2PriorityFilter');
+    const date = document.getElementById('taskV2DateFilter');
     if (search) search.value = '';
-    if (status) status.value = '';
+    if (status) status.value = 'all';
+    if (priority) priority.value = 'all';
+    if (date) date.value = '';
     window.taskV2SelectedProject = 'all';
     document.querySelectorAll('.task-v2-list-link').forEach((button, index) => button.classList.toggle('active', index === 0));
     window.filterTasksV2();
@@ -6183,10 +6215,10 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
     const department = (window.taskDepartmentsCache || []).find(item => item.name === departmentName || item.id === departmentName);
     
     let employees = [];
-    if (isTaskAdmin()) {
-        employees = window.taskAllUsersCache || [];
-    } else if (department) {
+    if (department) {
         employees = (window.taskAllUsersCache || []).filter(user => user.department_id === department.id);
+    } else if (isTaskAdmin()) {
+        employees = window.taskAllUsersCache || [];
     }
 
     select.innerHTML = `<option value="">${(department || isTaskAdmin()) ? (t('task_sel_emp') || 'Select Employee') : 'Select a department first'}</option>` + employees.map(user => {
@@ -6195,7 +6227,21 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
     }).join('');
     select.value = employees.some(user => user.id === selectedAssigneeId) ? selectedAssigneeId : '';
     handleTaskAssigneeChange(prefix);
+    if (prefix === 'edit') window.filterEditTaskAssigneeOptions(department?.id || departmentName || '');
 }
+
+window.filterEditTaskAssigneeOptions = function (departmentIdOrName) {
+    const root = document.getElementById('editTaskAssigneeOptions');
+    if (!root) return;
+    const department = (window.taskDepartmentsCache || []).find(item => item.id === departmentIdOrName || item.name === departmentIdOrName);
+    const users = department ? (window.taskAllUsersCache || []).filter(user => user.department_id === department.id) : [];
+    const selected = new Set(Array.from(root.querySelectorAll('input[type="checkbox"]:checked')).map(input => input.value));
+    root.innerHTML = `<label class="picker-select-all" for="editTaskAssigneeSelectAll"><input id="editTaskAssigneeSelectAll" type="checkbox" onchange="window.toggleEditTaskAssignees(this.checked)"><span>Select all employees</span></label>` + users.map((user, index) => {
+        const inputId = `editTaskAssigneeOption-${index}`;
+        return `<label for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${selected.has(user.id) ? 'checked' : ''} onchange="window.updateEditTaskSelectAllState('assignee')"><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
+    }).join('');
+    window.updateEditTaskSelectAllState('assignee');
+};
 
 function renderTaskWatcherPicker(selectId, options = '') {
     return `<div class="task-watcher-picker" data-watcher-picker="${selectId}">
@@ -6215,7 +6261,8 @@ window.populateTaskWatcherPicker = function (selectId, options, selectedIds = []
     const picker = select.closest('.task-watcher-picker');
     const list = picker?.querySelector('.task-watcher-options');
     if (!list) return;
-    list.innerHTML = Array.from(select.options).map(option => `<label class="task-watcher-option" data-search="${escapeHTML(option.text.toLowerCase())}"><input type="checkbox" value="${escapeHTML(option.value)}" ${option.selected ? 'checked' : ''} onchange="syncTaskWatcherSelection('${selectId}', this)"><span>${escapeHTML(option.text)}</span></label>`).join('');
+    list.innerHTML = `<label class="task-watcher-option picker-select-all" for="${selectId}-select-all"><input id="${selectId}-select-all" type="checkbox" onchange="window.toggleTaskWatcherSelectAll('${selectId}', this.checked)"><span>Select all employees</span></label>` + Array.from(select.options).map(option => `<label class="task-watcher-option" data-search="${escapeHTML(option.text.toLowerCase())}"><input type="checkbox" value="${escapeHTML(option.value)}" ${option.selected ? 'checked' : ''} onchange="syncTaskWatcherSelection('${selectId}', this)"><span>${escapeHTML(option.text)}</span></label>`).join('');
+    window.updateTaskWatcherSelectAll(selectId);
     updateTaskWatcherLabel(selectId);
 };
 
@@ -6243,6 +6290,27 @@ window.syncTaskWatcherSelection = function (selectId, checkbox) {
     const option = Array.from(select?.options || []).find(item => item.value === checkbox.value);
     if (option) option.selected = checkbox.checked;
     updateTaskWatcherLabel(selectId);
+    window.updateTaskWatcherSelectAll(selectId);
+};
+
+window.toggleTaskWatcherSelectAll = function (selectId, checked) {
+    const select = document.getElementById(selectId);
+    const picker = select?.closest('.task-watcher-picker');
+    picker?.querySelectorAll('.task-watcher-options input[type="checkbox"]:not([id$="-select-all"])').forEach(input => {
+        input.checked = checked;
+        const option = Array.from(select?.options || []).find(item => item.value === input.value);
+        if (option) option.selected = checked;
+    });
+    updateTaskWatcherLabel(selectId);
+    window.updateTaskWatcherSelectAll(selectId);
+};
+
+window.updateTaskWatcherSelectAll = function (selectId) {
+    const select = document.getElementById(selectId);
+    const picker = select?.closest('.task-watcher-picker');
+    const master = picker?.querySelector(`#${CSS.escape(selectId)}-select-all`);
+    const items = Array.from(picker?.querySelectorAll('.task-watcher-options input[type="checkbox"]') || []).filter(input => input !== master);
+    if (master) master.checked = items.length > 0 && items.every(input => input.checked);
 };
 
 function updateTaskWatcherLabel(selectId) {
@@ -6680,10 +6748,12 @@ window.openEditTaskModal = async function (id) {
         const assigneeIds = new Set(Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean));
         const assigneeOptions = document.getElementById('editTaskAssigneeOptions');
         if (assigneeOptions) {
-            assigneeOptions.innerHTML = (window.taskAllUsersCache || []).map((user, index) => {
+            assigneeOptions.innerHTML = `<label class="picker-select-all" for="editTaskAssigneeSelectAll"><input id="editTaskAssigneeSelectAll" type="checkbox" onchange="window.toggleEditTaskAssignees(this.checked)"><span>Select all employees</span></label>` + (window.taskAllUsersCache || []).map((user, index) => {
                 const inputId = `editTaskAssigneeOption-${index}`;
-                return `<label for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${assigneeIds.has(user.id) ? 'checked' : ''}><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
+                return `<label for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${assigneeIds.has(user.id) ? 'checked' : ''} onchange="window.updateEditTaskSelectAllState('assignee')"><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
             }).join('');
+            const all = assigneeOptions.querySelector('#editTaskAssigneeSelectAll');
+            if (all) all.checked = assigneeOptions.querySelectorAll('input[type="checkbox"]:not(#editTaskAssigneeSelectAll)').length > 0 && assigneeOptions.querySelectorAll('input[type="checkbox"]:not(#editTaskAssigneeSelectAll):checked').length === assigneeOptions.querySelectorAll('input[type="checkbox"]:not(#editTaskAssigneeSelectAll)').length;
         }
 
         const watchersSelect = document.getElementById('editTaskWatchers');
@@ -6692,7 +6762,20 @@ window.openEditTaskModal = async function (id) {
             watchersSelect.innerHTML = (window.taskAllUsersCache || []).map(user =>
                 `<option value="${escapeHTML(user.id)}" ${selectedWatchers.has(user.id) ? 'selected' : ''}>${escapeHTML(window.formatEmployeeName(user) || user.id)}</option>`
             ).join('');
+            const watcherOptions = document.getElementById('editTaskWatchersOptions');
+            if (watcherOptions) watcherOptions.innerHTML = `<label class="picker-select-all" for="editTaskWatcherSelectAll"><input id="editTaskWatcherSelectAll" type="checkbox" onchange="window.toggleEditTaskWatchers(this.checked)"><span>Select all followers</span></label>` + (window.taskAllUsersCache || []).map((user, index) => {
+                const inputId = `editTaskWatcherOption-${index}`;
+                return `<label for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${selectedWatchers.has(user.id) ? 'checked' : ''} onchange="window.syncEditTaskWatcher(this)"><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
+            }).join('');
+            const all = watcherOptions.querySelector('#editTaskWatcherSelectAll');
+            if (all) all.checked = watcherOptions.querySelectorAll('input[type="checkbox"]:not(#editTaskWatcherSelectAll)').length > 0 && watcherOptions.querySelectorAll('input[type="checkbox"]:not(#editTaskWatcherSelectAll):checked').length === watcherOptions.querySelectorAll('input[type="checkbox"]:not(#editTaskWatcherSelectAll)').length;
         }
+
+        const progress = Math.max(0, Math.min(100, Number(task.progress ?? 0) || 0));
+        const progressInput = document.getElementById('editTaskProgress');
+        if (progressInput) progressInput.value = String(progress);
+        const progressOutput = document.getElementById('editTaskProgressValue');
+        if (progressOutput) progressOutput.value = `${progress}%`;
 
         // Update project options
         let selectProject = document.getElementById('editTaskProject');
@@ -6997,6 +7080,18 @@ window.navigateToContract = async function (employeeId, empName) {
     if (window.lucide && lucide.createIcons) lucide.createIcons();
     modal.style.display = 'block';
 }
+
+window.toggleTaskAssigneePickerAll = function (checked) {
+    document.querySelectorAll('#taskAssigneePickerOptions input[type="checkbox"]:not(#taskAssigneeSelectAll)').forEach(input => { input.checked = checked; });
+    window.updateTaskAssigneePickerSelectAll();
+};
+window.updateTaskAssigneePickerSelectAll = function () {
+    const root = document.getElementById('taskAssigneePickerOptions');
+    const master = root?.querySelector('#taskAssigneeSelectAll');
+    if (!root || !master) return;
+    const items = Array.from(root.querySelectorAll('input[type="checkbox"]')).filter(input => input !== master);
+    master.checked = items.length > 0 && items.every(input => input.checked);
+};
 
 window.handleSaveContract = async function (e) {
     e.preventDefault();
@@ -11858,6 +11953,46 @@ window.updateEditTaskWatchersUI = function(selectElem) {
             span.title = selected.join(', ');
         }
     }
+};
+
+window.syncEditTaskWatcher = function (checkbox) {
+    const select = document.getElementById('editTaskWatchers');
+    const option = Array.from(select?.options || []).find(item => item.value === checkbox.value);
+    if (option) option.selected = checkbox.checked;
+    window.updateEditTaskWatchersUI(select);
+    window.updateEditTaskSelectAllState('watcher');
+};
+
+window.toggleEditTaskAssignees = function (checked) {
+    document.querySelectorAll('#editTaskAssigneeOptions input[type="checkbox"]:not(#editTaskAssigneeSelectAll)').forEach(input => { input.checked = checked; });
+};
+
+window.toggleEditTaskWatchers = function (checked) {
+    const select = document.getElementById('editTaskWatchers');
+    document.querySelectorAll('#editTaskWatchersOptions input[type="checkbox"]:not(#editTaskWatcherSelectAll)').forEach(input => {
+        input.checked = checked;
+        const option = Array.from(select?.options || []).find(item => item.value === input.value);
+        if (option) option.selected = checked;
+    });
+    window.updateEditTaskWatchersUI(select);
+};
+
+window.updateEditTaskSelectAllState = function (type) {
+    const root = document.getElementById(type === 'assignee' ? 'editTaskAssigneeOptions' : 'editTaskWatchersOptions');
+    const master = root?.querySelector(type === 'assignee' ? '#editTaskAssigneeSelectAll' : '#editTaskWatcherSelectAll');
+    if (!root || !master) return;
+    const items = Array.from(root.querySelectorAll('input[type="checkbox"]')).filter(input => input !== master);
+    master.checked = items.length > 0 && items.every(input => input.checked);
+};
+
+window.updateEditTaskProgress = function (value) {
+    const output = document.getElementById('editTaskProgressValue');
+    if (output) output.value = `${Math.max(0, Math.min(100, Number(value) || 0))}%`;
+};
+
+window.toggleEditTaskRepeatCustom = function (value) {
+    const input = document.getElementById('editTaskRepeatDays');
+    if (input) input.hidden = value !== 'CUSTOM';
 };
 
 window.editTaskPromptEstimate = async function() {
