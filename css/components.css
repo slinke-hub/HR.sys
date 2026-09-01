@@ -7584,3 +7584,80 @@ html[dir="rtl"] select:not([multiple]) {
 .task-pipeline-actions {
     display: none !important;
 }
+/* Responsive checkbox modal used by every task watcher and task-list multi-select. */
+body.multi-select-modal-open { overflow: hidden !important; }
+.task-watcher-dropdown.multi-select-modal-layer,
+.custom-multi-select-dropdown,
+.native-multi-select-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10050 !important;
+  margin: 0 !important;
+  padding: clamp(.75rem, 2vw, 1.5rem) !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  align-items: center;
+  justify-content: center;
+}
+.task-watcher-dropdown.multi-select-modal-layer:not([hidden]),
+.custom-multi-select.open .custom-multi-select-dropdown,
+.custom-multi-select-dropdown.open,
+.native-multi-select-modal { display: flex !important; }
+.multi-select-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgba(2, 8, 23, .7);
+  backdrop-filter: blur(10px) saturate(125%);
+  -webkit-backdrop-filter: blur(10px) saturate(125%);
+}
+.multi-select-modal-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(580px, calc(100vw - 2rem));
+  max-height: min(760px, calc(100dvh - 2rem));
+  padding: clamp(.85rem, 2vw, 1.25rem);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--color-bg-elevated) 92%, transparent);
+  box-shadow: 0 28px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
+  animation: multiSelectModalIn .2s ease-out both;
+}
+.multi-select-modal-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding-bottom:.8rem; }
+.multi-select-modal-header h3 { margin:.15rem 0 0; font-size:clamp(1.05rem, 2.5vw, 1.35rem); color:var(--color-text-primary); }
+.multi-select-modal-header .icon-btn { flex:0 0 38px; }
+.multi-select-modal-search { margin-bottom:.75rem; }
+.multi-select-modal-options,
+.task-watcher-options.multi-select-modal-options { min-height:120px; max-height:min(52dvh, 460px); overflow:auto; padding:.25rem; border:1px solid var(--color-border); border-radius:14px; background:rgba(8,20,38,.2); }
+.multi-select-modal-options .custom-multi-select-option,
+.multi-select-modal-options .task-watcher-option { min-height:44px; margin:.2rem 0; padding:.65rem .75rem; border:1px solid transparent; border-radius:11px; transition:background .18s ease,border-color .18s ease,transform .18s ease; }
+.multi-select-modal-options .custom-multi-select-option:hover,
+.multi-select-modal-options .task-watcher-option:hover { background:color-mix(in srgb, var(--color-primary) 12%, transparent); border-color:color-mix(in srgb, var(--color-primary) 35%, transparent); transform:translateY(-1px); }
+.multi-select-modal-options input[type="checkbox"] { width:19px; height:19px; flex:0 0 19px; accent-color:var(--color-primary); }
+.multi-select-modal-footer { display:flex; justify-content:flex-end; padding-top:.8rem; }
+.multi-select-modal-footer .btn { min-width:110px; justify-content:center; }
+.multi-select-empty { padding:2rem 1rem; text-align:center; color:var(--color-text-secondary); }
+.custom-multi-select-option[hidden] { display:none !important; }
+select.form-control[multiple]:not([hidden]) { min-height:48px !important; height:48px !important; cursor:pointer; padding-inline-end:2.25rem; background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%); background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%; background-size:5px 5px,5px 5px; background-repeat:no-repeat; }
+html[dir="rtl"] select.form-control[multiple]:not([hidden]) { background-position:16px 50%,11px 50%; }
+@keyframes multiSelectModalIn { from { opacity:0; transform:translateY(12px) scale(.98); } to { opacity:1; transform:none; } }
+@media (max-width: 640px) {
+  .task-watcher-dropdown.multi-select-modal-layer,
+  .custom-multi-select-dropdown,
+  .native-multi-select-modal { align-items:flex-end; padding:0 !important; }
+  .multi-select-modal-card { width:100%; max-height:min(88dvh, 720px); border-radius:22px 22px 0 0; border-bottom:0; padding:max(.8rem, env(safe-area-inset-top)) .8rem max(.8rem, env(safe-area-inset-bottom)); animation-name:multiSelectSheetIn; }
+  .multi-select-modal-options,.task-watcher-options.multi-select-modal-options { max-height:58dvh; }
+  .multi-select-modal-footer .btn { width:100%; }
+}
+@media (max-width: 380px) {
+  .multi-select-modal-card { max-height:92dvh; border-radius:17px 17px 0 0; }
+  .multi-select-modal-options .custom-multi-select-option,.multi-select-modal-options .task-watcher-option { min-height:40px; padding:.5rem; font-size:.82rem; }
+}
+@keyframes multiSelectSheetIn { from { opacity:0; transform:translateY(100%); } to { opacity:1; transform:none; } }

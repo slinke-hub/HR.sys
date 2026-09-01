@@ -1085,6 +1085,32 @@ const db = {
             return { success: false, error };
         }
     },
+    async fetchTaskWatcherDirectory() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('get_task_watcher_directory');
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.warn('Company watcher directory unavailable; using the visible profile directory.', error?.message || error);
+            return this.fetchAllProfiles(true);
+        }
+    },
+
+    async fetchTaskListDepartmentDirectory() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('get_task_list_department_directory');
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.warn('Department task-list directory unavailable; using visible profiles.', error?.message || error);
+            const profiles = await this.fetchAllProfiles(true);
+            const own = profiles.find(profile => profile.id === window.currentUser?.id);
+            return profiles.filter(profile => own?.department_id && profile.department_id === own.department_id);
+        }
+    },
+
     async createTaskList(name, ownerId, sharedWith = [], payload = {}) {
         if (!supabaseClient) return { success: false, error: new Error('Not connected') };
         try {

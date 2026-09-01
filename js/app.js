@@ -951,6 +951,12 @@ const arabicRuntimeUiText = Object.freeze({
     'Change assignee': 'تغيير المعيّن',
     'Change assignees': 'تغيير المعيّنين',
     'Search employees...': 'ابحث عن موظفين...',
+    'Task access': 'صلاحية المهمة',
+    'Task list access': 'صلاحيات قائمة المهام',
+    'Multi-selection': 'اختيار متعدد',
+    'Select options': 'اختر الخيارات',
+    'Select all': 'اختيار الكل',
+    'Search...': 'بحث...',
     'Search employees': 'ابحث عن موظفين',
     'Download Source': 'مصدر التنزيل',
     'Add another URL': 'إضافة رابط آخر',
@@ -5334,12 +5340,14 @@ window.handleUpdateProfileDetails = async function (e) {
 async function renderTasks() {
     console.log("renderTasks: Fetching data for V2...");
     const tasksPromise = db.fetchTasks();
-    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists] = await Promise.all([
+    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists, watcherDirectory, taskListDirectory] = await Promise.all([
         db.fetchUsers(),
         tasksPromise,
         db.fetchMyDepartmentSupervisors(),
         db.fetchDepartments(),
-        db.fetchTaskLists()
+        db.fetchTaskLists(),
+        db.fetchTaskWatcherDirectory(),
+        db.fetchTaskListDepartmentDirectory()
     ]);
     
     window.taskDepartmentSupervisors = departmentSupervisors || [];
@@ -5357,6 +5365,7 @@ async function renderTasks() {
     window.taskCache = {};
     window.taskAssigneeOptionsCache = ''; 
     window.taskAllUsersCache = allUsers;
+    window.taskWatcherDirectoryCache = Array.isArray(watcherDirectory) && watcherDirectory.length ? watcherDirectory : allUsers;
     window.taskDepartmentsCache = allDepartments;
     window.taskListsCache = taskLists || [];
     
@@ -5426,10 +5435,8 @@ async function renderTasks() {
 
     const ownTaskLists = (taskLists || []).filter(list => list.owner_id === currentUser.id);
     const currentProfile = allUsers.find(user => user.id === currentUser.id) || currentUser;
-    window.taskListShareCandidates = allUsers.filter(user => user.id !== currentUser.id && (
-        user.department_id === currentProfile.department_id || user.id === currentProfile.manager_id
-    ));
-    window.taskWatcherOptionsCache = allUsers.map(u => {
+    window.taskListShareCandidates = (taskListDirectory || []).filter(user => user.id !== currentUser.id);
+    window.taskWatcherOptionsCache = window.taskWatcherDirectoryCache.map(u => {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
         return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(u.role || 'EMPLOYEE'))})</option>`;
     }).join('');
@@ -5533,7 +5540,7 @@ async function renderTasksV2() {
             <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')" oncontextmenu="window.showTaskListContextMenu(event, '${list.id}', ${currentUserRole === 'ADMIN'})">
                 <span class="task-list-name">${escapeHTML(list.name)}</span>
                 <div style="margin-left: auto; display: flex; gap: 4px; align-items: center;">
-                    ${currentUserRole === 'ADMIN' ? `<button class="icon-btn" onclick="event.stopPropagation(); window.openTaskListModal('${list.id}')" style="padding: 2px;" title="Edit List"><i data-lucide="settings" style="width:14px;height:14px;"></i></button>` : ''}
+                    <button class="icon-btn" onclick="event.stopPropagation(); window.openTaskListModal('${list.id}')" style="padding: 2px;" title="Edit List"><i data-lucide="settings" style="width:14px;height:14px;"></i></button>
                     <button class="icon-btn" onclick="event.stopPropagation(); window.handleDeleteTaskList('${list.id}')" style="padding: 2px; color: var(--color-danger);" title="Delete List"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
                     <span class="badge task-count-badge" style="background: var(--color-surface); color: var(--color-text-secondary); border-radius: 4px; padding: 0.15rem 0.4rem; font-size: 0.75rem; margin-left: 4px;">${listTasksCount}</span>
                 </div>
@@ -5882,7 +5889,7 @@ async function renderTasksV2() {
                         </div>
                         <div class="form-group" style="margin-bottom: 1.5rem;">
                             <label class="form-label" style="font-weight: 500; margin-bottom: 0.5rem;">Shared With</label>
-                            <div class="custom-multi-select" id="taskListViewersWrapper" onclick="this.classList.toggle('open')">
+                            <div class="custom-multi-select" id="taskListViewersWrapper" onclick="window.openCustomMultiSelectModal('taskListViewersOptions', event)">
                                 <div class="custom-multi-select-header">
                                     <span id="taskListViewersText">Select employees...</span>
                                     <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
@@ -5895,7 +5902,7 @@ async function renderTasksV2() {
                         </div>
                         <div class="form-group" style="margin-bottom: 1.5rem;">
                             <label class="form-label" style="font-weight: 500; margin-bottom: 0.5rem;">Who can add tasks</label>
-                            <div class="custom-multi-select" id="taskListAddUsersWrapper" onclick="this.classList.toggle('open')">
+                            <div class="custom-multi-select" id="taskListAddUsersWrapper" onclick="window.openCustomMultiSelectModal('taskListAddUsersOptions', event)">
                                 <div class="custom-multi-select-header">
                                     <span id="taskListAddUsersText">Select employees...</span>
                                     <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
@@ -5908,7 +5915,7 @@ async function renderTasksV2() {
                         </div>
                         <div class="form-group" style="margin-bottom: 1.5rem;">
                             <label class="form-label" style="font-weight: 500; margin-bottom: 0.5rem;">Who can delete tasks</label>
-                            <div class="custom-multi-select" id="taskListDeleteUsersWrapper" onclick="this.classList.toggle('open')">
+                            <div class="custom-multi-select" id="taskListDeleteUsersWrapper" onclick="window.openCustomMultiSelectModal('taskListDeleteUsersOptions', event)">
                                 <div class="custom-multi-select-header">
                                     <span id="taskListDeleteUsersText">Select employees...</span>
                                     <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
@@ -6347,9 +6354,14 @@ window.filterEditTaskAssigneeOptions = function (departmentIdOrName) {
 function renderTaskWatcherPicker(selectId, options = '') {
     return `<div class="task-watcher-picker" data-watcher-picker="${selectId}">
         <button type="button" class="form-control task-watcher-toggle" onclick="toggleTaskWatcherDropdown('${selectId}')" aria-expanded="false">Select watchers</button>
-        <div class="task-watcher-dropdown" hidden>
-            <input type="search" class="form-control task-watcher-search" placeholder="Search employees..." aria-label="Search employees" oninput="filterTaskWatchers('${selectId}', this.value)">
-            <div class="task-watcher-options"></div>
+        <div class="task-watcher-dropdown multi-select-modal-layer" data-watcher-modal="${selectId}" hidden role="dialog" aria-modal="true" aria-label="Select watchers">
+            <button type="button" class="multi-select-modal-backdrop" onclick="window.closeTaskWatcherDropdown('${selectId}')" aria-label="Close"></button>
+            <section class="multi-select-modal-card">
+                <header class="multi-select-modal-header"><div><span class="eyebrow">${currentLang === 'ar' ? 'صلاحية المهمة' : 'Task access'}</span><h3>${currentLang === 'ar' ? 'اختر المتابعين' : 'Select watchers'}</h3></div><button type="button" class="icon-btn" onclick="window.closeTaskWatcherDropdown('${selectId}')" aria-label="Close"><i data-lucide="x"></i></button></header>
+                <input type="search" class="form-control task-watcher-search" placeholder="Search employees..." aria-label="Search employees" oninput="filterTaskWatchers('${selectId}', this.value)">
+                <div class="task-watcher-options multi-select-modal-options"></div>
+                <footer class="multi-select-modal-footer"><button type="button" class="btn btn-primary" onclick="window.closeTaskWatcherDropdown('${selectId}')">${currentLang === 'ar' ? 'تم' : 'Done'}</button></footer>
+            </section>
         </div>
         <select id="${selectId}" multiple hidden>${options}</select>
     </div>`;
@@ -6362,7 +6374,7 @@ window.populateTaskWatcherPicker = function (selectId, options, selectedIds = []
     const picker = select.closest('.task-watcher-picker');
     const list = picker?.querySelector('.task-watcher-options');
     if (!list) return;
-    list.innerHTML = `<label class="task-watcher-option picker-select-all" for="${selectId}-select-all"><input id="${selectId}-select-all" type="checkbox" onchange="window.toggleTaskWatcherSelectAll('${selectId}', this.checked)"><span>Select all employees</span></label>` + Array.from(select.options).map(option => `<label class="task-watcher-option" data-search="${escapeHTML(option.text.toLowerCase())}"><input type="checkbox" value="${escapeHTML(option.value)}" ${option.selected ? 'checked' : ''} onchange="syncTaskWatcherSelection('${selectId}', this)"><span>${escapeHTML(option.text)}</span></label>`).join('');
+    list.innerHTML = `<label class="task-watcher-option picker-select-all" for="${selectId}-select-all"><input id="${selectId}-select-all" type="checkbox" onchange="window.toggleTaskWatcherSelectAll('${selectId}', this.checked)"><span>Select all employees</span></label>` + (select.options.length ? Array.from(select.options).map(option => `<label class="task-watcher-option" data-search="${escapeHTML(option.text.toLowerCase())}"><input type="checkbox" value="${escapeHTML(option.value)}" ${option.selected ? 'checked' : ''} onchange="syncTaskWatcherSelection('${selectId}', this)"><span>${escapeHTML(option.text)}</span></label>`).join('') : '<div class="multi-select-empty">No employees are available. Apply the company watcher directory migration and refresh.</div>');
     window.updateTaskWatcherSelectAll(selectId);
     updateTaskWatcherLabel(selectId);
 };
@@ -6370,18 +6382,33 @@ window.populateTaskWatcherPicker = function (selectId, options, selectedIds = []
 window.toggleTaskWatcherDropdown = function (selectId) {
     const select = document.getElementById(selectId);
     const picker = select?.closest('.task-watcher-picker');
-    const dropdown = picker?.querySelector('.task-watcher-dropdown');
+    let dropdown = picker?.querySelector('.task-watcher-dropdown') || document.querySelector(`[data-watcher-modal="${CSS.escape(selectId)}"]`);
     const button = picker?.querySelector('.task-watcher-toggle');
     if (!dropdown || !button) return;
-    dropdown.hidden = !dropdown.hidden;
-    button.setAttribute('aria-expanded', String(!dropdown.hidden));
-    if (!dropdown.hidden) picker.querySelector('.task-watcher-search')?.focus();
+    if (!picker.querySelector('.task-watcher-options input[type="checkbox"]')) {
+        window.populateTaskWatcherPicker(selectId, select.innerHTML, Array.from(select.selectedOptions).map(option => option.value));
+        dropdown = picker.querySelector('.task-watcher-dropdown');
+    }
+    if (dropdown?.parentElement !== document.body) document.body.appendChild(dropdown);
+    dropdown.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    document.body.classList.add('multi-select-modal-open');
+    requestAnimationFrame(() => picker.querySelector('.task-watcher-search')?.focus());
+};
+
+window.closeTaskWatcherDropdown = function (selectId) {
+    const select = document.getElementById(selectId);
+    const picker = select?.closest('.task-watcher-picker');
+    const dropdown = document.querySelector(`[data-watcher-modal="${CSS.escape(selectId)}"]`) || picker?.querySelector('.task-watcher-dropdown');
+    if (dropdown) dropdown.hidden = true;
+    if (dropdown && picker && dropdown.parentElement !== picker) picker.appendChild(dropdown);
+    picker?.querySelector('.task-watcher-toggle')?.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('multi-select-modal-open');
 };
 
 window.filterTaskWatchers = function (selectId, query) {
-    const select = document.getElementById(selectId);
     const normalized = query.trim().toLowerCase();
-    select?.closest('.task-watcher-picker')?.querySelectorAll('.task-watcher-option').forEach(option => {
+    document.querySelector(`[data-watcher-modal="${CSS.escape(selectId)}"]`)?.querySelectorAll('.task-watcher-option').forEach(option => {
         option.hidden = normalized && !option.dataset.search.includes(normalized);
     });
 };
@@ -6396,8 +6423,8 @@ window.syncTaskWatcherSelection = function (selectId, checkbox) {
 
 window.toggleTaskWatcherSelectAll = function (selectId, checked) {
     const select = document.getElementById(selectId);
-    const picker = select?.closest('.task-watcher-picker');
-    picker?.querySelectorAll('.task-watcher-options input[type="checkbox"]:not([id$="-select-all"])').forEach(input => {
+    const modal = document.querySelector(`[data-watcher-modal="${CSS.escape(selectId)}"]`);
+    modal?.querySelectorAll('.task-watcher-options input[type="checkbox"]:not([id$="-select-all"])').forEach(input => {
         input.checked = checked;
         const option = Array.from(select?.options || []).find(item => item.value === input.value);
         if (option) option.selected = checked;
@@ -6407,10 +6434,9 @@ window.toggleTaskWatcherSelectAll = function (selectId, checked) {
 };
 
 window.updateTaskWatcherSelectAll = function (selectId) {
-    const select = document.getElementById(selectId);
-    const picker = select?.closest('.task-watcher-picker');
-    const master = picker?.querySelector(`#${CSS.escape(selectId)}-select-all`);
-    const items = Array.from(picker?.querySelectorAll('.task-watcher-options input[type="checkbox"]') || []).filter(input => input !== master);
+    const modal = document.querySelector(`[data-watcher-modal="${CSS.escape(selectId)}"]`);
+    const master = modal?.querySelector(`#${CSS.escape(selectId)}-select-all`);
+    const items = Array.from(modal?.querySelectorAll('.task-watcher-options input[type="checkbox"]') || []).filter(input => input !== master);
     if (master) master.checked = items.length > 0 && items.every(input => input.checked);
 };
 
@@ -6862,7 +6888,7 @@ window.openEditTaskModal = async function (id) {
         const watchersSelect = document.getElementById('editTaskWatchers');
         if (watchersSelect) {
             const selectedWatchers = new Set(Array.isArray(task.watchers) ? task.watchers : []);
-            watchersSelect.innerHTML = (window.taskAllUsersCache || []).map(user =>
+            watchersSelect.innerHTML = (window.taskWatcherDirectoryCache || window.taskAllUsersCache || []).map(user =>
                 `<option value="${escapeHTML(user.id)}" ${selectedWatchers.has(user.id) ? 'selected' : ''}>${escapeHTML(window.formatEmployeeName(user) || user.id)}</option>`
             ).join('');
             const watcherOptions = document.getElementById('editTaskWatchersOptions');
@@ -9405,17 +9431,113 @@ window.populateCustomMultiSelect = function(optionsContainerId, textContainerId,
             </label>
         ` + html;
     }
-    container.innerHTML = html;
+    const titles = {
+        taskListViewersOptions: 'Shared With',
+        taskListAddUsersOptions: 'Who can add tasks',
+        taskListDeleteUsersOptions: 'Who can delete tasks'
+    };
+    const title = localizeRuntimeText(titles[optionsContainerId] || 'Select employees');
+    container.innerHTML = `<button type="button" class="multi-select-modal-backdrop" onclick="window.closeCustomMultiSelectModal('${optionsContainerId}', event)" aria-label="Close"></button>
+        <section class="multi-select-modal-card">
+            <header class="multi-select-modal-header"><div><span class="eyebrow">${escapeHTML(localizeRuntimeText('Task list access'))}</span><h3>${escapeHTML(title)}</h3></div><button type="button" class="icon-btn" onclick="window.closeCustomMultiSelectModal('${optionsContainerId}', event)" aria-label="Close"><i data-lucide="x"></i></button></header>
+            <input type="search" class="form-control multi-select-modal-search" placeholder="${escapeHTML(localizeRuntimeText('Search employees...'))}" oninput="window.filterCustomMultiSelect('${optionsContainerId}', this.value)">
+            <div class="multi-select-modal-options">${html || `<div class="multi-select-empty">${escapeHTML(localizeRuntimeText('No employees available.'))}</div>`}</div>
+            <footer class="multi-select-modal-footer"><button type="button" class="btn btn-primary" onclick="window.closeCustomMultiSelectModal('${optionsContainerId}', event)">${currentLang === 'ar' ? 'تم' : 'Done'}</button></footer>
+        </section>`;
     window.updateCustomMultiSelectText(optionsContainerId, textContainerId);
+    if (window.lucide) window.lucide.createIcons();
 };
 
+window.openCustomMultiSelectModal = function(optionsContainerId, event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+    document.querySelectorAll('.custom-multi-select.open').forEach(item => item.classList.remove('open'));
+    const container = document.getElementById(optionsContainerId);
+    const owner = container?.closest('.custom-multi-select');
+    if (container && owner) {
+        container.dataset.modalOwner = owner.id;
+        owner.classList.add('open');
+        container.classList.add('open');
+        document.body.appendChild(container);
+    }
+    document.body.classList.add('multi-select-modal-open');
+    requestAnimationFrame(() => container?.querySelector('.multi-select-modal-search')?.focus());
+};
+
+window.closeCustomMultiSelectModal = function(optionsContainerId, event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+    const container = document.getElementById(optionsContainerId);
+    const owner = document.getElementById(container?.dataset.modalOwner || '');
+    owner?.classList.remove('open');
+    container?.classList.remove('open');
+    if (container && owner && container.parentElement !== owner) owner.appendChild(container);
+    document.body.classList.remove('multi-select-modal-open');
+};
+
+window.filterCustomMultiSelect = function(optionsContainerId, query) {
+    const normalized = String(query || '').trim().toLowerCase();
+    document.getElementById(optionsContainerId)?.querySelectorAll('.custom-multi-select-option:not(.custom-multi-select-all)').forEach(option => {
+        option.hidden = !!normalized && !option.textContent.toLowerCase().includes(normalized);
+    });
+};
+
+window.closeNativeMultiSelectModal = function() {
+    document.getElementById('nativeMultiSelectModal')?.remove();
+    document.body.classList.remove('multi-select-modal-open');
+};
+
+window.openNativeMultiSelectModal = function(select) {
+    if (!select?.id) return;
+    window.closeNativeMultiSelectModal();
+    const label = select.closest('.form-group, .property-cell')?.querySelector('label, .property-label')?.textContent?.trim() || localizeRuntimeText('Select options');
+    const options = Array.from(select.options);
+    const overlay = document.createElement('div');
+    overlay.id = 'nativeMultiSelectModal';
+    overlay.className = 'native-multi-select-modal multi-select-modal-layer';
+    overlay.innerHTML = `<button type="button" class="multi-select-modal-backdrop" onclick="window.closeNativeMultiSelectModal()" aria-label="Close"></button><section class="multi-select-modal-card" role="dialog" aria-modal="true"><header class="multi-select-modal-header"><div><span class="eyebrow">${escapeHTML(localizeRuntimeText('Multi-selection'))}</span><h3>${escapeHTML(label)}</h3></div><button type="button" class="icon-btn" onclick="window.closeNativeMultiSelectModal()"><i data-lucide="x"></i></button></header><input type="search" class="form-control multi-select-modal-search" placeholder="${escapeHTML(localizeRuntimeText('Search...'))}" oninput="window.filterNativeMultiSelectModal(this.value)"><div class="multi-select-modal-options"><label class="custom-multi-select-option custom-multi-select-all"><input type="checkbox" data-native-select-all onchange="window.toggleNativeMultiSelectAll('${escapeHTML(select.id)}', this.checked)"><span>${escapeHTML(localizeRuntimeText('Select all'))}</span></label>${options.map(option => `<label class="custom-multi-select-option" data-native-search="${escapeHTML(option.text.toLowerCase())}"><input type="checkbox" value="${escapeHTML(option.value)}" ${option.selected ? 'checked' : ''} onchange="window.syncNativeMultiSelectOption('${escapeHTML(select.id)}', this)"><span>${escapeHTML(option.text)}</span></label>`).join('')}</div><footer class="multi-select-modal-footer"><button type="button" class="btn btn-primary" onclick="window.closeNativeMultiSelectModal()">${currentLang === 'ar' ? 'تم' : 'Done'}</button></footer></section>`;
+    document.body.appendChild(overlay);
+    document.body.classList.add('multi-select-modal-open');
+    const master = overlay.querySelector('[data-native-select-all]');
+    if (master) master.checked = options.length > 0 && options.every(option => option.selected);
+    if (window.lucide) window.lucide.createIcons();
+    requestAnimationFrame(() => overlay.querySelector('.multi-select-modal-search')?.focus());
+};
+
+window.syncNativeMultiSelectOption = function(selectId, checkbox) {
+    const select = document.getElementById(selectId);
+    const option = Array.from(select?.options || []).find(item => item.value === checkbox.value);
+    if (option) option.selected = checkbox.checked;
+    select?.dispatchEvent(new Event('change', { bubbles: true }));
+};
+
+window.toggleNativeMultiSelectAll = function(selectId, checked) {
+    const select = document.getElementById(selectId);
+    Array.from(select?.options || []).forEach(option => { option.selected = checked; });
+    document.querySelectorAll('#nativeMultiSelectModal .multi-select-modal-options input[type="checkbox"]:not([data-native-select-all])').forEach(input => { input.checked = checked; });
+    select?.dispatchEvent(new Event('change', { bubbles: true }));
+};
+
+window.filterNativeMultiSelectModal = function(query) {
+    const normalized = String(query || '').trim().toLowerCase();
+    document.querySelectorAll('#nativeMultiSelectModal [data-native-search]').forEach(option => { option.hidden = !!normalized && !option.dataset.nativeSearch.includes(normalized); });
+};
+
+document.addEventListener('pointerdown', event => {
+    const select = event.target.closest?.('select[multiple]');
+    if (!select || select.closest('.task-watcher-picker') || select.hidden) return;
+    event.preventDefault();
+    event.stopPropagation();
+    window.openNativeMultiSelectModal(select);
+}, true);
+
 window.refreshTaskListDepartmentControls = function(selectedViewers, selectedAdd, selectedDelete) {
-    const departmentId = document.getElementById('taskListDepartment')?.value || '';
+    const departmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
     const currentSelections = (containerId) => new Set(Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked:not([data-select-all])`)).map(input => input.value));
     const viewers = selectedViewers instanceof Set ? selectedViewers : currentSelections('taskListViewersOptions');
     const addUsers = selectedAdd instanceof Set ? selectedAdd : currentSelections('taskListAddUsersOptions');
     const deleteUsers = selectedDelete instanceof Set ? selectedDelete : currentSelections('taskListDeleteUsersOptions');
-    const departmentUsers = (window.taskAllUsersCache || []).filter(user => user.id !== currentUser?.id && (departmentId === 'all' || user.department_id === departmentId));
+    const departmentUsers = (window.taskListShareCandidates || []).filter(user => user.id !== currentUser?.id && (!departmentId || user.department_id === departmentId));
     const options = departmentUsers.map(user => {
         const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
         return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(user.role || 'EMPLOYEE'))})</option>`;
@@ -9469,11 +9591,12 @@ window.openTaskListModal = function (listId = '') {
     const departmentSelect = document.getElementById('taskListDepartment');
     if (departmentSelect) {
         const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
-        departmentSelect.innerHTML = '<option value="">Select department</option><option value="all">Visible to all departments</option>' + (window.taskDepartmentsCache || []).map(department =>
-            `<option value="${escapeHTML(department.id)}">${escapeHTML(department.name)}</option>`
-        ).join('');
-        departmentSelect.value = list?.visible_to_all ? 'all' : (list?.department_id || viewerDepartmentId);
-        departmentSelect.disabled = !isTaskAdmin();
+        const ownDepartment = (window.taskDepartmentsCache || []).find(department => department.id === viewerDepartmentId);
+        departmentSelect.innerHTML = ownDepartment
+            ? `<option value="${escapeHTML(ownDepartment.id)}">${escapeHTML(ownDepartment.name)}</option>`
+            : '<option value="">No department assigned</option>';
+        departmentSelect.value = viewerDepartmentId;
+        departmentSelect.disabled = true;
     }
     
     // Set selected viewers
@@ -9504,8 +9627,8 @@ window.handleSaveTaskList = async function (event) {
     const name = document.getElementById('taskListName').value.trim();
     const description = document.getElementById('taskListDescription').value.trim();
     const template = document.getElementById('taskListTemplate').value;
-    const departmentSelection = document.getElementById('taskListDepartment')?.value || '';
-    const departmentId = departmentSelection && departmentSelection !== 'all' ? departmentSelection : null;
+    const departmentSelection = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
+    const departmentId = departmentSelection || null;
     
     const sharedWith = Array.from(document.querySelectorAll('#taskListViewersOptions input[type="checkbox"]:checked:not([data-select-all])')).map(cb => cb.value);
     const canAddUsers = Array.from(document.querySelectorAll('#taskListAddUsersOptions input[type="checkbox"]:checked:not([data-select-all])')).map(cb => cb.value);
@@ -9527,7 +9650,7 @@ window.handleSaveTaskList = async function (event) {
         name, 
         shared_with: sharedWith,
         department_id: departmentId,
-        visible_to_all: departmentSelection === 'all',
+        visible_to_all: false,
         can_add_users: canAddUsers,
         can_delete_users: canDeleteUsers,
         description,
