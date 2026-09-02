@@ -1183,7 +1183,7 @@ const db = {
             return [];
         }
     },
-    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = [], parentTaskId = null, marketingDepartment = null, contentLinks = [], submissionLinks = [], deliveryStatus = null, taskListId = null) {
+    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = [], parentTaskId = null, marketingDepartment = null, contentLinks = [], submissionLinks = [], deliveryStatus = null, taskListId = null, repeatType = 'NONE', repeatInterval = 1) {
         if (!supabaseClient) return { success: false };
         try {
             // RLS policies validate created_by against auth.uid(). Read the
@@ -1222,6 +1222,8 @@ const db = {
                 submission_links: submissionLinks,
                 delivery_status: deliveryStatus,
                 task_list_id: taskListId || null
+                ,repeat_type: repeatType || 'NONE'
+                ,repeat_interval: Number(repeatInterval) || 1
             };
             const { data, error } = await supabaseClient
                 .from('tasks')

@@ -5839,6 +5839,16 @@ async function renderTasksV2() {
                         </section>
 
                         <section class="create-task-section create-task-section-content">
+                            <div class="form-group task-repeat-field">
+                                <label class="form-label" for="taskRepeatType">Set to repeat</label>
+                                <select id="taskRepeatType" class="form-control">
+                                    <option value="NONE">Does not repeat</option>
+                                    <option value="DAILY">Daily</option>
+                                    <option value="WEEKLY">Weekly</option>
+                                    <option value="MONTHLY">Monthly</option>
+                                </select>
+                                <input type="number" id="taskRepeatInterval" class="form-control" min="1" value="1" aria-label="Repeat every" style="max-width:120px; margin-top:.5rem;" title="Repeat every number of periods">
+                            </div>
                             <div class="create-task-section-heading"><span><i data-lucide="align-left"></i> Description</span><small>Add the outcome, context, and useful instructions.</small></div>
                             <div class="form-group create-task-desc-group">
                                 <label class="form-label">${t('task_desc') || "Task's Description"}</label>
@@ -6839,7 +6849,9 @@ window.handleCreateTask = async function (e) {
     const parentTaskId = document.getElementById('taskParentId') ? document.getElementById('taskParentId').value || null : null;
 
     const finalDue = due;
-    const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, taskListId ? 'private' : 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId);
+    const repeatType = document.getElementById('taskRepeatType')?.value || 'NONE';
+    const repeatInterval = document.getElementById('taskRepeatInterval')?.value || 1;
+    const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, taskListId ? 'private' : 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId, repeatType, repeatInterval);
     if (success) {
         showToast(t('toast_task_created_successfully'), "success");
         await db.triggerWebhooks('task_created', { title, assignee_id: effectiveAssignee, supervisor_id: effectiveSupervisor, due_date: due, priority, project_id: projectId, task_list_id: taskListId });
