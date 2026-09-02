@@ -1,4 +1,4 @@
-const CACHE_NAME = 'muqam-hr-mobile-v112';
+const CACHE_NAME = 'muqam-hr-mobile-v116';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.json', '/offline.html',
   '/css/variables.css', '/css/layout.css', '/css/components.css', '/css/android.css',
@@ -42,25 +42,25 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then(cached => {
-      const network = fetch(request).then(response => {
-        // Clone immediately. If cloning is deferred until the cache opens, the
-        // browser may already have started consuming the original response body.
-        if (response.ok && response.type !== 'opaque') {
-          const responseForCache = response.clone();
-          caches.open(CACHE_NAME)
-            .then(cache => cache.put(request, responseForCache))
-            .catch(error => console.warn('Service worker cache update skipped:', error));
-        }
-        return response;
-      }).catch(error => {
-        if (cached) return cached;
-        throw error;
-      });
-      return cached || network;
-    })
-  );
+  // Use network-first for application assets. Cache-first allowed an old
+  // versioned app.js to execute once while its replacement downloaded in the
+  // background, producing mixed-build runtime errors after deployments.
+  event.respondWith((async () => {
+    try {
+      const response = await fetch(request, { cache: 'no-store' });
+      if (response.ok && response.type !== 'opaque') {
+        const responseForCache = response.clone();
+        caches.open(CACHE_NAME)
+          .then(cache => cache.put(request, responseForCache))
+          .catch(error => console.warn('Service worker cache update skipped:', error));
+      }
+      return response;
+    } catch (error) {
+      const cached = await caches.match(request, { ignoreSearch: true });
+      if (cached) return cached;
+      throw error;
+    }
+  })());
 });
 
 self.addEventListener('push', event => {

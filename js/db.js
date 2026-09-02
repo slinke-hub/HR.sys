@@ -130,7 +130,7 @@ const db = {
             if (error) throw error;
             return { success: true, data };
         } catch (error) {
-            console.error("Error updating user profile:", error);
+            console.error("Error updating user profile:", { message: error?.message, code: error?.code, details: error?.details, hint: error?.hint, status: error?.status });
             return { success: false, error };
         }
     },
@@ -1114,9 +1114,18 @@ const db = {
     async createTaskList(name, ownerId, sharedWith = [], payload = {}) {
         if (!supabaseClient) return { success: false, error: new Error('Not connected') };
         try {
-            const { data, error } = await supabaseClient.from('task_lists').insert([{
-                name: String(name || '').trim(), owner_id: ownerId, shared_with: sharedWith, ...payload
-            }]).select().single();
+            const { data, error } = await supabaseClient.rpc('create_task_list_for_user', {
+                p_name: String(name || '').trim(),
+                p_shared_with: sharedWith || [],
+                p_department_id: payload.department_id || null,
+                p_visible_to_all: !!payload.visible_to_all,
+                p_can_add_users: payload.can_add_users || [],
+                p_can_delete_users: payload.can_delete_users || [],
+                p_description: payload.description || null,
+                p_template: payload.template || 'none',
+                p_notify_assignee: !!payload.notify_assignee,
+                p_notify_complete: !!payload.notify_complete
+            });
             if (error) throw error;
             return { success: true, data };
         } catch (error) {
@@ -1261,6 +1270,12 @@ const db = {
     },
     async updateTaskStatus(taskId, status) {
         if (!supabaseClient) return { success: false };
+        // Guard against corrupted / non-UUID task IDs
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!taskId || !UUID_RE.test(String(taskId).trim())) {
+            console.warn('updateTaskStatus: skipped — invalid taskId:', JSON.stringify(taskId));
+            return { success: false, error: new Error('Invalid task ID') };
+        }
         let lastError;
         for (let attempt = 0; attempt < 2; attempt += 1) {
             try {
@@ -1289,16 +1304,46 @@ const db = {
     async updateTask(taskId, updates) {
         if (!supabaseClient) return { success: false };
         try {
+            // Postgres rejects empty strings for UUID/date columns. Several task
+            // fields are optional in the editor, so normalize cleared controls
+            // to SQL NULL before sending the PATCH request.
+            const normalizedUpdates = { ...updates };
+            const nullableFields = [
+                'assignee_id', 'supervisor_id', 'project_id', 'parent_task_id',
+                'task_list_id', 'task_department_id', 'created_by',
+                'due_date', 'start_date', 'end_date', 'completion_requested_by',
+                'completion_requested_at'
+            ];
+            nullableFields.forEach(field => {
+                if (normalizedUpdates[field] === '') normalizedUpdates[field] = null;
+            });
+
+            [
+                'assignee_ids', 'watchers', 'visible_to', 'tags', 'content_links',
+                'submission_links', 'file_links'
+            ].forEach(field => {
+                if (Array.isArray(normalizedUpdates[field])) {
+                    normalizedUpdates[field] = normalizedUpdates[field].filter(value => value !== null && value !== undefined && value !== '');
+                }
+            });
+
             const { error } = await supabaseClient
                 .from('tasks')
-                .update(updates)
+                .update(normalizedUpdates)
                 .eq('id', taskId);
             
             if (error) {
-                // If it's a 400 error (likely missing columns), retry without the new columns
-                if (error.code === 'PGRST204' || error.message?.includes('could not find the column') || error.code === '42703' || (error.status && error.status === 400)) {
+                // Retry only for an actual missing-column/schema-cache error.
+                // A generic HTTP 400 can also mean an invalid UUID/date or a
+                // database validation failure and must not be misclassified.
+                const errorMessage = String(error.message || '');
+                const isMissingColumn = error.code === 'PGRST204'
+                    || error.code === '42703'
+                    || /could not find (?:the )?['"]?\w+['"]? column/i.test(errorMessage)
+                    || /column [^ ]+ does not exist/i.test(errorMessage);
+                if (isMissingColumn) {
                     console.warn("Retrying updateTask without new columns due to missing schema...");
-                    const safeUpdates = { ...updates };
+                    const safeUpdates = { ...normalizedUpdates };
                     delete safeUpdates.department;
                     delete safeUpdates.sub_type;
                     delete safeUpdates.watchers;
@@ -1319,7 +1364,6 @@ const db = {
                     delete safeUpdates.task_department_id;
                     delete safeUpdates.task_sub_type;
                     delete safeUpdates.edited_by;
-                    delete safeUpdates.edited_by;
                     delete safeUpdates.file_links;
                     
                     const retry = await supabaseClient.from('tasks').update(safeUpdates).eq('id', taskId);
@@ -1332,7 +1376,13 @@ const db = {
             await this.flushTaskNotificationEmails();
             return { success: true };
         } catch (error) {
-            console.error("updateTask Error:", error);
+            console.error("updateTask Error:", {
+                code: error?.code,
+                message: error?.message,
+                details: error?.details,
+                hint: error?.hint,
+                status: error?.status
+            });
             return { success: false, error };
         }
     },
@@ -2153,6 +2203,15 @@ const db = {
                 map[dept.name].push(t.name);
             }
         });
+
+        // Older databases may have orphaned IT titles after the IT department
+        // was merged/archived. Keep those titles available under
+        // Administrative so user forms do not lose them.
+        const administrativeKey = Object.keys(map).find(name => /administrative|administration/i.test(name));
+        if (administrativeKey) {
+            titles.filter(t => t.is_active && !t.department_id && /^(IT|Information Technology|Systems?|Network|Technical|Technician|Developer|Software|Support)/i.test(String(t.name || '').trim()))
+                .forEach(t => { if (!map[administrativeKey].includes(t.name)) map[administrativeKey].push(t.name); });
+        }
         
         return map;
     },

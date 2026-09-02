@@ -7661,3 +7661,65 @@ html[dir="rtl"] select.form-control[multiple]:not([hidden]) { background-positio
   .multi-select-modal-options .custom-multi-select-option,.multi-select-modal-options .task-watcher-option { min-height:40px; padding:.5rem; font-size:.82rem; }
 }
 @keyframes multiSelectSheetIn { from { opacity:0; transform:translateY(100%); } to { opacity:1; transform:none; } }
+
+/* Final compact header rules.  Keep the navigation usable at reduced desktop
+   zoom and on narrow devices without allowing icon controls to disappear. */
+.topbar {
+  min-height: 52px;
+  padding-inline: clamp(.45rem, 1.25vw, 1rem) !important;
+  gap: .35rem;
+}
+.header-logo { min-width: 0; }
+.header-logo .app-logo { max-width: 104px; max-height: 30px; object-fit: contain; }
+.header-navigation { gap: .12rem !important; }
+.header-navigation .header-nav-item {
+  min-height: 32px !important;
+  padding: .28rem .5rem !important;
+  gap: .28rem !important;
+  font-size: .7rem !important;
+}
+.header-navigation .header-nav-item svg { width: 14px !important; height: 14px !important; flex-basis: 14px !important; }
+.topbar-actions { gap: .25rem !important; min-width: 0; }
+.topbar-actions .header-search-trigger,
+.topbar-actions .header-language-switcher,
+.topbar-actions .icon-btn { width: 34px !important; height: 34px !important; min-width: 34px; min-height: 34px; }
+.topbar-actions .header-search-trigger svg,
+.topbar-actions .header-language-switcher svg,
+.topbar-actions .icon-btn svg { width: 15px !important; height: 15px !important; }
+.user-profile { gap: .35rem !important; padding: .2rem .35rem !important; }
+.user-profile .avatar { width: 30px !important; height: 30px !important; }
+.user-profile .user-name { font-size: .78rem !important; }
+.user-profile .user-role { font-size: .66rem !important; }
+.user-profile > svg { width: 13px !important; height: 13px !important; margin-inline: .15rem !important; }
+
+@media (max-width: 1100px) {
+  .header-navigation .header-nav-item { padding-inline: .38rem !important; font-size: .66rem !important; }
+  .header-navigation .header-nav-item svg { width: 13px !important; height: 13px !important; }
+  .user-profile .user-info { display: none !important; }
+  .header-logo .app-logo { max-width: 88px; max-height: 27px; }
+}
+@media (max-width: 760px) {
+  .topbar { min-height: 48px; }
+  .header-navigation { margin-inline: .1rem !important; }
+  .header-navigation .header-nav-item { min-width: 30px; padding: .28rem !important; }
+  .header-navigation .header-nav-item span { display: none; }
+  .topbar-actions .header-search-trigger,
+  .topbar-actions .header-language-switcher,
+  .topbar-actions .icon-btn { width: 30px !important; height: 30px !important; min-width: 30px; min-height: 30px; }
+  .topbar-actions .header-search-trigger svg,
+  .topbar-actions .header-language-switcher svg,
+  .topbar-actions .icon-btn svg { width: 14px !important; height: 14px !important; }
+  .user-profile .avatar { width: 27px !important; height: 27px !important; }
+}
+@media (max-width: 380px), (max-height: 240px) {
+  .topbar { min-height: 42px; padding-block: .15rem !important; }
+  .header-logo .app-logo { max-width: 72px; max-height: 23px; }
+  .header-navigation .header-nav-item { min-height: 27px !important; min-width: 27px; }
+  .header-navigation .header-nav-item svg { width: 12px !important; height: 12px !important; }
+  .topbar-actions .header-search-trigger,
+  .topbar-actions .header-language-switcher,
+  .topbar-actions .icon-btn { width: 27px !important; height: 27px !important; min-width: 27px; min-height: 27px; }
+  .topbar-actions .header-search-trigger svg,
+  .topbar-actions .header-language-switcher svg,
+  .topbar-actions .icon-btn svg { width: 12px !important; height: 12px !important; }
+}

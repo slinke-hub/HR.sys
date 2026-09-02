@@ -120,7 +120,7 @@ window.hideSupervisorTooltip = function () {
 
 let currentUserRole = null;
 let currentUserProfile = null;
-const isTaskAdmin = () => ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(String(currentUserRole || '').trim().toUpperCase());
+const isTaskAdmin = () => ['ADMIN', 'OWNER', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(String(currentUserRole || '').trim().toUpperCase());
 const canInteractWithTask = task => !!task && (isTaskAdmin() || [task.created_by, task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
 let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
@@ -278,7 +278,7 @@ window.handleUpdateUser = async (e) => {
         document.getElementById('editUserModal').classList.remove('active');
         await window.refreshUserRowInPlace(userId, updates);
     } else {
-        showToast(t('toast_failed_to_update_user'), "danger");
+        showToast(res.error?.message || t('toast_failed_to_update_user'), "danger");
     }
 };
 
@@ -855,6 +855,23 @@ const arabicRuntimeUiText = Object.freeze({
     'OK': 'حسنًا',
     'Notice': 'تنبيه',
     'Input required': 'الإدخال مطلوب',
+    'Sign In to MUQAM': 'تسجيل الدخول إلى مُقام',
+    'Enter your credentials to access your portal': 'أدخل بياناتك للوصول إلى بوابتك',
+    'Email Address': 'البريد الإلكتروني',
+    'Password': 'كلمة المرور',
+    'Forgot Password?': 'هل نسيت كلمة المرور؟',
+    'Sign In': 'تسجيل الدخول',
+    'Reset Password': 'إعادة تعيين كلمة المرور',
+    'Create Account': 'إنشاء حساب',
+    'Back to login': 'العودة إلى تسجيل الدخول',
+    'Remember me': 'تذكرني',
+    'Loading...': 'جارٍ التحميل...',
+    'No data available': 'لا توجد بيانات متاحة',
+    'No results found': 'لم يتم العثور على نتائج',
+    'Search': 'بحث',
+    'Switch language': 'تبديل اللغة',
+    'Primary navigation': 'التنقل الرئيسي',
+    'Search (Cmd/Ctrl + K)': 'بحث (Cmd/Ctrl + K)',
     'Unknown': 'غير معروف',
     'Unknown user': 'مستخدم غير معروف',
     'Unknown employee': 'موظف غير معروف',
@@ -1376,6 +1393,10 @@ function translateArabicInterface(root = document) {
     if (currentLang !== 'ar' || !root?.querySelectorAll) return;
     const selectors = [
         'button', 'label', 'legend', 'th', 'dt', 'option', '[role="tab"]',
+        '.topbar', '.sidebar-nav', '.page-header', '.page-title', '.section-header',
+        '.modal-header', '.modal-footer', '.modal-content > h1', '.modal-content > h2',
+        '.modal-content > h3', '.view-container h1', '.view-container h2',
+        '.view-container h3', '.view-container h4', '.view-container p',
         '.form-label', '.card-title', '.page-subtitle', '.empty-state',
         '.task-assignee-picker-help', '.task-assignee-picker-empty',
         '.modal-header h2', '.status-badge', '.property-cell > span',
@@ -3014,7 +3035,7 @@ window.openTaskAssigneePicker = function (taskId) {
         document.body.appendChild(modal);
         modal.querySelectorAll('[data-assignee-cancel]').forEach(button => button.onclick = () => modal.classList.remove('show'));
         modal.querySelector('#taskAssigneePickerSave').onclick = async () => {
-            const selected = Array.from(modal.querySelectorAll('#taskAssigneePickerOptions input[type="checkbox"]:checked')).map(input => input.value);
+            const selected = Array.from(modal.querySelectorAll('#taskAssigneePickerOptions input[type="checkbox"]:checked:not(#taskAssigneeSelectAll)')).map(input => input.value);
             if (!selected.length) return showToast(window.t('msg_toast_12') || 'Select at least one employee.', 'warning');
             const save = await db.updateTask(modal.dataset.taskId, { assignee_id: selected[0], assignee_ids: selected });
             if (!save.success) return showToast(save.error?.message || 'Unable to update assignment.', 'danger');
@@ -3269,6 +3290,13 @@ function companyJobTitleOptions(selected = '', departmentName = '') {
     if (!departmentName) return '<option value="">Select Department first</option>';
     const matchedDepartment = Object.keys(jobTitlesMap).find(name => name.trim().toLowerCase() === departmentName.trim().toLowerCase());
     let titles = matchedDepartment ? jobTitlesMap[matchedDepartment] : [];
+    // Administrative also owns the former IT titles after the department
+    // merge. Keep these visible even when an older cached directory response
+    // has not refreshed yet.
+    if (/administrative|administration/i.test(String(departmentName))) {
+        const itTitles = ['IT Manager', 'IT Support Specialist', 'System Administrator', 'Network Administrator', 'Technician'];
+        titles = [...new Set([...titles, ...itTitles])];
+    }
     titles = titles.filter(t => !t.includes('General Manager, Executive Director'));
     return '<option value="">Select Job Title</option>' + titles.map(title =>
         `<option value="${escapeHTML(title)}" ${title === selected ? 'selected' : ''}>${escapeHTML(title)}</option>`
@@ -3318,7 +3346,13 @@ window.setTaskDetailInfoTab = function (tab) {
         panel.innerHTML = proofLinks.length ? `<div class="task-detail-link-list">${proofLinks.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : `<div class="task-tab-empty">${taskDetailText('No submission proofs have been added.', 'لم تتم إضافة إثباتات تسليم.')}</div>`;
     } else {
         panel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Status', 'الحالة')}</span><strong>${escapeHTML(taskDetailValue(task.status, 'status'))}</strong></div><div><span>${taskDetailText('Priority', 'الأولوية')}</span><strong>${escapeHTML(taskDetailValue(task.priority, 'priority'))}</strong></div><div><span>${taskDetailText('Content links', 'روابط المحتوى')}</span><strong>${contentLinks.length}</strong></div><div><span>${taskDetailText('Due date', 'تاريخ الاستحقاق')}</span><strong>${escapeHTML(task.due_date || taskDetailText('Not set', 'غير محدد'))}</strong></div></div>
-            <section class="task-detail-inline-subtasks"><div class="task-detail-subtask-heading"><strong>${taskDetailText('Subtasks', 'المهام الفرعية')} <span>${subtasks.length}</span></strong>${canManageTask ? `<button type="button" onclick="openInlineSubtaskComposer()"><i data-lucide="plus"></i> ${taskDetailText('Add a subtask', 'إضافة مهمة فرعية')}</button>` : `<span class="task-private-badge"><i data-lucide="eye"></i>${taskDetailText('View only', 'عرض فقط')}</span>`}</div><div id="taskDetailSubtaskHost">${subtasks.length ? subtasks.map(subtask => `<button type="button" class="task-detail-subtask-row" onclick="openTaskDetailsModal('${subtask.id}')"><i data-lucide="circle"></i><span>${escapeHTML(getLocalizedTaskTitle(subtask))}</span><small>${escapeHTML(subtask.due_date || taskDetailText('No due date', 'بدون تاريخ استحقاق'))}</small></button>`).join('') : `<div class="task-tab-empty">${taskDetailText('No subtasks yet.', 'لا توجد مهام فرعية بعد.')}</div>`}</div></section>`;
+            <section class="task-detail-inline-subtasks"><div class="task-detail-subtask-heading"><strong>${taskDetailText('Subtasks', 'المهام الفرعية')} <span>${subtasks.length}</span></strong>${canManageTask ? `<button type="button" onclick="openInlineSubtaskComposer()"><i data-lucide="plus"></i> ${taskDetailText('Add a subtask', 'إضافة مهمة فرعية')}</button>` : `<span class="task-private-badge"><i data-lucide="eye"></i>${taskDetailText('View only', 'عرض فقط')}</span>`}</div><div id="taskDetailSubtaskHost">${subtasks.length ? subtasks.map(subtask => {
+                const isDone = subtask.status === 'completed' || subtask.status === 'Approved';
+                const iconColor = isDone ? '#059669' : 'var(--color-text-secondary)';
+                const iconName = isDone ? 'check-circle-2' : 'circle';
+                const titleStyle = isDone ? 'text-decoration:line-through;opacity:0.55;' : '';
+                return `<button type="button" class="task-detail-subtask-row${isDone ? ' subtask-done' : ''}" data-task-id="${subtask.id}" onclick="openTaskDetailsModal('${subtask.id}')"><span class="subtask-check-btn" onclick="event.stopPropagation();window.toggleSubtaskComplete('${subtask.id}',this)" style="display:flex;align-items:center;flex-shrink:0;cursor:pointer;padding:0 4px 0 0;"><i data-lucide="${iconName}" style="width:18px;height:18px;color:${iconColor};transition:color 0.2s ease;pointer-events:none;"></i></span><span style="${titleStyle}">${escapeHTML(getLocalizedTaskTitle(subtask))}</span><small>${escapeHTML(subtask.due_date || taskDetailText('No due date', 'بدون تاريخ استحقاق'))}</small></button>`;
+            }).join('') : `<div class="task-tab-empty">${taskDetailText('No subtasks yet.', 'لا توجد مهام فرعية بعد.')}</div>`}</div></section>`;
     }
     if (window.lucide) window.lucide.createIcons();
 };
@@ -5435,7 +5469,10 @@ async function renderTasks() {
 
     const ownTaskLists = (taskLists || []).filter(list => list.owner_id === currentUser.id);
     const currentProfile = allUsers.find(user => user.id === currentUser.id) || currentUser;
-    window.taskListShareCandidates = (taskListDirectory || []).filter(user => user.id !== currentUser.id);
+    // Administrators and department managers may choose a department in the
+    // access tab, so keep the full active directory available for filtering.
+    const canManageTaskListDepartments = isTaskAdmin();
+    window.taskListShareCandidates = (canManageTaskListDepartments ? allUsers : (taskListDirectory || [])).filter(user => user.id !== currentUser.id && user.is_active !== false);
     window.taskWatcherOptionsCache = window.taskWatcherDirectoryCache.map(u => {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
         return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(u.role || 'EMPLOYEE'))})</option>`;
@@ -6112,12 +6149,102 @@ window.selectTaskV2Project = function (projectId) {
     window.filterTasksV2();
 };
 
+// Applies / reverts the completed visual state on all row nodes for a task.
+window._applyTaskRowCompleteStyle = function (taskId, completed) {
+    document.querySelectorAll(`[data-task-id="${taskId}"]`).forEach(node => {
+        // Check button icon
+        // Lucide replaces <i data-lucide> with <svg> at runtime, so target svg
+        const icon = node.querySelector('.task-v2-check-btn svg');
+        if (icon) {
+            icon.style.color = completed ? '#059669' : 'var(--color-text-secondary)';
+            icon.style.transition = 'color 0.2s ease';
+        }
+        // Task title
+        const title = node.querySelector('h4');
+        if (title) {
+            title.style.textDecoration = completed ? 'line-through' : '';
+            title.style.opacity = completed ? '0.6' : '';
+            title.style.transition = 'opacity 0.2s ease';
+        }
+        // Row article class
+        if (node.tagName === 'ARTICLE') {
+            node.classList.toggle('completed', completed);
+        }
+    });
+};
+
+const TASK_ACTION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function resolveTaskActionId(candidate, event) {
+    const supplied = String(candidate || '').trim();
+    if (TASK_ACTION_UUID_RE.test(supplied)) return supplied;
+    const rowId = String(event?.currentTarget?.closest?.('[data-task-id]')?.dataset?.taskId || '').trim();
+    return TASK_ACTION_UUID_RE.test(rowId) ? rowId : null;
+}
+
 window.taskV2ToggleComplete = async function (taskId, event) {
     if (event) event.stopPropagation();
+    taskId = resolveTaskActionId(taskId, event);
+    if (!taskId) {
+        console.warn('Task status change skipped because the task ID is invalid.');
+        return { error: new Error('Invalid task ID') };
+    }
     const task = window.taskCache[taskId];
     if (!task) return;
     const newStatus = task.status === 'completed' ? 'todo' : 'completed';
-    await window.taskV2ChangeStage(taskId, newStatus);
+    const wasCompleted = task.status === 'completed';
+
+    // --- Optimistic update: apply visual state instantly ---
+    window._applyTaskRowCompleteStyle(taskId, !wasCompleted);
+
+    const result = await window.taskV2ChangeStage(taskId, newStatus);
+
+    // Revert on failure
+    if (result?.error) {
+        window._applyTaskRowCompleteStyle(taskId, wasCompleted);
+    }
+};
+
+// Handles clicking the check icon on a subtask row inside the task detail side panel.
+window.toggleSubtaskComplete = async function (subtaskId, iconEl) {
+    const subtask = window.taskCache?.[subtaskId];
+    if (!subtask) return;
+
+    const isCurrentlyDone = subtask.status === 'completed' || subtask.status === 'Approved';
+    const newStatus = isCurrentlyDone ? 'todo' : 'completed';
+
+    // Optimistic DOM update on the icon and its sibling title span
+    const row = iconEl.closest('.task-detail-subtask-row');
+    if (row) {
+        iconEl.style.color = !isCurrentlyDone ? '#059669' : 'var(--color-text-secondary)';
+        iconEl.setAttribute('data-lucide', !isCurrentlyDone ? 'check-circle-2' : 'circle');
+        if (window.lucide) window.lucide.createIcons({ elements: [iconEl] });
+        const titleSpan = row.querySelector('span');
+        if (titleSpan) {
+            titleSpan.style.textDecoration = !isCurrentlyDone ? 'line-through' : '';
+            titleSpan.style.opacity = !isCurrentlyDone ? '0.55' : '';
+        }
+        row.classList.toggle('subtask-done', !isCurrentlyDone);
+    }
+
+    const result = await window.taskV2ChangeStage(subtaskId, newStatus);
+
+    // On failure, revert the optimistic changes and re-render
+    if (result?.error) {
+        if (row) {
+            iconEl.style.color = isCurrentlyDone ? '#059669' : 'var(--color-text-secondary)';
+            iconEl.setAttribute('data-lucide', isCurrentlyDone ? 'check-circle-2' : 'circle');
+            if (window.lucide) window.lucide.createIcons({ elements: [iconEl] });
+            const titleSpan = row.querySelector('span');
+            if (titleSpan) {
+                titleSpan.style.textDecoration = isCurrentlyDone ? 'line-through' : '';
+                titleSpan.style.opacity = isCurrentlyDone ? '0.55' : '';
+            }
+        }
+    } else {
+        // Refresh the subtask panel to pick up icon name change (circle ↔ check-circle-2)
+        if (window.setTaskDetailInfoTab) window.setTaskDetailInfoTab('overview');
+    }
 };
 
 window.openInlineSubtaskComposer = function () {
@@ -6152,6 +6279,8 @@ window.submitInlineSubtask = async function (event) {
 };
 
 window.taskV2ChangeStage = async function (taskId, requestedStatus) {
+    taskId = resolveTaskActionId(taskId);
+    if (!taskId) return { error: new Error('Invalid task ID') };
     const task = window.taskCache?.[taskId];
     if (!task || task.status === requestedStatus) return;
     const previousStatus = task.status;
@@ -6174,7 +6303,11 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus) {
         if (oldBadge) oldBadge.textContent = Math.max(0, Number(oldBadge.textContent || 0) - 1);
         if (newBadge) newBadge.textContent = Number(newBadge.textContent || 0) + 1;
     }
+    // Sync the check icon colour and title strikethrough for list-view rows
+    const isNowCompleted = actualStatus === 'completed' || actualStatus === 'Approved';
+    window._applyTaskRowCompleteStyle?.(taskId, isNowCompleted);
     window.syncTaskStageEmptyStates?.();
+    return result;
 };
 
 window.setTaskV2Mode = function (mode) {
@@ -6358,7 +6491,7 @@ function renderTaskWatcherPicker(selectId, options = '') {
             <button type="button" class="multi-select-modal-backdrop" onclick="window.closeTaskWatcherDropdown('${selectId}')" aria-label="Close"></button>
             <section class="multi-select-modal-card">
                 <header class="multi-select-modal-header"><div><span class="eyebrow">${currentLang === 'ar' ? 'صلاحية المهمة' : 'Task access'}</span><h3>${currentLang === 'ar' ? 'اختر المتابعين' : 'Select watchers'}</h3></div><button type="button" class="icon-btn" onclick="window.closeTaskWatcherDropdown('${selectId}')" aria-label="Close"><i data-lucide="x"></i></button></header>
-                <input type="search" class="form-control task-watcher-search" placeholder="Search employees..." aria-label="Search employees" oninput="filterTaskWatchers('${selectId}', this.value)">
+                <input type="search" class="form-control task-watcher-search" placeholder="Search employees..." aria-label="Search employees" oninput="window.filterTaskWatchers('${selectId}', this.value)">
                 <div class="task-watcher-options multi-select-modal-options"></div>
                 <footer class="multi-select-modal-footer"><button type="button" class="btn btn-primary" onclick="window.closeTaskWatcherDropdown('${selectId}')">${currentLang === 'ar' ? 'تم' : 'Done'}</button></footer>
             </section>
@@ -6407,9 +6540,10 @@ window.closeTaskWatcherDropdown = function (selectId) {
 };
 
 window.filterTaskWatchers = function (selectId, query) {
-    const normalized = query.trim().toLowerCase();
+    const normalized = String(query || '').trim().toLowerCase();
     document.querySelector(`[data-watcher-modal="${CSS.escape(selectId)}"]`)?.querySelectorAll('.task-watcher-option').forEach(option => {
-        option.hidden = normalized && !option.dataset.search.includes(normalized);
+        if (option.classList.contains('picker-select-all')) { option.hidden = false; return; }
+        option.hidden = !!normalized && !String(option.dataset.search || option.textContent || '').toLowerCase().includes(normalized);
     });
 };
 
@@ -7002,10 +7136,10 @@ window.handleEditTaskSubmit = async function (e) {
 
     const priority = document.getElementById('editTaskPriority').value;
     const assigneeId = document.getElementById('editTaskAssignee').value;
-    const selectedAssigneeIds = Array.from(document.querySelectorAll('#editTaskAssigneeOptions input[type="checkbox"]:checked')).map(input => input.value);
+    const selectedAssigneeIds = Array.from(document.querySelectorAll('#editTaskAssigneeOptions input[type="checkbox"]:checked:not(#editTaskAssigneeSelectAll)')).map(input => input.value);
     const assigneeIds = selectedAssigneeIds.length ? selectedAssigneeIds : (assigneeId ? [assigneeId] : []);
     const primaryAssigneeId = assigneeIds[0] || assigneeId;
-    const dueDate = document.getElementById('editTaskDue').value;
+    const dueDate = document.getElementById('editTaskDue').value || null;
 
     const visibility = document.getElementById('editTaskVisibility').value;
     const startDate = document.getElementById('editTaskStart').value;
@@ -9532,7 +9666,8 @@ document.addEventListener('pointerdown', event => {
 }, true);
 
 window.refreshTaskListDepartmentControls = function(selectedViewers, selectedAdd, selectedDelete) {
-    const departmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
+    const ownDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
+    const departmentId = document.getElementById('taskListDepartment')?.value || ownDepartmentId;
     const currentSelections = (containerId) => new Set(Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked:not([data-select-all])`)).map(input => input.value));
     const viewers = selectedViewers instanceof Set ? selectedViewers : currentSelections('taskListViewersOptions');
     const addUsers = selectedAdd instanceof Set ? selectedAdd : currentSelections('taskListAddUsersOptions');
@@ -9592,11 +9727,13 @@ window.openTaskListModal = function (listId = '') {
     if (departmentSelect) {
         const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
         const ownDepartment = (window.taskDepartmentsCache || []).find(department => department.id === viewerDepartmentId);
-        departmentSelect.innerHTML = ownDepartment
-            ? `<option value="${escapeHTML(ownDepartment.id)}">${escapeHTML(ownDepartment.name)}</option>`
+        const canManageDepartments = isTaskAdmin();
+        const availableDepartments = canManageDepartments ? (window.taskDepartmentsCache || []) : (ownDepartment ? [ownDepartment] : []);
+        departmentSelect.innerHTML = availableDepartments.length
+            ? availableDepartments.map(department => `<option value="${escapeHTML(department.id)}">${escapeHTML(getTaskDepartmentLabel(department))}</option>`).join('')
             : '<option value="">No department assigned</option>';
-        departmentSelect.value = viewerDepartmentId;
-        departmentSelect.disabled = true;
+        departmentSelect.value = list?.department_id || viewerDepartmentId;
+        departmentSelect.disabled = !canManageDepartments;
     }
     
     // Set selected viewers
@@ -9627,7 +9764,11 @@ window.handleSaveTaskList = async function (event) {
     const name = document.getElementById('taskListName').value.trim();
     const description = document.getElementById('taskListDescription').value.trim();
     const template = document.getElementById('taskListTemplate').value;
-    const departmentSelection = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
+    const ownDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
+    const canManageDepartments = isTaskAdmin();
+    const departmentSelection = canManageDepartments
+        ? (document.getElementById('taskListDepartment')?.value || ownDepartmentId)
+        : ownDepartmentId;
     const departmentId = departmentSelection || null;
     
     const sharedWith = Array.from(document.querySelectorAll('#taskListViewersOptions input[type="checkbox"]:checked:not([data-select-all])')).map(cb => cb.value);
@@ -12394,6 +12535,40 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 // --- Task List Modal: Tab Switcher ---
+window.showTaskListContextMenu = function(e, listId, isAdmin) {
+    e.preventDefault();
+    e.stopPropagation();
+    let menu = document.getElementById('taskListContextMenu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'taskListContextMenu';
+        menu.style.cssText = 'display:none; position:fixed; z-index:10000; background:var(--color-surface); border:1px solid var(--color-border); border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.18); min-width:160px; padding:4px 0;';
+        document.body.appendChild(menu);
+        document.addEventListener('click', function(ev) {
+            if (!ev.target.closest('#taskListContextMenu')) {
+                menu.style.display = 'none';
+            }
+        }, { capture: true });
+    }
+
+    let html = '';
+    if (isAdmin) {
+        html += `<button onclick="window.openTaskListModal('${listId}'); document.getElementById('taskListContextMenu').style.display='none';" style="display:flex;align-items:center;width:100%;padding:8px 16px;background:none;border:none;text-align:left;cursor:pointer;color:var(--color-text);font-size:0.875rem;gap:8px;"><i data-lucide="settings" style="width:15px;height:15px;flex-shrink:0;"></i>Edit List</button>`;
+    }
+    html += `<button onclick="window.handleDeleteTaskList('${listId}'); document.getElementById('taskListContextMenu').style.display='none';" style="display:flex;align-items:center;width:100%;padding:8px 16px;background:none;border:none;text-align:left;cursor:pointer;color:var(--color-danger);font-size:0.875rem;gap:8px;"><i data-lucide="trash-2" style="width:15px;height:15px;flex-shrink:0;"></i>Delete List</button>`;
+    menu.innerHTML = html;
+
+    menu.style.display = 'block';
+    let left = e.clientX, top = e.clientY;
+    const r = menu.getBoundingClientRect();
+    if (left + r.width > window.innerWidth) left = window.innerWidth - r.width - 8;
+    if (top + r.height > window.innerHeight) top = window.innerHeight - r.height - 8;
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+
+    if (window.lucide) window.lucide.createIcons({ elements: [menu] });
+};
+
 window.switchTaskListTab = function(tabName) {
     document.querySelectorAll('.task-list-tab').forEach(btn => {
         btn.classList.remove('active');
