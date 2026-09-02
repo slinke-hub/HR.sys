@@ -1367,6 +1367,8 @@ const db = {
                     delete safeUpdates.task_sub_type;
                     delete safeUpdates.edited_by;
                     delete safeUpdates.file_links;
+                    delete safeUpdates.repeat_type;
+                    delete safeUpdates.repeat_interval;
                     
                     const retry = await supabaseClient.from('tasks').update(safeUpdates).eq('id', taskId);
                     if (retry.error) throw retry.error;

@@ -40,7 +40,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=1788202890003">
     <link rel="stylesheet" href="css/layout.css?v=1788202890003">
-    <link rel="stylesheet" href="css/components.css?v=1788202890007">
+    <link rel="stylesheet" href="css/components.css?v=1788202890010">
     <link rel="stylesheet" href="css/android.css?v=1788202890003">
     <style>
         @media (hover: none) and (pointer: coarse) {
@@ -1206,9 +1206,22 @@
             <form id="editTaskForm" onsubmit="handleEditTaskSubmit(event)" style="display: flex; flex-direction: column;">
                 <div style="padding: 0 1.5rem;">
                     <div class="edit-task-list-indicator" style="background: var(--color-surface); padding: 0.5rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 0.5rem;">
-                        Task list <a href="#" id="editTaskListLabel" style="color: var(--color-primary); text-decoration: none; font-weight: 500;" data-i18n="ui_list_name">List Name</a>
+                        <span data-i18n="ui_task_list">Task list</span>
+                        <select id="editTaskMoveList" class="edit-task-list-select" aria-label="Move task to task list"></select>
+                        <a href="#" id="editTaskListLabel" style="display:none;" data-i18n="ui_list_name">List Name</a>
                         <select id="editTaskProject" style="display:none;"></select>
                         <input type="hidden" id="editTaskId">
+                    </div>
+
+                    <div class="edit-task-meta-row" aria-label="Task metadata">
+                        <div class="form-group">
+                            <label class="form-label" for="editTaskCreatedBy" data-i18n="html_creator">Created by</label>
+                            <input id="editTaskCreatedBy" class="form-control" type="text" readonly aria-readonly="true">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="editTaskCreatedDate" data-i18n="Created Date">Created Date</label>
+                            <input id="editTaskCreatedDate" class="form-control" type="date" readonly aria-readonly="true">
+                        </div>
                     </div>
                     
                     <div class="edit-task-tabs" style="display: flex; background: var(--color-surface); border-radius: 8px; padding: 0.25rem; margin-bottom: 1rem;">
@@ -1295,6 +1308,7 @@
                         </div>
                     </div>
 
+                    <div class="edit-task-section-heading"><i data-lucide="align-left"></i><span data-i18n="task_desc">Description</span></div>
                     <div class="description-area">
                         <textarea id="editTaskDescription" class="form-control" rows="4" placeholder="Add a description..." style="resize: vertical; min-height: 100px; padding: 1rem; border-radius: 8px; border: 1px solid var(--color-border); font-family: inherit; font-size: 0.95rem; width: 100%;"></textarea>
                     </div>
@@ -1331,7 +1345,7 @@
                             <span style="font-size: 0.85rem; font-weight: 500;" data-i18n="ui_set_to_repeat2">Set to repeat</span>
                             <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
                                 <i data-lucide="repeat" style="width: 16px; height: 16px;"></i>
-                                <select id="editTaskRepeat" class="form-control" onchange="window.toggleEditTaskRepeatCustom(this.value)" style="min-height: 30px; padding: .25rem .4rem; width: auto;"><option value="NONE" data-i18n="ui_not_set">Not set</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option><option value="MONTHLY">Monthly</option><option value="ANNUALLY">Annually</option><option value="CUSTOM">Custom days</option></select><input id="editTaskRepeatDays" type="number" min="1" max="365" placeholder="Days" hidden style="width: 70px; min-height: 30px;">
+                                <select id="editTaskRepeat" class="form-control" onchange="window.toggleEditTaskRepeatCustom(this.value)" style="min-height: 30px; padding: .25rem .4rem; width: auto;"><option value="NONE" data-i18n="ui_not_set">Not set</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option><option value="MONTHLY">Monthly</option><option value="ANNUALLY">Annually</option><option value="CUSTOM">Custom days</option></select><input id="editTaskRepeatDays" type="number" min="1" max="365" placeholder="Every" aria-label="Repeat interval" hidden style="width: 70px; min-height: 30px;">
                             </div>
                         </div>
                         
@@ -1639,7 +1653,7 @@
     <script src="js/data.js?v=1788202890003"></script>
     <script src="js/contract.js?v=1788202890003"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/app.js?v=1788202890017"></script>
+    <script src="js/app.js?v=1788202890021"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

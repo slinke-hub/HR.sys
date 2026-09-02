@@ -5509,6 +5509,9 @@ function renderTaskCard(task) {
             </div>
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
+                ${canManageTask ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
+                    ['todo','To do'],['in_progress','In progress'],['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done']
+                ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
                 <button type="button" class="task-assignee" title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">
                     <span class="task-assignee-avatar-stack">${(assignedUsers.length ? assignedUsers : [task.assignee]).filter(Boolean).slice(0, 4).map(user => { const name = window.formatEmployeeName(user) || 'Employee'; return `<span class="task-avatar" title="${escapeHTML(name)}">${escapeHTML(name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase())}</span>`; }).join('') || '<span class="task-avatar"><i data-lucide="user"></i></span>'}</span>
                     <span>${escapeHTML(assigneeIds.length > 1 ? `${assigneeName.split(' ')[0]} +${assigneeIds.length - 1}` : assigneeName.split(' ')[0])}</span>
@@ -6192,6 +6195,11 @@ function resolveTaskActionId(candidate, event) {
     return TASK_ACTION_UUID_RE.test(rowId) ? rowId : null;
 }
 
+window.handleTaskCardStageChange = async function (taskId, nextStatus) {
+    const result = await window.handleUpdateTaskStatus(taskId, nextStatus);
+    if (!result?.error) await renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
+};
+
 window.taskV2ToggleComplete = async function (taskId, event) {
     if (event) event.stopPropagation();
     taskId = resolveTaskActionId(taskId, event);
@@ -6468,6 +6476,15 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
     let employees = [];
     if (department) {
         employees = (window.taskAllUsersCache || []).filter(user => user.department_id === department.id);
+        // Include former IT staff in the merged Administrative department even
+        // when an older profile record still carries the retired IT id.
+        if (/administrative|administration/i.test(String(departmentName))) {
+            const formerIt = (window.taskAllUsersCache || []).filter(user =>
+                /^(IT|Information Technology|System|Network|Technical|Technician|Developer|Software|Support)/i.test(String(user.job_title || '').trim())
+                || /(تقنية المعلومات|فني|شبكات|نظم|دعم فني|مطور)/i.test(String(user.job_title || '').trim())
+            );
+            employees = [...new Map([...employees, ...formerIt].map(user => [user.id, user])).values()];
+        }
     } else if (isTaskAdmin()) {
         employees = window.taskAllUsersCache || [];
     }
@@ -6995,6 +7012,9 @@ window.openEditTaskModal = async function (id) {
         document.getElementById('editTaskId').value = task.id;
         document.getElementById('editTaskTitle').value = task.title || '';
         document.getElementById('editTaskDescription').value = task.description || '';
+        const creator = (window.taskAllUsersCache || []).find(user => user.id === task.created_by) || task.creator;
+        const creatorField = document.getElementById('editTaskCreatedBy');
+        if (creatorField) creatorField.value = window.formatEmployeeName(creator) || (task.created_by === currentUser?.id ? window.formatEmployeeName(currentUserProfile || currentUser) : task.created_by || '');
         document.getElementById('editTaskCategory').value = task.category || '';
         document.querySelector('.category-ui-value').textContent = task.category || 'No tags';
 
@@ -7009,6 +7029,8 @@ window.openEditTaskModal = async function (id) {
 
         const start = formatDate(task.start_date);
         const due = formatDate(task.due_date);
+        const createdDateField = document.getElementById('editTaskCreatedDate');
+        if (createdDateField) createdDateField.value = task.created_at ? formatDate(task.created_at) : '';
         document.getElementById('editTaskStart').value = start;
         document.getElementById('editTaskDue').value = due;
 
@@ -7018,6 +7040,12 @@ window.openEditTaskModal = async function (id) {
 
         const vis = task.visibility || 'public';
         document.getElementById('editTaskVisibility').value = vis;
+
+        const repeatSelect = document.getElementById('editTaskRepeat');
+        if (repeatSelect) repeatSelect.value = task.repeat_type || 'NONE';
+        const repeatInterval = document.getElementById('editTaskRepeatDays');
+        if (repeatInterval) repeatInterval.value = String(task.repeat_interval || 1);
+        window.toggleEditTaskRepeatCustom(repeatSelect?.value || 'NONE');
 
         const assigneeSelect = document.getElementById('editTaskAssignee');
         if (assigneeSelect) {
@@ -7058,6 +7086,12 @@ window.openEditTaskModal = async function (id) {
         // Update project options
         let selectProject = document.getElementById('editTaskProject');
         selectProject.innerHTML = `<option value="">No Project / Independent</option>`;
+        const moveListSelect = document.getElementById('editTaskMoveList');
+        const editableLists = (window.taskListsCache || []).filter(list => !list.is_archived && (list.id === task.task_list_id || isTaskAdmin() || list.owner_id === currentUser?.id || (list.can_add_users || []).includes(currentUser?.id)));
+        if (moveListSelect) {
+            moveListSelect.innerHTML = `<option value="">No task list</option>` + editableLists.map(list => `<option value="${escapeHTML(list.id)}">${escapeHTML(list.name)}</option>`).join('');
+            moveListSelect.value = task.task_list_id || '';
+        }
         (window.taskListsCache || []).forEach(list => {
             if (!list.is_archived) {
                 let isSelected = task.task_list_id === list.id ? 'selected' : '';
@@ -7132,7 +7166,7 @@ window.setEditTaskTab = function (tab) {
     const modal = document.getElementById('editTaskModal');
     if (!modal) return;
     modal.dataset.editTab = tab;
-    modal.querySelectorAll('.teamwork-edit-tabs button').forEach((button, index) => button.classList.toggle('active', tab === 'details' ? index === 0 : index === 1));
+    modal.querySelectorAll('.edit-task-tabs button').forEach((button, index) => button.classList.toggle('active', tab === 'details' ? index === 0 : index === 1));
     modal.querySelectorAll('.edit-task-advanced').forEach(field => field.style.display = tab === 'advanced' ? '' : 'none');
     const marketingFields = document.getElementById('editMarketingDesignFields');
     if (marketingFields && tab === 'advanced') handleMarketingTaskTypeChange('edit', document.getElementById('editTaskSubType')?.value || '');
@@ -7160,6 +7194,9 @@ window.handleEditTaskSubmit = async function (e) {
     const startDate = document.getElementById('editTaskStart').value;
     const estimate = document.getElementById('editTaskEstimate').value;
     const projectId = document.getElementById('editTaskProject').value || null;
+    const moveTaskListId = document.getElementById('editTaskMoveList')?.value || null;
+    const repeatType = document.getElementById('editTaskRepeat')?.value || 'NONE';
+    const repeatInterval = Math.max(1, Number(document.getElementById('editTaskRepeatDays')?.value || 1));
 
     // Check Designer status
     const allUsers = await db.fetchUsers();
@@ -7184,7 +7221,10 @@ window.handleEditTaskSubmit = async function (e) {
         visibility: visibility,
         start_date: startDate || null,
         estimated_time: estimate || null,
-        project_id: projectId
+        project_id: moveTaskListId ? null : projectId,
+        task_list_id: moveTaskListId,
+        repeat_type: repeatType,
+        repeat_interval: repeatInterval
     };
 
     if (projectId) {
@@ -12420,7 +12460,7 @@ window.updateEditTaskProgress = function (value) {
 
 window.toggleEditTaskRepeatCustom = function (value) {
     const input = document.getElementById('editTaskRepeatDays');
-    if (input) input.hidden = value !== 'CUSTOM';
+    if (input) input.hidden = value === 'NONE';
 };
 
 window.editTaskPromptEstimate = async function() {
