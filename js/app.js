@@ -6925,8 +6925,11 @@ window.syncTaskStageEmptyStates = function () {
 
 window.handleTaskDrop = async function (e, status) {
     e.preventDefault();
-    const id = e.dataTransfer.getData('text/plain');
-    if (!id) return;
+    const id = String(e.dataTransfer.getData('text/plain') || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        console.warn('handleTaskDrop: ignored invalid task id', id);
+        return;
+    }
 
     const taskCard = document.getElementById(`task-card-${id}`);
     if (taskCard) {
