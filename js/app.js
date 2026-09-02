@@ -1839,6 +1839,15 @@ window.handleLoginSubmit = async function (e) {
     await db.updateLastLogin(user.id);
 
     const profile = await db.getUserProfile(user.id);
+    if (profile && profile.is_active === false) {
+        await db.logout();
+        currentUser = null;
+        currentUserProfile = null;
+        currentUserRole = null;
+        showToast('This account is locked. Please contact an administrator.', 'danger');
+        await renderView('login');
+        return;
+    }
     if (profile) {
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
@@ -4107,7 +4116,7 @@ window.handleDirectoryDepartmentChange = async function (userId, departmentId, s
 async function renderUsers() {
     if (currentUserRole !== 'ADMIN') return '<div style="padding: 2rem;">Unauthorized</div>';
 
-    const [users, departments] = await Promise.all([db.fetchUsers(), db.fetchDepartments(), db.fetchJobTitles(true)]);
+    const [users, departments] = await Promise.all([db.fetchUsers(true), db.fetchDepartments(), db.fetchJobTitles(true)]);
     window.currentAdminUsers = users;
 
     return `
@@ -4147,7 +4156,7 @@ async function renderUsers() {
                                 <tr data-user-row="${u.id}">
                                     <td data-user-id><span class="directory-employee-id">${escapeHTML(formatEmployeeId(u.emp_index))}</span></td>
                                     <td data-user-details><div class="directory-employee-name">${escapeHTML(window.formatEmployeeName(u) || 'N/A')}</div></td>
-                                    <td data-user-role><span data-user-role-badge class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${escapeHTML(u.role || 'EMPLOYEE')}</span></td>
+                                    <td data-user-role><span data-user-role-badge class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${escapeHTML(u.role || 'EMPLOYEE')}</span>${u.is_active === false ? '<span class="status-badge danger" style="margin-inline-start:.35rem;">Locked</span>' : ''}</td>
                                     <td>
                                         <div class="directory-actions">
                                             <button type="button" class="btn-secondary btn-sm directory-view-button" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View employee details"><i data-lucide="eye"></i><span>View</span></button>
@@ -4158,6 +4167,7 @@ async function renderUsers() {
                                             <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem; color: var(--color-warning);" onclick="showAdminPasswordResetModal('${u.id}')" title="${t('password_reset_button')}">
                                                 <i data-lucide="key" style="width:14px;height:14px;"></i>
                                             </button>
+                                            <button type="button" class="btn-secondary btn-sm" style="padding:.4rem; color:${u.is_active === false ? 'var(--color-success)' : 'var(--color-warning)'};" onclick="window.toggleUserLock('${u.id}', ${u.is_active !== false})" title="${u.is_active === false ? 'Unlock user' : 'Lock user'}"><i data-lucide="${u.is_active === false ? 'unlock' : 'lock'}" style="width:14px;height:14px;"></i></button>
                                             <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem; color: var(--color-danger);" onclick="handleDeleteUser('${u.id}')" title="Remove User">
                                                 <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
                                             </button>
@@ -4172,6 +4182,27 @@ async function renderUsers() {
         </div>
     `;
 }
+
+window.toggleUserLock = async function (userId, currentlyActive) {
+    if (currentUserRole !== 'ADMIN' || userId === currentUser?.id) {
+        showToast('You cannot lock your own account.', 'warning');
+        return;
+    }
+    const action = currentlyActive ? 'lock' : 'unlock';
+    window.showConfirmModal(
+        currentlyActive ? 'Lock user' : 'Unlock user',
+        currentlyActive ? 'This user will no longer be able to sign in. Continue?' : 'Allow this user to sign in again?',
+        async () => {
+            const result = await db.updateUserProfile(userId, { is_active: !currentlyActive });
+            if (!result?.success) {
+                showToast(result?.error?.message || `Failed to ${action} user.`, 'danger');
+                return;
+            }
+            showToast(currentlyActive ? 'User locked.' : 'User unlocked.', 'success');
+            await renderView('users');
+        }
+    );
+};
 
 window.downloadUserDirectoryExcel = function () {
     if (typeof XLSX === 'undefined') {

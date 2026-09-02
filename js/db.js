@@ -710,14 +710,14 @@ const db = {
 
     // USER MANAGEMENT (ADMIN)
     // ==========================================
-    async fetchUsers() {
+    async fetchUsers(includeInactive = false) {
         if (!supabaseClient) return [];
         try {
-            const { data, error } = await supabaseClient
+            let query = supabaseClient
                 .from('profiles')
-                .select('id, emp_index, full_name, display_name_ar, nationality, iqama_number, phone_number, role, created_at, manager_id, base_salary, department_id, job_title, job_title_ar, avatar_url, last_login')
-                .eq('is_active', true)
-                .order('emp_index', { ascending: true });
+                .select('id, emp_index, full_name, display_name_ar, nationality, iqama_number, phone_number, role, created_at, manager_id, base_salary, department_id, job_title, job_title_ar, avatar_url, last_login, is_active');
+            if (!includeInactive) query = query.eq('is_active', true);
+            const { data, error } = await query.order('emp_index', { ascending: true });
             if (error) throw error;
             return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
