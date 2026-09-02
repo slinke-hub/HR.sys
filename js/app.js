@@ -5486,6 +5486,16 @@ function renderTaskCard(task) {
     const canManageTask = isTaskAdmin() || (task.task_list_id
         ? taskList?.owner_id === currentUser?.id
         : [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager));
+    // Stage changes are intentionally available to the people working on the
+    // task, not only to the list owner. List-level permissions still apply to
+    // adding/removing tasks, while assignees and creators can move the work
+    // through the pipeline.
+    const canChangeTaskStage = isTaskAdmin()
+        || task.created_by === currentUser?.id
+        || task.assignee_id === currentUser?.id
+        || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser?.id))
+        || task.supervisor_id === currentUser?.id
+        || (taskList && (taskList.owner_id === currentUser?.id || (taskList.can_add_users || []).includes(currentUser?.id)));
     const canEditTask = isTaskAdmin() || task.created_by === currentUser?.id;
     const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id
         || (taskList?.can_delete_users || []).includes(currentUser?.id);
@@ -5503,13 +5513,13 @@ function renderTaskCard(task) {
         : (t('task_no_date') || 'No date');
     
     return `
-        <article class="task-item-card task-pipeline-card priority-${escapeHTML(task.priority)} ${isOverdue ? 'is-overdue' : ''}" data-task-id="${task.id}" id="task-card-${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" draggable="${canManageTask}" ${canManageTask ? `ondragstart="handleTaskDragStart(event, '${task.id}')"` : ''} onclick="openTaskDetailsModal('${task.id}')" oncontextmenu="window.handleTaskContextMenu(event, '${task.id}', ${canEditTask}, ${canDeleteTask})">
+        <article class="task-item-card task-pipeline-card priority-${escapeHTML(task.priority)} ${isOverdue ? 'is-overdue' : ''}" data-task-id="${task.id}" id="task-card-${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" draggable="${canChangeTaskStage}" ${canChangeTaskStage ? `ondragstart="handleTaskDragStart(event, '${task.id}')"` : ''} onclick="openTaskDetailsModal('${task.id}')" oncontextmenu="window.handleTaskContextMenu(event, '${task.id}', ${canEditTask}, ${canDeleteTask})">
             <div class="task-pipeline-card-head">
                 <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="cursor:pointer;"><span class="task-relation-badge ${task.parent_task_id ? 'is-subtask' : 'is-parent'}">${task.parent_task_id ? 'Subtask' : 'Task'}</span>${escapeHTML(task.displayTitle)}</h4>
             </div>
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
-                ${canManageTask ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
+                ${canChangeTaskStage ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
                     ['todo','To do'],['in_progress','In progress'],['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done']
                 ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
                 <button type="button" class="task-assignee" title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">
@@ -7087,7 +7097,8 @@ window.openEditTaskModal = async function (id) {
         let selectProject = document.getElementById('editTaskProject');
         selectProject.innerHTML = `<option value="">No Project / Independent</option>`;
         const moveListSelect = document.getElementById('editTaskMoveList');
-        const editableLists = (window.taskListsCache || []).filter(list => !list.is_archived && (list.id === task.task_list_id || isTaskAdmin() || list.owner_id === currentUser?.id || (list.can_add_users || []).includes(currentUser?.id)));
+        const viewerDepartmentId = currentUserProfile?.department_id || currentUser?.department_id;
+        const editableLists = (window.taskListsCache || []).filter(list => !list.is_archived && (list.id === task.task_list_id || isTaskAdmin() || list.owner_id === currentUser?.id || (list.can_add_users || []).includes(currentUser?.id) || (list.department_id && list.department_id === viewerDepartmentId)));
         if (moveListSelect) {
             moveListSelect.innerHTML = `<option value="">No task list</option>` + editableLists.map(list => `<option value="${escapeHTML(list.id)}">${escapeHTML(list.name)}</option>`).join('');
             moveListSelect.value = task.task_list_id || '';
@@ -7322,6 +7333,12 @@ window.handleEditTaskSubmit = async function (e) {
     if (error) {
         showToast(t('toast_failed_to_update_task_details'), "danger");
     } else {
+        // Keep the local task immediately in sync with the selected destination
+        // list so the move is visible without waiting for a full reload.
+        if (window.taskCache?.[id]) {
+            window.taskCache[id].task_list_id = moveTaskListId;
+            if (moveTaskListId) window.taskCache[id].project_id = null;
+        }
         showToast(t('toast_task_updated_successfully'), "success");
         await db.triggerWebhooks('task_updated', { task_id: id, updates: updates });
         document.getElementById('editTaskModal').classList.remove('active');
