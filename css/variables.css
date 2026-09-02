@@ -1,16 +1,16 @@
 :root {
   /* Colors - Light Mode */
-  --color-primary: #0B192C; /* Navy Blue Accent */
-  --color-primary-hover: #1E3E62;
-  --color-accent: #007AFF; /* Vibrant electric blue for active states */
-  --color-accent-hover: #0056b3;
-  --color-bg-base: #F8F9FA;
-  --color-bg-surface: rgba(255, 255, 255, 0.85);
-  --color-bg-elevated: rgba(255, 255, 255, 0.95);
-  --color-text-primary: #0B192C;
-  --color-text-secondary: #0B192C;
-  --color-theme-highlight: #0B192C;
-  --color-border: rgba(0, 0, 0, 0.1);
+  --color-primary: #3157D5;
+  --color-primary-hover: #2445B7;
+  --color-accent: #06A6C7;
+  --color-accent-hover: #0786A2;
+  --color-bg-base: #F3F7FC;
+  --color-bg-surface: rgba(255, 255, 255, 0.92);
+  --color-bg-elevated: #FFFFFF;
+  --color-text-primary: #17233D;
+  --color-text-secondary: #40516F;
+  --color-theme-highlight: #3157D5;
+  --color-border: rgba(49, 87, 213, 0.16);
   --color-success: #10B981;
   --color-warning: #F59E0B;
   --color-danger: #EF4444;
@@ -25,13 +25,13 @@
   --gradient-fresh: linear-gradient(135deg, #10B981 0%, #06B6D4 100%);
 
   /* Sidebar styling */
-  --sidebar-bg: rgba(255, 255, 255, 0.85);
-  --sidebar-text: #0B192C;
-  --sidebar-text-muted: #0B192C;
-  --sidebar-item-hover: rgba(11, 25, 44, 0.05);
-  --sidebar-item-active: rgba(11, 25, 44, 0.10);
-  --sidebar-text-active: #0B192C;
-  --sidebar-border: rgba(0, 0, 0, 0.1);
+  --sidebar-bg: rgba(255, 255, 255, 0.94);
+  --sidebar-text: #17233D;
+  --sidebar-text-muted: #52627D;
+  --sidebar-item-hover: rgba(49, 87, 213, 0.07);
+  --sidebar-item-active: rgba(49, 87, 213, 0.13);
+  --sidebar-text-active: #2445B7;
+  --sidebar-border: rgba(49, 87, 213, 0.14);
 
   /* Typography */
   --font-family-ltr: 'Inter', sans-serif;
@@ -72,29 +72,29 @@
 
 [data-theme="dark"] {
   /* Colors - Dark Mode (Navy Blue Theme) */
-  --color-primary: #1E3E62; /* Lighter navy for buttons */
-  --color-primary-hover: #2A5384;
-  --color-accent: #3B82F6; /* Brighter electric blue for dark mode */
-  --color-accent-hover: #60A5FA;
-  --color-bg-base: #0B192C; /* Main Navy Blue Background */
-  --color-bg-surface: rgba(11, 25, 44, 0.75);
-  --color-bg-elevated: rgba(30, 62, 98, 0.85);
+  --color-primary: #6E8CFF;
+  --color-primary-hover: #8AA2FF;
+  --color-accent: #37D0E6;
+  --color-accent-hover: #67DDED;
+  --color-bg-base: #0A1224;
+  --color-bg-surface: rgba(18, 31, 57, 0.88);
+  --color-bg-elevated: #172A4A;
   --color-text-primary: #FFFFFF;
   --color-text-secondary: #FFFFFF;
   --color-theme-highlight: #FFFFFF;
-  --color-border: rgba(255, 255, 255, 0.15);
+  --color-border: rgba(151, 176, 255, 0.22);
   --color-shadow: rgba(0, 0, 0, 0.5);
   --gradient-brand: linear-gradient(135deg, #22D3EE 0%, #3B82F6 48%, #A78BFA 100%);
   --gradient-warm: linear-gradient(135deg, #FBBF24 0%, #FB7185 52%, #F472B6 100%);
   --gradient-fresh: linear-gradient(135deg, #34D399 0%, #22D3EE 100%);
   
-  --sidebar-bg: rgba(11, 25, 44, 0.75);
+  --sidebar-bg: rgba(10, 18, 36, 0.92);
   --sidebar-text: #FFFFFF;
   --sidebar-text-muted: #FFFFFF;
-  --sidebar-item-hover: rgba(255,255,255,0.05);
-  --sidebar-item-active: rgba(255, 255, 255, 0.10);
+  --sidebar-item-hover: rgba(110, 140, 255, 0.10);
+  --sidebar-item-active: rgba(110, 140, 255, 0.18);
   --sidebar-text-active: #FFFFFF;
-  --sidebar-border: rgba(255, 255, 255, 0.15);
+  --sidebar-border: rgba(151, 176, 255, 0.22);
 
   --shadow-sm: 0 1px 2px var(--color-shadow);
   --shadow-md: 0 4px 6px -1px var(--color-shadow);

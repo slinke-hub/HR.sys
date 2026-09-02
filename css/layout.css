@@ -1552,6 +1552,20 @@ body.modal-open {
 
 /* Keep the profile menu from being clipped by the header action group. */
 .topbar-actions { overflow: visible !important; }
+
+/* Calm, spacious application shell */
+body { background: radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--color-accent) 9%, transparent), transparent 34%), var(--color-bg-base); }
+.app-container { background: transparent; }
+.sidebar { border-inline-end: 1px solid color-mix(in srgb, var(--color-primary) 16%, var(--sidebar-border)); box-shadow: 8px 0 30px color-mix(in srgb, var(--color-primary) 7%, transparent); }
+.sidebar-header { padding: 1.1rem 1.2rem; border-bottom: 1px solid var(--sidebar-border); }
+.sidebar-nav { padding: .8rem .65rem; gap: .3rem; }
+.sidebar-nav .nav-item { border-radius: 10px; margin: .1rem 0; transition: background .18s ease, color .18s ease, transform .18s ease; }
+.sidebar-nav .nav-item:hover { transform: translateX(2px); }
+.sidebar-nav .nav-item.active { box-shadow: inset 3px 0 0 var(--color-accent), 0 5px 14px color-mix(in srgb, var(--color-primary) 10%, transparent); }
+.topbar { background: color-mix(in srgb, var(--color-bg-surface) 90%, transparent) !important; border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 15%, var(--color-border)); box-shadow: 0 5px 24px color-mix(in srgb, var(--color-primary) 8%, transparent); backdrop-filter: blur(18px); }
+.main-content { padding: clamp(1rem, 2.5vw, 2rem) clamp(1rem, 3vw, 2.5rem); }
+.page-header { margin-bottom: 1.35rem; }
+.page-title { letter-spacing: -.025em; }
 .profile-dropdown-wrapper { position: relative; z-index: 30; flex: 0 0 auto; }
 .user-profile { position: relative; min-height: 40px; min-width: 40px; }
 .profile-dropdown-menu {

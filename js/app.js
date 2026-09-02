@@ -1804,14 +1804,10 @@ window.handleLoginSubmit = async function (e) {
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
 
-    const lockoutData = await db.checkLoginLockout(email);
-    if (lockoutData && lockoutData.locked_until) {
-        const lockedUntil = new Date(lockoutData.locked_until);
-        if (lockedUntil > new Date()) {
-            showToast(`Account locked due to multiple failed attempts. Please contact Admin.`, 'danger');
-            return;
-        }
-    }
+    // Do not block a sign-in based solely on the shared login_attempts row.
+    // That counter is account-wide and can be stale on one device after a
+    // successful login elsewhere. Supabase Auth remains the source of truth;
+    // failed attempts are still recorded and successful sign-ins reset them.
 
     const loginBtn = e.target.querySelector('button[type="submit"]');
     const originalBtnText = loginBtn.innerHTML;
@@ -2243,13 +2239,15 @@ async function renderDashboard() {
     const newsApiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
 
     // Run independent fetches in parallel
-    const [todayAttendance, announcements, newsRes, profile, dashboardLeaves, dashboardGenericRequests] = await Promise.all([
+    const [todayAttendance, announcements, newsRes, profile, dashboardLeaves, dashboardGenericRequests, dashboardAttendance, dashboardTasks] = await Promise.all([
         db.fetchTodayAttendance(currentUser?.id),
         db.fetchAnnouncements(),
         fetch(newsApiUrl).catch(() => null),
         db.getUserProfile(currentUser?.id),
         db.fetchLeaveRequests(currentUser?.id),
-        db.fetchGenericRequests()
+        db.fetchGenericRequests(),
+        currentUserRole === 'ADMIN' ? db.fetchAllAttendance() : Promise.resolve([]),
+        currentUserRole === 'ADMIN' ? db.fetchTasks() : Promise.resolve([])
     ]);
 
     const isClockedIn = todayAttendance != null && !todayAttendance.clock_out_time;
@@ -2375,13 +2373,27 @@ async function renderDashboard() {
     if (currentUserRole === 'ADMIN') {
         const allProfiles = await db.fetchAllProfiles();
         const lastLoginsHTML = renderRecentLoginsHTML(allProfiles);
+        const clockedInEmployees = (dashboardAttendance || []).filter(record => record.clock_in_time && !record.clock_out_time);
+        const profileMap = new Map(allProfiles.map(user => [user.id, user]));
+        const openTasks = (dashboardTasks || []).filter(task => !['completed', 'Approved'].includes(task.status)).length;
+        const pendingRequests = (dashboardGenericRequests || []).filter(request => String(request.status || '').toUpperCase().startsWith('PENDING')).length;
+        const radarRows = clockedInEmployees.map(record => {
+            const employee = profileMap.get(record.employee_id);
+            return `<li><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(window.formatEmployeeName(employee) || 'Employee')}</span><time>${new Date(record.clock_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></li>`;
+        }).join('');
 
         adminWidgets += `
+            <section class="card col-span-12 employees-radar-card" id="employeesRadarWidget" aria-live="polite">
+                <div class="employees-radar-header"><div><div class="card-title">Employees Radar</div><p class="employees-radar-subtitle">Live view of employees currently clocked in</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> Live</span></div>
+                <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>clocked in</small></div><ul class="employees-radar-list" id="employeesRadarList">${radarRows || '<li class="employees-radar-empty">No employees are currently clocked in.</li>'}</ul></div>
+            </section>
+            <section class="card col-span-12 admin-kpi-card"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong>${allProfiles.length}</strong><span>Total employees</span></div><div><strong>${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong>${openTasks}</strong><span>Open tasks</span></div><div><strong>${pendingRequests}</strong><span>Pending requests</span></div></div></section>
             <div class="card col-span-12 md:col-span-6">
                 <div class="card-title">${t('last_login')}</div>
                 <div id="recentLoginsList" aria-live="polite">${lastLoginsHTML}</div>
             </div>
         `;
+        window.initializeEmployeesRadar?.(dashboardAttendance || [], allProfiles);
     }
 
     return `
@@ -2507,6 +2519,29 @@ async function renderDashboard() {
         </div>
     `;
 }
+
+let employeesRadarChannel = null;
+let employeesRadarTimer = null;
+window.initializeEmployeesRadar = function (attendance, profiles) {
+    const refresh = async (records = attendance) => {
+        const active = (records || []).filter(record => record.clock_in_time && !record.clock_out_time);
+        const map = new Map((profiles || []).map(user => [user.id, user]));
+        const count = document.getElementById('employeesRadarCount');
+        const list = document.getElementById('employeesRadarList');
+        if (!count || !list) return;
+        count.textContent = String(active.length);
+        list.innerHTML = active.map(record => `<li><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(window.formatEmployeeName(map.get(record.employee_id)) || 'Employee')}</span><time>${new Date(record.clock_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></li>`).join('') || '<li class="employees-radar-empty">No employees are currently clocked in.</li>';
+    };
+    setTimeout(() => refresh(), 0);
+    if (employeesRadarTimer) clearInterval(employeesRadarTimer);
+    employeesRadarTimer = setInterval(async () => refresh(await db.fetchAllAttendance()), 30000);
+    if (employeesRadarChannel && window.supabaseClient) window.supabaseClient.removeChannel(employeesRadarChannel);
+    if (window.supabaseClient) {
+        employeesRadarChannel = window.supabaseClient.channel('employees-radar-live')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, async () => refresh(await db.fetchAllAttendance()))
+            .subscribe();
+    }
+};
 
 window.showAnnouncementModal = () => document.getElementById('announcementModal').style.display = 'block';
 window.closeAnnouncementModal = () => document.getElementById('announcementModal').style.display = 'none';
