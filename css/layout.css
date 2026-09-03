@@ -1166,6 +1166,14 @@ textarea,
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(calc(72px + env(safe-area-inset-bottom)), 1rem) max(1rem, env(safe-area-inset-left));
 }
 
+.login-logo {
+  width: min(250px, 72vw);
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin-inline: auto;
+}
+
 .mobile-navigation-backdrop {
   position: absolute;
   inset: 0;
@@ -1240,6 +1248,53 @@ textarea,
   color: var(--color-text-primary);
   font: inherit;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+
+.mobile-navigation-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--item-accent, #22d3ee) 14%, transparent), transparent 60%);
+  opacity: .65;
+  pointer-events: none;
+}
+
+.mobile-navigation-item > :is(i, svg) {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  padding: 7px;
+  box-sizing: content-box;
+  border-radius: 11px;
+  color: #fff;
+  stroke: #fff;
+  background: linear-gradient(145deg, var(--item-accent, #22d3ee), var(--item-accent-end, #3b82f6));
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.55), 0 6px 14px color-mix(in srgb, var(--item-accent-end, #3b82f6) 35%, transparent);
+  transition: transform .2s ease, filter .2s ease, box-shadow .2s ease;
+}
+
+.mobile-navigation-item:nth-child(5n + 2) { --item-accent: #8b5cf6; --item-accent-end: #ec4899; }
+.mobile-navigation-item:nth-child(5n + 3) { --item-accent: #f59e0b; --item-accent-end: #f97316; }
+.mobile-navigation-item:nth-child(5n + 4) { --item-accent: #10b981; --item-accent-end: #06b6d4; }
+.mobile-navigation-item:nth-child(5n) { --item-accent: #fb7185; --item-accent-end: #ec4899; }
+
+.mobile-navigation-item:hover,
+.mobile-navigation-item:focus-visible {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--item-accent, #22d3ee) 72%, var(--color-border));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--item-accent-end, #3b82f6) 20%, transparent);
+  outline: none;
+}
+
+.mobile-navigation-item:hover > :is(i, svg),
+.mobile-navigation-item:focus-visible > :is(i, svg),
+.mobile-navigation-item.active > :is(i, svg) {
+  transform: scale(1.1) rotate(-4deg);
+  filter: brightness(1.12) saturate(1.25);
 }
 
 .mobile-navigation-item.active {
@@ -1422,12 +1477,11 @@ body.modal-open {
 }
 
 .login-logo-mark {
-  width: min(240px, 78%);
-  max-height: 72px !important;
+  width: min(280px, 86%);
+  max-height: 120px !important;
   object-fit: contain;
-  padding: .5rem .75rem;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, .9);
+  padding: .25rem;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, .28));
 }
 
 @media (max-width: 767px) {

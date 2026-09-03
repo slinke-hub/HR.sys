@@ -122,13 +122,12 @@ const db = {
     async updateUserProfile(userId, updates) {
         if (!supabaseClient) return null;
         try {
-            const { data, error } = await supabaseClient
+            const { error } = await supabaseClient
                 .from('profiles')
                 .update(updates)
-                .eq('id', userId)
-                .select();
+                .eq('id', userId);
             if (error) throw error;
-            return { success: true, data };
+            return { success: true, data: null };
         } catch (error) {
             console.error("Error updating user profile:", { message: error?.message, code: error?.code, details: error?.details, hint: error?.hint, status: error?.status });
             return { success: false, error };
@@ -816,16 +815,29 @@ const db = {
                 if (profileLookupError) throw profileLookupError;
                 resolvedDepartmentId = profile?.department_id || null;
             }
-            let titleQuery = supabaseClient.from('job_titles').select('department_id').eq('name', jobTitle).eq('is_active', true);
+            const normalizedJobTitle = String(jobTitle || '').trim();
+            let titleQuery = supabaseClient.from('job_titles').select('department_id').ilike('name', normalizedJobTitle).eq('is_active', true);
             if (resolvedDepartmentId) titleQuery = titleQuery.eq('department_id', resolvedDepartmentId);
-            const { data: titleRecord, error: titleError } = await titleQuery.limit(1).maybeSingle();
+            let { data: titleRecord, error: titleError } = await titleQuery.limit(1).maybeSingle();
             if (titleError) throw titleError;
+            // Older databases may still have the former IT catalog rows under
+            // the removed IT department. Accept those known titles when the
+            // user selected Administrative and save the selected department;
+            // the accompanying migration will normalize the catalog later.
+            if (!titleRecord && resolvedDepartmentId) {
+                const legacyTitles = new Set(['IT Manager', 'IT Support Specialist', 'System Administrator', 'Network Administrator', 'Technician']);
+                if (legacyTitles.has(normalizedJobTitle)) {
+                    const fallback = await supabaseClient.from('job_titles').select('department_id').ilike('name', normalizedJobTitle).eq('is_active', true).limit(1).maybeSingle();
+                    if (fallback.error) throw fallback.error;
+                    titleRecord = fallback.data;
+                }
+            }
             if (!titleRecord) throw new Error('This job title is not available for the selected department.');
-            const { error: profileError } = await supabaseClient.from('profiles').update({ job_title: jobTitle, department_id: titleRecord.department_id }).eq('id', userId);
+            const { error: profileError } = await supabaseClient.from('profiles').update({ job_title: normalizedJobTitle, department_id: resolvedDepartmentId || titleRecord.department_id }).eq('id', userId);
             if (profileError) throw profileError;
             // Update contract if exists
             const { error: contractError } = await supabaseClient.from('contracts').update({ job_title_ar: jobTitle, job_title_en: jobTitle }).eq('employee_id', userId);
-            if (contractError) throw contractError;
+            if (contractError) console.warn('Contract job-title sync skipped:', contractError);
             return { success: true };
         } catch (error) {
             console.error("updateUserJobTitle Error:", error);
@@ -2949,6 +2961,27 @@ const db = {
             return data || [];
         } catch (error) {
             console.error('fetchContractPrintRequests Error:', error);
+            return [];
+        }
+    },
+    // Return only today's attendance sessions that are still open. Keeping this
+    // query server-side prevents historical, unclosed records from appearing
+    // in live dashboards such as Employees Radar.
+    async fetchCurrentClockedInAttendance() {
+        if (!supabaseClient) return [];
+        try {
+            const now = new Date();
+            const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+            const { data, error } = await supabaseClient
+                .from('attendance')
+                .select('*')
+                .eq('date', today)
+                .is('clock_out_time', null)
+                .order('clock_in_time', { ascending: false });
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.error("fetchCurrentClockedInAttendance Error:", error);
             return [];
         }
     },

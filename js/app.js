@@ -121,6 +121,11 @@ window.hideSupervisorTooltip = function () {
 let currentUserRole = null;
 let currentUserProfile = null;
 const isTaskAdmin = () => ['ADMIN', 'OWNER', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(String(currentUserRole || '').trim().toUpperCase());
+const isITManagerProfile = (profile = currentUserProfile) => {
+    const values = [profile?.job_title, profile?.role].map(value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' '));
+    return values.some(value => value === 'IT MANAGER' || value.includes('IT MANAGER'));
+};
+const canViewEmployeesRadar = () => isTaskAdmin() || isITManagerProfile() || ['MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').trim().toUpperCase());
 const canInteractWithTask = task => !!task && (isTaskAdmin() || [task.created_by, task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
 let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
@@ -149,7 +154,7 @@ let deferredPrompt;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=1788202890050', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -266,8 +271,18 @@ window.handleUpdateUser = async (e) => {
         showToast(loginUpdate.error?.message || 'Failed to update the login email.', 'danger');
         return;
     }
-    const res = await db.updateUserProfile(userId, updates);
-    if (res.success) {
+    // Save title/department through the dedicated validator. Sending both
+    // fields in the generic profile update can trigger the database guard
+    // before the Administrative job-title mapping is resolved.
+    const profileUpdates = { ...updates };
+    delete profileUpdates.job_title;
+    delete profileUpdates.department_id;
+    if (!updates.job_title) profileUpdates.department_id = updates.department_id;
+    const res = await db.updateUserProfile(userId, profileUpdates);
+    const titleUpdate = res.success && updates.job_title
+        ? await db.updateUserJobTitle(userId, updates.job_title, updates.department_id)
+        : { success: true };
+    if (res.success && titleUpdate.success) {
         if (updates.avatar_url) localStorage.setItem('user_avatar_' + userId, updates.avatar_url);
         // Invalidate view cache
         if (window.viewHTMLCache) {
@@ -278,7 +293,7 @@ window.handleUpdateUser = async (e) => {
         document.getElementById('editUserModal').classList.remove('active');
         await window.refreshUserRowInPlace(userId, updates);
     } else {
-        showToast(res.error?.message || t('toast_failed_to_update_user'), "danger");
+        showToast(titleUpdate.error?.message || res.error?.message || t('toast_failed_to_update_user'), "danger");
     }
 };
 
@@ -1886,10 +1901,8 @@ window.handleLoginSubmit = async function (e) {
     ]);
     const _loginRequestedView = new URLSearchParams(window.location.search).get('view');
     const _loginSavedView = _loginRequestedView || (currentUser ? (localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view')) : null);
-    currentView = (_loginSavedView && _loginRestorableViews.has(_loginSavedView)) ? _loginSavedView : 'dashboard';
-    // Do not restore a sidebar page hidden for this user's role
-    const _loginRestoredNav = document.querySelector(`.nav-item[data-view="${currentView}"]`);
-    if (_loginRestoredNav && _loginRestoredNav.style.display === 'none') currentView = 'dashboard';
+    // Always land users on their personal dashboard after authentication.
+    currentView = 'dashboard';
     renderView(currentView);
 }
 
@@ -1950,7 +1963,7 @@ function renderLogin() {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
                 <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo" style="max-height: 60px;">
+                    <img src="/images/muqam-login-logo.png" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
                 </div>
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('reset_password')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('reset_email_instruction')}</p>
@@ -1970,7 +1983,7 @@ function renderLogin() {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
                 <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo" style="max-height: 60px;">
+                    <img src="/images/muqam-login-logo.png" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
                 </div>
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('set_new_password')}</h2>
             </div>
@@ -1989,7 +2002,7 @@ function renderLogin() {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
                 <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo" style="max-height: 60px;">
+                    <img src="/images/muqam-login-logo.png" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
                 </div>
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>
@@ -2024,7 +2037,7 @@ function renderLogin() {
                 color: #FFFFFF !important;
             }
         </style>
-        <div style="display: flex; height: 100vh; align-items: center; justify-content: center; width: 100vw; position: fixed; top: 0; left: 0; background: url('images/login_bg.png') center/cover no-repeat; z-index: 9999;">
+        <div style="display: flex; height: 100vh; align-items: center; justify-content: center; width: 100vw; position: fixed; top: 0; left: 0; background: radial-gradient(circle at 18% 12%, rgba(52, 211, 153, .18), transparent 35%), linear-gradient(135deg, #081b33 0%, #102d4d 52%, #192a52 100%); z-index: 9999;">
             <div class="card login-card-wrapper" style="width: 100%; max-width: 400px; padding: 2.5rem 2rem; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 30px 60px rgba(0,0,0,0.3); color: white;">
                 ${formHTML}
             </div>
@@ -2246,7 +2259,7 @@ async function renderDashboard() {
         db.getUserProfile(currentUser?.id),
         db.fetchLeaveRequests(currentUser?.id),
         db.fetchGenericRequests(),
-        currentUserRole === 'ADMIN' ? db.fetchAllAttendance() : Promise.resolve([]),
+        canViewEmployeesRadar() ? db.fetchCurrentClockedInAttendance() : Promise.resolve([]),
         currentUserRole === 'ADMIN' ? db.fetchTasks() : Promise.resolve([])
     ]);
 
@@ -2370,8 +2383,8 @@ async function renderDashboard() {
     } catch (e) { }
 
     let adminWidgets = '';
-    if (currentUserRole === 'ADMIN') {
-        const allProfiles = await db.fetchAllProfiles();
+    if (canViewEmployeesRadar()) {
+        const allProfiles = (await db.fetchAllProfiles()) || [];
         const lastLoginsHTML = renderRecentLoginsHTML(allProfiles);
         const clockedInEmployees = (dashboardAttendance || []).filter(record => record.clock_in_time && !record.clock_out_time);
         const profileMap = new Map(allProfiles.map(user => [user.id, user]));
@@ -2387,11 +2400,11 @@ async function renderDashboard() {
                 <div class="employees-radar-header"><div><div class="card-title">Employees Radar</div><p class="employees-radar-subtitle">Live view of employees currently clocked in</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> Live</span></div>
                 <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>clocked in</small></div><ul class="employees-radar-list" id="employeesRadarList">${radarRows || '<li class="employees-radar-empty">No employees are currently clocked in.</li>'}</ul></div>
             </section>
-            <section class="card col-span-12 admin-kpi-card"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong>${allProfiles.length}</strong><span>Total employees</span></div><div><strong>${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong>${openTasks}</strong><span>Open tasks</span></div><div><strong>${pendingRequests}</strong><span>Pending requests</span></div></div></section>
-            <div class="card col-span-12 md:col-span-6">
+            ${currentUserRole === 'ADMIN' ? `<section class="card col-span-12 admin-kpi-card"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong>${allProfiles.length}</strong><span>Total employees</span></div><div><strong>${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong>${openTasks}</strong><span>Open tasks</span></div><div><strong>${pendingRequests}</strong><span>Pending requests</span></div></div></section>` : ''}
+            ${currentUserRole === 'ADMIN' ? `<div class="card col-span-12 md:col-span-6">
                 <div class="card-title">${t('last_login')}</div>
                 <div id="recentLoginsList" aria-live="polite">${lastLoginsHTML}</div>
-            </div>
+            </div>` : ''}
         `;
         window.initializeEmployeesRadar?.(dashboardAttendance || [], allProfiles);
     }
@@ -2534,11 +2547,11 @@ window.initializeEmployeesRadar = function (attendance, profiles) {
     };
     setTimeout(() => refresh(), 0);
     if (employeesRadarTimer) clearInterval(employeesRadarTimer);
-    employeesRadarTimer = setInterval(async () => refresh(await db.fetchAllAttendance()), 30000);
+    employeesRadarTimer = setInterval(async () => refresh(await db.fetchCurrentClockedInAttendance()), 10000);
     if (employeesRadarChannel && window.supabaseClient) window.supabaseClient.removeChannel(employeesRadarChannel);
     if (window.supabaseClient) {
         employeesRadarChannel = window.supabaseClient.channel('employees-radar-live')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, async () => refresh(await db.fetchAllAttendance()))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, async () => refresh(await db.fetchCurrentClockedInAttendance()))
             .subscribe();
     }
 };
@@ -3338,8 +3351,16 @@ function companyJobTitleOptions(selected = '', departmentName = '') {
     // merge. Keep these visible even when an older cached directory response
     // has not refreshed yet.
     if (/administrative|administration/i.test(String(departmentName))) {
-        const itTitles = ['IT Manager', 'IT Support Specialist', 'System Administrator', 'Network Administrator', 'Technician'];
-        titles = [...new Set([...titles, ...itTitles])];
+        const administrativeTitles = [
+            'Owner', 'GM', 'Accountant Manager', 'CEO', 'HR Manager',
+            'Accountant Assistant', 'Receptionist', 'Data Entry Clerk',
+            'Administrative Assistant', 'Office Manager', 'Executive Assistant (EA)',
+            'Facilities Coordinator', 'Director of Administration',
+            'Chief Administrative Officer (CAO)', 'IT Manager',
+            'IT Support Specialist', 'System Administrator', 'Network Administrator',
+            'Technician'
+        ];
+        titles = [...new Set([...titles, ...administrativeTitles])];
     }
     titles = titles.filter(t => !t.includes('General Manager, Executive Director'));
     return '<option value="">Select Job Title</option>' + titles.map(title =>
@@ -3355,7 +3376,8 @@ window.syncJobTitlesWithDepartment = function (departmentSelectId, jobTitleSelec
     const departmentName = departmentSelect.options[departmentSelect.selectedIndex]?.text || '';
     const jobTitlesMap = db.getJobTitlesMap() || {};
     const matchedDepartment = Object.keys(jobTitlesMap).find(name => name.trim().toLowerCase() === departmentName.trim().toLowerCase());
-    if (!departmentSelect.value || !matchedDepartment) {
+    const isAdministrativeDepartment = /administrative|administration/i.test(String(departmentName));
+    if (!departmentSelect.value || (!matchedDepartment && !isAdministrativeDepartment)) {
         titleSelect.innerHTML = '<option value="">Select Department first</option>';
         titleSelect.value = '';
         titleSelect.disabled = true;
@@ -3970,100 +3992,454 @@ window.previewRole = function (role) {
     }
 };
 
+window.setAdminTab = function (tab) {
+    document.querySelectorAll('[data-admin-panel]').forEach(panel => {
+        panel.hidden = panel.dataset.adminPanel !== tab;
+    });
+    document.querySelectorAll('[data-admin-tab]').forEach(button => {
+        const isActive = button.dataset.adminTab === tab;
+        button.classList.toggle('btn-primary', isActive);
+        button.classList.toggle('btn-secondary', !isActive);
+    });
+};
+
 async function renderAdmin() {
     if (currentUserRole !== 'ADMIN') {
         return `<div class="page-header"><h1 class="page-title">${t('analy_unauth')}</h1></div>`;
     }
 
-    const employees = await db.fetchAllEmployees();
-    let pendingLeaves = await db.fetchAllPendingLeaves();
+    const [allUsers, employees, pendingLeaves, departments, workflows, jobTitles, tasks] = await Promise.all([
+        db.fetchUsers(true),
+        db.fetchAllEmployees(),
+        db.fetchAllPendingLeaves(),
+        db.fetchDepartments(),
+        db.fetchRequestApprovalWorkflows(),
+        db.fetchJobTitles(true),
+        db.fetchTasks()
+    ]);
 
-    if (((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) {
-        const myTeamIds = employees.filter(e => e.manager_id === currentUser.id).map(e => e.id);
-        pendingLeaves = pendingLeaves.filter(l => myTeamIds.includes(l.employee_id));
-    }
+    window.currentAdminUsers = allUsers || [];
 
-    let leaveHTML = pendingLeaves.map(r => `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--color-border);">
-            <div>
-                <h4 style="margin-bottom: 4px;">${r.leave_type}</h4>
-                <p style="font-size: 0.875rem; color: var(--color-text-secondary);">${new Date(r.start_date).toLocaleDateString()} - ${new Date(r.end_date).toLocaleDateString()}</p>
-                <p style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">Employee ID: ${r.employee_id.substring(0, 8)}...</p>
-            </div>
-            <div style="display: flex; gap: 8px;">
-                <button class="btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;" onclick="handleLeaveAction('${r.id}', 'APPROVED', '${r.employee_id}')">${t('leave_approve')}</button>
-                <button class="btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleLeaveAction('${r.id}', 'REJECTED', '${r.employee_id}')">${t('leave_reject')}</button>
-            </div>
-        </div>
-    `).join('');
+    const userMap = new Map((allUsers || []).map(u => [u.id, u]));
+    const lockedUsers = (allUsers || []).filter(u => u.is_active === false);
+    const adminUsers = (allUsers || []).filter(u => u.role === 'ADMIN');
+    const pendingWorkflows = (workflows || []).filter(w => w.status === 'PENDING');
+    const pendingTasks = (tasks || []).filter(t => String(t.status || '').trim().toLowerCase() === 'pending approval');
 
-    if (pendingLeaves.length === 0) {
-        leaveHTML = `<p style="padding: 1rem; color: var(--color-text-secondary);">${t('admin_no_pending')}</p>`;
-    }
-
-    return `
-        <div class="page-header">
-            <div>
-                <h1 class="page-title">${t('admin_overview')}</h1>
-                <p class="page-subtitle">${t('admin_sub')}</p>
-            </div>
-        </div>
-
-        <div class="dashboard-grid" style="margin-bottom: 2rem;">
-            <div class="card col-span-3" style="text-align: center; cursor: pointer;" onclick="renderView('tasks')">
-                <i data-lucide="check-square" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>${t('admin_manage_tasks')}</h4>
-            </div>
-            <div class="card col-span-3" style="text-align: center; cursor: pointer;" onclick="renderView('time')">
-                <i data-lucide="clock" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>${t('admin_time_reports')}</h4>
-            </div>
-            <div class="card col-span-3" style="text-align: center; cursor: pointer;" onclick="renderView('users')">
-                <i data-lucide="users" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>${t('admin_emp_dir')}</h4>
-            </div>
-            <div class="card col-span-3" style="text-align: center; cursor: pointer;" onclick="renderView('documents')">
-                <i data-lucide="file-text" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>${t('admin_docs')}</h4>
-            </div>
-        </div>
-
-        <div class="dashboard-grid" style="margin-bottom: 2rem;">
-            <div class="card col-span-4" style="text-align: center; cursor: pointer; border: 1px dashed var(--color-primary);" onclick="previewRole('EMPLOYEE')">
-                <i data-lucide="eye" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>${t('ui_employee_view') || 'Employee View'}</h4>
-            </div>
-            <div class="card col-span-4" style="text-align: center; cursor: pointer; border: 1px dashed var(--color-primary);" onclick="previewRole('SUPERVISOR')">
-                <i data-lucide="eye" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>${t('ui_supervisor_view') || 'Supervisor View'}</h4>
-            </div>
-            <div class="card col-span-4" style="text-align: center; cursor: pointer; border: 1px dashed var(--color-primary);" onclick="previewRole('MANAGER')">
-                <i data-lucide="eye" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
-                <h4>${t('ui_manager_view') || 'Manager View'}</h4>
-            </div>
-        </div>
-
-        <div class="dashboard-grid">
-            <div class="card col-span-4">
-                <div class="card-title">${t('headcount')} <i data-lucide="users"></i></div>
-                <h2 style="font-size: 2.5rem; margin-top: 10px;">${employees.length}</h2>
-                <p style="color: var(--color-success); font-size: 0.875rem;">${t('admin_reg_users')}</p>
-            </div>
-            
-            <div class="card col-span-4">
-                <div class="card-title">${t('admin_pend_appr')} <i data-lucide="inbox"></i></div>
-                <h2 style="font-size: 2.5rem; margin-top: 10px;">${pendingLeaves.length}</h2>
-                <p style="color: var(--color-warning); font-size: 0.875rem;">${t('admin_req_attn')}</p>
-            </div>
-            
-            <div class="card col-span-8">
-                <div class="card-title">${t('admin_leave_inbox')}</div>
-                <div style="max-height: 300px; overflow-y: auto;">
-                    ${leaveHTML}
+    // Build Pending Leave Requests HTML
+    let leaveHTML = (pendingLeaves || []).map(r => {
+        const emp = userMap.get(r.employee_id);
+        const empName = window.formatEmployeeName(emp) || `Employee (${(r.employee_id || '').substring(0, 8)})`;
+        return `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1rem; border-bottom: 1px solid var(--color-border);">
+                <div>
+                    <h4 style="margin-bottom: 4px; font-size: 0.925rem;">${escapeHTML(r.leave_type || 'Leave Request')}</h4>
+                    <p style="font-size: 0.825rem; color: var(--color-text-secondary); margin: 0;">${escapeHTML(empName)}</p>
+                    <p style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 2px;">
+                        ${r.start_date ? new Date(r.start_date).toLocaleDateString() : ''} - ${r.end_date ? new Date(r.end_date).toLocaleDateString() : ''}
+                    </p>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn-primary" style="padding: 0.25rem 0.65rem; font-size: 0.75rem;" onclick="handleLeaveAction('${r.id}', 'APPROVED', '${r.employee_id}')">${t('leave_approve')}</button>
+                    <button class="btn-primary" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleLeaveAction('${r.id}', 'REJECTED', '${r.employee_id}')">${t('leave_reject')}</button>
                 </div>
             </div>
-            
+        `;
+    }).join('');
+
+    if (!pendingLeaves || pendingLeaves.length === 0) {
+        leaveHTML = `<p style="padding: 1.5rem; text-align: center; color: var(--color-text-secondary);">${t('admin_no_pending')}</p>`;
+    }
+
+    // Build Recent Logins HTML
+    const recentLoginsHTML = renderRecentLoginsHTML(allUsers);
+
+    // Build Pending Approval Overrides Table HTML
+    const workflowRows = pendingWorkflows.map(w => {
+        const step = w.steps?.find(s => s.step_order === w.current_step);
+        const emp = userMap.get(w.employee_id);
+        const empName = window.formatEmployeeName(emp) || 'Employee';
+        const stageLabel = (REQUEST_STAGE_LABELS && REQUEST_STAGE_LABELS[step?.stage_key]) || step?.stage_key || 'Pending approval';
+        return `
+            <tr>
+                <td><strong>${escapeHTML(empName)}</strong></td>
+                <td><span class="status-badge info">${escapeHTML(w.request_type || 'Request')}</span></td>
+                <td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td>
+                <td>${w.created_at ? new Date(w.created_at).toLocaleDateString() : '—'}</td>
+                <td>
+                    <div style="display:flex; gap:0.4rem;">
+                        <button class="btn-primary btn-sm" onclick="handleApprovalRequestDecision('${w.source_table}','${w.source_id}','APPROVED')">Admin Approve</button>
+                        <button class="btn-secondary btn-sm" style="color:var(--color-danger);" onclick="handleApprovalRequestDecision('${w.source_table}','${w.source_id}','REJECTED')">Admin Reject</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    // Build Pending Tasks Table HTML
+    const taskRows = pendingTasks.map(t => {
+        const assignee = userMap.get(t.assignee_id);
+        const title = t.title_i18n?.[currentLang] || t.title_i18n?.en || t.title || 'Untitled Task';
+        return `
+            <tr>
+                <td><strong>${escapeHTML(title)}</strong></td>
+                <td>${escapeHTML(t.department || 'General')}</td>
+                <td>${escapeHTML(window.formatEmployeeName(assignee) || 'Unassigned')}</td>
+                <td>
+                    <div style="display:flex; gap:0.4rem;">
+                        <button class="btn-primary btn-sm" onclick="handleTaskApprovalDecision('${t.id}','APPROVED')">Approve</button>
+                        <button class="btn-secondary btn-sm" style="color:var(--color-danger);" onclick="handleTaskApprovalDecision('${t.id}','REJECTED')">Reject</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    // Build Users Directory Rows
+    const usersRows = (allUsers || []).map(u => `
+        <tr data-user-row="${u.id}">
+            <td><span class="directory-employee-id">${escapeHTML(formatEmployeeId(u.emp_index))}</span></td>
+            <td><div class="directory-employee-name">${escapeHTML(window.formatEmployeeName(u) || 'N/A')}</div></td>
+            <td>
+                <span class="status-badge ${u.role === 'ADMIN' ? 'success' : (u.role === 'MANAGER' ? 'warning' : 'info')}">${escapeHTML(u.role || 'EMPLOYEE')}</span>
+                ${u.is_active === false ? '<span class="status-badge danger" style="margin-inline-start:.35rem;">Locked</span>' : ''}
+            </td>
+            <td>
+                <div class="directory-actions">
+                    <button type="button" class="btn-secondary btn-sm" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View details"><i data-lucide="eye"></i><span>View</span></button>
+                    <button type="button" class="btn-primary btn-sm" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>
+                    <button type="button" class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="${t('users_contract')}"><i data-lucide="file-signature"></i></button>
+                    <button type="button" class="btn-secondary btn-sm" style="color: var(--color-warning);" onclick="showAdminPasswordResetModal('${u.id}')" title="${t('password_reset_button')}"><i data-lucide="key"></i></button>
+                    <button type="button" class="btn-secondary btn-sm" style="color:${u.is_active === false ? 'var(--color-success)' : 'var(--color-warning)'};" onclick="window.toggleUserLock('${u.id}', ${u.is_active !== false})" title="${u.is_active === false ? 'Unlock user' : 'Lock user'}"><i data-lucide="${u.is_active === false ? 'unlock' : 'lock'}"></i></button>
+                    <button type="button" class="btn-secondary btn-sm" style="color: var(--color-danger);" onclick="handleDeleteUser('${u.id}')" title="Remove User"><i data-lucide="trash-2"></i></button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+
+    // Build Locked Accounts Rows
+    const lockedRows = lockedUsers.map(u => `
+        <tr>
+            <td><strong>${escapeHTML(window.formatEmployeeName(u) || 'User')}</strong></td>
+            <td>${escapeHTML(u.email || 'N/A')}</td>
+            <td><span class="status-badge danger">Locked</span></td>
+            <td>
+                <button type="button" class="btn-primary btn-sm" onclick="window.toggleUserLock('${u.id}', false)">
+                    <i data-lucide="unlock" style="width:14px;height:14px;margin-inline-end:4px;"></i> Unlock Account
+                </button>
+            </td>
+        </tr>
+    `).join('');
+
+    return `
+        <div class="page-header fade-in-up">
+            <div>
+                <h1 class="page-title"><i data-lucide="shield-check" style="width:28px;height:28px;margin-inline-end:8px;color:var(--color-primary);vertical-align:middle;"></i>${t('admin_overview') || 'Admin Control Center'}</h1>
+                <p class="page-subtitle">${t('admin_sub') || 'Central management portal for users, system workflows, permissions, and security'}</p>
+            </div>
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button class="btn btn-secondary" type="button" onclick="window.showAnnouncementModal()">
+                    <i data-lucide="megaphone"></i> Post Announcement
+                </button>
+                <button class="btn-primary" type="button" onclick="showAddUserModal()">
+                    <i data-lucide="user-plus"></i> ${t('users_add_new') || 'Add New User'}
+                </button>
+            </div>
         </div>
+
+        <!-- Navigation Tab Bar -->
+        <div class="card fade-in-up" style="padding: 0.5rem; margin-bottom: 1.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn-primary" data-admin-tab="overview" onclick="setAdminTab('overview')">
+                <i data-lucide="layout-dashboard" style="width:16px;height:16px;margin-inline-end:4px;"></i> Overview & Hub
+            </button>
+            <button class="btn-secondary" data-admin-tab="users" onclick="setAdminTab('users')">
+                <i data-lucide="user-cog" style="width:16px;height:16px;margin-inline-end:4px;"></i> User Directory <span class="status-badge">${(allUsers || []).length}</span>
+            </button>
+            <button class="btn-secondary" data-admin-tab="approvals" onclick="setAdminTab('approvals')">
+                <i data-lucide="check-circle-2" style="width:16px;height:16px;margin-inline-end:4px;"></i> Pending Overrides <span class="status-badge">${pendingWorkflows.length + pendingTasks.length + (pendingLeaves || []).length}</span>
+            </button>
+            <button class="btn-secondary" data-admin-tab="departments" onclick="setAdminTab('departments')">
+                <i data-lucide="building-2" style="width:16px;height:16px;margin-inline-end:4px;"></i> Departments <span class="status-badge">${(departments || []).length}</span>
+            </button>
+            <button class="btn-secondary" data-admin-tab="security" onclick="setAdminTab('security')">
+                <i data-lucide="shield-alert" style="width:16px;height:16px;margin-inline-end:4px;"></i> Security & Locks ${lockedUsers.length > 0 ? `<span class="status-badge danger">${lockedUsers.length}</span>` : ''}
+            </button>
+            <button class="btn-secondary" data-admin-tab="tools" onclick="setAdminTab('tools')">
+                <i data-lucide="wrench" style="width:16px;height:16px;margin-inline-end:4px;"></i> System Tools
+            </button>
+        </div>
+
+        <!-- TAB 1: OVERVIEW & HUB -->
+        <section data-admin-panel="overview" class="fade-in-up">
+            <!-- KPI Summary Cards -->
+            <div class="admin-kpi-grid" style="margin-bottom: 1.5rem;">
+                <div>
+                    <strong>${(employees || []).length}</strong>
+                    <span>Total Employees</span>
+                </div>
+                <div>
+                    <strong style="color:var(--color-warning);">${(pendingLeaves || []).length}</strong>
+                    <span>Pending Leave Requests</span>
+                </div>
+                <div>
+                    <strong style="color:var(--color-info);">${pendingWorkflows.length + pendingTasks.length}</strong>
+                    <span>Pending Workflow Overrides</span>
+                </div>
+                <div>
+                    <strong style="color:${lockedUsers.length > 0 ? 'var(--color-danger)' : 'var(--color-success)'};">${lockedUsers.length}</strong>
+                    <span>Locked Accounts</span>
+                </div>
+            </div>
+
+            <!-- Quick Action Hub Cards -->
+            <h3 style="margin-bottom: 1rem; font-size: 1.1rem;"><i data-lucide="sparkles" style="width:18px;height:18px;margin-inline-end:6px;color:var(--color-primary);"></i>Quick Administration Hub</h3>
+            <div class="dashboard-grid" style="margin-bottom: 2rem;">
+                <div class="card col-span-3" style="text-align: center; cursor: pointer; transition: transform 0.2s;" onclick="renderView('users')">
+                    <i data-lucide="user-cog" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 28px; height: 28px;"></i>
+                    <h4 style="margin:0;">User Management</h4>
+                    <p style="font-size:0.75rem; color:var(--color-text-secondary); margin-top:4px;">Users, Roles & Reset Passwords</p>
+                </div>
+                <div class="card col-span-3" style="text-align: center; cursor: pointer; transition: transform 0.2s;" onclick="renderView('departments')">
+                    <i data-lucide="building-2" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 28px; height: 28px;"></i>
+                    <h4 style="margin:0;">Departments & Titles</h4>
+                    <p style="font-size:0.75rem; color:var(--color-text-secondary); margin-top:4px;">Org Structure & Job Titles</p>
+                </div>
+                <div class="card col-span-3" style="text-align: center; cursor: pointer; transition: transform 0.2s;" onclick="renderView('tasks')">
+                    <i data-lucide="check-square" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 28px; height: 28px;"></i>
+                    <h4 style="margin:0;">Task Manager</h4>
+                    <p style="font-size:0.75rem; color:var(--color-text-secondary); margin-top:4px;">System Task Assignments</p>
+                </div>
+                <div class="card col-span-3" style="text-align: center; cursor: pointer; transition: transform 0.2s;" onclick="renderView('time')">
+                    <i data-lucide="clock" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 28px; height: 28px;"></i>
+                    <h4 style="margin:0;">Time & Attendance</h4>
+                    <p style="font-size:0.75rem; color:var(--color-text-secondary); margin-top:4px;">Clock Logs & Reports</p>
+                </div>
+            </div>
+
+            <!-- Role Simulator / Testing Studio -->
+            <h3 style="margin-bottom: 1rem; font-size: 1.1rem;"><i data-lucide="eye" style="width:18px;height:18px;margin-inline-end:6px;color:var(--color-primary);"></i>Role Simulation Studio</h3>
+            <div class="dashboard-grid" style="margin-bottom: 2rem;">
+                <div class="card col-span-4" style="text-align: center; cursor: pointer; border: 1px dashed var(--color-primary);" onclick="previewRole('EMPLOYEE')">
+                    <i data-lucide="user" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
+                    <h4>${t('ui_employee_view') || 'Employee View'}</h4>
+                    <p style="font-size:0.75rem; color:var(--color-text-secondary);">Test app experience as standard Employee</p>
+                </div>
+                <div class="card col-span-4" style="text-align: center; cursor: pointer; border: 1px dashed var(--color-primary);" onclick="previewRole('SUPERVISOR')">
+                    <i data-lucide="user-check" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
+                    <h4>${t('ui_supervisor_view') || 'Supervisor View'}</h4>
+                    <p style="font-size:0.75rem; color:var(--color-text-secondary);">Test app experience as Department Supervisor</p>
+                </div>
+                <div class="card col-span-4" style="text-align: center; cursor: pointer; border: 1px dashed var(--color-primary);" onclick="previewRole('MANAGER')">
+                    <i data-lucide="briefcase" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 24px; height: 24px;"></i>
+                    <h4>${t('ui_manager_view') || 'Manager View'}</h4>
+                    <p style="font-size:0.75rem; color:var(--color-text-secondary);">Test app experience as HR / Department Manager</p>
+                </div>
+            </div>
+
+            <!-- Main Live Dashboard Grid -->
+            <div class="dashboard-grid">
+                <div class="card col-span-6">
+                    <div class="card-title">${t('admin_leave_inbox') || 'Pending Leave Requests'} <i data-lucide="inbox"></i></div>
+                    <div style="max-height: 340px; overflow-y: auto;">
+                        ${leaveHTML}
+                    </div>
+                </div>
+
+                <div class="card col-span-6">
+                    <div class="card-title">${t('last_login') || 'Recent User Activity & Logins'} <i data-lucide="activity"></i></div>
+                    <div id="recentLoginsList" aria-live="polite" style="max-height: 340px; overflow-y: auto;">
+                        ${recentLoginsHTML}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: USER DIRECTORY -->
+        <section data-admin-panel="users" class="fade-in-up" hidden>
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+                    <div class="card-title" style="margin:0;">User Directory & Permissions</div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn btn-secondary btn-sm" type="button" onclick="window.downloadUserDirectoryExcel()">
+                            <i data-lucide="download"></i> Download Excel
+                        </button>
+                        <input type="file" id="bulkUserUploadAdminPortal" accept=".xlsx, .xls" style="display: none;" onchange="handleBulkUpload(event)">
+                        <button class="btn btn-secondary btn-sm" type="button" onclick="window.triggerSpecificBulkUpload('employees', 'bulkUserUploadAdminPortal')">
+                            <i data-lucide="upload"></i> Bulk Upload
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Employee Details</th>
+                                <th>Role & Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${usersRows || `<tr><td colspan="4" style="text-align:center; padding:2rem;">No users found.</td></tr>`}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: PENDING OVERRIDES -->
+        <section data-admin-panel="approvals" class="fade-in-up" hidden>
+            <div class="card" style="margin-bottom:1.5rem; background:color-mix(in srgb, var(--color-primary) 8%, var(--color-bg-surface)); border: 1px solid var(--color-primary);">
+                <div style="display:flex; align-items:center; gap:0.75rem;">
+                    <i data-lucide="shield-alert" style="width:24px;height:24px;color:var(--color-primary);flex-shrink:0;"></i>
+                    <div>
+                        <strong style="font-size:1rem;">Administrator Request Override Center</strong>
+                        <p style="margin:2px 0 0; font-size:0.85rem; color:var(--color-text-secondary);">As System Administrator, you can approve or reject any pending employee request or task completion override directly.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom:1.5rem;">
+                <div class="card-title">Pending Workflow Requests (${pendingWorkflows.length})</div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Request Type</th>
+                                <th>Stage</th>
+                                <th>Date</th>
+                                <th>Admin Override</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${workflowRows || `<tr><td colspan="5" style="text-align:center; padding:2rem;">No pending request workflows awaiting approval.</td></tr>`}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Pending Task Completion Approvals (${pendingTasks.length})</div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Task Title</th>
+                                <th>Department</th>
+                                <th>Assignee</th>
+                                <th>Admin Override</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${taskRows || `<tr><td colspan="4" style="text-align:center; padding:2rem;">No pending tasks awaiting approval.</td></tr>`}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: DEPARTMENTS & JOB TITLES -->
+        <section data-admin-panel="departments" class="fade-in-up" hidden>
+            <div class="card" style="margin-bottom:1.5rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <div class="card-title" style="margin:0;">Departments Overview (${(departments || []).length})</div>
+                    <button class="btn-primary btn-sm" onclick="renderView('departments')">
+                        <i data-lucide="settings"></i> Manage Departments & Titles
+                    </button>
+                </div>
+                <div class="dashboard-grid">
+                    ${(departments || []).map(d => {
+                        const deptHead = userMap.get(d.head_id);
+                        const deptEmps = (employees || []).filter(e => e.department_id === d.id);
+                        const deptTitles = (jobTitles || []).filter(j => j.department_id === d.id);
+                        return `
+                            <div class="card col-span-4">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                    <h4 style="margin:0 0 6px;">${escapeHTML(d.name || 'Department')}</h4>
+                                    <span class="status-badge ${d.is_active !== false ? 'success' : 'danger'}">${d.is_active !== false ? 'Active' : 'Inactive'}</span>
+                                </div>
+                                <p style="font-size:0.8rem; color:var(--color-text-secondary); margin:2px 0;">Head: <strong>${escapeHTML(window.formatEmployeeName(deptHead) || 'Unassigned')}</strong></p>
+                                <p style="font-size:0.8rem; color:var(--color-text-secondary); margin:2px 0;">Employees: <strong>${deptEmps.length}</strong> | Job Titles: <strong>${deptTitles.length}</strong></p>
+                            </div>
+                        `;
+                    }).join('') || '<div class="col-span-12" style="text-align:center; padding:2rem;">No departments configured.</div>'}
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 5: SECURITY & LOCKS -->
+        <section data-admin-panel="security" class="fade-in-up" hidden>
+            <div class="admin-kpi-grid" style="margin-bottom: 1.5rem;">
+                <div>
+                    <strong style="color:var(--color-primary);">${adminUsers.length}</strong>
+                    <span>System Administrators</span>
+                </div>
+                <div>
+                    <strong style="color:${lockedUsers.length > 0 ? 'var(--color-danger)' : 'var(--color-success)'};">${lockedUsers.length}</strong>
+                    <span>Locked Accounts</span>
+                </div>
+                <div>
+                    <strong style="color:var(--color-info);">${(allUsers || []).length - lockedUsers.length}</strong>
+                    <span>Active User Logins</span>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom:1.5rem;">
+                <div class="card-title"><i data-lucide="lock" style="width:18px;height:18px;margin-inline-end:6px;color:var(--color-danger);"></i>Locked User Accounts (${lockedUsers.length})</div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Email</th>
+                                <th>Lock Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${lockedRows || `<tr><td colspan="4" style="text-align:center; padding:2rem; color:var(--color-success);">No locked accounts. All user accounts are active.</td></tr>`}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 6: SYSTEM TOOLS -->
+        <section data-admin-panel="tools" class="fade-in-up" hidden>
+            <div class="dashboard-grid">
+                <div class="card col-span-4" style="cursor:pointer;" onclick="window.showAnnouncementModal()">
+                    <i data-lucide="megaphone" style="color:var(--color-primary); width:28px; height:28px; margin-bottom:0.5rem;"></i>
+                    <h4>System Announcements</h4>
+                    <p style="font-size:0.8rem; color:var(--color-text-secondary);">Broadcast company-wide notices to all employee dashboards.</p>
+                </div>
+                <div class="card col-span-4" style="cursor:pointer;" onclick="renderView('translations')">
+                    <i data-lucide="languages" style="color:var(--color-primary); width:28px; height:28px; margin-bottom:0.5rem;"></i>
+                    <h4>Interface Translations</h4>
+                    <p style="font-size:0.8rem; color:var(--color-text-secondary);">Manage Arabic & English UI text strings and custom labels.</p>
+                </div>
+                <div class="card col-span-4" style="cursor:pointer;" onclick="renderView('templates')">
+                    <i data-lucide="file-spreadsheet" style="color:var(--color-primary); width:28px; height:28px; margin-bottom:0.5rem;"></i>
+                    <h4>Excel & Contract Templates</h4>
+                    <p style="font-size:0.8rem; color:var(--color-text-secondary);">Configure bulk import templates and official contract formats.</p>
+                </div>
+                <div class="card col-span-4" style="cursor:pointer;" onclick="renderView('custody_handover')">
+                    <i data-lucide="package-check" style="color:var(--color-primary); width:28px; height:28px; margin-bottom:0.5rem;"></i>
+                    <h4>Custody & Asset Handover</h4>
+                    <p style="font-size:0.8rem; color:var(--color-text-secondary);">Track company assets, custody forms, and equipment sign-offs.</p>
+                </div>
+                <div class="card col-span-4" style="cursor:pointer;" onclick="renderView('integrations')">
+                    <i data-lucide="webhook" style="color:var(--color-primary); width:28px; height:28px; margin-bottom:0.5rem;"></i>
+                    <h4>API & Integrations</h4>
+                    <p style="font-size:0.8rem; color:var(--color-text-secondary);">Webhooks, CRM integration parameters, and external APIs.</p>
+                </div>
+                <div class="card col-span-4" style="cursor:pointer;" onclick="renderView('archived')">
+                    <i data-lucide="archive" style="color:var(--color-primary); width:28px; height:28px; margin-bottom:0.5rem;"></i>
+                    <h4>Archived Records</h4>
+                    <p style="font-size:0.8rem; color:var(--color-text-secondary);">Access archived requests, legacy contracts, and deleted employee records.</p>
+                </div>
+            </div>
+        </section>
     `;
 }
 
@@ -4130,7 +4506,8 @@ window.handleDirectoryDepartmentChange = async function (userId, departmentId, s
     const currentTitle = jobTitleSelect?.value || '';
     const jobTitlesMap = db.getJobTitlesMap() || {};
     const matchedDepartment = Object.keys(jobTitlesMap).find(name => name.trim().toLowerCase() === departmentName.trim().toLowerCase());
-    if (!matchedDepartment || !jobTitlesMap[matchedDepartment].includes(currentTitle)) {
+    const isAdministrativeDepartment = /administrative|administration/i.test(String(departmentName));
+    if ((!matchedDepartment && !isAdministrativeDepartment) || (matchedDepartment && !jobTitlesMap[matchedDepartment].includes(currentTitle))) {
         if (jobTitleSelect) {
             jobTitleSelect.disabled = false;
             jobTitleSelect.innerHTML = companyJobTitleOptions('', departmentName);
@@ -5470,8 +5847,8 @@ async function renderTasks() {
     window.taskListsCache = taskLists || [];
     
     let tasks = fetchedTasks.map(t => {
-        const assignee = allUsers.find(u => u.id === t.assignee_id);
-        const creator = allUsers.find(u => u.id === t.created_by);
+        const assignee = allUsers.find(u => u.id === t.assignee_id) || (t.assignee_id === currentUser?.id ? (currentUserProfile || currentUser) : null);
+        const creator = allUsers.find(u => u.id === t.created_by) || (t.created_by === currentUser?.id ? (currentUserProfile || currentUser) : null);
         const displayTitle = getLocalizedTaskTitle(t);
         const taskObj = {
             ...t,
@@ -5899,7 +6276,7 @@ async function renderTasksV2() {
 
                             <div class="form-group">
                                 <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
-                                <select id="taskAssignee" class="form-control" required ${isRegularEmployee ? 'disabled' : ''}>
+                                <select id="taskAssignee" class="form-control" required>
                                     ${!isRegularEmployee ? `<option value="">${t('task_sel_emp') || 'Select Employee'}</option>` : ''}
                                     ${window.taskAssigneeOptionsCache}
                                 </select>
@@ -6521,6 +6898,10 @@ window.toggleTaskV2Create = function () {
     const listInput = document.getElementById('taskListId');
     if (listInput) listInput.value = canUseList ? listId : '';
     modal.classList.add('active');
+    // Prefill the creator as the initial assignee while retaining a normal
+    // department-scoped dropdown so the creator can choose another employee.
+    const departmentInput = document.getElementById('taskDepartment');
+    handleTaskDepartmentChange('new', departmentInput?.value || '', currentUser?.id || '');
     translateArabicInterface(modal);
     if (window.lucide) window.lucide.createIcons();
 };
@@ -6546,7 +6927,7 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '', select
 
 function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = '') {
     const select = document.getElementById(prefix === 'new' ? 'taskAssignee' : 'editTaskAssignee');
-    if (!select || currentUserRole === 'EMPLOYEE') return;
+    if (!select) return;
     const department = (window.taskDepartmentsCache || []).find(item => item.name === departmentName || item.id === departmentName || getCanonicalDepartmentName(item) === departmentName);
     
     let employees = [];
@@ -9172,7 +9553,7 @@ window.renderView = async function (viewId, isBack = false) {
             console.error("lucide error:", e);
         }
         if (viewId === 'analytics') setTimeout(initCharts, 100);
-        if (viewId === 'dashboard') startRecentLoginsRealtime();
+        if (viewId === 'dashboard' || viewId === 'admin') startRecentLoginsRealtime();
         else stopRecentLoginsRealtime();
         console.log("renderView: done updating DOM.");
     } else {
@@ -11499,12 +11880,8 @@ async function initApp() {
             'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover'
         ]);
         const requestedView = new URLSearchParams(window.location.search).get('view');
-        const savedView = requestedView || localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view');
-        currentView = restorableViews.has(savedView) ? savedView : 'dashboard';
-
-        // Do not restore a sidebar page that is hidden for this user's role.
-        const restoredNav = document.querySelector(`.nav-item[data-view="${currentView}"]`);
-        if (restoredNav && restoredNav.style.display === 'none') currentView = 'dashboard';
+        // Keep the landing destination predictable after a session resumes.
+        currentView = 'dashboard';
 
         pollNotifications();
         if (notificationsInterval) clearInterval(notificationsInterval);

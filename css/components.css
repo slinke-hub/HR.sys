@@ -697,7 +697,8 @@ textarea.form-control {
 .card:hover { box-shadow: 0 14px 34px color-mix(in srgb, var(--color-primary) 12%, transparent); }
 .card-title { letter-spacing: -.01em; }
 .table-responsive { border-radius: 10px; }
-.dashboard-grid > .card:has(.hierarchy-square-tree) { order: 99; }
+.dashboard-grid > .team-hierarchy-widget,
+.dashboard-grid > .card:has(.hierarchy-square-tree) { order: 999; }
 .form-control,
 select.form-control,
 textarea.form-control,
@@ -6467,19 +6468,23 @@ input.btn-primary,
 .edit-task-v2 #editTaskTabAdvanced { min-height: 0; overflow-y: auto; }
 .edit-task-v2 .modal-footer { position: sticky; bottom: 0; z-index: 4; flex: 0 0 auto; background: var(--color-bg-surface); box-shadow: 0 -8px 18px color-mix(in srgb, var(--color-bg-surface) 75%, transparent); }
 .employees-radar-card { overflow: hidden; order: -20; }
+.employees-radar-card { background: linear-gradient(145deg, #081a32 0%, #102b4d 100%); border-color: rgba(255,255,255,.2); color: #fff; }
+.employees-radar-card .card-title, .employees-radar-card .employees-radar-name { color: #fff; }
+.employees-radar-card .employees-radar-subtitle, .employees-radar-card .employees-radar-list time, .employees-radar-card .employees-radar-visual small { color: rgba(255,255,255,.72); }
+.employees-radar-card .employees-radar-live { color: #fff; }
 .employees-radar-header { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; }
 .employees-radar-subtitle { margin:.25rem 0 0; color:var(--color-text-secondary); font-size:.82rem; }
 .employees-radar-live { display:inline-flex; align-items:center; gap:.3rem; color:var(--color-success); font-size:.75rem; font-weight:700; }
 .employees-radar-live svg { width:14px; height:14px; animation: radar-live-blink 1.6s ease-in-out infinite; }
 .employees-radar-layout { display:grid; grid-template-columns:180px 1fr; gap:1.5rem; align-items:center; margin-top:1rem; }
-.employees-radar-visual { position:relative; width:160px; height:160px; margin:auto; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(circle, color-mix(in srgb, var(--color-success) 18%, transparent) 0 8%, transparent 9% 100%), repeating-radial-gradient(circle, color-mix(in srgb, var(--color-success) 25%, transparent) 0 1px, transparent 2px 38px); border:1px solid color-mix(in srgb, var(--color-success) 45%, var(--color-border)); box-shadow:0 0 28px color-mix(in srgb, var(--color-success) 20%, transparent); overflow:hidden; }
-.employees-radar-ring { position:absolute; inset:18%; border:1px solid color-mix(in srgb, var(--color-success) 32%, transparent); border-radius:50%; }
+.employees-radar-visual { position:relative; width:160px; height:160px; margin:auto; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(circle, rgba(255,255,255,.18) 0 8%, transparent 9% 100%), repeating-radial-gradient(circle, rgba(255,255,255,.24) 0 1px, transparent 2px 38px); border:1px solid rgba(255,255,255,.62); box-shadow:0 0 28px rgba(255,255,255,.18), 0 0 52px rgba(30,58,95,.8); overflow:hidden; }
+.employees-radar-ring { position:absolute; inset:18%; border:1px solid rgba(255,255,255,.42); border-radius:50%; }
 .employees-radar-ring.ring-two { inset:36%; }.employees-radar-ring.ring-three { inset:52%; }
-.employees-radar-sweep { position:absolute; width:50%; height:1px; left:50%; top:50%; transform-origin:left center; background:linear-gradient(90deg, var(--color-success), transparent); animation:radar-sweep 2.8s linear infinite; }
-.employees-radar-visual strong { z-index:1; font-size:2rem; color:var(--color-success); }.employees-radar-visual small { z-index:1; color:var(--color-text-secondary); font-size:.7rem; }
+.employees-radar-sweep { position:absolute; width:50%; height:1px; left:50%; top:50%; transform-origin:left center; background:linear-gradient(90deg, #fff, transparent); animation:radar-sweep 2.8s linear infinite; }
+.employees-radar-visual strong { z-index:1; font-size:2rem; color:#fff; }.employees-radar-visual small { z-index:1; color:rgba(255,255,255,.72); font-size:.7rem; }
 .employees-radar-list { list-style:none; margin:0; padding:0; display:grid; gap:.45rem; max-height:160px; overflow:auto; }
-.employees-radar-list li { display:flex; align-items:center; gap:.5rem; padding:.55rem .7rem; border:1px solid var(--color-border); border-radius:8px; background:color-mix(in srgb, var(--color-bg-surface) 92%, var(--color-success)); }
-.employees-radar-list time { margin-inline-start:auto; color:var(--color-text-secondary); font-size:.72rem; }.employees-radar-pulse { width:8px; height:8px; border-radius:50%; background:var(--color-success); box-shadow:0 0 0 0 color-mix(in srgb, var(--color-success) 55%, transparent); animation:radar-pulse 1.8s infinite; }.employees-radar-empty { color:var(--color-text-secondary); justify-content:center; padding:1rem !important; }
+.employees-radar-list li { display:flex; align-items:center; gap:.5rem; padding:.55rem .7rem; border:1px solid rgba(255,255,255,.2); border-radius:8px; background:rgba(255,255,255,.08); }
+.employees-radar-list time { margin-inline-start:auto; color:rgba(255,255,255,.72); font-size:.72rem; }.employees-radar-pulse { width:8px; height:8px; border-radius:50%; background:#fff; box-shadow:0 0 0 0 rgba(255,255,255,.55); animation:radar-pulse 1.8s infinite; }.employees-radar-empty { color:rgba(255,255,255,.72); justify-content:center; padding:1rem !important; }
 .admin-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; }.admin-kpi-grid > div { display:flex; flex-direction:column; gap:.25rem; padding:.8rem; border:1px solid var(--color-border); border-radius:9px; background:color-mix(in srgb, var(--color-bg-surface) 92%, var(--color-primary)); }.admin-kpi-grid strong { font-size:1.45rem; color:var(--color-primary); }.admin-kpi-grid span { color:var(--color-text-secondary); font-size:.75rem; }
 @keyframes radar-sweep { to { transform:rotate(360deg); } } @keyframes radar-pulse { 70% { box-shadow:0 0 0 7px transparent; } 100% { box-shadow:0 0 0 0 transparent; } } @keyframes radar-live-blink { 50% { opacity:.4; } }
 @media (max-width:640px) { .employees-radar-layout { grid-template-columns:1fr; }.employees-radar-visual { width:135px; height:135px; }.admin-kpi-grid { grid-template-columns:repeat(2,1fr); } }
