@@ -1766,7 +1766,8 @@ async function canCurrentUserAccessView(viewId) {
 
 window.updateSidebarVisibility = async function () {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
-    const adminNav = document.querySelector('.nav-item[data-view=\'admin\']');
+    const adminNav = document.querySelector('.sidebar-nav .nav-item[data-view=\'admin\']');
+    const headerNavAdmin = document.getElementById('headerNavAdmin');
     const usersNav = document.querySelector('.nav-item[data-view=\'users\']');
     const analyticsNav = document.querySelector('.nav-item[data-view=\'analytics\']');
     const employeesNav = document.querySelector('.nav-item[data-view=\'employees\']');
@@ -1786,9 +1787,14 @@ window.updateSidebarVisibility = async function () {
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
         if (normalizedRole === 'EMPLOYEE') {
             item.style.display = employeeAllowedViews.has(item.dataset.view) ? 'flex' : 'none';
+        } else {
+            if (item.style.display === 'none' && !['admin', 'users', 'departments', 'translations', 'templates', 'analytics'].includes(item.dataset.view)) {
+                item.style.display = 'flex';
+            }
         }
     });
     if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
+    if (headerNavAdmin) headerNavAdmin.style.display = isAdmin ? 'inline-flex' : 'none';
     if (usersNav) usersNav.style.display = isAdmin ? 'flex' : 'none';
     if (analyticsNav) analyticsNav.style.display = 'none';
     if (employeesNav) employeesNav.style.display = 'flex';
@@ -2422,6 +2428,24 @@ async function renderDashboard() {
         </div>
 
         <div class="dashboard-grid">
+            ${currentUserRole === 'ADMIN' ? `
+            <div class="card col-span-12 fade-in-up" style="background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, var(--color-bg-surface)), var(--color-bg-surface)); border: 1.5px solid var(--color-primary); padding: 1.25rem 1.5rem; border-radius: 12px; margin-bottom: 0.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="background: var(--color-primary); color: #fff; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <i data-lucide="shield-check" style="width: 24px; height: 24px;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700;">Admin Control Center</h3>
+                            <p style="margin: 2px 0 0; color: var(--color-text-secondary); font-size: 0.85rem;">Access employee directory, request overrides, system settings, security logs & role simulations.</p>
+                        </div>
+                    </div>
+                    <button class="btn-primary" type="button" onclick="renderView('admin')" style="padding: 0.65rem 1.35rem; font-size: 0.9rem; border-radius: 8px; font-weight: 600;">
+                        <i data-lucide="layout-dashboard" style="margin-inline-end: 6px;"></i> Open Admin Hub
+                    </button>
+                </div>
+            </div>
+            ` : ''}
             ${expirationAlerts ? `<div class="col-span-12">${expirationAlerts}</div>` : ''}
             ${canUsePersonalLeaveWidgets ? `
             <div class="card col-span-12 annual-leave-widget">
@@ -8327,10 +8351,14 @@ window.closeEmployeeDetailsCard = function () {
 };
 
 window.showEmployeeDetailsCard = async function (userId) {
-    const user = (window.currentAdminUsers || []).find(item => item.id === userId) || await db.getUserProfile(userId);
-    if (!user) {
+    const user = await db.getUserProfile(userId);
+    if (!user || !user.id) {
         showToast(window.t('msg_toast_36') || 'Employee details could not be loaded.', 'danger');
         return;
+    }
+    if (window.currentAdminUsers && Array.isArray(window.currentAdminUsers)) {
+        const idx = window.currentAdminUsers.findIndex(item => item.id === userId);
+        if (idx >= 0) window.currentAdminUsers[idx] = { ...window.currentAdminUsers[idx], ...user };
     }
     const users = window.currentAdminUsers || await db.fetchUsers();
     const manager = users.find(item => item.id === user.manager_id);
@@ -8351,9 +8379,9 @@ window.showEmployeeDetailsCard = async function (userId) {
                 <div><span>Full Name</span><strong>${escapeHTML(user.full_name || 'Not provided')}</strong></div>
                 <div><span>Department</span><strong>${escapeHTML(department)}</strong></div>
                 <div><span>ID/Iqama number</span><strong>${escapeHTML(user.iqama_number || formatEmployeeId(user.emp_index, 'Not assigned'))}</strong></div>
-                <div><span>Job Title</span><strong>${escapeHTML(user.job_title || 'Not assigned')}</strong></div>
+                <div><span>Job Title</span><strong>${escapeHTML(user.job_title || 'System Administrator')}</strong></div>
                 <div><span>Assigned Manager</span><strong>${escapeHTML(manager ? window.formatEmployeeName(manager) : 'No Manager')}</strong></div>
-                <div><span>Role</span><strong>${escapeHTML(user.role || 'EMPLOYEE')}</strong></div>
+                <div><span>Role</span><strong>${escapeHTML(user.role || 'ADMIN')}</strong></div>
             </div>
         </section>`;
     document.body.appendChild(overlay);
