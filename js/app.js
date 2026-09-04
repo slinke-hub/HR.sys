@@ -181,7 +181,7 @@ let deferredPrompt;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=1788202890051', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=1788202890057', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -750,7 +750,7 @@ window.toggleTheme = function () {
     if (themeIcon) themeIcon.setAttribute('data-lucide', currentTheme === 'light' ? 'moon' : 'sun');
     lucide.createIcons();
     const dropdown = document.getElementById('profileDropdown');
-    if (dropdown) { dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
+    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
 }
 
 // --- LANGUAGE MANAGEMENT ---
@@ -779,7 +779,7 @@ window.toggleLanguage = function () {
     updateTranslations();
     renderView(currentView); // Re-render view for updated strings inside
     const dropdown = document.getElementById('profileDropdown');
-    if (dropdown) { dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
+    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
 }
 
 window.closeMobileNavigation = function () {
@@ -4745,8 +4745,8 @@ async function renderPerformance() {
                     <span><i data-lucide="award" style="margin-right:8px; width:20px; height:20px; vertical-align:middle; color:var(--color-accent);"></i>${t('ui_employee_performance_report')}</span>
                     <div style="display:flex; align-items:center; gap: 1rem;">
                         <span id="perfReportDate" style="font-size:0.8rem; font-weight:400; color:var(--color-text-secondary);"></span>
-                        <button class="btn btn-icon" onclick="printPerformanceReport()" title="Print Report" style="padding: 0.25rem;">
-                            <i data-lucide="printer" style="width: 16px; height: 16px;"></i>
+                        <button class="btn btn-primary" onclick="printPerformanceReport()" title="Print Report" style="display:flex; align-items:center; gap:0.4rem; padding: 0.35rem 0.85rem; font-size:0.8rem;">
+                            <i data-lucide="printer" style="width: 14px; height: 14px;"></i> Print
                         </button>
                     </div>
                 </div>
@@ -4780,19 +4780,34 @@ window.generatePerformanceReport = async function () {
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-sm" style="margin-right: 0.5rem;"></span> Generating...'; }
     if (window.lucide) window.lucide.createIcons();
 
-    const tasks = await db.fetchTasksWithProfiles();
+    // Fetch tasks and full Employee Directory in parallel
+    const [tasks, directoryUsers] = await Promise.all([
+        db.fetchTasksWithProfiles(),
+        db.fetchUsers()
+    ]);
+
+    // Build a fast id→profile map from the Employee Directory
+    const dirUserMap = {};
+    directoryUsers.forEach(u => { dirUserMap[u.id] = u; });
 
     // Group tasks by employee
     const empMap = {};
     tasks.forEach(task => {
         if (!task.assignee_id) return;
-        const profile = task.profiles || {};
         const id = task.assignee_id;
         if (!empMap[id]) {
+            // Authoritative source: Employee Directory profile
+            const profile = dirUserMap[id] || task.profiles || {};
+            const name = currentLang === 'ar'
+                ? (profile.display_name_ar || profile.full_name || 'Unknown')
+                : (profile.full_name || profile.display_name || 'Unknown');
+            const jobTitle = currentLang === 'ar'
+                ? (profile.job_title_ar || profile.job_title || '')
+                : (profile.job_title || '');
             empMap[id] = {
                 id,
-                name: profile.full_name || 'Unknown',
-                job_title: profile.job_title || '',
+                name,
+                job_title: jobTitle,
                 total: 0,
                 done: 0,
                 inProgress: 0,
@@ -4835,9 +4850,14 @@ window.generatePerformanceReport = async function () {
         return { label: 'Needs Improvement', cls: 'danger' };
     };
 
+    // Medals are reserved for genuine target achievers, not rank alone.
+    // The existing Excellent threshold is the performance target (85/100).
+    const targetScore = 85;
     const rows = employees.map((e, i) => {
         const { label, cls } = getRatingLabel(e.score);
-        const medal = i === 0 ? 'ðŸ¥‡' : i === 1 ? 'ðŸ¥ˆ' : i === 2 ? 'ðŸ¥‰' : `#${i + 1}`;
+        const medal = e.score >= targetScore && i < 3
+            ? (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉')
+            : `#${i + 1}`;
         return `
         <tr>
             <td style="font-weight:600;">${medal} ${escapeHTML(e.name)}</td>
@@ -9837,6 +9857,7 @@ window.toggleProfileDropdown = function () {
     if (dropdown) {
         const isShowing = dropdown.style.display === 'block';
         dropdown.style.display = isShowing ? 'none' : 'block';
+        dropdown.setAttribute('aria-hidden', isShowing ? 'true' : 'false');
 
         // Hide notifications dropdown if profile dropdown is closing
         if (isShowing && notifDropdown) {
@@ -9857,7 +9878,12 @@ window.addEventListener('click', function (e) {
 
     if (!e.target.closest('.profile-dropdown-wrapper')) {
         const dropdown = document.getElementById('profileDropdown');
-        if (dropdown) { dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
+        if (dropdown) {
+            if (dropdown.contains(document.activeElement)) document.activeElement.blur();
+            dropdown.style.display = 'none';
+            dropdown.classList.remove('show');
+            dropdown.setAttribute('aria-hidden', 'true');
+        }
 
         const notifDropdown = document.getElementById('notificationsDropdown');
         if (notifDropdown) {
@@ -10990,11 +11016,20 @@ window.executeDeleteOrder = async () => {
 };
 
 window.printWithLetterhead = (title, contentHTML) => {
+    // Repair legacy UTF-8/Windows-1252 mojibake that may exist in older
+    // stored Arabic translations before inserting them into the print frame.
+    const repairArabicEncoding = value => {
+        const text = String(value ?? '');
+        if (!/[ØÙÃÂâ]/.test(text)) return text;
+        try { return decodeURIComponent(escape(text)); } catch (_) { return text; }
+    };
+    title = repairArabicEncoding(title);
+    contentHTML = repairArabicEncoding(contentHTML);
     const printContents = `
         <div class="html-letterhead">
             <div class="hl-header">
                 <div class="hl-top-bar"></div>
-                <img src="${window.location.origin}/images/logo.png" style="width: 200px; float: right; margin-top: 50px; margin-right: 40px;">
+                <img src="${window.location.origin}/images/logo.png" style="width: 200px; position: absolute; top: 50px; right: 40px;">
             </div>
             <div class="hl-footer">
                 <div class="hl-text-container">
@@ -11003,12 +11038,12 @@ window.printWithLetterhead = (title, contentHTML) => {
                         <span style="color: #0000FF; display:inline-block; transform:translateY(2px);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></span> +966 50 708 4704 &nbsp;&nbsp; 
                         <span style="color: #0000FF; display:inline-block; transform:translateY(2px);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></span> info@muqam.net &nbsp;&nbsp; 
                         <span style="color: #0000FF; display:inline-block; transform:translateY(2px);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span> www.muqam.net<br>
-                        <span style="color: #0000FF; display:inline-block; transform:translateY(2px);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></span> St.Arafat BnÂ°3113 ,7558 Al Hamra Dist. Jeddah PC. 23323 ,Kingdom of Saudi Arabia
+                        <span style="color: #0000FF; display:inline-block; transform:translateY(2px);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></span> St. Arafat Bn°3113, 7558 Al Hamra Dist., Jeddah PC 23323, Kingdom of Saudi Arabia
                     </div>
                     <div class="hl-text-right" dir="rtl">
-                        <strong style="font-size: 15px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">Ù…ÙÙ‚Ø§Ù… | Ù„ØªÙ†Ø¸ÙŠÙ… Ø§Ù„Ù…Ø¹Ø§Ø±Ø¶ ÙˆØ§Ù„Ù…Ø¤ØªÙ…Ø±Ø§Øª</strong><br><br>
-                        Ø§Ù„ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¶Ø±ÙŠØ¨ÙŠ VAT : 311460343900003<br>
-                        Ø§Ù„Ø³Ø¬Ù„ Ø§Ù„ØªØ¬Ø§Ø±ÙŠ CR : 7031641660
+                        <strong style="font-size: 15px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">مُقام | لتنظيم المعارض والمؤتمرات</strong><br><br>
+                        التسجيل الضريبي VAT : 311460343900003<br>
+                        السجل التجاري CR : 7031641660
                     </div>
                 </div>
                 <div class="hl-ribbon-top"></div>
@@ -11023,7 +11058,7 @@ window.printWithLetterhead = (title, contentHTML) => {
                     <p>Date: ${new Date().toLocaleDateString()}</p>
                 </div>
             </div>` : ''}
-            <div class="print-body" style="${!title ? 'padding-top: 150px;' : ''}">
+            <div class="print-body" style="${!title ? 'padding-top: 190px;' : ''}">
                 ${contentHTML}
             </div>
         </div>
@@ -11059,6 +11094,15 @@ window.printWithLetterhead = (title, contentHTML) => {
                 top: 0;
                 left: 0;
                 width: 100%;
+                height: 100%;
+                pointer-events: none;
+            }
+            .hl-footer {
+                position: absolute;
+                left: 0;
+                bottom: 0;
+                width: 100%;
+                height: 150px;
             }
             .hl-top-bar {
                 height: 12px;
@@ -11074,7 +11118,11 @@ window.printWithLetterhead = (title, contentHTML) => {
                 display: flex;
                 justify-content: space-between;
                 padding: 0 40px;
-                margin-bottom: 40px;
+                margin: 0;
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 38px;
                 font-size: 11px;
                 line-height: 1.6;
                 color: #000;
@@ -11108,14 +11156,18 @@ window.printWithLetterhead = (title, contentHTML) => {
                 z-index: 1;
             }
             .print-title {
-                margin-top: 150px;
-                padding: 0 40px;
+                /* Keep the title below the letterhead logo and top rule. */
+                margin-top: 190px;
+                padding: 0 50px;
             }
             .print-body {
                 flex-grow: 1;
-                padding: 10px 50px 20px 50px;
-                min-height: 600px;
+                /* Reserve the footer contact block and decorative ribbon. */
+                padding: 16px 50px 190px 50px;
+                min-height: 0;
+                box-sizing: border-box;
             }
+            .print-body > * { break-inside: avoid; }
             
             /* Universal Table Styles for Print */
             table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
@@ -11935,8 +11987,12 @@ async function initApp() {
             'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover'
         ]);
         const requestedView = new URLSearchParams(window.location.search).get('view');
-        // Keep the landing destination predictable after a session resumes.
-        currentView = 'dashboard';
+        const savedView = requestedView || localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view');
+        // On a browser refresh, restore the page the user was viewing. A
+        // fresh sign-in is handled separately and still starts on Dashboard.
+        currentView = restorableViews.has(savedView) ? savedView : 'dashboard';
+        const restoredNav = document.querySelector(`.nav-item[data-view="${currentView}"]`);
+        if (restoredNav && restoredNav.style.display === 'none') currentView = 'dashboard';
 
         pollNotifications();
         if (notificationsInterval) clearInterval(notificationsInterval);

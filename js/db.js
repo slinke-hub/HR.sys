@@ -712,11 +712,19 @@ const db = {
     async fetchUsers(includeInactive = false) {
         if (!supabaseClient) return [];
         try {
-            let query = supabaseClient
-                .from('profiles')
-                .select('id, emp_index, full_name, display_name_ar, nationality, iqama_number, phone_number, role, created_at, manager_id, base_salary, department_id, job_title, job_title_ar, avatar_url, last_login, is_active');
+            const columns = 'id, emp_index, full_name, display_name_ar, nationality, iqama_number, phone_number, role, created_at, manager_id, base_salary, department_id, job_title, job_title_ar, avatar_url, last_login, is_active';
+            let query = supabaseClient.from('profiles').select(columns);
             if (!includeInactive) query = query.eq('is_active', true);
-            const { data, error } = await query.order('emp_index', { ascending: true });
+            let { data, error } = await query.order('emp_index', { ascending: true });
+            // Keep user management usable against older databases where one of
+            // the newer profile columns has not been added yet.
+            if (error) {
+                let fallback = supabaseClient.from('profiles').select('id, emp_index, full_name, role, created_at, manager_id, department_id, job_title, avatar_url, last_login, is_active');
+                if (!includeInactive) fallback = fallback.eq('is_active', true);
+                const fallbackResult = await fallback.order('emp_index', { ascending: true });
+                data = fallbackResult.data;
+                error = fallbackResult.error;
+            }
             if (error) throw error;
             return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
@@ -1062,6 +1070,230 @@ const db = {
             return { success: false, error };
         }
     },
+    // ==========================================
+    // DOCUMENT REQUESTS
+    // ==========================================
+    async fetchDocuments(employeeId = null) {
+        if (!supabaseClient) return [];
+        try {
+            let query = supabaseClient.from('document_requests').select('*').order('created_at', { ascending: false });
+            const scopedIds = Array.isArray(employeeId) ? employeeId.filter(Boolean) : (employeeId ? [employeeId] : []);
+            if (scopedIds.length) query = query.in('employee_id', scopedIds);
+            else if (Array.isArray(employeeId)) return [];
+            const { data, error } = await query;
+            if (error) throw error;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
+        } catch (error) {
+            console.error("fetchDocuments Error:", error);
+            return [];
+        }
+    },
+    async fetchTasksWithProfiles() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .select('*, profiles:assignee_id(id, full_name, role), projects(project_name)')
+                .order('created_at', { ascending: false });
+            if (!error) {
+                return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
+            }
+            // Fallback: join failed (e.g. FK not in schema cache) — fetch tasks plainly
+            console.warn('fetchTasksWithProfiles: join query failed, falling back to plain fetch. Error:', error?.message);
+            const { data: plainData, error: plainError } = await supabaseClient
+                .from('tasks')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (plainError) throw plainError;
+            // Attach profile data from the local users cache if available
+            const users = window.taskAllUsersCache || window.usersCache || [];
+            const tasks = Array.isArray(plainData) ? plainData : (plainData ? [plainData] : []);
+            tasks.forEach(task => {
+                const user = users.find(u => u.id === task.assignee_id);
+                if (user) task.profiles = {
+                    id: user.id,
+                    full_name: user.full_name,
+                    display_name: user.display_name,
+                    display_name_ar: user.display_name_ar,
+                    job_title: user.job_title,
+                    role: user.role
+                };
+            });
+            return tasks.map(applyI18nGetters);
+        } catch (error) {
+            console.error("fetchTasksWithProfiles Error:", error);
+            return [];
+        }
+    },
+    async requestDocument(employeeId, docType, purpose) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('document_requests')
+                .insert([{ employee_id: employeeId, doc_type: docType, purpose }]);
+            if (error) throw error;
+            await this.flushTaskNotificationEmails();
+            return { success: true };
+        } catch (error) {
+            console.error("requestDocument Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateDocumentStatus(docId, status) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('document_requests')
+                .update({ status })
+                .eq('id', docId)
+                .select();
+            if (error) throw error;
+            if (!data || data.length === 0) throw new Error("No rows updated. You might lack permissions (RLS).");
+            return { success: true };
+        } catch (error) {
+            console.error("updateDocumentStatus Error:", error);
+            return { success: false, error };
+        }
+    },
+    // ==========================================
+    // PROFILE MANAGEMENT
+    // ==========================================
+    async getSession() {
+        if (!supabaseClient) return { data: { session: null } };
+        return await supabaseClient.auth.getSession();
+    },
+
+    onAuthStateChange(callback) {
+        if (!supabaseClient) return;
+        return supabaseClient.auth.onAuthStateChange(callback);
+    },
+
+    async updateUserPassword(newPassword) {
+        try {
+            const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateUserPassword Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateProfilePhoto(userId, base64Url) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient
+                .from('profiles')
+                .update({ avatar_url: base64Url })
+                .eq('id', userId)
+                .select('id, avatar_url')
+                .maybeSingle();
+            if (error) throw error;
+            if (!data?.id) throw new Error('The profile photo was not saved. Check the profile avatar update policy.');
+            return { success: true, data };
+        } catch (error) {
+            console.error("updateProfilePhoto Error:", error);
+            return { success: false, error };
+        }
+    },
+
+    async updateUserProfileDetails(userId, displayName, fullName, iqama, phone) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient
+                .from('profiles')
+                .update({
+                    display_name: displayName,
+                    full_name: fullName,
+                    iqama_number: iqama,
+                    phone_number: phone
+                })
+                .eq('id', userId)
+                .select('id, display_name, full_name, iqama_number, phone_number, role')
+                .single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error("updateUserProfileDetails Error:", JSON.stringify(error, null, 2));
+            return { success: false, error };
+        }
+    },
+    // ==========================================
+    // PROJECTS & TASK MANAGER
+    // ==========================================
+    async fetchProjects(userId = null) {
+        if (!supabaseClient) return [];
+        try {
+            let query = supabaseClient.from('projects').select('*, crm_clients(name, company)').order('created_at', { ascending: false });
+            // Let RLS handle user-specific project visibility, or we can explicitely filter:
+            // if (userId) { ... }
+            const { data, error } = await query;
+            if (error) throw error;
+            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
+        } catch (error) {
+            console.error("fetchProjects Error:", error);
+            return [];
+        }
+    },
+    async createProject(projectName, projectType, description, assignedPeople, projectCategory, projectTags) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('projects')
+                .insert([{
+                    project_name: projectName,
+                    project_type: projectType,
+                    description: description,
+                    assigned_people: assignedPeople,
+                    project_category: projectCategory,
+                    project_tags: projectTags
+                }]).select();
+            if (error) throw error;
+            return { success: true, data: data };
+        } catch (error) {
+            console.error("createProject Error:", error);
+            return { success: false, error };
+        }
+    },
+    async deleteProject(projectId) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('projects')
+                .delete()
+                .eq('id', projectId)
+                .select();
+            
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                return { success: false, error: new Error("Permission denied or project not found.") };
+            }
+            return { success: true };
+        } catch (error) {
+            console.error("deleteProject Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateProject(projectId, projectName, projectType, description, assignedPeople, projectCategory, projectTags) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('projects')
+                .update({
+                    project_name: projectName,
+                    project_type: projectType,
+                    description: description,
+                    assigned_people: assignedPeople,
+                    project_category: projectCategory,
+                    project_tags: projectTags
+                })
+                .eq('id', projectId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateProject Error:", error);
+            return { success: false, error };
+        }
+    },
     async fetchTaskLists() {
         if (!supabaseClient) return [];
         try {
@@ -1178,20 +1410,6 @@ const db = {
             return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchTasks Error:", error);
-            return [];
-        }
-    },
-    async fetchTasksWithProfiles() {
-        if (!supabaseClient) return [];
-        try {
-            const { data, error } = await supabaseClient
-                .from('tasks')
-                .select('*, profiles:assignee_id(id, full_name, role), projects(project_name)')
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
-        } catch (error) {
-            console.error("fetchTasksWithProfiles Error:", error);
             return [];
         }
     },
@@ -2717,7 +2935,19 @@ const db = {
                 query = query.eq('employee_id', employeeId);
             }
             const { data, error } = await query;
-            if (error) throw error;
+            if (error) {
+                // Older contract tables may not have the archive flag. Do not
+                // hide every contract when that optional column is absent.
+                const message = String(error.message || '').toLowerCase();
+                if (error.code === 'PGRST204' || error.code === '42703' || message.includes('is_archived')) {
+                    let fallback = supabaseClient.from('contracts').select('*').order('created_at', { ascending: false });
+                    if (employeeId) fallback = fallback.eq('employee_id', employeeId);
+                    const retry = await fallback;
+                    if (retry.error) throw retry.error;
+                    return (retry.data || []).map(applyI18nGetters);
+                }
+                throw error;
+            }
             return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchContracts Error:", error);
