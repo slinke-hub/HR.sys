@@ -127,6 +127,33 @@ const isITManagerProfile = (profile = currentUserProfile) => {
 };
 const canViewEmployeesRadar = () => isTaskAdmin() || isITManagerProfile() || ['MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').trim().toUpperCase());
 const canInteractWithTask = task => !!task && (isTaskAdmin() || [task.created_by, task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
+
+// Allow open dialogs to be repositioned by dragging their headers. This is
+// delegated so dynamically-rendered modals receive the same behavior.
+let draggedModalState = null;
+document.addEventListener('pointerdown', event => {
+    const header = event.target.closest('.modal .modal-header');
+    if (!header || event.target.closest('button, input, select, textarea, a')) return;
+    const modalContent = header.closest('.modal-content');
+    if (!modalContent) return;
+    const rect = modalContent.getBoundingClientRect();
+    modalContent.style.margin = '0';
+    modalContent.style.position = 'fixed';
+    modalContent.style.left = `${rect.left}px`;
+    modalContent.style.top = `${rect.top}px`;
+    draggedModalState = { content: modalContent, startX: event.clientX, startY: event.clientY, left: rect.left, top: rect.top };
+    header.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+});
+document.addEventListener('pointermove', event => {
+    if (!draggedModalState) return;
+    const { content, startX, startY, left, top } = draggedModalState;
+    const maxLeft = Math.max(0, window.innerWidth - content.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - content.offsetHeight);
+    content.style.left = `${Math.min(maxLeft, Math.max(0, left + event.clientX - startX))}px`;
+    content.style.top = `${Math.min(maxTop, Math.max(0, top + event.clientY - startY))}px`;
+});
+document.addEventListener('pointerup', () => { draggedModalState = null; });
 let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
 let recentLoginsChannel = null;
@@ -154,7 +181,7 @@ let deferredPrompt;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=1788202890050', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=1788202890051', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {

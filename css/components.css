@@ -852,6 +852,8 @@ select.form-control option:checked { background: var(--color-accent); color: #ff
   align-items: center;
   margin-bottom: 1.5rem;
 }
+.modal-header { cursor: move; user-select: none; }
+.modal-header button, .modal-header input, .modal-header select { cursor: pointer; }
 
 .close-modal {
   background: transparent;

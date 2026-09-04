@@ -1237,46 +1237,60 @@ const db = {
                 ,repeat_type: repeatType || 'NONE'
                 ,repeat_interval: Number(repeatInterval) || 1
             };
-            const { data, error } = await supabaseClient
-                .from('tasks')
-                .insert([newTask])
-                .select()
-                .single();
-            
-            if (error) {
-                if (error.code === 'PGRST204' || error.message?.includes('could not find the column') || error.code === '42703' || (error.status && error.status === 400)) {
-                    console.warn("Retrying createTask without new columns due to missing schema...");
-                    const safeTask = { ...newTask };
-                    delete safeTask.department;
-                    delete safeTask.sub_type;
-                    delete safeTask.watchers;
-                    delete safeTask.title_i18n;
-                    delete safeTask.description_i18n;
-                    delete safeTask.visibility;
-                    delete safeTask.tags;
-                    delete safeTask.visible_to;
-                    delete safeTask.content_type;
-                    delete safeTask.source_link;
-                    delete safeTask.upload_link;
-                    delete safeTask.marketing_department;
-                    delete safeTask.content_links;
-                    delete safeTask.submission_links;
-                    delete safeTask.delivery_status;
-                    delete safeTask.parent_task_id;
-                    delete safeTask.task_list_id;
-                    
-                    const retry = await supabaseClient.from('tasks').insert([safeTask]).select().single();
-                    if (retry.error) {
-                        console.error("createTask compatibility retry failed:", retry.error.message || retry.error, retry.error.details || '');
-                        throw retry.error;
-                    }
+            let currentTask = { ...newTask };
+            let retryCount = 0;
+            let lastError = null;
+
+            while (retryCount < 10) {
+                const { data, error } = await supabaseClient
+                    .from('tasks')
+                    .insert([currentTask])
+                    .select()
+                    .single();
+                
+                if (!error) {
                     await this.flushTaskNotificationEmails();
-                    return { success: true, data: retry.data };
+                    return { success: true, data };
                 }
-                throw error;
+
+                lastError = error;
+                const errorMessage = String(error.message || '');
+                const isMissingColumn = error.code === 'PGRST204'
+                    || error.code === '42703'
+                    || errorMessage.includes('could not find the column')
+                    || /could not find (?:the )?['"]?\w+['"]? column/i.test(errorMessage)
+                    || /column [^ ]+ does not exist/i.test(errorMessage)
+                    || (error.status === 400 && /could not find|does not exist/i.test(errorMessage))
+                    || (error.status === 400 && retryCount === 0);
+
+                if (!isMissingColumn) {
+                    break;
+                }
+
+                let errorDetails = error.details ? String(error.details) : '';
+                let errorHint = error.hint ? String(error.hint) : '';
+                
+                const missingColumn = errorMessage.match(/['"]([a-zA-Z0-9_]+)['"]\s*column/i)?.[1]
+                    || errorMessage.match(/column\s*['"]?([a-zA-Z0-9_]+)['"]?/i)?.[1]
+                    || errorDetails.match(/['"]([a-zA-Z0-9_]+)['"]\s*column/i)?.[1]
+                    || errorDetails.match(/column\s*['"]?([a-zA-Z0-9_]+)['"]?/i)?.[1]
+                    || errorHint.match(/['"]([a-zA-Z0-9_]+)['"]\s*column/i)?.[1]
+                    || errorHint.match(/column\s*['"]?([a-zA-Z0-9_]+)['"]?/i)?.[1];
+
+                console.warn(`Retrying createTask without new columns due to missing schema (attempt ${retryCount + 1})... matched column: ${missingColumn}. Error details: msg="${errorMessage}", details="${errorDetails}", hint="${errorHint}"`);
+
+                if (missingColumn && Object.prototype.hasOwnProperty.call(currentTask, missingColumn)) {
+                    delete currentTask[missingColumn];
+                } else {
+                    ['department', 'sub_type', 'watchers', 'title_i18n', 'description_i18n', 'visibility', 'tags', 'visible_to', 'content_type', 'source_link', 'upload_link', 'marketing_department', 'content_links', 'submission_links', 'delivery_status', 'parent_task_id', 'task_list_id', 'repeat_type', 'repeat_interval'].forEach(field => delete currentTask[field]);
+                    
+                    if (retryCount > 0 && !missingColumn) {
+                        break;
+                    }
+                }
+                retryCount++;
             }
-            await this.flushTaskNotificationEmails();
-            return { success: true, data };
+            throw lastError;
         } catch (error) {
             console.error("createTask Error:", error?.message || error, error?.details || '', error?.code || '');
             return { success: false, error };
@@ -1336,61 +1350,69 @@ const db = {
                 'assignee_ids', 'watchers', 'visible_to', 'tags', 'content_links',
                 'submission_links', 'file_links'
             ].forEach(field => {
-                if (Array.isArray(normalizedUpdates[field])) {
+                if (normalizedUpdates[field] === null || normalizedUpdates[field] === '') {
+                    normalizedUpdates[field] = [];
+                } else if (Array.isArray(normalizedUpdates[field])) {
                     normalizedUpdates[field] = normalizedUpdates[field].filter(value => value !== null && value !== undefined && value !== '');
                 }
             });
+            let currentUpdates = { ...normalizedUpdates };
+            let retryCount = 0;
+            let lastError = null;
 
-            const { error } = await supabaseClient
-                .from('tasks')
-                .update(normalizedUpdates)
-                .eq('id', taskId);
-            
-            if (error) {
-                // Retry only for an actual missing-column/schema-cache error.
-                // A generic HTTP 400 can also mean an invalid UUID/date or a
-                // database validation failure and must not be misclassified.
+            while (retryCount < 10) {
+                if (Object.keys(currentUpdates).length === 0) {
+                    await this.flushTaskNotificationEmails();
+                    return { success: true };
+                }
+
+                const { error } = await supabaseClient
+                    .from('tasks')
+                    .update(currentUpdates)
+                    .eq('id', taskId);
+                
+                if (!error) {
+                    await this.flushTaskNotificationEmails();
+                    return { success: true };
+                }
+
+                lastError = error;
                 const errorMessage = String(error.message || '');
                 const isMissingColumn = error.code === 'PGRST204'
                     || error.code === '42703'
                     || /could not find (?:the )?['"]?\w+['"]? column/i.test(errorMessage)
                     || /column [^ ]+ does not exist/i.test(errorMessage);
-                if (isMissingColumn) {
-                    console.warn("Retrying updateTask without new columns due to missing schema...");
-                    const safeUpdates = { ...normalizedUpdates };
-                    delete safeUpdates.department;
-                    delete safeUpdates.sub_type;
-                    delete safeUpdates.watchers;
-                    delete safeUpdates.title_i18n;
-                    delete safeUpdates.description_i18n;
-                    delete safeUpdates.visibility;
-                    delete safeUpdates.tags;
-                    delete safeUpdates.visible_to;
-                    delete safeUpdates.content_type;
-                    delete safeUpdates.source_link;
-                    delete safeUpdates.upload_link;
-                    delete safeUpdates.marketing_department;
-                    delete safeUpdates.content_links;
-                    delete safeUpdates.submission_links;
-                    delete safeUpdates.delivery_status;
-                    delete safeUpdates.task_list_id;
-                    delete safeUpdates.assignee_ids;
-                    delete safeUpdates.task_department_id;
-                    delete safeUpdates.task_sub_type;
-                    delete safeUpdates.edited_by;
-                    delete safeUpdates.file_links;
-                    delete safeUpdates.repeat_type;
-                    delete safeUpdates.repeat_interval;
-                    
-                    const retry = await supabaseClient.from('tasks').update(safeUpdates).eq('id', taskId);
-                    if (retry.error) throw retry.error;
-                    await this.flushTaskNotificationEmails();
-                    return { success: true };
+
+                if (!isMissingColumn) {
+                    break;
                 }
-                throw error;
+
+                let errorDetails = error.details ? String(error.details) : '';
+                let errorHint = error.hint ? String(error.hint) : '';
+                
+                const missingColumn = errorMessage.match(/['"]([a-zA-Z0-9_]+)['"]\s*column/i)?.[1]
+                    || errorMessage.match(/column\s*['"]?([a-zA-Z0-9_]+)['"]?/i)?.[1]
+                    || errorDetails.match(/['"]([a-zA-Z0-9_]+)['"]\s*column/i)?.[1]
+                    || errorDetails.match(/column\s*['"]?([a-zA-Z0-9_]+)['"]?/i)?.[1]
+                    || errorHint.match(/['"]([a-zA-Z0-9_]+)['"]\s*column/i)?.[1]
+                    || errorHint.match(/column\s*['"]?([a-zA-Z0-9_]+)['"]?/i)?.[1];
+
+                console.warn(`Retrying updateTask without new columns due to missing schema (attempt ${retryCount + 1})... matched column: ${missingColumn}. Error details: msg="${errorMessage}", details="${errorDetails}", hint="${errorHint}"`);
+
+                if (missingColumn && Object.prototype.hasOwnProperty.call(currentUpdates, missingColumn)) {
+                    delete currentUpdates[missingColumn];
+                } else {
+                    ['department', 'sub_type', 'task_department_id', 'task_sub_type', 'edited_by', 'title_i18n', 'description_i18n', 'content_type', 'marketing_department', 'content_links', 'submission_links', 'delivery_status', 'file_links', 'repeat_type', 'repeat_interval', 'parent_task_id', 'task_list_id', 'tags', 'visible_to', 'visibility', 'watchers', 'source_link', 'upload_link', 'assignee_ids'].forEach(field => delete currentUpdates[field]);
+                    
+                    if (retryCount > 0 && !missingColumn) {
+                        break;
+                    }
+                }
+                
+                retryCount++;
             }
-            await this.flushTaskNotificationEmails();
-            return { success: true };
+            
+            throw lastError;
         } catch (error) {
             console.error("updateTask Error:", {
                 code: error?.code,
