@@ -10717,7 +10717,7 @@ async function renderCRM() {
                     <div class="card-title">${t('ui_deal_pipeline') || 'Deal Pipeline'}</div>
                     <button class="btn btn-primary" onclick="showCRMDealModal()"><i data-lucide="plus"></i> ${t('ui_new_deal') || 'New Deal'}</button>
                 </div>
-                <div class="kanban-board" style="display:flex; gap: 1rem; overflow-x: auto; padding-bottom: 1rem;">
+                <div id="crmDealPipelineBoard" class="kanban-board crm-deal-pipeline-board" style="display:flex; gap: 1rem; overflow-x: auto; padding-bottom: 1rem;">
                     ${boardHtml}
                 </div>
             </div>
@@ -10773,6 +10773,22 @@ window.switchCrmTab = function (tabId) {
     if (pipelineEl) pipelineEl.style.display = tabId === 'pipeline' ? 'block' : 'none';
     if (clientsEl) clientsEl.style.display = tabId === 'clients' ? 'block' : 'none';
 };
+
+function handleCrmPipelineWheel(event) {
+    const board = event.target?.closest?.('#crmDealPipelineBoard');
+    if (!board || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+
+    const deltaScale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? board.clientWidth : 1;
+    const direction = getComputedStyle(board).direction === 'rtl' ? -1 : 1;
+    const previousScrollLeft = board.scrollLeft;
+    board.scrollLeft += event.deltaY * deltaScale * direction;
+
+    // Consume the wheel only when the board actually moved. At either edge,
+    // leave the event alone so the surrounding page can continue scrolling.
+    if (board.scrollLeft !== previousScrollLeft) event.preventDefault();
+}
+
+document.addEventListener('wheel', handleCrmPipelineWheel, { passive: false });
 
 const dealApprovalStageLabels = {
     MARKETING_MANAGER: 'crm_marketing_manager',

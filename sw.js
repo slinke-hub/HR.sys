@@ -1,6 +1,6 @@
 // Bump whenever the shell or versioned scripts change so already-open clients
 // activate a fresh worker and do not keep executing a stale application bundle.
-const CACHE_NAME = 'muqam-hr-mobile-v138';
+const CACHE_NAME = 'muqam-hr-mobile-v139';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.json', '/offline.html',
   '/css/variables.css', '/css/layout.css', '/css/components.css', '/css/android.css',
