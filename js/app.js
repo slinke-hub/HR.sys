@@ -125,7 +125,12 @@ const isITManagerProfile = (profile = currentUserProfile) => {
     const values = [profile?.job_title, profile?.role].map(value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' '));
     return values.some(value => value === 'IT MANAGER' || value.includes('IT MANAGER'));
 };
-const canViewEmployeesRadar = () => isTaskAdmin() || isITManagerProfile() || ['MANAGER', 'SUPERVISOR'].includes(String(currentUserRole || '').trim().toUpperCase());
+const canViewEmployeesRadar = () => {
+    const accessValues = [currentUserRole, currentUserProfile?.role, currentUserProfile?.job_title]
+        .map(value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' '));
+    const permittedValues = ['MANAGER', 'SUPERVISOR', 'GENERAL MANAGER', 'GM', 'CEO', 'CHIEF EXECUTIVE OFFICER'];
+    return isTaskAdmin() || isITManagerProfile() || accessValues.some(value => permittedValues.includes(value));
+};
 const canInteractWithTask = task => !!task && (isTaskAdmin() || [task.created_by, task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
 
 // Allow open dialogs to be repositioned by dragging their headers. This is
@@ -1694,10 +1699,7 @@ window.handleLogout = async function () {
     }
 
     stopRecentLoginsRealtime();
-    if (notificationsInterval) {
-        clearInterval(notificationsInterval);
-        notificationsInterval = null;
-    }
+    stopNotificationsRealtime();
     // Preserve custom translations and other important local preferences across logins
     const customI18n = localStorage.getItem('custom_i18n');
     const pwaPrompt = localStorage.getItem('pwaPromptDismissed');
@@ -1941,6 +1943,7 @@ window.handleLoginSubmit = async function (e) {
     const _loginSavedView = _loginRequestedView || (currentUser ? (localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view')) : null);
     // Always land users on their personal dashboard after authentication.
     currentView = 'dashboard';
+    startNotificationsRealtime();
     renderView(currentView);
 }
 
@@ -2297,7 +2300,7 @@ async function renderDashboard() {
         db.getUserProfile(currentUser?.id),
         db.fetchLeaveRequests(currentUser?.id),
         db.fetchGenericRequests(),
-        canViewEmployeesRadar() ? db.fetchCurrentClockedInAttendance() : Promise.resolve([]),
+        canViewEmployeesRadar() ? db.fetchEmployeesRadarAttendance() : Promise.resolve([]),
         currentUserRole === 'ADMIN' ? db.fetchTasks() : Promise.resolve([])
     ]);
 
@@ -2422,21 +2425,18 @@ async function renderDashboard() {
 
     let adminWidgets = '';
     if (canViewEmployeesRadar()) {
-        const allProfiles = (await db.fetchAllProfiles()) || [];
+        const allProfiles = currentUserRole === 'ADMIN' ? ((await db.fetchAllProfiles()) || []) : [];
         const lastLoginsHTML = renderRecentLoginsHTML(allProfiles);
         const clockedInEmployees = (dashboardAttendance || []).filter(record => record.clock_in_time && !record.clock_out_time);
-        const profileMap = new Map(allProfiles.map(user => [user.id, user]));
+        const clockedOutEmployees = (dashboardAttendance || []).filter(record => record.clock_in_time && record.clock_out_time);
         const openTasks = (dashboardTasks || []).filter(isOpenDashboardTask).length;
         const pendingRequests = (dashboardGenericRequests || []).filter(request => String(request.status || '').toUpperCase().startsWith('PENDING')).length;
-        const radarRows = clockedInEmployees.map(record => {
-            const employee = profileMap.get(record.employee_id);
-            return `<li><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(window.formatEmployeeName(employee) || 'Employee')}</span><time>${new Date(record.clock_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></li>`;
-        }).join('');
+        const radarRows = renderEmployeesRadarRows(dashboardAttendance || []);
 
         adminWidgets += `
             <section class="card col-span-12 employees-radar-card" id="employeesRadarWidget" aria-live="polite">
-                <div class="employees-radar-header"><div><div class="card-title">Employees Radar</div><p class="employees-radar-subtitle">Live view of employees currently clocked in</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> Live</span></div>
-                <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>clocked in</small></div><ul class="employees-radar-list" id="employeesRadarList">${radarRows || '<li class="employees-radar-empty">No employees are currently clocked in.</li>'}</ul></div>
+                <div class="employees-radar-header"><div><div class="card-title">Employees Radar</div><p class="employees-radar-subtitle">Live view of today&rsquo;s clocked-in and clocked-out employees</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> Live</span></div>
+                <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>clocked in now</small><span class="employees-radar-out-count" id="employeesRadarOutCount">${clockedOutEmployees.length} clocked out</span></div><ul class="employees-radar-list" id="employeesRadarList">${radarRows || '<li class="employees-radar-empty">No attendance recorded today.</li>'}</ul></div>
             </section>
             ${currentUserRole === 'ADMIN' ? `<section class="card col-span-12 admin-kpi-card" id="dashboardKpiOverview" aria-live="polite"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong id="dashboardKpiEmployees">${allProfiles.length}</strong><span>Total employees</span></div><div><strong id="dashboardKpiClockedIn">${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong id="dashboardKpiOpenTasks">${openTasks}</strong><span>Open tasks</span></div><div><strong id="dashboardKpiPendingRequests">${pendingRequests}</strong><span>Pending requests</span></div></div></section>` : ''}
             ${currentUserRole === 'ADMIN' ? `<div class="card col-span-12 md:col-span-6">
@@ -2444,7 +2444,7 @@ async function renderDashboard() {
                 <div id="recentLoginsList" aria-live="polite">${lastLoginsHTML}</div>
             </div>` : ''}
         `;
-        window.initializeEmployeesRadar?.(dashboardAttendance || [], allProfiles);
+        window.initializeEmployeesRadar?.(dashboardAttendance || []);
     }
 
     return `
@@ -2591,23 +2591,35 @@ async function renderDashboard() {
 
 let employeesRadarChannel = null;
 let employeesRadarTimer = null;
-window.initializeEmployeesRadar = function (attendance, profiles) {
+function renderEmployeesRadarRows(records) {
+    return (records || []).map(record => {
+        const isClockedOut = Boolean(record.clock_out_time);
+        const eventTime = isClockedOut ? record.clock_out_time : record.clock_in_time;
+        const status = isClockedOut ? 'Clocked out' : 'Clocked in';
+        const employeeName = record.full_name || window.formatEmployeeName(record.profile) || 'Employee';
+        return `<li class="${isClockedOut ? 'is-clocked-out' : 'is-clocked-in'}"><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(employeeName)}</span><span class="employees-radar-meta"><span class="employees-radar-status">${status}</span><time>${eventTime ? new Date(eventTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '&mdash;'}</time></span></li>`;
+    }).join('');
+}
+
+window.initializeEmployeesRadar = function (attendance) {
     const refresh = async (records = attendance) => {
         const active = (records || []).filter(record => record.clock_in_time && !record.clock_out_time);
-        const map = new Map((profiles || []).map(user => [user.id, user]));
+        const clockedOut = (records || []).filter(record => record.clock_in_time && record.clock_out_time);
         const count = document.getElementById('employeesRadarCount');
+        const outCount = document.getElementById('employeesRadarOutCount');
         const list = document.getElementById('employeesRadarList');
         if (!count || !list) return;
         count.textContent = String(active.length);
-        list.innerHTML = active.map(record => `<li><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(window.formatEmployeeName(map.get(record.employee_id)) || 'Employee')}</span><time>${new Date(record.clock_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></li>`).join('') || '<li class="employees-radar-empty">No employees are currently clocked in.</li>';
+        if (outCount) outCount.textContent = `${clockedOut.length} clocked out`;
+        list.innerHTML = renderEmployeesRadarRows(records) || '<li class="employees-radar-empty">No attendance recorded today.</li>';
     };
     setTimeout(() => refresh(), 0);
     if (employeesRadarTimer) clearInterval(employeesRadarTimer);
-    employeesRadarTimer = setInterval(async () => refresh(await db.fetchCurrentClockedInAttendance()), 10000);
+    employeesRadarTimer = setInterval(async () => refresh(await db.fetchEmployeesRadarAttendance()), 10000);
     if (employeesRadarChannel && window.supabaseClient) window.supabaseClient.removeChannel(employeesRadarChannel);
     if (window.supabaseClient) {
         employeesRadarChannel = window.supabaseClient.channel('employees-radar-live')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, async () => refresh(await db.fetchCurrentClockedInAttendance()))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, async () => refresh(await db.fetchEmployeesRadarAttendance()))
             .subscribe();
     }
 };
@@ -9757,6 +9769,8 @@ function updateTopbarProfile(profile) {
 // ==========================================
 // NOTIFICATIONS VIEW
 // ==========================================
+let notificationNavigationCache = new Map();
+
 async function renderNotifications() {
     if (!currentUser) return `<div class="page-header"><h1 class="page-title">${t('notif_title')}</h1></div><div class="card">${t('notif_login')}</div>`;
 
@@ -9764,8 +9778,7 @@ async function renderNotifications() {
 
     // Mark as read when viewing the page
     await db.markNotificationsRead(currentUser.id);
-    const badge = document.querySelector('.notification-badge');
-    if (badge) badge.style.display = 'none';
+    updateNotificationBadge(0);
 
     let listHtml = `<div class="card" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('notif_no_found')}</div>`;
 
@@ -9778,7 +9791,7 @@ async function renderNotifications() {
                             <i data-lucide="bell"></i>
                         </div>
                         <div>
-                            <div style="font-weight: 500; font-size: 1rem; color: var(--color-text);">${escapeHTML(localizeNotificationMessage(n.message))}</div>
+                            <button type="button" class="notification-title-button" onclick="event.stopPropagation();openNotificationDestination('${escapeHTML(n.id)}')">${escapeHTML(localizeNotificationMessage(n.message))}</button>
                             ${renderNotificationDetails(n)}
                             <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(n.created_at).toLocaleString()}</div>
                             ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.65rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')"><i data-lucide="check-circle"></i> Approve</button>` : ''}
@@ -9820,33 +9833,87 @@ function renderNotificationDetails(notification, compact = false) {
 }
 
 // ==========================================
-// NOTIFICATIONS POLLING
+// NOTIFICATIONS LIVE UPDATES
 // ==========================================
 let notificationsInterval;
-async function pollNotifications() {
+let notificationsChannel = null;
+let notificationsInitialized = false;
+let knownNotificationIds = new Set();
+let notificationAudioContext = null;
+let notificationSoundUnlocked = false;
+
+function unlockNotificationSound() {
+    if (notificationSoundUnlocked) return;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    try {
+        notificationAudioContext ||= new AudioContextClass();
+        const resume = notificationAudioContext.resume?.();
+        if (resume?.catch) resume.catch(() => { });
+        notificationSoundUnlocked = true;
+    } catch (_) { }
+}
+
+document.addEventListener('pointerdown', unlockNotificationSound, { once: true, capture: true });
+document.addEventListener('keydown', unlockNotificationSound, { once: true, capture: true });
+
+function playNotificationRing() {
+    if (!notificationSoundUnlocked || !notificationAudioContext) return;
+    try {
+        const context = notificationAudioContext;
+        if (context.state === 'suspended') context.resume?.().catch?.(() => { });
+        const startAt = context.currentTime + 0.02;
+        [0, 0.22].forEach((delay, index) => {
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(index === 0 ? 880 : 1046.5, startAt + delay);
+            gain.gain.setValueAtTime(0.0001, startAt + delay);
+            gain.gain.exponentialRampToValueAtTime(0.075, startAt + delay + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, startAt + delay + 0.18);
+            oscillator.connect(gain);
+            gain.connect(context.destination);
+            oscillator.start(startAt + delay);
+            oscillator.stop(startAt + delay + 0.2);
+        });
+    } catch (_) { }
+}
+
+function updateNotificationBadge(unreadCount) {
+    const count = Math.max(0, Number(unreadCount) || 0);
+    document.querySelectorAll('.notification-badge').forEach(badge => {
+        badge.hidden = count === 0;
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.setAttribute('aria-label', count + ' unread notification' + (count === 1 ? '' : 's'));
+    });
+    const button = document.getElementById('headerNotificationsButton');
+    if (button) button.setAttribute('aria-label', count ? 'Notifications, ' + count + ' unread' : 'Notifications');
+}
+
+async function pollNotifications(options = {}) {
     if (!currentUser) return;
     const notifs = await db.fetchNotifications(currentUser.id);
+    notificationNavigationCache = new Map(notifs.map(notification => [String(notification.id), notification]));
+    notificationNavigationCache = new Map(notifs.map(notification => [String(notification.id), notification]));
     const unread = notifs.filter(n => !n.is_read);
+    const newUnread = notificationsInitialized
+        ? unread.filter(notification => notification.id && !knownNotificationIds.has(notification.id))
+        : [];
+    knownNotificationIds = new Set(notifs.map(notification => notification.id).filter(Boolean));
+    notificationsInitialized = true;
+    if (options.playSound !== false && newUnread.length > 0) playNotificationRing();
 
-    const badge = document.querySelector('.notification-badge');
     const dropdown = document.getElementById('notificationsDropdown');
-
-    if (badge) {
-        if (unread.length > 0) {
-            badge.style.display = 'flex';
-            badge.textContent = unread.length;
-        } else {
-            badge.style.display = 'none';
-        }
-    }
+    updateNotificationBadge(unread.length);
 
     if (dropdown) {
+        const dropdownHeader = '<div class="notifications-dropdown-header"><strong>' + escapeHTML(t('nav_notifications') || 'Notifications') + '</strong><button type="button" onclick="renderView(&quot;notifications&quot;);window.toggleNotifications(false)">' + (currentLang === 'ar' ? 'عرض الكل' : 'View all') + '</button></div>';
         if (notifs.length === 0) {
-            dropdown.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--color-text-secondary);">${t('notif_no_dropdown')}</div>`;
+            dropdown.innerHTML = dropdownHeader + `<div style="padding: 1rem; text-align: center; color: var(--color-text-secondary);">${t('notif_no_dropdown')}</div>`;
         } else {
-            dropdown.innerHTML = notifs.map(n => `
+            dropdown.innerHTML = dropdownHeader + notifs.map(n => `
                 <div class="notification-item ${!n.is_read ? 'unread' : ''}" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''} style="padding: 10px; border-bottom: 1px solid var(--color-border); ${n.task_id ? 'cursor: pointer;' : ''} ${!n.is_read ? 'background: rgba(var(--color-primary-rgb), 0.05); font-weight: 500;' : ''}">
-                    <div style="font-size: 0.875rem;">${escapeHTML(localizeNotificationMessage(n.message))}</div>
+                    <button type="button" class="notification-title-button compact" onclick="event.stopPropagation();openNotificationDestination('${escapeHTML(n.id)}')">${escapeHTML(localizeNotificationMessage(n.message))}</button>
                     ${renderNotificationDetails(n, true)}
                     <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">${new Date(n.created_at).toLocaleDateString()}</div>
                     ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.5rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')">Approve</button>` : ''}
@@ -9854,6 +9921,50 @@ async function pollNotifications() {
             `).join('');
         }
     }
+}
+
+function stopNotificationsRealtime() {
+    if (notificationsInterval) clearInterval(notificationsInterval);
+    notificationsInterval = null;
+    if (notificationsChannel && window.supabaseClient?.removeChannel) {
+        window.supabaseClient.removeChannel(notificationsChannel);
+    }
+    notificationsChannel = null;
+    notificationsInitialized = false;
+    knownNotificationIds = new Set();
+    updateNotificationBadge(0);
+}
+
+async function startNotificationsRealtime() {
+    stopNotificationsRealtime();
+    if (!currentUser) return;
+    await pollNotifications({ playSound: false });
+    notificationsInterval = setInterval(() => pollNotifications(), 30000);
+    if (!window.supabaseClient) return;
+    notificationsChannel = window.supabaseClient
+        .channel('user-notifications-' + currentUser.id)
+        .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: 'user_id=eq.' + currentUser.id
+        }, payload => {
+            const notification = payload.new || {};
+            const shouldRing = notificationsInitialized
+                && !notification.is_read
+                && notification.id
+                && !knownNotificationIds.has(notification.id);
+            if (notification.id) knownNotificationIds.add(notification.id);
+            if (shouldRing) playNotificationRing();
+            pollNotifications({ playSound: false });
+        })
+        .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: 'user_id=eq.' + currentUser.id
+        }, () => pollNotifications({ playSound: false }))
+        .subscribe();
 }
 
 async function renderArchivedContracts() {
@@ -9906,9 +10017,49 @@ window.handleContractDepartmentChange = function (departmentId) {
     jobTitleSelect.innerHTML = `<option value="">Select Job Title</option>${titles.map(title => `<option value="${escapeHTML(title.name)}">${escapeHTML(title.name)}</option>`).join('')}`;
 };
 
+window.openNotificationDestination = async function (notificationId) {
+    const notification = notificationNavigationCache.get(String(notificationId));
+    if (!notification) {
+        await renderView('notifications');
+        return;
+    }
+
+    if (!notification.is_read) {
+        await db.markNotificationRead(notification.id);
+        notification.is_read = true;
+    }
+    window.toggleNotifications(false);
+
+    let actionView = '';
+    let actionTaskId = notification.task_id || '';
+    try {
+        const action = new URL(notification.action_url || '', window.location.origin);
+        actionView = action.searchParams.get('view') || '';
+        actionTaskId ||= action.searchParams.get('task') || '';
+        if (!actionView && /tasks-v2|tasks/.test(action.pathname)) actionView = 'tasks';
+        if (!actionView && /requests/.test(action.pathname)) actionView = 'requests';
+    } catch (_) { }
+
+    if (actionTaskId) {
+        await window.openTaskNotification(actionTaskId);
+        return;
+    }
+
+    const isRequestNotification = String(notification.event_type || '').startsWith('request_')
+        || /request|leave|expense/i.test(String(notification.message || ''));
+    if (isRequestNotification) actionView = 'requests';
+
+    const allowedViews = new Set(['dashboard', 'tasks', 'requests', 'time', 'documents', 'expenses', 'performance', 'projects', 'crm', 'clients', 'approvals', 'profile', 'notifications']);
+    await renderView(allowedViews.has(actionView) ? actionView : 'notifications');
+};
+
 window.openTaskNotification = async function (taskId) {
     const dropdown = document.getElementById('notificationsDropdown');
-    if (dropdown) dropdown.classList.remove('show');
+    if (dropdown) {
+        dropdown.classList.remove('show');
+        dropdown.setAttribute('aria-hidden', 'true');
+    }
+    document.getElementById('headerNotificationsButton')?.setAttribute('aria-expanded', 'false');
     await renderView('tasks');
     if (window.taskCache?.[taskId]) {
         openTaskDetailsModal(taskId);
@@ -9917,15 +10068,22 @@ window.openTaskNotification = async function (taskId) {
     }
 };
 
-window.toggleNotifications = async function () {
+window.toggleNotifications = async function (forceOpen) {
     const dropdown = document.getElementById('notificationsDropdown');
     if (!dropdown) return;
-    dropdown.classList.toggle('show');
+    const willOpen = typeof forceOpen === 'boolean' ? forceOpen : !dropdown.classList.contains('show');
+    dropdown.classList.toggle('show', willOpen);
+    dropdown.setAttribute('aria-hidden', String(!willOpen));
+    document.getElementById('headerNotificationsButton')?.setAttribute('aria-expanded', String(willOpen));
+    const profileDropdown = document.getElementById('profileDropdown');
+    if (willOpen && profileDropdown) {
+        profileDropdown.style.display = 'none';
+        profileDropdown.setAttribute('aria-hidden', 'true');
+    }
 
-    if (dropdown.classList.contains('show') || dropdown.style.display === 'block') {
+    if (willOpen) {
         await db.markNotificationsRead(currentUser.id);
-        const badge = document.querySelector('.notification-badge');
-        if (badge) badge.style.display = 'none';
+        updateNotificationBadge(0);
 
         // Hide profile badge if shown
         const pBadge = document.getElementById('profileNotificationBadge');
@@ -9944,10 +10102,11 @@ window.toggleProfileDropdown = function () {
         dropdown.style.display = isShowing ? 'none' : 'block';
         dropdown.setAttribute('aria-hidden', isShowing ? 'true' : 'false');
 
-        // Hide notifications dropdown if profile dropdown is closing
-        if (isShowing && notifDropdown) {
-            notifDropdown.style.display = 'none';
+        // Keep the two header menus mutually exclusive.
+        if (notifDropdown) {
             notifDropdown.classList.remove('show');
+            notifDropdown.setAttribute('aria-hidden', 'true');
+            document.getElementById('headerNotificationsButton')?.setAttribute('aria-expanded', 'false');
         }
     }
 }
@@ -9970,10 +10129,14 @@ window.addEventListener('click', function (e) {
             dropdown.setAttribute('aria-hidden', 'true');
         }
 
+    }
+
+    if (!e.target.closest('.notification-dropdown-wrapper')) {
         const notifDropdown = document.getElementById('notificationsDropdown');
         if (notifDropdown) {
-            notifDropdown.style.display = 'none';
             notifDropdown.classList.remove('show');
+            notifDropdown.setAttribute('aria-hidden', 'true');
+            document.getElementById('headerNotificationsButton')?.setAttribute('aria-expanded', 'false');
         }
     }
 });
@@ -10664,7 +10827,7 @@ async function renderCRM() {
     const deals = await db.fetchDeals();
     const users = await db.fetchUsers();
 
-    const stages = ['LEAD', 'PITCH', 'QUOTATION', 'TECHNICAL', 'APPROVAL', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
+    const stages = ['LEAD', 'QUALIFICATION', 'PITCH', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
 
     let boardHtml = '';
     stages.forEach(stage => {
@@ -10689,7 +10852,7 @@ async function renderCRM() {
                         </div>
                         ${d.closing_date ? `<div style="font-size: 0.75rem; color: var(--color-danger); margin-bottom: 0.5rem;"><i data-lucide="calendar" style="width: 12px; height: 12px;"></i> Close: ${d.closing_date}</div>` : ''}
                         ${d.assigned_to ? `<div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;"><i data-lucide="user" style="width: 12px; height: 12px;"></i> ${window.formatEmployeeName(users.find(u => u.id === d.assigned_to) || {}) || 'User'}</div>` : ''}
-                        ${stage === 'APPROVAL' ? `<div class="status-badge ${d.workflow_status === 'APPROVED' ? 'success' : (d.workflow_status === 'REJECTED' ? 'danger' : 'warning')}" style="margin-bottom:.5rem;">${t('crm_workflow_' + String(d.workflow_status || 'not_started').toLowerCase()) || String(d.workflow_status || 'NOT_STARTED').replace(/_/g, ' ')}</div>` : ''}
+                        ${d.workflow_status && d.workflow_status !== 'NOT_STARTED' ? `<div class="status-badge ${d.workflow_status === 'APPROVED' ? 'success' : (d.workflow_status === 'REJECTED' ? 'danger' : 'warning')}" style="margin-bottom:.5rem;">${t('crm_workflow_' + String(d.workflow_status).toLowerCase()) || String(d.workflow_status).replace(/_/g, ' ')}</div>` : ''}
                         <div class="status-badge success" style="margin-top: auto;">SAR ${d.amount}</div>
                         <button type="button" class="btn btn-secondary btn-sm deal-workflow-button" onclick="openDealWorkflowModal('${d.id}')"><i data-lucide="git-branch"></i> ${t('crm_workflow') || 'Workflow'}</button>
                     </div>
@@ -10938,11 +11101,6 @@ window.dropDeal = async (ev, newStage) => {
     const card = document.getElementById(`deal-card-${dealId}`);
     const oldStage = card ? card.getAttribute('data-stage') : null;
     if (oldStage === newStage) return;
-
-    if (newStage === 'APPROVAL') {
-        await window.openDealWorkflowModal(dealId);
-        return;
-    }
 
     if ((newStage === 'PROPOSAL' || newStage === 'NEGOTIATION' || newStage === 'WON') && card?.getAttribute('data-workflow-status') !== 'APPROVED') {
         showToast(t('crm_approval_required') || 'Complete all internal approvals before advancing this deal.', 'warning');
@@ -12032,6 +12190,7 @@ async function initApp() {
     // Listen for session expiration or logout
     db.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT' || !session) {
+            stopNotificationsRealtime();
             currentUser = null;
             currentUserRole = null;
             currentUserProfile = null;
@@ -12095,9 +12254,7 @@ async function initApp() {
         const restoredNav = document.querySelector(`.nav-item[data-view="${currentView}"]`);
         if (restoredNav && restoredNav.style.display === 'none') currentView = 'dashboard';
 
-        pollNotifications();
-        if (notificationsInterval) clearInterval(notificationsInterval);
-        notificationsInterval = setInterval(pollNotifications, 60000);
+        await startNotificationsRealtime();
     } else {
         currentView = 'login';
     }

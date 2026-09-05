@@ -590,6 +590,104 @@ textarea.form-control {
 }
 
 /* Notifications Dropdown */
+.notification-dropdown-wrapper {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.header-notification-button {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.header-notification-button:hover,
+.header-notification-button[aria-expanded="true"] {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-surface));
+}
+
+.notification-badge {
+  position: absolute;
+  inset-block-start: -5px;
+  inset-inline-end: -5px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-bg-surface);
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 3px 9px rgba(220, 38, 38, .35);
+}
+
+.notification-badge[hidden] { display: none !important; }
+
+.notifications-dropdown {
+  position: absolute;
+  z-index: 320;
+  inset-block-start: calc(100% + .65rem);
+  inset-inline-end: 0;
+  display: none;
+  width: min(380px, calc(100vw - 1rem));
+  max-height: min(520px, calc(100dvh - 80px));
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  box-shadow: 0 18px 48px rgba(2, 8, 23, .24);
+}
+
+.notifications-dropdown.show { display: block; }
+
+.notifications-dropdown-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .85rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+}
+
+.notifications-dropdown-header button {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.notification-title-button {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: start;
+}
+
+.notification-title-button.compact { font-size: .875rem; }
+.notification-title-button:hover { color: var(--color-primary); text-decoration: underline; }
+.notification-title-button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; border-radius: 3px; }
+
 .notification-item {
   padding: 1rem;
   border-bottom: 1px solid var(--color-border);
@@ -690,6 +788,15 @@ textarea.form-control {
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   transition: background-color var(--transition-normal), color var(--transition-normal), border-color var(--transition-normal);
+}
+
+@media (max-width: 480px) {
+  .notifications-dropdown {
+    position: fixed;
+    inset-block-start: calc(var(--topbar-height, 64px) + .35rem);
+    inset-inline: .5rem;
+    width: auto;
+  }
 }
 
 /* Clear interaction colors: users can identify controls at a glance. */
@@ -6484,9 +6591,10 @@ input.btn-primary,
 .employees-radar-ring.ring-two { inset:36%; }.employees-radar-ring.ring-three { inset:52%; }
 .employees-radar-sweep { position:absolute; width:50%; height:1px; left:50%; top:50%; transform-origin:left center; background:linear-gradient(90deg, #fff, transparent); animation:radar-sweep 2.8s linear infinite; }
 .employees-radar-visual strong { z-index:1; font-size:2rem; color:#fff; }.employees-radar-visual small { z-index:1; color:rgba(255,255,255,.72); font-size:.7rem; }
+.employees-radar-out-count { z-index:1; margin-top:.25rem; color:rgba(255,255,255,.66); font-size:.62rem; }
 .employees-radar-list { list-style:none; margin:0; padding:0; display:grid; gap:.45rem; max-height:160px; overflow:auto; }
 .employees-radar-list li { display:flex; align-items:center; gap:.5rem; padding:.55rem .7rem; border:1px solid rgba(255,255,255,.2); border-radius:8px; background:rgba(255,255,255,.08); }
-.employees-radar-list time { margin-inline-start:auto; color:rgba(255,255,255,.72); font-size:.72rem; }.employees-radar-pulse { width:8px; height:8px; border-radius:50%; background:#fff; box-shadow:0 0 0 0 rgba(255,255,255,.55); animation:radar-pulse 1.8s infinite; }.employees-radar-empty { color:rgba(255,255,255,.72); justify-content:center; padding:1rem !important; }
+.employees-radar-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.employees-radar-meta { margin-inline-start:auto; display:flex; align-items:flex-end; flex-direction:column; gap:.12rem; white-space:nowrap; }.employees-radar-status { color:#86efac; font-size:.68rem; font-weight:700; }.employees-radar-list time { color:rgba(255,255,255,.72); font-size:.72rem; }.employees-radar-pulse { flex:0 0 auto; width:8px; height:8px; border-radius:50%; background:#4ade80; box-shadow:0 0 0 0 rgba(74,222,128,.55); animation:radar-pulse 1.8s infinite; }.employees-radar-list li.is-clocked-out { opacity:.82; }.employees-radar-list li.is-clocked-out .employees-radar-pulse { background:#94a3b8; box-shadow:none; animation:none; }.employees-radar-list li.is-clocked-out .employees-radar-status { color:#cbd5e1; }.employees-radar-empty { color:rgba(255,255,255,.72); justify-content:center; padding:1rem !important; }
 .admin-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; }.admin-kpi-grid > div { display:flex; flex-direction:column; gap:.25rem; padding:.8rem; border:1px solid var(--color-border); border-radius:9px; background:color-mix(in srgb, var(--color-bg-surface) 92%, var(--color-primary)); }.admin-kpi-grid strong { font-size:1.45rem; color:var(--color-primary); }.admin-kpi-grid span { color:var(--color-text-secondary); font-size:.75rem; }
 @keyframes radar-sweep { to { transform:rotate(360deg); } } @keyframes radar-pulse { 70% { box-shadow:0 0 0 7px transparent; } 100% { box-shadow:0 0 0 0 transparent; } } @keyframes radar-live-blink { 50% { opacity:.4; } }
 @media (max-width:640px) { .employees-radar-layout { grid-template-columns:1fr; }.employees-radar-visual { width:135px; height:135px; }.admin-kpi-grid { grid-template-columns:repeat(2,1fr); } }

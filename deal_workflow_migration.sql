@@ -120,7 +120,7 @@ BEGIN
         (p_deal_id, 1, 'MARKETING_MANAGER', p_marketing_manager),
         (p_deal_id, 2, 'GENERAL_MANAGER', p_general_manager),
         (p_deal_id, 3, 'OPERATIONS_MANAGER', p_operations_manager);
-    UPDATE public.crm_deals SET stage = 'APPROVAL', workflow_status = 'PENDING_APPROVAL' WHERE id = p_deal_id;
+    UPDATE public.crm_deals SET workflow_status = 'PENDING_APPROVAL' WHERE id = p_deal_id;
     INSERT INTO public.crm_deal_activity (deal_id, action, to_status, actor_id)
     VALUES (p_deal_id, 'APPROVAL_STARTED', 'PENDING_APPROVAL', auth.uid());
 END;

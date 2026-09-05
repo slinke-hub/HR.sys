@@ -3237,6 +3237,21 @@ const db = {
             return [];
         }
     },
+    // The database function returns one latest attendance state per employee
+    // and exposes only the name and times required by Employees Radar.
+    async fetchEmployeesRadarAttendance() {
+        if (!supabaseClient) return [];
+        try {
+            const now = new Date();
+            const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+            const { data, error } = await supabaseClient.rpc('get_employees_radar', { p_date: today });
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.error('fetchEmployeesRadarAttendance Error:', error);
+            return [];
+        }
+    },
     async fetchDashboardKpiCounts() {
         if (!supabaseClient) return null;
         try {
