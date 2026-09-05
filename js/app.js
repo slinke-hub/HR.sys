@@ -6144,6 +6144,58 @@ function renderTaskCard(task) {
     `;
 }
 
+function closeTaskContextMenu() {
+    const menu = document.getElementById('task-context-menu');
+    if (menu) menu.style.display = 'none';
+}
+
+window.handleTaskContextMenu = function (event, taskId, canEdit, canDelete) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const menu = document.getElementById('task-context-menu');
+    const editItem = document.getElementById('ctx-edit-task');
+    const deleteItem = document.getElementById('ctx-delete-task');
+    if (!menu || !editItem || !deleteItem) return;
+
+    editItem.hidden = !canEdit;
+    deleteItem.hidden = !canDelete;
+    if (!canEdit && !canDelete) {
+        closeTaskContextMenu();
+        return;
+    }
+
+    editItem.onclick = () => {
+        closeTaskContextMenu();
+        window.openEditTaskModal(taskId);
+    };
+    deleteItem.onclick = () => {
+        closeTaskContextMenu();
+        window.handleDeleteTask(taskId);
+    };
+
+    menu.style.position = 'fixed';
+    menu.style.visibility = 'hidden';
+    menu.style.display = 'block';
+    const menuRect = menu.getBoundingClientRect();
+    const viewportPadding = 8;
+    const left = Math.max(viewportPadding, Math.min(event.clientX, window.innerWidth - menuRect.width - viewportPadding));
+    const top = Math.max(viewportPadding, Math.min(event.clientY, window.innerHeight - menuRect.height - viewportPadding));
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    menu.style.visibility = 'visible';
+    if (window.lucide) window.lucide.createIcons({ elements: [menu] });
+};
+
+document.addEventListener('pointerdown', event => {
+    if (!event.target?.closest?.('#task-context-menu')) closeTaskContextMenu();
+}, true);
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeTaskContextMenu();
+});
+window.addEventListener('resize', closeTaskContextMenu);
+window.addEventListener('scroll', closeTaskContextMenu, true);
+
 async function renderTasksV2() {
     console.log("renderTasksV2: Loading tasks natively...");
     await renderTasks();
@@ -7570,6 +7622,22 @@ window.handleTaskDragOver = function (e) {
     e.dataTransfer.dropEffect = 'move';
 };
 
+function handleTaskPipelineWheel(event) {
+    const board = event.target?.closest?.('#tasks-view-board .task-board-wrapper');
+    if (!board || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+
+    const deltaScale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? board.clientWidth : 1;
+    const direction = getComputedStyle(board).direction === 'rtl' ? -1 : 1;
+    const previousScrollLeft = board.scrollLeft;
+    board.scrollLeft += event.deltaY * deltaScale * direction;
+
+    // Consume the wheel only while the task pipeline can move horizontally.
+    // At either edge, normal vertical page scrolling resumes automatically.
+    if (board.scrollLeft !== previousScrollLeft) event.preventDefault();
+}
+
+document.addEventListener('wheel', handleTaskPipelineWheel, { passive: false });
+
 window.syncTaskStageEmptyStates = function () {
     document.querySelectorAll('#tasks-view-board .task-column').forEach(column => {
         const hasTasks = !!column.querySelector('.task-item-card');
@@ -7622,6 +7690,8 @@ window.handleTaskDrop = async function (e, status) {
         if (targetCol) {
             targetCol.appendChild(taskCard);
             taskCard.setAttribute('data-status', actualStatus);
+            const stageSelect = taskCard.querySelector('.task-v2-stage-select');
+            if (stageSelect) stageSelect.value = actualStatus;
 
             const statusId = actualStatus === 'Pending Approval' ? 'pending' : actualStatus;
             const currentStatusId = currentStatus === 'Pending Approval' ? 'pending' : currentStatus;
@@ -7635,7 +7705,21 @@ window.handleTaskDrop = async function (e, status) {
 
     const finalStatus = taskCard ? taskCard.getAttribute('data-status') : status;
     const result = await window.handleUpdateTaskStatus(id, finalStatus);
-    if (!result?.error && window.taskCache?.[id]) window.taskCache[id].status = result.status || finalStatus;
+    if (result?.error) {
+        await renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
+        return;
+    }
+
+    const savedStatus = result.status || finalStatus;
+    if (window.taskCache?.[id]) window.taskCache[id].status = savedStatus;
+    if (taskCard) {
+        taskCard.setAttribute('data-status', savedStatus);
+        const savedStageSelect = taskCard.querySelector('.task-v2-stage-select');
+        if (savedStageSelect) savedStageSelect.value = savedStatus;
+        const savedColumn = document.getElementById(`col-${savedStatus}`);
+        if (savedColumn && taskCard.parentElement !== savedColumn) savedColumn.appendChild(taskCard);
+    }
+    window.syncTaskStageEmptyStates();
 };
 
 window.openEditTaskModal = async function (id) {
