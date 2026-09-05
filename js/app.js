@@ -3281,7 +3281,8 @@ function prepareTeamworkTaskDetail(task) {
     const canManagePrivateTask = !task.task_list_id || taskList?.owner_id === currentUser?.id;
     if (header) {
         const canEdit = isTaskAdmin() || task.created_by === currentUser?.id;
-        const canApproveCompletion = !task.task_list_id && task.status === 'Pending Approval' && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
+        const canApproveCompletion = task.status === 'Pending Approval' && (isTaskAdmin()
+            || (!task.task_list_id && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id));
         let actions = header.querySelector('.task-detail-actions');
         if (!actions) {
             actions = document.createElement('div');
@@ -3602,8 +3603,9 @@ window.approveTaskCompletion = async function (taskId) {
         const departments = await db.fetchDepartments();
         window.taskDepartmentManagerByName = Object.fromEntries(departments.map(department => [department.name, department.head_id || department.manager_id || null]));
     }
-    if (!task || window.taskDepartmentManagerByName?.[task.department] !== currentUser?.id) {
-        showToast(window.t('msg_toast_17') || 'Only this task’s department manager can approve completion.', 'danger');
+    const canApproveCompletion = !!task && (isTaskAdmin() || window.taskDepartmentManagerByName?.[task.department] === currentUser?.id);
+    if (!canApproveCompletion) {
+        showToast(window.t('msg_toast_17') || 'Only an administrator or this task’s department manager can approve completion.', 'danger');
         return;
     }
     const result = await db.updateTaskStatus(taskId, 'completed');
@@ -6283,9 +6285,9 @@ async function renderTasksV2() {
     }
 
     const taskRows = tasks.map(task => {
-        const canManageTask = isTaskAdmin() || (task.task_list_id
+        const canManageTask = isTaskAdmin() || task.created_by === currentUser?.id || (task.task_list_id
             ? taskLists.find(l => l.id === task.task_list_id)?.owner_id === currentUser?.id
-            : [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id));
+            : [task.assignee_id, task.supervisor_id].includes(currentUser?.id));
         const canEditTask = isTaskAdmin() || task.created_by === currentUser?.id;
         const taskList = taskLists.find(list => list.id === task.task_list_id);
         const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id
@@ -7587,13 +7589,17 @@ function isDailyRepeatingTask(task) {
     return String(task?.repeat_type || '').trim().toUpperCase() === 'DAILY';
 }
 
+function bypassesTaskCompletionApproval(task) {
+    return isTaskAdmin() || task?.created_by === currentUser?.id || isDailyRepeatingTask(task);
+}
+
 window.handleUpdateTaskStatus = async function (id, status) {
     const task = window.taskCache ? window.taskCache[id] : null;
     let actualStatus = status;
     let needsManagerApproval = false;
 
     const isDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
-    if (status === 'completed' && task && !isDepartmentManager && !isDailyRepeatingTask(task)) {
+    if (status === 'completed' && task && !isDepartmentManager && !bypassesTaskCompletionApproval(task)) {
         actualStatus = 'Pending Approval';
         needsManagerApproval = true;
     }
@@ -7670,7 +7676,7 @@ window.handleTaskDrop = async function (e, status) {
 
         const task = window.taskCache ? window.taskCache[id] : null;
         const isTaskDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
-        const bypassesCompletionApproval = isDailyRepeatingTask(task);
+        const bypassesCompletionApproval = bypassesTaskCompletionApproval(task);
         // Only the department manager (or system admin) can approve a pending task.
         const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
         if (currentStatus === 'Pending Approval' && status === 'completed' && currentUserRole !== 'ADMIN' && !isHussain && !isTaskDepartmentManager && !bypassesCompletionApproval) {
@@ -9902,7 +9908,7 @@ async function renderNotifications() {
                             <button type="button" class="notification-title-button" onclick="event.stopPropagation();openNotificationDestination('${escapeHTML(n.id)}')">${escapeHTML(localizeNotificationMessage(n.message))}</button>
                             ${renderNotificationDetails(n)}
                             <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(n.created_at).toLocaleString()}</div>
-                            ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.65rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')"><i data-lucide="check-circle"></i> Approve</button>` : ''}
+                            ${n.event_type === 'task_approval_requested' && (isTaskAdmin() || n.metadata?.department_manager_id === currentUser.id) ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.65rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')"><i data-lucide="check-circle"></i> Approve</button>` : ''}
                         </div>
                     </div>
                     ${!n.is_read ? `<span class="badge" style="background: var(--color-primary); color: white;">${t('notif_new')}</span>` : ''}
@@ -10024,7 +10030,7 @@ async function pollNotifications(options = {}) {
                     <button type="button" class="notification-title-button compact" onclick="event.stopPropagation();openNotificationDestination('${escapeHTML(n.id)}')">${escapeHTML(localizeNotificationMessage(n.message))}</button>
                     ${renderNotificationDetails(n, true)}
                     <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">${new Date(n.created_at).toLocaleDateString()}</div>
-                    ${n.event_type === 'task_approval_requested' && n.metadata?.department_manager_id === currentUser.id ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.5rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')">Approve</button>` : ''}
+                    ${n.event_type === 'task_approval_requested' && (isTaskAdmin() || n.metadata?.department_manager_id === currentUser.id) ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.5rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')">Approve</button>` : ''}
                 </div>
             `).join('');
         }
@@ -13116,9 +13122,15 @@ async function renderApprovals() {
         const assignee = userMap.get(task.assignee_id);
         const project = projectMap.get(task.project_id);
         const department = (departments || []).find(item => item.name === task.department);
-        const canDecide = department?.head_id === currentUser?.id;
+        const isDepartmentHead = department?.head_id === currentUser?.id;
+        const canApprove = isAdmin || isDepartmentHead;
+        const canReject = isDepartmentHead;
         const title = task.title_i18n?.[currentLang] || task.title_i18n?.en || task.title || 'Untitled task';
-        return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(window.formatEmployeeName(assignee) || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : 'â€”'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleTaskApprovalDecision('${task.id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleTaskApprovalDecision('${task.id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Watcher access Â· View only</span>'}</td></tr>`;
+        const taskActions = [
+            canApprove ? `<button class="btn-primary" onclick="handleTaskApprovalDecision('${task.id}','APPROVED')">Approve</button>` : '',
+            canReject ? `<button class="btn-secondary" style="color:var(--color-danger)" onclick="handleTaskApprovalDecision('${task.id}','REJECTED')">Reject</button>` : ''
+        ].filter(Boolean).join('');
+        return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(window.formatEmployeeName(assignee) || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : 'â€”'}</td><td>${taskActions ? `<div style="display:flex;gap:.5rem">${taskActions}</div>` : '<span class="status-badge info">Watcher access Â· View only</span>'}</td></tr>`;
     }).join('');
 
     return `<div class="page-header"><div><h1 class="page-title">${t('ui_approvals_dashboard')}</h1><p class="page-subtitle">${t('approvals_subtitle')}</p></div></div>

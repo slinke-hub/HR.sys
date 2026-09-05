@@ -7,13 +7,15 @@ const appSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'u
 
 assert.match(appSource, /function isDailyRepeatingTask\(task\)/);
 assert.match(appSource, /String\(task\?\.repeat_type \|\| ''\)\.trim\(\)\.toUpperCase\(\) === 'DAILY'/);
+assert.match(appSource, /function bypassesTaskCompletionApproval\(task\)/);
+assert.match(appSource, /isTaskAdmin\(\) \|\| task\?\.created_by === currentUser\?\.id \|\| isDailyRepeatingTask\(task\)/);
 
 // Daily repeating tasks skip initial approval and start in To do.
 assert.match(appSource, /String\(repeatType\)\.toUpperCase\(\) === 'DAILY' && status === 'Pending Approval'[\s\S]*status = 'todo'/);
 
 // Direct stage changes and drag-and-drop must both bypass completion approval.
-assert.match(appSource, /status === 'completed' && task && !isDepartmentManager && !isDailyRepeatingTask\(task\)/);
-assert.match(appSource, /const bypassesCompletionApproval = isDailyRepeatingTask\(task\)/);
+assert.match(appSource, /status === 'completed' && task && !isDepartmentManager && !bypassesTaskCompletionApproval\(task\)/);
+assert.match(appSource, /const bypassesCompletionApproval = bypassesTaskCompletionApproval\(task\)/);
 assert.match(appSource, /currentStatus === 'Pending Approval'[\s\S]*!bypassesCompletionApproval/);
 assert.match(appSource, /status === 'completed' && task && !isDepartmentManager && !bypassesCompletionApproval/);
 
