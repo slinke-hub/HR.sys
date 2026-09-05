@@ -6014,7 +6014,7 @@ async function renderTasks() {
     window.taskDepartmentsCache = allDepartments;
     window.taskListsCache = taskLists || [];
     
-    let tasks = fetchedTasks.map(t => {
+    let tasks = fetchedTasks.filter(t => !t.archived_at).map(t => {
         const assignee = allUsers.find(u => u.id === t.assignee_id) || (t.assignee_id === currentUser?.id ? (currentUserProfile || currentUser) : null);
         const creator = allUsers.find(u => u.id === t.created_by) || (t.created_by === currentUser?.id ? (currentUserProfile || currentUser) : null);
         const displayTitle = getLocalizedTaskTitle(t);
@@ -6091,6 +6091,101 @@ async function renderTasks() {
     
     return ''; 
 }
+
+async function renderArchivedTasks() {
+    const [archivedTasks, allUsers] = await Promise.all([
+        db.fetchArchivedTasks(),
+        db.fetchUsers()
+    ]);
+    const usersById = Object.fromEntries((allUsers || []).map(user => [String(user.id), user]));
+    const locale = currentLang === 'ar' ? 'ar-SA' : undefined;
+    const text = currentLang === 'ar' ? {
+        title: 'المهام المؤرشفة',
+        subtitle: 'تُنقل المهام المكتملة تلقائياً إلى الأرشيف يومياً بعد الساعة 11:00 مساءً.',
+        back: 'إدارة المهام', search: 'البحث في المهام المؤرشفة...', all: 'كل الحالات',
+        task: 'المهمة', assigned: 'مُعيّنة إلى', creator: 'أنشأها', status: 'الحالة',
+        due: 'تاريخ الاستحقاق', archived: 'تاريخ الأرشفة', empty: 'لا توجد مهام مؤرشفة بعد.',
+        completed: 'مكتملة', approved: 'مُعتمدة', unknown: 'غير معروف', unassigned: 'غير معيّنة'
+    } : {
+        title: 'Archived Tasks',
+        subtitle: 'Completed tasks are moved here automatically every day after 11:00 PM.',
+        back: 'Task Manager', search: 'Search archived tasks...', all: 'All statuses',
+        task: 'Task', assigned: 'Assigned To', creator: 'Created By', status: 'Status',
+        due: 'Due Date', archived: 'Archived At', empty: 'No archived tasks yet.',
+        completed: 'Completed', approved: 'Approved', unknown: 'Unknown', unassigned: 'Unassigned'
+    };
+    const dateOnly = value => value ? new Date(value).toLocaleDateString(locale) : '—';
+    const dateTime = value => value ? new Date(value).toLocaleString(locale) : '—';
+    const rows = (archivedTasks || []).map(task => {
+        const assigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length
+            ? task.assignee_ids
+            : (task.assignee_id ? [task.assignee_id] : []);
+        const assigneeNames = assigneeIds
+            .map(id => usersById[String(id)])
+            .filter(Boolean)
+            .map(user => window.formatEmployeeName(user))
+            .filter(Boolean);
+        const creator = usersById[String(task.created_by || '')];
+        const creatorName = creator ? window.formatEmployeeName(creator) : text.unknown;
+        const title = getLocalizedTaskTitle(task) || task.title || '—';
+        const normalizedStatus = String(task.status || 'completed').toLowerCase();
+        const statusLabel = normalizedStatus === 'approved' ? text.approved : text.completed;
+        const searchText = [title, assigneeNames.join(' '), creatorName, statusLabel].join(' ').toLowerCase();
+        return `
+            <tr class="archived-task-row" data-status="${escapeHTML(normalizedStatus)}" data-search="${escapeHTML(searchText)}">
+                <td data-label="${escapeHTML(text.task)}"><strong>${escapeHTML(title)}</strong></td>
+                <td data-label="${escapeHTML(text.assigned)}">${escapeHTML(assigneeNames.join(', ') || text.unassigned)}</td>
+                <td data-label="${escapeHTML(text.creator)}">${escapeHTML(creatorName)}</td>
+                <td data-label="${escapeHTML(text.status)}"><span class="status-badge success">${escapeHTML(statusLabel)}</span></td>
+                <td data-label="${escapeHTML(text.due)}">${escapeHTML(dateOnly(task.due_date))}</td>
+                <td data-label="${escapeHTML(text.archived)}">${escapeHTML(dateTime(task.archived_at))}</td>
+            </tr>`;
+    }).join('');
+
+    return `
+        <div class="page-header fade-in-up archived-tasks-header">
+            <div>
+                <h1 class="page-title"><i data-lucide="archive"></i> ${escapeHTML(text.title)}</h1>
+                <p class="page-subtitle">${escapeHTML(text.subtitle)}</p>
+            </div>
+            <button type="button" class="btn-secondary" onclick="renderView('tasks')"><i data-lucide="arrow-left"></i> ${escapeHTML(text.back)}</button>
+        </div>
+        <section class="card fade-in-up archived-tasks-card">
+            <div class="archived-task-filters">
+                <label class="archived-task-search"><i data-lucide="search"></i><input id="archivedTaskSearch" class="form-control" type="search" placeholder="${escapeHTML(text.search)}" oninput="window.filterArchivedTasks()"></label>
+                <select id="archivedTaskStatus" class="form-control" onchange="window.filterArchivedTasks()">
+                    <option value="">${escapeHTML(text.all)}</option>
+                    <option value="completed">${escapeHTML(text.completed)}</option>
+                    <option value="approved">${escapeHTML(text.approved)}</option>
+                </select>
+                <span class="archived-task-count"><strong id="archivedTaskVisibleCount">${archivedTasks.length}</strong> / ${archivedTasks.length}</span>
+            </div>
+            <div class="table-responsive archived-task-table-wrap">
+                <table class="data-table archived-task-table">
+                    <thead><tr><th>${escapeHTML(text.task)}</th><th>${escapeHTML(text.assigned)}</th><th>${escapeHTML(text.creator)}</th><th>${escapeHTML(text.status)}</th><th>${escapeHTML(text.due)}</th><th>${escapeHTML(text.archived)}</th></tr></thead>
+                    <tbody>${rows || `<tr id="archivedTasksEmpty"><td colspan="6" class="empty-state-inline">${escapeHTML(text.empty)}</td></tr>`}</tbody>
+                </table>
+            </div>
+            <div id="archivedTasksFilteredEmpty" class="empty-state-inline" hidden>${escapeHTML(text.empty)}</div>
+        </section>`;
+}
+
+window.filterArchivedTasks = function () {
+    const query = String(document.getElementById('archivedTaskSearch')?.value || '').trim().toLowerCase();
+    const status = String(document.getElementById('archivedTaskStatus')?.value || '').toLowerCase();
+    const rows = Array.from(document.querySelectorAll('.archived-task-row'));
+    let visible = 0;
+    rows.forEach(row => {
+        const matches = (!query || String(row.dataset.search || '').includes(query))
+            && (!status || String(row.dataset.status || '') === status);
+        row.hidden = !matches;
+        if (matches) visible += 1;
+    });
+    const count = document.getElementById('archivedTaskVisibleCount');
+    if (count) count.textContent = String(visible);
+    const empty = document.getElementById('archivedTasksFilteredEmpty');
+    if (empty) empty.hidden = visible > 0 || rows.length === 0;
+};
 
 function renderTaskCard(task) {
     const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
@@ -9795,6 +9890,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'approvals': content = await renderApprovals(); break;
             case 'tasks': content = await renderTasksV2(); break;
             case 'tasks_v2': content = await renderTasksV2(); break;
+            case 'archived_tasks': content = await renderArchivedTasks(); break;
             case 'departments': content = await renderDepartments(); break;
             case 'translations': content = await renderTranslationsPage(); break;
             case 'templates': content = await renderTemplates(); break;

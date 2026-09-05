@@ -3237,6 +3237,21 @@ const db = {
             return [];
         }
     },
+    async fetchArchivedTasks() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .select('*')
+                .not('archived_at', 'is', null)
+                .order('archived_at', { ascending: false });
+            if (error) throw error;
+            return Array.isArray(data) ? data.map(applyI18nGetters) : [];
+        } catch (error) {
+            console.error("fetchArchivedTasks Error:", error);
+            return [];
+        }
+    },
     // The database function returns one latest attendance state per employee
     // and exposes only the name and times required by Employees Radar.
     async fetchEmployeesRadarAttendance() {
