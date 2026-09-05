@@ -3237,6 +3237,33 @@ const db = {
             return [];
         }
     },
+    async fetchDashboardKpiCounts() {
+        if (!supabaseClient) return null;
+        try {
+            const now = new Date();
+            const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+            const [profilesResult, attendanceResult, tasksResult, requestsResult] = await Promise.all([
+                supabaseClient.from('profiles').select('id', { count: 'exact', head: true }).eq('is_active', true),
+                supabaseClient.from('attendance').select('id', { count: 'exact', head: true }).eq('date', today).is('clock_out_time', null),
+                supabaseClient.from('tasks').select('status'),
+                supabaseClient.from('requests').select('status')
+            ]);
+            const failedResult = [profilesResult, attendanceResult, tasksResult, requestsResult].find(result => result.error);
+            if (failedResult) throw failedResult.error;
+            return {
+                totalEmployees: profilesResult.count || 0,
+                clockedInNow: attendanceResult.count || 0,
+                openTasks: (tasksResult.data || []).filter(task => {
+                    const status = String(task.status || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+                    return !['completed', 'approved'].includes(status);
+                }).length,
+                pendingRequests: (requestsResult.data || []).filter(request => String(request.status || '').toUpperCase().startsWith('PENDING')).length
+            };
+        } catch (error) {
+            console.error('fetchDashboardKpiCounts Error:', error);
+            return null;
+        }
+    },
     async requestContractPrint(contractId, employeeId, managerId) {
         if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {

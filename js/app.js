@@ -158,6 +158,11 @@ let currentContractEmployeeId = null;
 let currentContractEmployeeName = '';
 let recentLoginsChannel = null;
 let recentLoginsPollInterval = null;
+let dashboardKpiChannel = null;
+let dashboardKpiPollInterval = null;
+let dashboardKpiRefreshTimer = null;
+let dashboardKpiRefreshInFlight = false;
+let dashboardKpiRefreshQueued = false;
 
 window.canCurrentUserEditContracts = function (profile = currentUserProfile) {
     return String(currentUserRole || '').toUpperCase() === 'ADMIN' ||
@@ -2421,7 +2426,7 @@ async function renderDashboard() {
         const lastLoginsHTML = renderRecentLoginsHTML(allProfiles);
         const clockedInEmployees = (dashboardAttendance || []).filter(record => record.clock_in_time && !record.clock_out_time);
         const profileMap = new Map(allProfiles.map(user => [user.id, user]));
-        const openTasks = (dashboardTasks || []).filter(task => !['completed', 'Approved'].includes(task.status)).length;
+        const openTasks = (dashboardTasks || []).filter(isOpenDashboardTask).length;
         const pendingRequests = (dashboardGenericRequests || []).filter(request => String(request.status || '').toUpperCase().startsWith('PENDING')).length;
         const radarRows = clockedInEmployees.map(record => {
             const employee = profileMap.get(record.employee_id);
@@ -2433,7 +2438,7 @@ async function renderDashboard() {
                 <div class="employees-radar-header"><div><div class="card-title">Employees Radar</div><p class="employees-radar-subtitle">Live view of employees currently clocked in</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> Live</span></div>
                 <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>clocked in</small></div><ul class="employees-radar-list" id="employeesRadarList">${radarRows || '<li class="employees-radar-empty">No employees are currently clocked in.</li>'}</ul></div>
             </section>
-            ${currentUserRole === 'ADMIN' ? `<section class="card col-span-12 admin-kpi-card"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong>${allProfiles.length}</strong><span>Total employees</span></div><div><strong>${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong>${openTasks}</strong><span>Open tasks</span></div><div><strong>${pendingRequests}</strong><span>Pending requests</span></div></div></section>` : ''}
+            ${currentUserRole === 'ADMIN' ? `<section class="card col-span-12 admin-kpi-card" id="dashboardKpiOverview" aria-live="polite"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong id="dashboardKpiEmployees">${allProfiles.length}</strong><span>Total employees</span></div><div><strong id="dashboardKpiClockedIn">${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong id="dashboardKpiOpenTasks">${openTasks}</strong><span>Open tasks</span></div><div><strong id="dashboardKpiPendingRequests">${pendingRequests}</strong><span>Pending requests</span></div></div></section>` : ''}
             ${currentUserRole === 'ADMIN' ? `<div class="card col-span-12 md:col-span-6">
                 <div class="card-title">${t('last_login')}</div>
                 <div id="recentLoginsList" aria-live="polite">${lastLoginsHTML}</div>
@@ -2606,6 +2611,84 @@ window.initializeEmployeesRadar = function (attendance, profiles) {
             .subscribe();
     }
 };
+
+function isOpenDashboardTask(task) {
+    const status = String(task?.status || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+    return !['completed', 'approved'].includes(status);
+}
+
+function updateDashboardKpiOverview(values) {
+    const root = document.getElementById('dashboardKpiOverview');
+    if (!root || !values || currentView !== 'dashboard' || currentUserRole !== 'ADMIN') return;
+
+    Object.entries({
+        dashboardKpiEmployees: values.totalEmployees,
+        dashboardKpiClockedIn: values.clockedInNow,
+        dashboardKpiOpenTasks: values.openTasks,
+        dashboardKpiPendingRequests: values.pendingRequests
+    }).forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element && element.textContent !== String(value)) element.textContent = String(value);
+    });
+}
+
+async function refreshDashboardKpiOverview() {
+    if (dashboardKpiRefreshInFlight) {
+        dashboardKpiRefreshQueued = true;
+        return;
+    }
+    if (currentView !== 'dashboard' || currentUserRole !== 'ADMIN' || !document.getElementById('dashboardKpiOverview')) return;
+
+    dashboardKpiRefreshInFlight = true;
+    try {
+        updateDashboardKpiOverview(await db.fetchDashboardKpiCounts());
+    } catch (error) {
+        console.warn('Unable to refresh the dashboard KPI overview:', error);
+    } finally {
+        dashboardKpiRefreshInFlight = false;
+        if (dashboardKpiRefreshQueued) {
+            dashboardKpiRefreshQueued = false;
+            refreshDashboardKpiOverview();
+        }
+    }
+}
+
+function scheduleDashboardKpiRefresh() {
+    if (dashboardKpiRefreshTimer) clearTimeout(dashboardKpiRefreshTimer);
+    dashboardKpiRefreshTimer = setTimeout(() => {
+        dashboardKpiRefreshTimer = null;
+        refreshDashboardKpiOverview();
+    }, 150);
+}
+
+function stopDashboardKpiRealtime() {
+    if (dashboardKpiPollInterval) clearInterval(dashboardKpiPollInterval);
+    if (dashboardKpiRefreshTimer) clearTimeout(dashboardKpiRefreshTimer);
+    dashboardKpiPollInterval = null;
+    dashboardKpiRefreshTimer = null;
+    dashboardKpiRefreshQueued = false;
+    if (dashboardKpiChannel && window.supabaseClient?.removeChannel) {
+        window.supabaseClient.removeChannel(dashboardKpiChannel);
+    }
+    dashboardKpiChannel = null;
+}
+
+function startDashboardKpiRealtime() {
+    stopDashboardKpiRealtime();
+    if (currentView !== 'dashboard' || currentUserRole !== 'ADMIN' || !document.getElementById('dashboardKpiOverview')) return;
+
+    refreshDashboardKpiOverview();
+    if (window.supabaseClient?.channel) {
+        dashboardKpiChannel = window.supabaseClient
+            .channel('dashboard-kpi-live')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleDashboardKpiRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, scheduleDashboardKpiRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, scheduleDashboardKpiRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, scheduleDashboardKpiRefresh)
+            .subscribe();
+    }
+    dashboardKpiPollInterval = setInterval(refreshDashboardKpiOverview, 15000);
+}
 
 window.showAnnouncementModal = () => document.getElementById('announcementModal').style.display = 'block';
 window.closeAnnouncementModal = () => document.getElementById('announcementModal').style.display = 'none';
@@ -9630,6 +9713,8 @@ window.renderView = async function (viewId, isBack = false) {
         if (viewId === 'analytics') setTimeout(initCharts, 100);
         if (viewId === 'dashboard' || viewId === 'admin') startRecentLoginsRealtime();
         else stopRecentLoginsRealtime();
+        if (viewId === 'dashboard') startDashboardKpiRealtime();
+        else stopDashboardKpiRealtime();
         console.log("renderView: done updating DOM.");
     } else {
         console.log("renderView: skipped DOM update because currentView changed.");
