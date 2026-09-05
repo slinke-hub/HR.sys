@@ -6280,8 +6280,8 @@ async function renderTasksV2() {
                             ${escapeHTML(task.displayTitle)}
                         </h4>
                         <div class="task-focus-people" aria-label="${taskDetailText('Task people', 'أشخاص المهمة')}">
-                            <span class="task-focus-assignee"><i data-lucide="user-round"></i><span>${taskDetailText('Employee', 'الموظف')}</span><strong>${escapeHTML(rowAssigneeFirstName)}</strong></span>
-                            <span class="task-focus-creator"><i data-lucide="user-round-plus"></i><span>${taskDetailText('Created by', 'أنشأها')}</span><strong>${escapeHTML(rowCreatorName)}</strong></span>
+                            <span class="task-focus-assignee"><i data-lucide="user-round"></i><span>${taskDetailText('Assigned To:', 'مُعيّنة إلى:')}</span><strong>${escapeHTML(rowAssigneeFirstName)}</strong></span>
+                            <span class="task-focus-creator"><i data-lucide="user-round-plus"></i><span>${taskDetailText('Created by:', 'أنشأها:')}</span><strong>${escapeHTML(rowCreatorName)}</strong></span>
                         </div>
                     </div>
                 </div>
@@ -7505,6 +7505,11 @@ window.handleCreateTask = async function (e) {
     const finalDue = due;
     const repeatType = document.getElementById('taskRepeatType')?.value || 'NONE';
     const repeatInterval = document.getElementById('taskRepeatInterval')?.value || 1;
+    // Daily operational tasks repeat continuously, so they do not enter the
+    // one-off approval workflow when created or completed.
+    if (String(repeatType).toUpperCase() === 'DAILY' && status === 'Pending Approval') {
+        status = 'todo';
+    }
     const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, taskListId ? 'private' : 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId, repeatType, repeatInterval);
     if (success) {
         showToast(t('toast_task_created_successfully'), "success");
@@ -7526,13 +7531,17 @@ window.handleCreateTask = async function (e) {
     }
 };
 
+function isDailyRepeatingTask(task) {
+    return String(task?.repeat_type || '').trim().toUpperCase() === 'DAILY';
+}
+
 window.handleUpdateTaskStatus = async function (id, status) {
     const task = window.taskCache ? window.taskCache[id] : null;
     let actualStatus = status;
     let needsManagerApproval = false;
 
     const isDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
-    if (status === 'completed' && task && !isDepartmentManager) {
+    if (status === 'completed' && task && !isDepartmentManager && !isDailyRepeatingTask(task)) {
         actualStatus = 'Pending Approval';
         needsManagerApproval = true;
     }
@@ -7593,9 +7602,10 @@ window.handleTaskDrop = async function (e, status) {
 
         const task = window.taskCache ? window.taskCache[id] : null;
         const isTaskDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
+        const bypassesCompletionApproval = isDailyRepeatingTask(task);
         // Only the department manager (or system admin) can approve a pending task.
         const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
-        if (currentStatus === 'Pending Approval' && status === 'completed' && currentUserRole !== 'ADMIN' && !isHussain && !isTaskDepartmentManager) {
+        if (currentStatus === 'Pending Approval' && status === 'completed' && currentUserRole !== 'ADMIN' && !isHussain && !isTaskDepartmentManager && !bypassesCompletionApproval) {
             showToast(t('toast_you_do_not_have_permission_to_modify_pending_approval_tasks'), 'danger');
             return;
         }
@@ -7603,7 +7613,7 @@ window.handleTaskDrop = async function (e, status) {
         // Intercept completion requests from non-managers.
         let actualStatus = status;
         const isDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
-        if (status === 'completed' && task && !isDepartmentManager) {
+        if (status === 'completed' && task && !isDepartmentManager && !bypassesCompletionApproval) {
             actualStatus = 'Pending Approval';
         }
 

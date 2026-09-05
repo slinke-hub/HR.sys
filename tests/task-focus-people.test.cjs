@@ -12,8 +12,8 @@ assert.match(appSource, /class="task-focus-people"/);
 assert.match(appSource, /class="task-focus-assignee"/);
 assert.match(appSource, /class="task-focus-creator"/);
 assert.match(appSource, /font-weight: 700/);
-assert.match(appSource, /taskDetailText\('Employee', 'الموظف'\)/);
-assert.match(appSource, /taskDetailText\('Created by', 'أنشأها'\)/);
+assert.match(appSource, /taskDetailText\('Assigned To:', 'مُعيّنة إلى:'\)/);
+assert.match(appSource, /taskDetailText\('Created by:', 'أنشأها:'\)/);
 assert.match(appSource, /escapeHTML\(rowAssigneeFirstName\)/);
 assert.match(appSource, /escapeHTML\(rowCreatorName\)/);
 
