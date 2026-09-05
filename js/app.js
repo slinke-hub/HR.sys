@@ -6256,6 +6256,16 @@ async function renderTasksV2() {
         const isFocusTask = !isClosedTask && (task.status === 'Rejected' || task.priority === 'urgent' || task.priority === 'critical' || (daysUntilDue !== null && daysUntilDue <= 7));
         const rowAssigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean);
         const rowAssignedUsers = (window.taskAllUsersCache || []).filter(user => rowAssigneeIds.includes(user.id));
+        const rowAssigneeProfiles = rowAssignedUsers.length ? rowAssignedUsers : [task.assignee].filter(Boolean);
+        const rowAssigneeFirstNames = rowAssigneeProfiles.map(user => (window.formatEmployeeName(user) || '').trim().split(/\s+/)[0]).filter(Boolean);
+        const rowAssigneeFirstName = rowAssigneeFirstNames.length
+            ? `${rowAssigneeFirstNames[0]}${rowAssigneeIds.length > 1 ? ` +${rowAssigneeIds.length - 1}` : ''}`
+            : taskDetailText('Unassigned', 'غير معيّن');
+        const rowCreator = (window.taskAllUsersCache || []).find(user => user.id === task.created_by) || task.creator;
+        const formattedRowCreatorName = rowCreator ? window.formatEmployeeName(rowCreator) : '';
+        const rowCreatorName = formattedRowCreatorName && formattedRowCreatorName !== 'Unknown'
+            ? formattedRowCreatorName
+            : taskDetailText('System', 'النظام');
         const avatarHTML = rowAssignedUsers.length ? `<span class="task-assignee-avatar-stack">${rowAssignedUsers.slice(0, 4).map(user => { const name = window.formatEmployeeName(user) || 'Employee'; return `<span class="avatar-circle" title="${escapeHTML(name)}">${escapeHTML(name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase())}</span>`; }).join('')}</span>` : `<span class="avatar-circle" title="Unassigned"><i data-lucide="user" style="width:14px;height:14px;"></i></span>`;
 
         return `
@@ -6265,10 +6275,14 @@ async function renderTasksV2() {
                         <i data-lucide="check-circle-2" style="width: 20px; height: 20px; color: ${stageCheckColor};"></i>
                     </button>
                     <div class="task-v2-row-content" style="display: flex; flex-direction: column;">
-                        <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="margin: 0; font-size: 0.95rem; font-weight: 500; cursor: pointer; ${isCompleted ? 'text-decoration: line-through; opacity: 0.6;' : 'color: var(--color-text);'}">
+                        <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="margin: 0; font-size: 0.95rem; font-weight: 700; cursor: pointer; ${isCompleted ? 'text-decoration: line-through; opacity: 0.6;' : 'color: var(--color-text);'}">
                             ${task.parent_task_id ? '<span class="task-relation-badge is-subtask">Subtask</span> ' : ''}
                             ${escapeHTML(task.displayTitle)}
                         </h4>
+                        <div class="task-focus-people" aria-label="${taskDetailText('Task people', 'أشخاص المهمة')}">
+                            <span class="task-focus-assignee"><i data-lucide="user-round"></i><span>${taskDetailText('Employee', 'الموظف')}</span><strong>${escapeHTML(rowAssigneeFirstName)}</strong></span>
+                            <span class="task-focus-creator"><i data-lucide="user-round-plus"></i><span>${taskDetailText('Created by', 'أنشأها')}</span><strong>${escapeHTML(rowCreatorName)}</strong></span>
+                        </div>
                     </div>
                 </div>
                 

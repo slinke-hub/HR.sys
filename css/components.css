@@ -6693,8 +6693,32 @@ input.btn-primary,
 #task-v2-rows-container .task-v2-row-content h4 {
   width: 100%;
   min-width: 0;
+  font-weight: 700 !important;
   overflow-wrap: anywhere;
 }
+
+.task-focus-people {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .25rem .8rem;
+  margin-top: .32rem;
+  color: var(--color-text-secondary);
+  font-size: .72rem;
+  line-height: 1.35;
+}
+
+.task-focus-people > span {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: .25rem;
+}
+
+.task-focus-people svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.task-focus-assignee svg { color: #2563eb; }
+.task-focus-creator svg { color: #7c3aed; }
+.task-focus-people strong { color: var(--color-text); font-weight: 700; overflow-wrap: anywhere; }
 
 #task-v2-rows-container .task-v2-row-actions,
 #task-v2-rows-container .task-v2-row-actions[style] {
@@ -6709,6 +6733,7 @@ input.btn-primary,
 [data-theme="dark"] .task-stage-panel { background: color-mix(in srgb, var(--stage-color) 4%, #101d31); }
 [data-theme="dark"] .task-pipeline-card { background: #15253d; border-color: rgba(255,255,255,.13); }
 [data-theme="dark"] .task-focus-header { background: color-mix(in srgb, var(--pipeline-amber) 7%, #101d31); }
+[data-theme="dark"] .task-focus-people strong { color: #f8fafc; }
 
 @media (max-width: 900px) {
   .task-pipeline-health { padding-inline: .75rem; }
