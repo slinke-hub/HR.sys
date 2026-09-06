@@ -1413,7 +1413,7 @@ const db = {
             return [];
         }
     },
-    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = [], parentTaskId = null, marketingDepartment = null, contentLinks = [], submissionLinks = [], deliveryStatus = null, taskListId = null, repeatType = 'NONE', repeatInterval = 1) {
+    async createTask(title, description, assigneeId, dueDate, createdBy, priority = 'medium', category = 'General', titleI18n = {}, descI18n = {}, startDate = null, endDate = null, estimatedTime = null, visibility = 'public', projectId = null, tags = [], visibleTo = [], contentType = null, sourceLink = null, uploadLink = null, status = 'todo', supervisorId = null, department = null, subType = null, watchers = [], parentTaskId = null, marketingDepartment = null, contentLinks = [], submissionLinks = [], deliveryStatus = null, taskListId = null, repeatType = 'NONE', repeatInterval = 1, notifyViaEmail = false) {
         if (!supabaseClient) return { success: false };
         try {
             // RLS policies validate created_by against auth.uid(). Read the
@@ -1454,6 +1454,7 @@ const db = {
                 task_list_id: taskListId || null
                 ,repeat_type: repeatType || 'NONE'
                 ,repeat_interval: Number(repeatInterval) || 1
+                ,notify_via_email: notifyViaEmail === true
             };
             let currentTask = { ...newTask };
             let retryCount = 0;
@@ -1500,7 +1501,7 @@ const db = {
                 if (missingColumn && Object.prototype.hasOwnProperty.call(currentTask, missingColumn)) {
                     delete currentTask[missingColumn];
                 } else {
-                    ['department', 'sub_type', 'watchers', 'title_i18n', 'description_i18n', 'visibility', 'tags', 'visible_to', 'content_type', 'source_link', 'upload_link', 'marketing_department', 'content_links', 'submission_links', 'delivery_status', 'parent_task_id', 'task_list_id', 'repeat_type', 'repeat_interval'].forEach(field => delete currentTask[field]);
+                    ['department', 'sub_type', 'watchers', 'title_i18n', 'description_i18n', 'visibility', 'tags', 'visible_to', 'content_type', 'source_link', 'upload_link', 'marketing_department', 'content_links', 'submission_links', 'delivery_status', 'parent_task_id', 'task_list_id', 'repeat_type', 'repeat_interval', 'notify_via_email'].forEach(field => delete currentTask[field]);
                     
                     if (retryCount > 0 && !missingColumn) {
                         break;

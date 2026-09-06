@@ -50,7 +50,7 @@ Deno.serve(async (request) => {
 
   const { data: queued, error: queueError } = await admin
     .from("task_email_outbox")
-    .select("id,recipient_email,subject,message,action_url,attempts,comment_text,attachment_links")
+    .select("id,task_id,recipient_email,subject,message,action_url,attempts,comment_text,attachment_links,always_send")
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(25);
@@ -58,12 +58,31 @@ Deno.serve(async (request) => {
   if (queueError) return json({ error: "Unable to read email queue" }, 500);
   if (!queued?.length) return json({ processed: 0, sent: 0, failed: 0 });
 
-  const ids = queued.map((item) => item.id);
+  const taskIds = [...new Set(queued.map((item) => item.task_id).filter(Boolean))];
+  const { data: optedInTasks, error: optInError } = taskIds.length
+    ? await admin.from("tasks").select("id").in("id", taskIds).eq("notify_via_email", true)
+    : { data: [], error: null };
+  if (optInError) return json({ error: "Unable to verify task email consent" }, 500);
+
+  const optedInTaskIds = new Set((optedInTasks || []).map((task) => task.id));
+  const eligible = queued.filter((item) => item.always_send === true || (item.task_id && optedInTaskIds.has(item.task_id)));
+  const suppressedIds = queued
+    .filter((item) => item.always_send !== true && (!item.task_id || !optedInTaskIds.has(item.task_id)))
+    .map((item) => item.id);
+  if (suppressedIds.length) {
+    await admin.from("task_email_outbox").update({
+      status: "cancelled",
+      last_error: "Email was not requested by the task creator.",
+    }).in("id", suppressedIds);
+  }
+  if (!eligible.length) return json({ processed: queued.length, sent: 0, failed: 0, suppressed: suppressedIds.length });
+
+  const ids = eligible.map((item) => item.id);
   await admin.from("task_email_outbox").update({ status: "processing" }).in("id", ids);
 
   let sent = 0;
   let failed = 0;
-  for (const item of queued) {
+  for (const item of eligible) {
     try {
       const actionUrl = item.action_url && appUrl ? `${appUrl}${item.action_url}` : appUrl;
       const attachments = Array.isArray(item.attachment_links) ? item.attachment_links.filter(Boolean) : [];
@@ -91,5 +110,5 @@ Deno.serve(async (request) => {
     }
   }
 
-  return json({ processed: queued.length, sent, failed });
+  return json({ processed: queued.length, sent, failed, suppressed: suppressedIds.length });
 });
