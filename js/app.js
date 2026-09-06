@@ -2007,7 +2007,7 @@ function renderLogin() {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
                 <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/muqam-login-logo.png" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
+                    <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
                 </div>
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('reset_password')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('reset_email_instruction')}</p>
@@ -2027,7 +2027,7 @@ function renderLogin() {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
                 <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/muqam-login-logo.png" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
+                    <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
                 </div>
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('set_new_password')}</h2>
             </div>
@@ -2046,7 +2046,7 @@ function renderLogin() {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
                 <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/muqam-login-logo.png" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
+                    <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
                 </div>
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>

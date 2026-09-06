@@ -37,6 +37,7 @@ vm.runInContext(`${dbSource}\nglobalThis.__testDb = db;`, context);
     assert.deepEqual(JSON.parse(JSON.stringify(result)), radarRows);
 
     const appSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+    const componentStyles = fs.readFileSync(path.join(__dirname, '..', 'css', 'components.css'), 'utf8');
     const migrationSource = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260905133000_executive_employees_radar.sql'), 'utf8');
     for (const executive of ['GENERAL MANAGER', 'GM', 'CEO', 'CHIEF EXECUTIVE OFFICER']) {
         assert.match(appSource, new RegExp(`'${executive}'`));
@@ -44,6 +45,7 @@ vm.runInContext(`${dbSource}\nglobalThis.__testDb = db;`, context);
     }
     assert.match(appSource, /isClockedOut \? 'Clocked out' : 'Clocked in'/);
     assert.match(appSource, /fetchEmployeesRadarAttendance\(\)/);
+    assert.match(componentStyles, /\.employees-radar-card span,[\s\S]*\.employees-radar-card time \{ color:#fff !important; \}/);
     assert.match(migrationSource, /CREATE POLICY employees_radar_company_attendance_select/);
     assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.get_employees_radar/);
 
