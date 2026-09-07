@@ -6863,7 +6863,7 @@ async function renderTasksV2() {
                             <p>Plan the work, choose the team, and share everything needed to begin.</p>
                         </div>
                     </div>
-                    <button type="button" class="icon-btn" onclick="document.getElementById('createTaskModal').classList.remove('active')">
+                    <button type="button" class="icon-btn" onclick="window.closeCreateTaskModal()" aria-label="Close">
                         <i data-lucide="x"></i>
                     </button>
                 </div>
@@ -6999,7 +6999,7 @@ async function renderTasksV2() {
                     <!-- Footer -->
                     <div class="create-task-footer">
                         <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> ${t('save') || 'Save Task'}</button>
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('createTaskModal').classList.remove('active')">${t('cancel') || 'Cancel'}</button>
+                        <button type="button" class="btn btn-secondary" onclick="window.closeCreateTaskModal()">${t('cancel') || 'Cancel'}</button>
                     </div>
                 </form>
             </div>
@@ -7763,6 +7763,14 @@ window.toggleTaskV2Create = function () {
     }
     const listInput = document.getElementById('taskListId');
     if (listInput) listInput.value = canUseList ? listId : '';
+    if (modal.parentElement !== document.body) {
+        window.createTaskModalPortalHome = {
+            parent: modal.parentElement,
+            nextSibling: modal.nextSibling
+        };
+        document.body.appendChild(modal);
+    }
+    document.body.classList.add('modal-open', 'create-task-modal-open');
     modal.classList.add('active');
     // Prefill the creator as the initial assignee while retaining a normal
     // department-scoped dropdown so the creator can choose another employee.
@@ -7770,6 +7778,19 @@ window.toggleTaskV2Create = function () {
     handleTaskDepartmentChange('new', departmentInput?.value || '', currentUser?.id || '');
     translateArabicInterface(modal);
     if (window.lucide) window.lucide.createIcons();
+};
+
+window.closeCreateTaskModal = function () {
+    const modal = document.getElementById('createTaskModal');
+    if (!modal) return;
+    modal.classList.remove('active', 'show');
+    document.body.classList.remove('modal-open', 'create-task-modal-open');
+    const home = window.createTaskModalPortalHome;
+    if (home?.parent?.isConnected) {
+        if (home.nextSibling?.parentNode === home.parent) home.parent.insertBefore(modal, home.nextSibling);
+        else home.parent.appendChild(modal);
+    }
+    window.createTaskModalPortalHome = null;
 };
 
 window.handleTaskDepartmentChange = function (prefix = 'new', value = '', selectedAssigneeId = '') {
@@ -8241,8 +8262,7 @@ window.handleCreateTask = async function (e) {
             showToast(t('toast_task_sent_to_hussain_for_approval'), "info");
         }
 
-        const modal = document.getElementById('createTaskModal');
-        if (modal) modal.classList.remove('active');
+        window.closeCreateTaskModal();
         const emailOption = document.getElementById('taskNotifyViaEmail');
         if (emailOption) emailOption.checked = false;
 

@@ -8220,3 +8220,218 @@ html[dir="rtl"] select.form-control[multiple]:not([hidden]) { background-positio
   .modal-content .modal-actions .btn,
   .modal-content .form-actions .btn { flex: 1 1 100% !important; width: 100%; }
 }
+
+/* Unified close control: use the same dimensional, gradient, and tactile
+   feedback language as the rest of the application's buttons. */
+:is(
+  .close-modal,
+  .modal .modal-close-btn,
+  .modal .modal-header > .icon-btn,
+  .modal .modal-header > .btn.btn-icon
+) {
+  box-sizing: border-box;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--color-border)) !important;
+  border-radius: var(--radius-full) !important;
+  color: var(--color-theme-highlight) !important;
+  background-color: var(--color-bg-surface) !important;
+  background-image: linear-gradient(145deg, color-mix(in srgb, var(--color-bg-surface) 90%, var(--color-cyan)), color-mix(in srgb, var(--color-bg-surface) 91%, var(--color-violet))) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 6px 14px rgba(15, 23, 42, .12) !important;
+  cursor: pointer;
+  transition: transform .2s ease, color .2s ease, border-color .2s ease, background-image .2s ease, box-shadow .2s ease, filter .2s ease !important;
+}
+
+/* Replace legacy text × glyphs with a crisp CSS-drawn close mark. */
+.close-modal {
+  font-size: 0 !important;
+  line-height: 1;
+}
+
+.close-modal::before,
+.close-modal::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  pointer-events: none;
+}
+
+.close-modal::before { transform: rotate(45deg); }
+.close-modal::after { transform: rotate(-45deg); }
+
+:is(
+  .close-modal,
+  .modal .modal-close-btn,
+  .modal .modal-header > .icon-btn,
+  .modal .modal-header > .btn.btn-icon
+) :is(svg, [data-lucide]) {
+  width: 17px !important;
+  height: 17px !important;
+  margin: 0 !important;
+  color: currentColor !important;
+  stroke: currentColor !important;
+}
+
+:is(
+  .close-modal,
+  .modal .modal-close-btn,
+  .modal .modal-header > .icon-btn,
+  .modal .modal-header > .btn.btn-icon
+):hover {
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, .3) !important;
+  background-image: var(--gradient-brand) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 10px 21px rgba(99, 102, 241, .3) !important;
+  filter: saturate(1.15) brightness(1.04);
+  transform: translateY(-2px) scale(1.04);
+}
+
+:is(
+  .close-modal,
+  .modal .modal-close-btn,
+  .modal .modal-header > .icon-btn,
+  .modal .modal-header > .btn.btn-icon
+):active {
+  transform: translateY(0) scale(.96);
+  box-shadow: inset 0 2px 5px rgba(15, 23, 42, .2), 0 3px 8px rgba(15, 23, 42, .14) !important;
+}
+
+:is(
+  .close-modal,
+  .modal .modal-close-btn,
+  .modal .modal-header > .icon-btn,
+  .modal .modal-header > .btn.btn-icon
+):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+  outline-offset: 3px;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  :is(
+    .close-modal,
+    .modal .modal-close-btn,
+    .modal .modal-header > .icon-btn,
+    .modal .modal-header > .btn.btn-icon
+  ) {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    flex-basis: 44px;
+  }
+}
+
+/* New Task mobile sheet. The dialog is portaled to <body> while open so this
+   viewport shell also escapes page stacking contexts and the bottom nav. */
+@media (max-width: 600px) {
+  body.create-task-modal-open .sidebar {
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  body > #createTaskModal {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100dvw !important;
+    max-width: 100dvw !important;
+    height: 100dvh !important;
+    padding:
+      max(.35rem, env(safe-area-inset-top))
+      max(.35rem, env(safe-area-inset-right))
+      max(.35rem, env(safe-area-inset-bottom))
+      max(.35rem, env(safe-area-inset-left)) !important;
+    align-items: stretch !important;
+    justify-content: stretch !important;
+    overflow: hidden !important;
+    z-index: 2147483200 !important;
+  }
+
+  body > #createTaskModal .create-task-modal-content {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+  }
+
+  body > #createTaskModal .modal-header {
+    position: relative !important;
+    top: auto !important;
+    z-index: 5;
+    min-width: 0;
+    margin: 0 !important;
+    padding: .72rem .78rem !important;
+  }
+
+  body > #createTaskModal .create-task-heading {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  body > #createTaskModal .create-task-heading h2 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body > #createTaskModal #standardTaskForm,
+  body > #createTaskModal .create-task-body,
+  body > #createTaskModal .create-task-section,
+  body > #createTaskModal .create-task-top-row,
+  body > #createTaskModal .create-task-fields-row,
+  body > #createTaskModal .form-group {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  body > #createTaskModal .create-task-body {
+    flex: 1 1 0;
+    padding: .62rem !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body > #createTaskModal .create-task-top-row,
+  body > #createTaskModal .create-task-fields-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body > #createTaskModal .create-task-section {
+    padding: .62rem !important;
+  }
+
+  body > #createTaskModal #standardTaskForm > .create-task-footer {
+    position: relative !important;
+    bottom: auto !important;
+    z-index: 5;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 !important;
+    padding: .58rem .62rem !important;
+  }
+
+  body > #createTaskModal #standardTaskForm > .create-task-footer .btn {
+    min-height: 42px;
+  }
+}
