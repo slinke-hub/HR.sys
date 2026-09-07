@@ -1108,6 +1108,14 @@ select.form-control option:checked { background: var(--color-accent); color: #ff
 .task-assignee:hover { color: var(--color-primary); }
 .task-row-assignee { padding: 0; display: inline-flex; align-items: center; }
 .task-row-assignee .avatar-circle { pointer-events: none; }
+.task-assignee .task-assignee-full-name {
+  max-width: min(240px, 32vw) !important;
+  overflow-wrap: anywhere;
+  white-space: normal !important;
+  text-align: start;
+  line-height: 1.25;
+}
+.task-assignee > svg { width: 14px; height: 14px; flex: 0 0 14px; }
 .task-assignee-picker-content { width: min(440px, calc(100vw - 1.25rem)); max-width: 100%; }
 .task-assignee-picker-content select { min-height: 11rem; }
 .task-assignee-picker-help { margin: -.6rem 0 1rem; color: var(--color-text-secondary); font-size: .85rem; }

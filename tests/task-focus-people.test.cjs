@@ -6,7 +6,7 @@ const path = require('node:path');
 const appSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
 const cssSource = fs.readFileSync(path.join(__dirname, '..', 'css', 'components.css'), 'utf8');
 
-assert.match(appSource, /const rowAssigneeFirstNames = rowAssigneeProfiles\.map/);
+assert.match(appSource, /const rowAssigneeNames = rowAssigneeProfiles\.map/);
 assert.match(appSource, /const rowCreator = usersById\.get\(String\(task\.created_by\)\) \|\| task\.creator/);
 assert.match(appSource, /class="task-focus-people"/);
 assert.match(appSource, /class="task-focus-assignee"/);
@@ -14,13 +14,17 @@ assert.match(appSource, /class="task-focus-creator"/);
 assert.match(appSource, /font-weight: 700/);
 assert.match(appSource, /taskDetailText\('Assigned To:', 'مُعيّنة إلى:'\)/);
 assert.match(appSource, /taskDetailText\('Created by:', 'أنشأها:'\)/);
-assert.match(appSource, /escapeHTML\(rowAssigneeFirstName\)/);
+assert.match(appSource, /escapeHTML\(rowAssigneeName\)/);
 assert.match(appSource, /escapeHTML\(rowCreatorName\)/);
+assert.match(appSource, /class="task-assignee-full-name"/);
+assert.doesNotMatch(appSource, /name\.split\(\/\\s\+\/\)\.map\(part => part\[0\]\)/);
+assert.match(appSource, /display_name_ar: assignee\.display_name_ar/);
 
 assert.match(cssSource, /\.task-focus-people \{/);
 assert.match(cssSource, /\.task-focus-people strong \{/);
 assert.match(cssSource, /#task-v2-rows-container \.task-v2-row-content h4 \{[\s\S]*font-weight: 700 !important/);
 assert.match(cssSource, /\.task-focus-assignee svg \{ color: #2563eb; \}/);
 assert.match(cssSource, /\.task-focus-creator svg \{ color: #7c3aed; \}/);
+assert.match(cssSource, /\.task-assignee \.task-assignee-full-name \{/);
 
 console.log('Task focus people tests passed.');

@@ -40,9 +40,9 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=1788202890005">
     <link rel="stylesheet" href="css/layout.css?v=1788202890007">
-    <link rel="stylesheet" href="css/components.css?v=2026090711">
+    <link rel="stylesheet" href="css/components.css?v=2026090716">
     <link rel="stylesheet" href="css/android.css?v=2026090702">
-    <link rel="stylesheet" href="css/crm-tailwind.css?v=2026090706">
+    <link rel="stylesheet" href="css/crm-tailwind.css?v=2026090716">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -1356,9 +1356,18 @@
                                 <span class="select-ui-value" style="font-size: 0.9rem;" data-i18n="ui_select_sub_type2">Select Sub-Type</span>
                             </div>
                         </div>
+                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.85rem; font-weight: 500;">Department Manager</span>
+                            <input id="editTaskDepartmentManagerName" class="form-control" type="text" readonly aria-readonly="true" placeholder="Selected automatically">
+                            <input id="editTaskSupervisorId" type="hidden" value="">
+                        </div>
                     </div>
 
                     <div id="editMarketingDesignFields" class="marketing-design-fields" style="display:none; padding: 1rem; border: 1px solid var(--color-border); border-radius: 8px;"></div>
+                    <div id="editTaskRegularUrlGroup" class="form-group" style="display:none;">
+                        <label class="form-label" for="editTaskRegularUrl">Shared URL</label>
+                        <input id="editTaskRegularUrl" type="url" class="form-control" placeholder="https://..." disabled>
+                    </div>
                     
                     <div class="files-section" style="margin-top: 1rem;">
                         <span style="font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 0.5rem;" data-i18n="ui_files2">Files</span>
@@ -1647,8 +1656,8 @@
     <script src="js/data.js?v=2026090711"></script>
     <script src="js/contract.js?v=1788202890003"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/crm-dashboard.bundle.js?v=2026090712"></script>
-    <script src="js/app.js?v=2026090714"></script>
+    <script src="js/crm-dashboard.bundle.js?v=2026090715"></script>
+    <script src="js/app.js?v=2026090717"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

@@ -1021,6 +1021,7 @@ const arabicRuntimeUiText = Object.freeze({
     'Select Task Type': 'اختر نوع المهمة',
     'Regular Tasks': 'مهام اعتيادية',
     'Regular Task': 'مهمة اعتيادية',
+    'Shared URL': 'رابط المشاركة',
     'Watchers (Optional)': 'المتابعون (اختياري)',
     'Select watchers': 'اختر المتابعين',
     'Change assignee': 'تغيير المعيّن',
@@ -6314,8 +6315,8 @@ async function renderTasks() {
             status: t.status || 'todo',
             priority: t.priority || 'medium',
             category: t.category || 'General',
-            assignee: assignee ? { full_name: assignee.full_name } : null,
-            creator: creator ? { full_name: creator.full_name } : null
+            assignee: assignee ? { full_name: assignee.full_name, display_name_ar: assignee.display_name_ar } : null,
+            creator: creator ? { full_name: creator.full_name, display_name_ar: creator.display_name_ar } : null
         };
         window.taskCache[t.id] = taskObj;
         return taskObj;
@@ -6357,8 +6358,6 @@ async function renderTasks() {
     const isRegularEmployee = currentUserRole === 'EMPLOYEE';
     if (currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') {
         users = users.filter(u => teamIds.includes(u.id));
-    } else if (isRegularEmployee) {
-        users = users.filter(u => u.id === currentUser.id);
     }
     window.taskAssigneeOptionsCache = users.map(u => {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
@@ -6498,9 +6497,8 @@ function renderTaskCard(task) {
     const assigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean);
     const assignedUsers = (window.taskAllUsersCache || []).filter(user => assigneeIds.includes(user.id));
     const assigneeName = window.formatEmployeeName(task.assignee) || (assignedUsers[0] ? window.formatEmployeeName(assignedUsers[0]) : '') || t('task_unknown') || 'Unassigned';
-    const assigneeInitials = task.assignee
-        ? assigneeName.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase()
-        : '';
+    const assigneeProfiles = assignedUsers.length ? assignedUsers : [task.assignee].filter(Boolean);
+    const assigneeLabel = assigneeProfiles.map(user => window.formatEmployeeName(user)).filter(Boolean).join(', ') || assigneeName;
     const isOverdue = task.due_date && !['completed', 'Approved'].includes(task.status) && new Date(`${task.due_date}T23:59:59`) < new Date();
     const dueLabel = task.due_date
         ? new Intl.DateTimeFormat(currentLang === 'ar' ? 'ar-SA' : 'en', { month: 'short', day: 'numeric' }).format(new Date(`${task.due_date}T12:00:00`))
@@ -6517,8 +6515,8 @@ function renderTaskCard(task) {
                     ['todo','To do'],['in_progress','In progress'],['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done']
                 ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
                 <button type="button" class="task-assignee" title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">
-                    <span class="task-assignee-avatar-stack">${(assignedUsers.length ? assignedUsers : [task.assignee]).filter(Boolean).slice(0, 4).map(user => { const name = window.formatEmployeeName(user) || 'Employee'; return `<span class="task-avatar" title="${escapeHTML(name)}">${escapeHTML(name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase())}</span>`; }).join('') || '<span class="task-avatar"><i data-lucide="user"></i></span>'}</span>
-                    <span>${escapeHTML(assigneeIds.length > 1 ? `${assigneeName.split(' ')[0]} +${assigneeIds.length - 1}` : assigneeName.split(' ')[0])}</span>
+                    <i data-lucide="users"></i>
+                    <span class="task-assignee-full-name">${escapeHTML(assigneeLabel)}</span>
                 </button>
                 <div class="task-card-signals">
                     <span class="task-priority-label"><i></i>${escapeHTML(priorityLabel)}</span>
@@ -6727,16 +6725,16 @@ async function renderTasksV2() {
         const rowAssigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean);
         const rowAssignedUsers = rowAssigneeIds.map(id => usersById.get(String(id))).filter(Boolean);
         const rowAssigneeProfiles = rowAssignedUsers.length ? rowAssignedUsers : [task.assignee].filter(Boolean);
-        const rowAssigneeFirstNames = rowAssigneeProfiles.map(user => (window.formatEmployeeName(user) || '').trim().split(/\s+/)[0]).filter(Boolean);
-        const rowAssigneeFirstName = rowAssigneeFirstNames.length
-            ? `${rowAssigneeFirstNames[0]}${rowAssigneeIds.length > 1 ? ` +${rowAssigneeIds.length - 1}` : ''}`
+        const rowAssigneeNames = rowAssigneeProfiles.map(user => (window.formatEmployeeName(user) || '').trim()).filter(Boolean);
+        const rowAssigneeName = rowAssigneeNames.length
+            ? rowAssigneeNames.join(', ')
             : taskDetailText('Unassigned', 'غير معيّن');
         const rowCreator = usersById.get(String(task.created_by)) || task.creator;
         const formattedRowCreatorName = rowCreator ? window.formatEmployeeName(rowCreator) : '';
         const rowCreatorName = formattedRowCreatorName && formattedRowCreatorName !== 'Unknown'
             ? formattedRowCreatorName
             : taskDetailText('System', 'النظام');
-        const avatarHTML = rowAssignedUsers.length ? `<span class="task-assignee-avatar-stack">${rowAssignedUsers.slice(0, 4).map(user => { const name = window.formatEmployeeName(user) || 'Employee'; return `<span class="avatar-circle" title="${escapeHTML(name)}">${escapeHTML(name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase())}</span>`; }).join('')}</span>` : `<span class="avatar-circle" title="Unassigned"><i data-lucide="user" style="width:14px;height:14px;"></i></span>`;
+        const assigneeHTML = `<i data-lucide="users" style="width:14px;height:14px;"></i><span class="task-assignee-full-name">${escapeHTML(rowAssigneeName)}</span>`;
 
         return `
             <article class="task-v2-row ${isCompleted ? 'completed' : ''} ${isNestedSubtask ? 'task-v2-subtask-row' : 'task-v2-main-row'}" data-task-id="${task.id}" data-parent-task-id="${task.parent_task_id || ''}" data-task-depth="${taskDepth}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="--task-subtask-depth:${taskDepth}; cursor:pointer; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--color-border); background: var(--color-surface); transition: background 0.2s; flex-wrap: wrap; gap: 0.5rem;">
@@ -6750,14 +6748,14 @@ async function renderTasksV2() {
                             ${escapeHTML(task.displayTitle)}
                         </h4>
                         <div class="task-focus-people" aria-label="${taskDetailText('Task people', 'أشخاص المهمة')}">
-                            <span class="task-focus-assignee"><i data-lucide="user-round"></i><span>${taskDetailText('Assigned To:', 'مُعيّنة إلى:')}</span><strong>${escapeHTML(rowAssigneeFirstName)}</strong></span>
+                            <span class="task-focus-assignee"><i data-lucide="user-round"></i><span>${taskDetailText('Assigned To:', 'مُعيّنة إلى:')}</span><strong>${escapeHTML(rowAssigneeName)}</strong></span>
                             <span class="task-focus-creator"><i data-lucide="user-round-plus"></i><span>${taskDetailText('Created by:', 'أنشأها:')}</span><strong>${escapeHTML(rowCreatorName)}</strong></span>
                         </div>
                     </div>
                 </div>
                 
                 <div class="task-v2-row-actions" style="display: flex; align-items: center; gap: 1rem; flex-shrink: 0;">
-                    <button type="button" class="task-assignee task-row-assignee" title="Change assignee" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">${avatarHTML}</button>
+                    <button type="button" class="task-assignee task-row-assignee" title="Change assignee" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">${assigneeHTML}</button>
                     ${task.due_date ? `<span class="task-row-due${dueClass}" style="display:flex; align-items: center; gap:4px; font-size:0.8rem; color:var(--color-text-secondary); white-space:nowrap; flex-shrink:0;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date}</span>` : ''}
                     ${task.category && task.category !== 'General' ? `<span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--color-primary); font-size: 0.75rem;">${escapeHTML(task.category)}</span>` : ''}
                     <button class="icon-btn ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.stopPropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator or an administrator can edit this task'}" style="color:var(--color-text-secondary);"><i data-lucide="pencil" style="width:16px;height:16px;"></i></button>
@@ -6930,10 +6928,16 @@ async function renderTasksV2() {
 
                             <div class="form-group">
                                 <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
-                                <select id="taskAssignee" class="form-control" required>
+                                <select id="taskAssignee" class="form-control" required onchange="window.handleTaskAssigneeChange('new')">
                                     ${!isRegularEmployee ? `<option value="">${t('task_sel_emp') || 'Select Employee'}</option>` : ''}
                                     ${window.taskAssigneeOptionsCache}
                                 </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="taskDepartmentManagerName">${currentLang === 'ar' ? 'مدير القسم' : 'Department Manager'}</label>
+                                <input id="taskDepartmentManagerName" type="text" class="form-control" readonly aria-readonly="true" placeholder="${currentLang === 'ar' ? 'يُحدد تلقائياً' : 'Selected automatically'}">
+                                <input id="taskSupervisorId" type="hidden" value="">
                             </div>
                             
                             <div class="form-group">
@@ -6945,6 +6949,10 @@ async function renderTasksV2() {
                             <!-- Marketing Design Fields (hidden by default) -->
                             <div id="newMarketingDesignFields" class="marketing-design-fields" style="display: none;">
                                 ${renderMarketingDesignFields('new')}
+                            </div>
+                            <div id="taskRegularUrlGroup" class="form-group" style="display:none; margin-top:1rem;">
+                                <label class="form-label" for="taskRegularUrl">${currentLang === 'ar' ? 'رابط المشاركة' : 'Shared URL'}</label>
+                                <input id="taskRegularUrl" type="url" class="form-control" placeholder="https://..." disabled>
                             </div>
                         </section>
 
@@ -7227,8 +7235,20 @@ function cacheTaskRecord(record) {
         status: record.status || existing.status || 'todo',
         priority: record.priority || existing.priority || 'medium',
         category: Object.prototype.hasOwnProperty.call(record, 'category') ? record.category : (existing.category || 'General'),
-        assignee: assignee ? { full_name: assignee.full_name } : null,
-        creator: creator ? { full_name: creator.full_name } : null
+        assignee: assignee ? {
+            id: assignee.id,
+            full_name: assignee.full_name,
+            display_name: assignee.display_name,
+            display_name_ar: assignee.display_name_ar,
+            avatar_url: assignee.avatar_url
+        } : null,
+        creator: creator ? {
+            id: creator.id,
+            full_name: creator.full_name,
+            display_name: creator.display_name,
+            display_name_ar: creator.display_name_ar,
+            avatar_url: creator.avatar_url
+        } : null
     };
     window.taskCache = window.taskCache || {};
     window.taskCache[record.id] = cached;
@@ -7240,15 +7260,9 @@ function patchCachedTaskNodes(task) {
     if (!task?.id) return;
     const assigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean);
     const assignedUsers = (window.taskAllUsersCache || []).filter(user => assigneeIds.includes(user.id));
-    const assigneeName = assignedUsers[0] ? window.formatEmployeeName(assignedUsers[0]) : (window.formatEmployeeName(task.assignee) || taskDetailText('Unassigned', 'غير معيّن'));
-    const avatars = assignedUsers.slice(0, 4).map(user => {
-        const name = window.formatEmployeeName(user) || 'Employee';
-        return `<span class="avatar-circle" title="${escapeHTML(name)}">${escapeHTML(name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase())}</span>`;
-    }).join('') || '<span class="avatar-circle" title="Unassigned"><i data-lucide="user"></i></span>';
-    const boardAvatars = assignedUsers.slice(0, 4).map(user => {
-        const name = window.formatEmployeeName(user) || 'Employee';
-        return `<span class="task-avatar" title="${escapeHTML(name)}">${escapeHTML(name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase())}</span>`;
-    }).join('') || '<span class="task-avatar"><i data-lucide="user"></i></span>';
+    const assigneeProfiles = assignedUsers.length ? assignedUsers : [task.assignee].filter(Boolean);
+    const assigneeName = assigneeProfiles.map(user => window.formatEmployeeName(user)).filter(Boolean).join(', ') || taskDetailText('Unassigned', 'غير معيّن');
+    const assigneeHTML = `<i data-lucide="users"></i><span class="task-assignee-full-name">${escapeHTML(assigneeName)}</span>`;
     document.querySelectorAll(`[data-task-id="${task.id}"]`).forEach(node => {
         if (!node.matches('.task-v2-row, .task-item-card')) return;
         node.dataset.projectId = task.project_id || 'none';
@@ -7272,11 +7286,11 @@ function patchCachedTaskNodes(task) {
         const priority = node.querySelector('.task-priority-label');
         if (priority) priority.innerHTML = `<i></i>${escapeHTML(task.priority === 'urgent' ? 'Urgent' : String(task.priority || 'medium').replace(/^./, value => value.toUpperCase()))}`;
         const focusAssignee = node.querySelector('.task-focus-assignee strong');
-        if (focusAssignee) focusAssignee.textContent = `${assigneeName.split(/\s+/)[0] || assigneeName}${assigneeIds.length > 1 ? ` +${assigneeIds.length - 1}` : ''}`;
+        if (focusAssignee) focusAssignee.textContent = assigneeName;
         const rowAssignee = node.querySelector('.task-row-assignee');
-        if (rowAssignee) rowAssignee.innerHTML = `<span class="task-assignee-avatar-stack">${avatars}</span>`;
+        if (rowAssignee) rowAssignee.innerHTML = assigneeHTML;
         const boardAssignee = node.querySelector('.task-pipeline-card-footer > .task-assignee');
-        if (boardAssignee) boardAssignee.innerHTML = `<span class="task-assignee-avatar-stack">${boardAvatars}</span><span>${escapeHTML(assigneeIds.length > 1 ? `${assigneeName.split(/\s+/)[0]} +${assigneeIds.length - 1}` : assigneeName.split(/\s+/)[0])}</span>`;
+        if (boardAssignee) boardAssignee.innerHTML = assigneeHTML;
         node.className = node.className.replace(/\bpriority-(?:low|medium|high|urgent|critical)\b/g, '').replace(/\s{2,}/g, ' ').trim();
         if (node.classList.contains('task-item-card')) node.classList.add(`priority-${task.priority || 'medium'}`);
     });
@@ -7762,7 +7776,8 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '', select
     const selectedDepartment = (window.taskDepartmentsCache || []).find(item => item.id === value || item.name === value || getCanonicalDepartmentName(item) === value);
     const departmentName = getCanonicalDepartmentName(selectedDepartment) || value;
     updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId);
-    const subTypeGroup = document.getElementById(prefix === 'new' ? 'taskSubTypeGroup' : 'editTaskSubTypeGroup');
+    updateTaskDepartmentManager(prefix, selectedDepartment);
+    const subTypeGroup = document.getElementById(prefix === 'new' ? 'taskSubTypeGroup' : 'editTaskSubTypeGroupWrap');
     if (!subTypeGroup) return;
 
     if (isMarketingTaskDepartment(departmentName)) {
@@ -7776,6 +7791,18 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '', select
         handleMarketingTaskTypeChange(prefix, '');
     }
 };
+
+function updateTaskDepartmentManager(prefix, department) {
+    const managerId = department?.head_id || department?.manager_id || '';
+    const manager = (window.taskAllUsersCache || []).find(user => user.id === managerId);
+    const nameInput = document.getElementById(prefix === 'new' ? 'taskDepartmentManagerName' : 'editTaskDepartmentManagerName');
+    const idInput = document.getElementById(prefix === 'new' ? 'taskSupervisorId' : 'editTaskSupervisorId');
+    if (nameInput) {
+        nameInput.value = manager ? (window.formatEmployeeName(manager) || manager.full_name || '') : '';
+        nameInput.placeholder = currentLang === 'ar' ? 'لا يوجد مدير محدد' : 'No manager assigned';
+    }
+    if (idInput) idInput.value = managerId;
+}
 
 function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = '') {
     const select = document.getElementById(prefix === 'new' ? 'taskAssignee' : 'editTaskAssignee');
@@ -7798,11 +7825,16 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
         employees = window.taskAllUsersCache || [];
     }
 
+    const creator = (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id);
+    if (prefix === 'new' && creator && !employees.some(user => user.id === creator.id)) {
+        employees = [creator, ...employees];
+    }
+    const preferredAssigneeId = selectedAssigneeId || (prefix === 'new' ? currentUser?.id : '');
     select.innerHTML = `<option value="">${(department || isTaskAdmin()) ? (t('task_sel_emp') || 'Select Employee') : 'Select a department first'}</option>` + employees.map(user => {
         const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
         return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(user.role || 'EMPLOYEE'))})</option>`;
     }).join('');
-    select.value = employees.some(user => user.id === selectedAssigneeId) ? selectedAssigneeId : '';
+    select.value = employees.some(user => user.id === preferredAssigneeId) ? preferredAssigneeId : '';
     handleTaskAssigneeChange(prefix);
     if (prefix === 'edit') window.filterEditTaskAssigneeOptions(department?.id || departmentName || '');
 }
@@ -7931,17 +7963,24 @@ function renderMarketingDesignFields(prefix) {
 
 window.handleMarketingTaskTypeChange = function (prefix = 'new', value = '') {
     const container = document.getElementById(prefix === 'new' ? 'newMarketingDesignFields' : 'editMarketingDesignFields');
-    if (!container) return;
     const active = value === 'Designing Task';
-    container.style.display = active ? 'block' : 'none';
-    const contentLinks = container.querySelector(`#${prefix === 'new' ? 'taskContentLinks' : 'editTaskContentLinks'}`);
-    const submissionLinks = container.querySelector(`#${prefix === 'new' ? 'taskSubmissionLinks' : 'editTaskSubmissionLinks'}`);
-    if (active && contentLinks && !contentLinks.children.length) window.addMarketingLink(contentLinks.id);
-    if (active && submissionLinks && !submissionLinks.children.length) window.addMarketingLink(submissionLinks.id);
-    container.querySelectorAll('input, textarea, select, button.marketing-add-link').forEach(field => {
-        field.disabled = !active || (field.dataset.managerOnly === 'true' && !window.isMarketingDepartmentManager);
-    });
-    translateArabicInterface(container);
+    const regular = value === 'Regular Task' || value === 'Regular Tasks';
+    const regularGroup = document.getElementById(prefix === 'new' ? 'taskRegularUrlGroup' : 'editTaskRegularUrlGroup');
+    const regularInput = document.getElementById(prefix === 'new' ? 'taskRegularUrl' : 'editTaskRegularUrl');
+    if (regularGroup) regularGroup.style.display = regular ? 'block' : 'none';
+    if (regularInput) regularInput.disabled = !regular;
+    if (container) {
+        container.style.display = active ? 'block' : 'none';
+        const contentLinks = container.querySelector(`#${prefix === 'new' ? 'taskContentLinks' : 'editTaskContentLinks'}`);
+        const submissionLinks = container.querySelector(`#${prefix === 'new' ? 'taskSubmissionLinks' : 'editTaskSubmissionLinks'}`);
+        if (active && contentLinks && !contentLinks.children.length) window.addMarketingLink(contentLinks.id);
+        if (active && submissionLinks && !submissionLinks.children.length) window.addMarketingLink(submissionLinks.id);
+        container.querySelectorAll('input, textarea, select, button.marketing-add-link').forEach(field => {
+            field.disabled = !active || (field.dataset.managerOnly === 'true' && !window.isMarketingDepartmentManager);
+        });
+        translateArabicInterface(container);
+    }
+    if (regularGroup) translateArabicInterface(regularGroup);
 };
 
 window.addMarketingLink = function (containerId, value = '') {
@@ -8110,9 +8149,7 @@ window.handleCreateTask = async function (e) {
     const taskListId = document.getElementById('taskListId')?.value
         || (activeSelection.startsWith('list_') ? activeSelection.slice(5) : null);
     const projectId = taskListId ? null : (document.getElementById('taskProject')?.value || null);
-    const supervisorId = window.taskDepartmentSupervisors?.[0]?.id || null;
     const effectiveAssignee = assignee || currentUser.id;
-    const effectiveSupervisor = isTaskAdmin() || taskListId ? null : supervisorId;
 
     // Check if assignee is in Designing
     const allUsers = window.taskAllUsersCache || await db.fetchUsers();
@@ -8153,6 +8190,11 @@ window.handleCreateTask = async function (e) {
 
     // Get department, sub-type, and watchers
     const department = document.getElementById('taskDepartment') ? document.getElementById('taskDepartment').value : null;
+    const selectedDepartment = (window.taskDepartmentsCache || []).find(item => item.id === department || item.name === department || getCanonicalDepartmentName(item) === department);
+    const effectiveSupervisor = document.getElementById('taskSupervisorId')?.value
+        || selectedDepartment?.head_id
+        || selectedDepartment?.manager_id
+        || null;
     const subTypeGroup = document.getElementById('taskSubTypeGroup');
     let subType = null;
     if (subTypeGroup && subTypeGroup.style.display !== 'none') {
@@ -8160,6 +8202,7 @@ window.handleCreateTask = async function (e) {
         if (taskType?.value) subType = taskType.value;
     }
     const isMarketingDesign = isMarketingTaskDepartment(department) && subType === 'Designing Task';
+    const isRegularTask = subType === 'Regular Task' || subType === 'Regular Tasks';
     if (isMarketingDesign) status = 'review';
     const description = document.getElementById('taskDesc')?.value.trim() || '';
     const marketingDepartment = isMarketingDesign ? document.getElementById('taskMarketingDepartment')?.value : null;
@@ -8170,6 +8213,8 @@ window.handleCreateTask = async function (e) {
         contentType = document.getElementById('taskContentType')?.value || null;
         sourceLink = document.getElementById('taskSourceLink')?.value || contentLinks[0] || null;
         uploadLink = document.getElementById('taskUploadLink')?.value || submissionLinks[0] || null;
+    } else if (isRegularTask) {
+        sourceLink = document.getElementById('taskRegularUrl')?.value.trim() || null;
     }
     const watchersSelect = document.getElementById('taskWatchers');
     let watchers = watchersSelect ? Array.from(watchersSelect.selectedOptions).map(opt => opt.value) : [];
@@ -8475,11 +8520,14 @@ window.openEditTaskModal = async function (id) {
             setTimeout(() => {
                 const selectedDepartment = (window.taskDepartmentsCache || []).find(d => d.id === task.task_department_id || d.name === task.department);
                 window.handleTaskDepartmentChange('edit', selectedDepartment?.id || '', task.assignee_id || '');
-                if (task.task_sub_type) {
+                const taskSubType = task.sub_type || task.task_sub_type || '';
+                const regularUrl = document.getElementById('editTaskRegularUrl');
+                if (regularUrl) regularUrl.value = task.source_link || '';
+                if (taskSubType) {
                     let subTypeSelect = document.getElementById('editTaskSubType');
                     if (subTypeSelect) {
-                        subTypeSelect.value = task.task_sub_type;
-                        handleMarketingTaskTypeChange('edit', task.task_sub_type, task.marketing_design_fields);
+                        subTypeSelect.value = taskSubType;
+                        handleMarketingTaskTypeChange('edit', taskSubType, task.marketing_design_fields);
                     }
                 }
                 window.updateEditTaskSelectUI(customDeptSelect);
@@ -8581,18 +8629,19 @@ window.handleEditTaskSubmit = async function (e) {
 
     // Get department, sub-type, and watchers
     const departmentEl = document.getElementById('editTaskDepartment');
-    if (departmentEl) updates.task_department_id = departmentEl.value || null;
+    const selectedDepartment = (window.taskDepartmentsCache || []).find(department => department.id === departmentEl?.value || department.name === departmentEl?.value || getCanonicalDepartmentName(department) === departmentEl?.value);
+    updates.department = selectedDepartment ? getCanonicalDepartmentName(selectedDepartment) : null;
+    updates.supervisor_id = document.getElementById('editTaskSupervisorId')?.value || selectedDepartment?.head_id || selectedDepartment?.manager_id || null;
 
     const subTypeEl = document.getElementById('editTaskSubType');
     if (subTypeEl && document.getElementById('editTaskSubTypeGroupWrap').style.display !== 'none') {
-        updates.task_sub_type = subTypeEl.value || null;
+        updates.sub_type = subTypeEl.value || null;
     } else {
-        updates.task_sub_type = null;
+        updates.sub_type = null;
     }
     
-    // In our DB schema, these are task_department_id and task_sub_type 
-    // We already mapped them above. Now handle marketing fields.
-    const isMarketingDesign = updates.task_sub_type === 'Designing Task';
+    const isMarketingDesign = updates.sub_type === 'Designing Task';
+    const isRegularTask = updates.sub_type === 'Regular Task' || updates.sub_type === 'Regular Tasks';
     if (isMarketingDesign) {
         updates.marketing_department = document.getElementById('editTaskMarketingDepartment')?.value || null;
         updates.content_type = document.getElementById('editTaskContentType')?.value || null;
@@ -8609,7 +8658,7 @@ window.handleEditTaskSubmit = async function (e) {
         updates.content_type = null;
         updates.content_links = null;
         updates.submission_links = null;
-        updates.source_link = null;
+        updates.source_link = isRegularTask ? (document.getElementById('editTaskRegularUrl')?.value.trim() || null) : null;
         updates.delivery_status = null;
     }
     
@@ -8667,14 +8716,14 @@ window.handleEditTaskSubmit = async function (e) {
     if (error) {
         showToast(t('toast_failed_to_update_task_details'), "danger");
     } else {
-        const selectedDepartment = (window.taskDepartmentsCache || []).find(department => department.id === updates.task_department_id);
+        const selectedDepartment = (window.taskDepartmentsCache || []).find(department => getCanonicalDepartmentName(department) === updates.department);
         const selectedAssignee = (window.taskAllUsersCache || []).find(user => user.id === primaryAssigneeId);
         const updatedTask = cacheTaskRecord({
             ...task,
             ...updates,
             department: selectedDepartment?.name || null,
-            sub_type: updates.task_sub_type || null,
-            assignee: selectedAssignee ? { full_name: selectedAssignee.full_name } : null
+            sub_type: updates.sub_type || null,
+            assignee: selectedAssignee ? { full_name: selectedAssignee.full_name, display_name_ar: selectedAssignee.display_name_ar } : null
         });
         patchCachedTaskNodes(updatedTask);
         showToast(t('toast_task_updated_successfully'), "success");
@@ -14293,7 +14342,7 @@ window.handleCreateTaskTypeChange = function(checked) {
         if (collapseLabel) collapseLabel.textContent = 'Attachments';
         // Hide marketing design fields
         if (window.handleMarketingTaskTypeChange) {
-            window.handleMarketingTaskTypeChange('new', '');
+            window.handleMarketingTaskTypeChange('new', checked || '');
         }
     }
 };

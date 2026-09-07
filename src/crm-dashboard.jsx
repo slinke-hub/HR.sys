@@ -19,7 +19,7 @@ const COPY = {
     acquisition: 'New Client Acquisition', revenue: 'Revenue by Client Industry', totalPipeline: 'Pipeline value',
     activeClients: 'Active clients', wonDeals: 'Won deals', openDeals: 'Open deals',
     activityLabel: 'Client activity', noAnalytics: 'No client analytics yet',
-    account: 'account', accounts: 'accounts', today: 'Today', daysAgo: 'days ago', viewDeal: 'View deal', editDeal: 'Edit deal'
+    account: 'account', accounts: 'accounts', today: 'Today', daysAgo: 'days ago', viewDeal: 'View deal', editDeal: 'Edit deal', unassigned: 'Unassigned'
   },
   ar: {
     dashboard: 'لوحة القيادة', employees: 'الموظفين', payroll: 'الرواتب', time: 'الوقت والحضور', crm: 'إدارة علاقات العملاء',
@@ -33,7 +33,7 @@ const COPY = {
     acquisition: 'اكتساب عملاء جدد', revenue: 'الإيرادات حسب قطاع العميل', totalPipeline: 'قيمة مسار الصفقات',
     activeClients: 'العملاء النشطون', wonDeals: 'الصفقات الفائزة', openDeals: 'الصفقات المفتوحة',
     activityLabel: 'نشاط العميل', noAnalytics: 'لا توجد تحليلات للعملاء بعد',
-    account: 'حساب', accounts: 'حسابات', today: 'اليوم', daysAgo: 'أيام مضت', viewDeal: 'عرض الصفقة', editDeal: 'تعديل الصفقة'
+    account: 'حساب', accounts: 'حسابات', today: 'اليوم', daysAgo: 'أيام مضت', viewDeal: 'عرض الصفقة', editDeal: 'تعديل الصفقة', unassigned: 'غير معيّن'
   }
 };
 
@@ -49,15 +49,23 @@ const normalizeStage = stage => ['QUALIFICATION', 'PITCH', 'CONTACTED'].includes
   ? 'CONTACTED'
   : String(stage || 'LEAD').toUpperCase();
 const money = value => new Intl.NumberFormat('en-SA', { maximumFractionDigits: 0 }).format(Number(value || 0));
-const initials = value => String(value || 'M').trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+const localizedEmployeeName = (profile, lang) => {
+  if (!profile) return '';
+  const candidates = lang === 'ar'
+    ? [profile.display_name_ar, profile.full_name, profile.display_name, profile.name]
+    : [profile.full_name, profile.display_name, profile.name, profile.display_name_ar];
+  return String(candidates.find(value => typeof value === 'string' && value.trim()) || '').trim();
+};
 const dateLabel = (value, locale) => value
   ? new Intl.DateTimeFormat(locale === 'ar' ? 'ar-SA' : 'en-SA', { day: 'numeric', month: 'short' }).format(new Date(value))
   : '—';
 
-function Avatar({ profile, size = 'tw-h-9 tw-w-9' }) {
-  const name = profile?.display_name_ar || profile?.full_name || profile?.name || profile?.initials || 'M';
-  if (profile?.avatar_url) return <img className={`${size} tw-rounded-full tw-object-cover tw-ring-2 tw-ring-white`} src={profile.avatar_url} alt={name} />;
-  return <span className={`${size} tw-inline-flex tw-flex-none tw-items-center tw-justify-center tw-rounded-full tw-bg-gradient-to-br tw-from-blue-600 tw-to-cyan-500 tw-text-[11px] tw-font-bold tw-text-white tw-ring-2 tw-ring-white`}>{profile?.initials || initials(name)}</span>;
+function EmployeeName({ profile, lang }) {
+  const name = localizedEmployeeName(profile, lang) || COPY[lang].unassigned;
+  return <span className="tw-inline-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-[11px] tw-font-semibold tw-text-slate-700" title={name}>
+    {profile?.avatar_url ? <img className="tw-h-6 tw-w-6 tw-flex-none tw-rounded-full tw-object-cover" src={profile.avatar_url} alt="" /> : <Users size={14} className="tw-flex-none tw-text-blue-600" />}
+    <span className="tw-break-words tw-text-start tw-leading-4">{name}</span>
+  </span>;
 }
 
 function Metric({ icon: Icon, label, value, tone }) {
@@ -95,7 +103,7 @@ function DealCard({ deal, lang, canOpenDetails }) {
         <p className="tw-mb-3 tw-mt-1.5 tw-line-clamp-2 tw-min-h-9 tw-text-xs tw-leading-[18px] tw-text-slate-500">{details}</p>
         <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-slate-100 tw-pt-3">
           <span className="tw-flex tw-items-center tw-gap-1.5 tw-text-[11px] tw-font-semibold tw-text-slate-500"><CalendarDays size={13} />{dateLabel(deal.closing_date || deal.created_at, lang)}</span>
-          <Avatar profile={profile} size="tw-h-7 tw-w-7" />
+          <span className="tw-flex tw-min-w-0 tw-flex-1 tw-justify-end"><EmployeeName profile={profile} lang={lang} /></span>
         </div>
         {Number(deal.amount || 0) > 0 && <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-text-[11px] tw-font-bold tw-text-emerald-700"><CircleDollarSign size={13} />SAR {money(deal.amount)}</div>}
       </div>
@@ -158,7 +166,7 @@ function TasksWidget({ lang, tasks, deals }) {
 function ActivityWidget({ lang, activity }) {
   const text = COPY[lang];
   const rows = activity.slice(0, 4);
-  return <WidgetShell icon={Activity} title={text.interactions} accent="tw-bg-violet-50 tw-text-violet-700"><div className="tw-relative tw-grid tw-gap-0 before:tw-absolute before:tw-bottom-3 before:tw-start-[7px] before:tw-top-3 before:tw-w-px before:tw-bg-slate-200">{rows.length ? rows.map((item, index) => <div key={item.id || index} className="tw-relative tw-grid tw-grid-cols-[16px_minmax(0,1fr)] tw-gap-3 tw-pb-4 last:tw-pb-0"><i className="tw-relative tw-z-10 tw-mt-1 tw-h-3.5 tw-w-3.5 tw-rounded-full tw-border-[3px] tw-border-white tw-bg-violet-500 tw-ring-1 tw-ring-violet-200" /><div className="tw-min-w-0"><span className="tw-flex tw-items-center tw-justify-between tw-gap-2"><strong className="tw-truncate tw-text-xs tw-text-slate-800">{String(item.action || text.activityLabel).replaceAll('_', ' ')}</strong><small className="tw-flex-none tw-text-[9px] tw-text-slate-400">{dateLabel(item.created_at, lang)}</small></span><p className="tw-mb-0 tw-mt-1 tw-text-[10px] tw-leading-4 tw-text-slate-500">{item.profiles?.full_name || item.profiles?.display_name_ar || (lang === 'ar' ? 'فريق مُقام' : 'Mogam team')} · {item.client || item.crm_deals?.crm_clients?.name || item.crm_deals?.title || 'CRM'}</p></div></div>) : <p className="tw-m-0 tw-py-8 tw-text-center tw-text-xs tw-text-slate-400">{text.noActivity}</p>}</div></WidgetShell>;
+  return <WidgetShell icon={Activity} title={text.interactions} accent="tw-bg-violet-50 tw-text-violet-700"><div className="tw-relative tw-grid tw-gap-0 before:tw-absolute before:tw-bottom-3 before:tw-start-[7px] before:tw-top-3 before:tw-w-px before:tw-bg-slate-200">{rows.length ? rows.map((item, index) => <div key={item.id || index} className="tw-relative tw-grid tw-grid-cols-[16px_minmax(0,1fr)] tw-gap-3 tw-pb-4 last:tw-pb-0"><i className="tw-relative tw-z-10 tw-mt-1 tw-h-3.5 tw-w-3.5 tw-rounded-full tw-border-[3px] tw-border-white tw-bg-violet-500 tw-ring-1 tw-ring-violet-200" /><div className="tw-min-w-0"><span className="tw-flex tw-items-center tw-justify-between tw-gap-2"><strong className="tw-truncate tw-text-xs tw-text-slate-800">{String(item.action || text.activityLabel).replaceAll('_', ' ')}</strong><small className="tw-flex-none tw-text-[9px] tw-text-slate-400">{dateLabel(item.created_at, lang)}</small></span><p className="tw-mb-0 tw-mt-1 tw-text-[10px] tw-leading-4 tw-text-slate-500">{localizedEmployeeName(item.profiles, lang) || (lang === 'ar' ? 'فريق مُقام' : 'Mogam team')} · {item.client || item.crm_deals?.crm_clients?.name || item.crm_deals?.title || 'CRM'}</p></div></div>) : <p className="tw-m-0 tw-py-8 tw-text-center tw-text-xs tw-text-slate-400">{text.noActivity}</p>}</div></WidgetShell>;
 }
 
 function AssignmentsWidget({ lang, deals, users }) {
@@ -172,7 +180,7 @@ function AssignmentsWidget({ lang, deals, users }) {
     });
     return [...groups.entries()].slice(0, 6).map(([id, assignedDeals]) => ({ profile: users.find(user => String(user.id) === id) || assignedDeals[0].assignee || { full_name: lang === 'ar' ? 'فريق مُقام' : 'Mogam team' }, deals: assignedDeals }));
   }, [deals, users, lang]);
-  return <WidgetShell icon={Users} title={text.assignments} accent="tw-bg-cyan-50 tw-text-cyan-700"><div className="tw-grid tw-grid-cols-2 tw-gap-2.5">{byUser.length ? byUser.map((item, index) => <div key={item.profile.id || index} className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/70 tw-p-3 tw-text-center"><Avatar profile={item.profile} size="tw-mx-auto tw-h-10 tw-w-10" /><strong className="tw-mt-2 tw-block tw-truncate tw-text-[11px] tw-text-slate-800">{(lang === 'ar' && item.profile.display_name_ar) || item.profile.full_name || item.profile.initials}</strong><small className="tw-mt-1 tw-block tw-text-[9px] tw-font-semibold tw-text-cyan-700">{item.deals.length} {item.deals.length === 1 ? text.account : text.accounts}</small></div>) : <p className="tw-col-span-2 tw-m-0 tw-py-8 tw-text-center tw-text-xs tw-text-slate-400">{text.noAssignments}</p>}</div></WidgetShell>;
+  return <WidgetShell icon={Users} title={text.assignments} accent="tw-bg-cyan-50 tw-text-cyan-700"><div className="tw-grid tw-grid-cols-2 tw-gap-2.5">{byUser.length ? byUser.map((item, index) => <div key={item.profile.id || index} className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/70 tw-p-3 tw-text-center"><span className="tw-flex tw-justify-center"><EmployeeName profile={item.profile} lang={lang} /></span><small className="tw-mt-1 tw-block tw-text-[9px] tw-font-semibold tw-text-cyan-700">{item.deals.length} {item.deals.length === 1 ? text.account : text.accounts}</small></div>) : <p className="tw-col-span-2 tw-m-0 tw-py-8 tw-text-center tw-text-xs tw-text-slate-400">{text.noAssignments}</p>}</div></WidgetShell>;
 }
 
 function AnalyticsWidget({ lang, deals, clients }) {
