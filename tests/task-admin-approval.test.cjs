@@ -10,6 +10,6 @@ assert.match(source, /const canApproveCompletion = !!task && \(isTaskAdmin\(\) \
 assert.match(source, /return isTaskAdmin\(\) \|\| task\?\.created_by === currentUser\?\.id/);
 assert.match(source, /task_approval_requested' && \(isTaskAdmin\(\) \|\| n\.metadata\?\.department_manager_id === currentUser\.id\)/);
 assert.match(source, /const canApprove = isAdmin \|\| isDepartmentHead/);
-assert.match(source, /const canReject = isDepartmentHead/);
+assert.match(source, /const canReject = isAdmin \|\| isDepartmentHead/);
 
 console.log('Task admin approval tests passed.');

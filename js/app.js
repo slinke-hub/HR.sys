@@ -10794,8 +10794,16 @@ window.openNotificationDestination = async function (notificationId) {
         || /request|leave|expense/i.test(String(notification.message || ''));
     if (isRequestNotification) actionView = 'requests';
 
+    const isCrmNotification = String(notification.event_type || '').startsWith('crm_')
+        || actionView === 'crm';
+    if (isCrmNotification) actionView = 'crm';
+
     const allowedViews = new Set(['dashboard', 'tasks', 'requests', 'time', 'documents', 'expenses', 'performance', 'projects', 'crm', 'clients', 'approvals', 'profile', 'notifications']);
     await renderView(allowedViews.has(actionView) ? actionView : 'notifications');
+    const dealId = notification.metadata?.deal_id;
+    if (actionView === 'crm' && dealId) {
+        await window.openDealWorkflowModal(String(dealId));
+    }
 };
 
 window.openTaskNotification = async function (taskId) {
@@ -11567,7 +11575,7 @@ async function renderOrders() {
     `;
 }
 
-async function renderCRM() {
+async function fetchCrmDashboardPayload() {
     const [clients, deals, users, tasks, activity] = await Promise.all([
         db.fetchClients(),
         db.fetchDeals(),
@@ -11576,7 +11584,7 @@ async function renderCRM() {
         db.fetchRecentCrmActivity(8)
     ]);
 
-    const crmPayload = {
+    return {
         lang: currentLang,
         clients: clients || [],
         deals: deals || [],
@@ -11586,18 +11594,35 @@ async function renderCRM() {
             return task.assignee_id === currentUser?.id || assigneeIds.includes(currentUser?.id);
         }),
         activity: activity || [],
-        profile: currentUserProfile || currentUser || {}
+        profile: currentUserProfile || currentUser || {},
+        role: currentUserRole || currentUserProfile?.role || ''
     };
+}
+
+function mountCrmDashboardPayload(crmPayload) {
     window.pendingCrmDashboardPayload = crmPayload;
-    setTimeout(() => {
-        const root = document.getElementById('crm-react-root');
-        if (!root || currentView !== 'crm') return;
-        if (!window.MogamCrmDashboard?.mount) {
-            root.innerHTML = `<div class="crm-react-load-error">${taskDetailText('Unable to load the CRM dashboard.', 'تعذر تحميل لوحة إدارة علاقات العملاء.')}</div>`;
-            return;
-        }
-        window.MogamCrmDashboard.mount(root, window.pendingCrmDashboardPayload);
-    }, 0);
+    const root = document.getElementById('crm-react-root');
+    if (!root || currentView !== 'crm') return false;
+    if (!window.MogamCrmDashboard?.mount) {
+        root.innerHTML = `<div class="crm-react-load-error">${taskDetailText('Unable to load the CRM dashboard.', 'تعذر تحميل لوحة إدارة علاقات العملاء.')}</div>`;
+        return false;
+    }
+    window.MogamCrmDashboard.mount(root, crmPayload);
+    return true;
+}
+
+window.refreshCrmDashboardInBackground = async function () {
+    if (currentView !== 'crm') return;
+    const refreshId = (window.crmBackgroundRefreshId || 0) + 1;
+    window.crmBackgroundRefreshId = refreshId;
+    const crmPayload = await fetchCrmDashboardPayload();
+    if (currentView !== 'crm' || refreshId !== window.crmBackgroundRefreshId) return;
+    mountCrmDashboardPayload(crmPayload);
+};
+
+async function renderCRM() {
+    const crmPayload = await fetchCrmDashboardPayload();
+    setTimeout(() => mountCrmDashboardPayload(crmPayload), 0);
 
     return `<div id="crm-react-root" class="crm-react-root" aria-live="polite"><div class="crm-react-loading"><div class="spinner"></div></div></div>`;
 
@@ -11748,6 +11773,25 @@ window.openDealWorkflowModal = async function (dealId) {
     if (!deal) return showToast(t('crm_deal_not_found') || 'Deal not found.', 'danger');
     document.getElementById('workflowDealId').value = dealId;
     document.getElementById('dealWorkflowName').textContent = deal.title;
+    const clientName = deal.crm_clients?.name || (t('crm_unassigned') || 'Unassigned');
+    const assignee = users.find(user => user.id === deal.assigned_to);
+    const dealStage = t(`crm_${String(deal.stage || 'LEAD').toLowerCase()}`) || String(deal.stage || 'LEAD').replace(/_/g, ' ');
+    const summaryFields = [
+        [t('crm_client') || 'Client', clientName],
+        [t('status') || 'Stage', dealStage],
+        [t('crm_amount_sar') || 'Amount (SAR)', `SAR ${Number(deal.amount || 0).toLocaleString()}`],
+        [t('crm_closing_date') || 'Closing Date', deal.closing_date || '—'],
+        [t('crm_assigned_to') || 'Assigned To', dealEmployeeName(assignee) || (t('crm_unassigned') || 'Unassigned')],
+        [t('crm_event_type') || 'Event Type', deal.event_type || '—'],
+        [t('crm_first_contact_date') || 'First Contact Date', deal.first_contact_date || '—'],
+        [t('crm_contacted_via') || 'Contacted Via', deal.contact_method || '—'],
+        [t('crm_heard_from') || 'Lead Source', deal.lead_source || '—']
+    ];
+    const summary = document.getElementById('dealWorkflowSummary');
+    if (summary) {
+        summary.innerHTML = summaryFields.map(([label, value]) => `<div><dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd></div>`).join('')
+            + `<div class="deal-workflow-summary-wide"><dt>${escapeHTML(t('crm_technical_description') || 'Project Description')}</dt><dd>${escapeHTML(deal.technical_description || '—')}</dd></div>`;
+    }
     const options = `<option value="">${t('crm_select_employee') || 'Select employee'}</option>` + users.map(user =>
         `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}${user.job_title ? ` â€” ${escapeHTML(user.job_title)}` : ''}</option>`
     ).join('');
@@ -11773,7 +11817,7 @@ function renderDealWorkflowContents(workflow) {
     const approvalsEl = document.getElementById('dealApprovalSteps');
     const nextPending = workflow.approvals.find(step => step.status === 'PENDING');
     approvalsEl.innerHTML = workflow.approvals.length ? workflow.approvals.map(step => {
-        const canDecide = step.status === 'PENDING' && step.id === nextPending?.id && (step.approver_id === currentUser?.id || currentUserRole === 'ADMIN');
+        const canDecide = step.status === 'PENDING' && step.id === nextPending?.id && (step.approver_id === currentUser?.id || isTaskAdmin());
         const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
         return `<article class="deal-approval-step ${step.status.toLowerCase()}">
             <div class="deal-approval-index">${step.status === 'APPROVED' ? '✓' : (step.status === 'REJECTED' ? '×' : step.step_order)}</div>
@@ -11803,7 +11847,7 @@ window.startDealApprovalWorkflow = async function () {
     if (!result.success) return showToast(result.error?.message || t('crm_approval_start_failed') || 'Could not start approval.', 'danger');
     showToast(t('crm_approval_started') || 'Approval workflow started.', 'success');
     window.closeDealWorkflowModal();
-    if (currentView === 'crm') renderView('crm');
+    if (currentView === 'crm') void window.refreshCrmDashboardInBackground?.();
 };
 
 window.decideDealApproval = async function (stepId, decision) {
@@ -11816,6 +11860,7 @@ window.decideDealApproval = async function (stepId, decision) {
     const workflow = await db.fetchDealWorkflow(dealId);
     renderDealWorkflowContents(workflow);
     showToast(decision === 'APPROVED' ? (t('crm_approval_saved') || 'Approval saved.') : (t('crm_rejection_saved') || 'Rejection saved.'), 'success');
+    if (currentView === 'crm') void window.refreshCrmDashboardInBackground?.();
     if (window.lucide) window.lucide.createIcons();
 };
 
@@ -11873,16 +11918,16 @@ window.moveDealCard = function (dealId, newStage) {
 window.dropDeal = async (ev, newStage) => {
     ev.preventDefault();
     const dealId = ev.dataTransfer.getData("dealId");
-    if (!dealId) return;
+    if (!dealId) return { success: false, reason: 'missing_deal' };
 
     const card = document.getElementById(`deal-card-${dealId}`);
-    const oldStage = card ? card.getAttribute('data-stage') : null;
-    if (oldStage === newStage) return;
+    const oldStage = ev.dataTransfer.getData('oldStage') || (card ? card.getAttribute('data-stage') : null);
+    if (oldStage === newStage) return { success: true, reason: 'same_stage', dealId, oldStage, newStage };
 
     if ((newStage === 'PROPOSAL' || newStage === 'NEGOTIATION' || newStage === 'WON') && card?.getAttribute('data-workflow-status') !== 'APPROVED') {
         showToast(t('crm_approval_required') || 'Complete all internal approvals before advancing this deal.', 'warning');
         await window.openDealWorkflowModal(dealId);
-        return;
+        return { success: false, reason: 'approval_required', dealId, oldStage, newStage };
     }
 
     if (newStage === 'LOST') {
@@ -11890,7 +11935,7 @@ window.dropDeal = async (ev, newStage) => {
         document.getElementById('lostOldStage').value = oldStage || '';
         document.getElementById('lostReasonText').value = '';
         document.getElementById('lostReasonModal').classList.add('show');
-        return;
+        return { success: false, reason: 'lost_details_required', dealId, oldStage, newStage };
     }
 
     if (newStage === 'WON') {
@@ -11906,10 +11951,11 @@ window.dropDeal = async (ev, newStage) => {
         document.getElementById('orderUninstallationDate').value = '';
         document.getElementById('crmOrderModal').classList.add('show');
         if (window.lucide) window.lucide.createIcons();
-        return;
+        return { success: false, reason: 'won_details_required', dealId, oldStage, newStage };
     }
 
-    window.moveDealCard(dealId, newStage);
+    const reactManaged = Boolean(card && document.getElementById('crm-react-root')?.contains(card));
+    if (!reactManaged) window.moveDealCard(dealId, newStage);
 
     const res = newStage === 'PROPOSAL'
         ? await db.updateDeal(dealId, { stage: newStage, proposal_sent_at: new Date().toISOString() })
@@ -11917,8 +11963,12 @@ window.dropDeal = async (ev, newStage) => {
     if (res.success) {
         await db.logDealActivity(dealId, 'STAGE_CHANGED', oldStage, newStage, null);
         showToast(t('toast_deal_moved_to') + newStage, "success");
+        void window.refreshCrmDashboardInBackground?.();
+        return { success: true, dealId, oldStage, newStage };
     } else {
         showToast(t('toast_failed_to_move_deal'), "danger");
+        if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
+        return { success: false, reason: 'save_failed', dealId, oldStage, newStage };
     }
 };
 
@@ -13738,21 +13788,20 @@ window.handleUpdateProject = async function (event) {
 // ==========================================
 async function renderApprovals() {
     const profile_auth = currentUserProfile || {};
-    const canUseApprovals = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile_auth?.job_title || '');
+    const canUseApprovals = isTaskAdmin() || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile_auth?.job_title || '');
     if (!canUseApprovals) {
         return `<div class="empty-state">
                     <i data-lucide="shield-alert"></i>
                     <p data-i18n="unauthorized_access">You are not authorized to view this page.</p>
                 </div>`;
     }
-    const [allTasks, allUsers, allProjects, departments, workflows, leaves, documents, expenses, genericRequests] = await Promise.all([
+    const [allTasks, allUsers, allProjects, departments, workflows, leaves, documents, expenses, genericRequests, crmApprovalSteps] = await Promise.all([
         db.fetchTasks(), db.fetchUsers(), db.fetchProjects(), db.fetchDepartments(),
         db.fetchRequestApprovalWorkflows(), db.fetchLeaveRequests(), db.fetchDocuments(),
-        db.fetchExpenses(), db.fetchGenericRequests()
+        db.fetchExpenses(), db.fetchGenericRequests(), db.fetchPendingCrmApprovals()
     ]);
     const profile = (allUsers || []).find(user => user.id === currentUser?.id) || currentUserProfile || {};
-    const normalizedRole = String(currentUserRole || '').toUpperCase();
-    const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    const isAdmin = isTaskAdmin();
     const managedDepartments = (departments || []).filter(department => department.head_id === currentUser?.id);
     const isManager = isAdmin || ['MANAGER', 'SUPERVISOR'].includes(currentUserRole) || /manager|supervisor/i.test(profile.job_title || '') || managedDepartments.length > 0;
     if (!isManager) return `<div class="page-header"><h1 class="page-title">${t('ui_unauthorized')}</h1></div>`;
@@ -13798,7 +13847,7 @@ async function renderApprovals() {
         const department = (departments || []).find(item => item.name === task.department);
         const isDepartmentHead = department?.head_id === currentUser?.id;
         const canApprove = isAdmin || isDepartmentHead;
-        const canReject = isDepartmentHead;
+        const canReject = isAdmin || isDepartmentHead;
         const title = task.title_i18n?.[currentLang] || task.title_i18n?.en || task.title || 'Untitled task';
         const taskActions = [
             canApprove ? `<button class="btn-primary" onclick="handleTaskApprovalDecision('${task.id}','APPROVED')">Approve</button>` : '',
@@ -13807,13 +13856,30 @@ async function renderApprovals() {
         return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(window.formatEmployeeName(assignee) || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : 'â€”'}</td><td>${taskActions ? `<div style="display:flex;gap:.5rem">${taskActions}</div>` : '<span class="status-badge info">Watcher access Â· View only</span>'}</td></tr>`;
     }).join('');
 
+    const actionableCrmStepByDeal = new Map();
+    (crmApprovalSteps || []).forEach(step => {
+        const current = actionableCrmStepByDeal.get(step.deal_id);
+        if (!current || Number(step.step_order) < Number(current.step_order)) actionableCrmStepByDeal.set(step.deal_id, step);
+    });
+    const pendingCrmApprovals = [...actionableCrmStepByDeal.values()].filter(step => isAdmin || step.approver_id === currentUser?.id);
+    const crmRows = pendingCrmApprovals.map(step => {
+        const deal = step.deal || {};
+        const clientName = deal.crm_clients?.name || 'No client';
+        const approver = userMap.get(step.approver_id);
+        const stageLabel = t(dealApprovalStageLabels[step.stage_key]) || String(step.stage_key || 'Approval').replace(/_/g, ' ');
+        const canDecide = isAdmin || step.approver_id === currentUser?.id;
+        return `<tr><td><strong>${escapeHTML(deal.title || 'Untitled deal')}</strong></td><td>${escapeHTML(clientName)}</td><td>SAR ${Number(deal.amount || 0).toLocaleString()}</td><td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${deal.created_at ? new Date(deal.created_at).toLocaleDateString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
+    }).join('');
+
     return `<div class="page-header"><div><h1 class="page-title">${t('ui_approvals_dashboard')}</h1><p class="page-subtitle">${t('approvals_subtitle')}</p></div></div>
         <div class="card" style="padding:.5rem;margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
             <button class="btn-primary" data-approval-tab="requests" onclick="setApprovalsTab('requests')">${t('approvals_employee_requests')} <span class="status-badge">${pendingRequests.length}</span></button>
             <button class="btn-secondary" data-approval-tab="tasks" onclick="setApprovalsTab('tasks')">${t('approvals_tasks')} <span class="status-badge">${pendingTasks.length}</span></button>
+            <button class="btn-secondary" data-approval-tab="crm" onclick="setApprovalsTab('crm')">${t('nav_crm') || 'CRM'} <span class="status-badge">${pendingCrmApprovals.length}</span></button>
         </div>
         <section data-approval-panel="requests" class="card"><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('leave_employee')}</th><th>${t('ui_request')}</th><th>${t('req_details')}</th><th>${t('approvals_current_stage')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${requestRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_employee_requests')}</td></tr>`}</tbody></table></div></section>
-        <section data-approval-panel="tasks" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('nav_tasks')}</th><th>${t('custody_department')}</th><th>${t('ui_project')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${taskRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_tasks')}</td></tr>`}</tbody></table></div></section>`;
+        <section data-approval-panel="tasks" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('nav_tasks')}</th><th>${t('custody_department')}</th><th>${t('ui_project')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${taskRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_tasks')}</td></tr>`}</tbody></table></div></section>
+        <section data-approval-panel="crm" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('ui_deal') || 'Deal'}</th><th>${t('ui_client') || 'Client'}</th><th>${t('ui_amount') || 'Amount'}</th><th>${t('approvals_current_stage')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${crmRows || `<tr><td colspan="7" style="text-align:center;padding:2rem">${t('crm_no_pending_approvals') || 'No pending CRM approvals.'}</td></tr>`}</tbody></table></div></section>`;
 };
 
 window.setApprovalsTab = function (tab) {
@@ -13834,6 +13900,21 @@ window.handleApprovalRequestDecision = async function (sourceTable, sourceId, de
     if (!result.success) return showToast(result.error?.message || 'Unable to record this approval.', 'danger');
     showToast(decision === 'APPROVED' ? 'Request approved and moved to its next stage.' : 'Request rejected and employee notified.', 'success');
     renderView('approvals');
+};
+
+window.handleCrmApprovalDecision = async function (dealId, stepId, decision) {
+    let note = '';
+    if (decision === 'REJECTED') {
+        note = await window.showPromptModal(t('crm_rejection_note_prompt') || 'Enter the rejection reason:', t('crm_approval'), { required: true });
+        if (note === null || !String(note).trim()) return;
+    } else {
+        note = await window.showPromptModal(t('crm_approval_note_prompt') || 'Optional approval note:', t('crm_approval'));
+        if (note === null) return;
+    }
+    const result = await db.decideDealApproval(stepId, decision, note || '');
+    if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the CRM decision.', 'danger');
+    showToast(decision === 'APPROVED' ? (t('crm_approval_saved') || 'CRM approval saved.') : (t('crm_rejection_saved') || 'CRM rejection saved.'), 'success');
+    if (currentView === 'approvals') renderView('approvals');
 };
 
 window.handleTaskApprovalDecision = async function (taskId, decision) {

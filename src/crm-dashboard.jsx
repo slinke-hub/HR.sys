@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Activity, BarChart3, BriefcaseBusiness, Building2, CalendarDays,
@@ -67,16 +67,27 @@ function Metric({ icon: Icon, label, value, tone }) {
   </div>;
 }
 
-function DealCard({ deal, lang }) {
+function DealCard({ deal, lang, canOpenDetails }) {
   const text = COPY[lang];
   const clientName = deal.clientName || deal.crm_clients?.name || deal.title || (lang === 'ar' ? 'عميل' : 'Client');
   const details = deal.details || deal.technical_description || deal.event_type || deal.title;
   const profile = deal.assignee || {};
+  const openDetails = () => {
+    if (canOpenDetails) window.openDealWorkflowModal?.(String(deal.id));
+  };
   return <article id={`deal-card-${deal.id}`} draggable onDragStart={event => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('dealId', String(deal.id));
+    event.dataTransfer.setData('oldStage', String(deal.stage || 'LEAD'));
     window.dragDeal?.(event.nativeEvent, String(deal.id));
-  }} className="kanban-card tw-group tw-relative tw-mb-3 tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 tw-shadow-[0_4px_16px_rgba(15,23,42,.05)] tw-transition hover:-tw-translate-y-0.5 hover:tw-border-blue-200 hover:tw-shadow-float" data-stage={deal.stage} data-workflow-status={deal.workflow_status || 'NOT_STARTED'}>
+  }} onClick={event => {
+    if (!event.target.closest('button, a, input, select, textarea')) openDetails();
+  }} onKeyDown={event => {
+    if (canOpenDetails && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      openDetails();
+    }
+  }} role={canOpenDetails ? 'button' : undefined} tabIndex={canOpenDetails ? 0 : undefined} aria-label={canOpenDetails ? `${text.viewDeal}: ${clientName}` : undefined} className={`kanban-card tw-group tw-relative tw-mb-3 tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 tw-shadow-[0_4px_16px_rgba(15,23,42,.05)] tw-transition hover:-tw-translate-y-0.5 hover:tw-border-blue-200 hover:tw-shadow-float ${canOpenDetails ? 'tw-cursor-pointer focus:tw-outline-none focus:tw-ring-2 focus:tw-ring-blue-400' : ''}`} data-stage={deal.stage} data-workflow-status={deal.workflow_status || 'NOT_STARTED'}>
     <div className="tw-flex tw-items-start tw-gap-2">
       <GripVertical size={16} className="tw-mt-0.5 tw-flex-none tw-cursor-grab tw-text-slate-300 group-hover:tw-text-blue-400" />
       <div className="tw-min-w-0 tw-flex-1">
@@ -89,22 +100,28 @@ function DealCard({ deal, lang }) {
         {Number(deal.amount || 0) > 0 && <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-text-[11px] tw-font-bold tw-text-emerald-700"><CircleDollarSign size={13} />SAR {money(deal.amount)}</div>}
       </div>
       <div className="tw-flex tw-flex-col tw-gap-1 tw-opacity-0 tw-transition group-hover:tw-opacity-100 focus-within:tw-opacity-100">
-        <button aria-label={text.viewDeal} title={text.viewDeal} onClick={() => window.showCRMDealModal?.(String(deal.id), true)} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-500 hover:tw-bg-blue-50 hover:tw-text-blue-700"><Search size={13} /></button>
-        <button aria-label={text.editDeal} title={text.editDeal} onClick={() => window.showCRMDealModal?.(String(deal.id))} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-500 hover:tw-bg-blue-50 hover:tw-text-blue-700"><MoreHorizontal size={14} /></button>
+        <button aria-label={text.viewDeal} title={text.viewDeal} onClick={event => { event.stopPropagation(); window.showCRMDealModal?.(String(deal.id), true); }} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-500 hover:tw-bg-blue-50 hover:tw-text-blue-700"><Search size={13} /></button>
+        <button aria-label={text.editDeal} title={text.editDeal} onClick={event => { event.stopPropagation(); window.showCRMDealModal?.(String(deal.id)); }} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-500 hover:tw-bg-blue-50 hover:tw-text-blue-700"><MoreHorizontal size={14} /></button>
       </div>
     </div>
   </article>;
 }
 
-function PipelineBoard({ lang, deals }) {
+function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails }) {
   const text = COPY[lang];
   const handleDrop = async (event, stage) => {
     event.preventDefault();
     const dealId = event.dataTransfer.getData('dealId');
     const deal = deals.find(item => String(item.id) === String(dealId));
     if (!deal) return;
-    await window.dropDeal?.(event.nativeEvent, stage.dbStage);
-    if (stage.dbStage !== 'WON') setTimeout(() => window.renderView?.('crm'), 500);
+    const oldStage = deal.stage;
+    if (oldStage === stage.dbStage) return;
+    const requiresApproval = ['PROPOSAL', 'NEGOTIATION', 'WON'].includes(stage.dbStage)
+      && deal.workflow_status !== 'APPROVED';
+    const canMoveImmediately = stage.dbStage !== 'WON' && !requiresApproval;
+    if (canMoveImmediately) onDealStageChange(dealId, stage.dbStage);
+    const result = await window.dropDeal?.(event.nativeEvent, stage.dbStage);
+    if (canMoveImmediately && !result?.success) onDealStageChange(dealId, oldStage);
   };
   return <section className="tw-rounded-3xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 tw-shadow-panel sm:tw-p-5">
     <div className="tw-mb-4 tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-2">
@@ -116,7 +133,7 @@ function PipelineBoard({ lang, deals }) {
         const stageDeals = deals.filter(deal => normalizeStage(deal.stage) === stage.key);
         return <section key={stage.key} id={`crm-col-${stage.dbStage}`} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, stage)} className={`kanban-col tw-min-h-[390px] tw-w-[286px] tw-flex-none tw-snap-start tw-rounded-2xl tw-border tw-p-3 ${stage.soft} ${stage.border}`}>
           <header className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-px-1"><h3 id={`crm-header-${stage.dbStage}`} className="tw-m-0 tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-black tw-uppercase tw-tracking-[.08em] tw-text-slate-700"><i className={`tw-h-2.5 tw-w-2.5 tw-rounded-full ${stage.tone}`} />{text[stage.label]}</h3><span className="tw-grid tw-h-6 tw-min-w-6 tw-place-items-center tw-rounded-full tw-bg-white tw-px-1.5 tw-text-[10px] tw-font-black tw-text-slate-600 tw-shadow-sm">{stageDeals.length}</span></header>
-          <div className="tw-min-h-[320px]">{stageDeals.map(deal => <DealCard key={deal.id} deal={deal} lang={lang} />)}{!stageDeals.length && <div className="tw-grid tw-min-h-32 tw-place-items-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-white/50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-400">{text.noDeals}</div>}</div>
+          <div className="tw-min-h-[320px]">{stageDeals.map(deal => <DealCard key={deal.id} deal={deal} lang={lang} canOpenDetails={canOpenDetails} />)}{!stageDeals.length && <div className="tw-grid tw-min-h-32 tw-place-items-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-white/50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-400">{text.noDeals}</div>}</div>
         </section>;
       })}
     </div>
@@ -198,8 +215,19 @@ function CrmDashboard({ payload = {} }) {
   const lang = payload.lang === 'en' ? 'en' : 'ar';
   const text = COPY[lang];
   const [query, setQuery] = useState('');
-  const sourceDeals = (payload.deals || []).map(deal => ({ ...deal, clientName: deal.crm_clients?.name, assignee: payload.users?.find(user => user.id === deal.assigned_to) }));
-  const [deals] = useState(sourceDeals);
+  const accessValues = [payload.role, payload.profile?.role, payload.profile?.job_title]
+    .map(value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' '));
+  const canOpenDetails = accessValues.some(value => ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMIN', 'MANAGER'].includes(value) || /\bMANAGER\b/.test(value));
+  const sourceDeals = useMemo(() => (payload.deals || []).map(deal => ({
+    ...deal,
+    clientName: deal.crm_clients?.name,
+    assignee: payload.users?.find(user => user.id === deal.assigned_to)
+  })), [payload.deals, payload.users]);
+  const [deals, setDeals] = useState(sourceDeals);
+  useEffect(() => setDeals(sourceDeals), [sourceDeals]);
+  const handleDealStageChange = (dealId, stage) => {
+    setDeals(previous => previous.map(deal => String(deal.id) === String(dealId) ? { ...deal, stage } : deal));
+  };
   const filteredDeals = useMemo(() => {
     const value = query.trim().toLocaleLowerCase(lang === 'ar' ? 'ar' : 'en');
     if (!value) return deals;
@@ -212,7 +240,7 @@ function CrmDashboard({ payload = {} }) {
         <div className="tw-mx-auto tw-w-full tw-max-w-[1800px]">
           <section className="page-header tw-flex-wrap tw-gap-4"><div className="tw-max-w-3xl"><span className="tw-mb-2 tw-inline-flex tw-items-center tw-gap-1.5 tw-rounded-full tw-bg-blue-50 tw-px-3 tw-py-1 tw-text-[10px] tw-font-black tw-uppercase tw-tracking-[.12em] tw-text-blue-700"><BriefcaseBusiness size={13} />Mogam CRM</span><h1 className="page-title tw-m-0">{text.title}</h1><p className="page-subtitle tw-mb-0 tw-mt-2">{text.subtitle}</p></div><div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-end tw-gap-3 sm:tw-w-auto"><label className="search-container crm-dashboard-search tw-m-0 tw-min-w-0 tw-flex-1 sm:tw-w-72 sm:tw-flex-none"><Search size={18} className="search-icon tw-m-0 tw-flex-none" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={text.search} className="search-input" /></label><button type="button" data-crm-new-deal onClick={() => window.showCRMDealModal?.()} className="btn btn-primary tw-inline-flex tw-min-h-10 tw-items-center tw-justify-center tw-gap-2"><Plus size={17} />{text.newDeal}</button><button type="button" onClick={() => window.showCRMClientModal?.()} className="btn btn-secondary tw-inline-flex tw-min-h-10 tw-items-center tw-justify-center tw-gap-2"><Building2 size={17} />{text.addClient}</button></div></section>
           <section className="tw-mb-5 tw-grid tw-grid-cols-1 tw-gap-3 sm:tw-grid-cols-2 xl:tw-grid-cols-4"><Metric icon={CircleDollarSign} label={text.totalPipeline} value={`SAR ${money(pipelineValue)}`} tone="tw-bg-blue-50 tw-text-blue-700" /><Metric icon={Building2} label={text.activeClients} value={payload.clients?.length || new Set(deals.map(deal => deal.clientName)).size} tone="tw-bg-cyan-50 tw-text-cyan-700" /><Metric icon={Target} label={text.openDeals} value={openDeals.length} tone="tw-bg-amber-50 tw-text-amber-700" /><Metric icon={CheckCircle2} label={text.wonDeals} value={wonDeals.length} tone="tw-bg-emerald-50 tw-text-emerald-700" /></section>
-          <PipelineBoard lang={lang} deals={filteredDeals} />
+          <PipelineBoard lang={lang} deals={filteredDeals} onDealStageChange={handleDealStageChange} canOpenDetails={canOpenDetails} />
           <section className="tw-mt-5 tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 2xl:tw-grid-cols-4"><TasksWidget lang={lang} tasks={payload.tasks || []} deals={deals} /><ActivityWidget lang={lang} activity={payload.activity || []} /><AssignmentsWidget lang={lang} deals={deals} users={payload.users || []} /><AnalyticsWidget lang={lang} deals={deals} clients={payload.clients || []} /></section>
         </div>
   </div>;

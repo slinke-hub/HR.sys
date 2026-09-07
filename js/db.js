@@ -2684,6 +2684,22 @@ const db = {
             return { success: false, error };
         }
     },
+    async fetchPendingCrmApprovals() {
+        if (!supabaseClient) return [];
+        try {
+            const [{ data: steps, error: stepsError }, { data: deals, error: dealsError }] = await Promise.all([
+                supabaseClient.from('crm_deal_approval_steps').select('*').eq('status', 'PENDING').order('step_order', { ascending: true }),
+                supabaseClient.from('crm_deals').select('*, crm_clients(*)').eq('workflow_status', 'PENDING_APPROVAL').order('created_at', { ascending: false })
+            ]);
+            if (stepsError) throw stepsError;
+            if (dealsError) throw dealsError;
+            const dealMap = new Map((deals || []).map(deal => [deal.id, deal]));
+            return (steps || []).filter(step => dealMap.has(step.deal_id)).map(step => ({ ...step, deal: dealMap.get(step.deal_id) }));
+        } catch (error) {
+            console.error('fetchPendingCrmApprovals Error:', error);
+            return [];
+        }
+    },
     async fetchDealWorkflow(dealId) {
         if (!supabaseClient) return { approvals: [], attachments: [], activity: [] };
         try {
