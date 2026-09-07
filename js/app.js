@@ -6,6 +6,8 @@ let currentView = 'login';
 let loginMode = 'login';
 let currentUser = null;
 let viewHistory = [];
+const APP_HISTORY_VIEW_KEY = 'muqamView';
+let appHistoryInitialized = false;
 const defaultTranslationsSnapshot = typeof i18n !== 'undefined' ? JSON.parse(JSON.stringify(i18n)) : { en: {}, ar: {} };
 if (typeof i18n !== 'undefined') {
     i18n.en.nav_more = 'More';
@@ -82,8 +84,51 @@ function getProfileDisplayName(profile) {
     return selectedName ? selectedName.trim() : '';
 }
 
+function getAppHistoryUrl(viewId) {
+    const url = new URL(window.location.href);
+    if (viewId && viewId !== 'login') url.searchParams.set('view', viewId);
+    else url.searchParams.delete('view');
+    return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function syncAppBrowserHistory(viewId, replace = false) {
+    if (!window.history?.pushState || !viewId) return;
+    const currentState = window.history.state || {};
+    const nextState = { ...currentState, [APP_HISTORY_VIEW_KEY]: viewId };
+    const shouldReplace = replace || !appHistoryInitialized || currentState[APP_HISTORY_VIEW_KEY] === viewId;
+    window.history[shouldReplace ? 'replaceState' : 'pushState'](nextState, '', getAppHistoryUrl(viewId));
+    appHistoryInitialized = true;
+}
+
+function closeTransientUiForHistoryNavigation() {
+    window.closeCreateTaskModal?.();
+    window.closeTaskDetailsModal?.();
+    window.closeMobileNavigation?.();
+    window.toggleNotifications?.(false);
+    document.body.classList.remove('modal-open', 'multi-select-modal-open', 'create-task-modal-open');
+}
+
+window.addEventListener('popstate', event => {
+    const urlView = new URLSearchParams(window.location.search).get('view');
+    let previousView = event.state?.[APP_HISTORY_VIEW_KEY] || urlView;
+    if (!previousView) previousView = currentUser ? 'dashboard' : 'login';
+    if (!currentUser && previousView !== 'login') previousView = 'login';
+
+    appHistoryInitialized = true;
+    const previousIndex = viewHistory.lastIndexOf(previousView);
+    if (previousIndex >= 0) viewHistory = viewHistory.slice(0, previousIndex + 1);
+    else if (previousView !== 'login' && viewHistory[viewHistory.length - 1] !== previousView) viewHistory.push(previousView);
+
+    closeTransientUiForHistoryNavigation();
+    if (previousView !== currentView) void renderView(previousView, true);
+});
+
 window.goBack = function () {
     if (viewHistory.length > 1) {
+        if (window.history?.state?.[APP_HISTORY_VIEW_KEY]) {
+            window.history.back();
+            return;
+        }
         viewHistory.pop(); // remove current
         const prevView = viewHistory[viewHistory.length - 1];
         currentView = prevView;
@@ -2013,6 +2058,7 @@ window.handleLogout = async function () {
     currentUserProfile = null;
     currentView = 'login';
     viewHistory = [];
+    appHistoryInitialized = false;
     document.querySelector('.sidebar').style.display = 'none';
     document.querySelector('.topbar').style.display = 'none';
     await renderView('login');
@@ -2227,6 +2273,8 @@ window.handleLoginSubmit = async function (e) {
     const _loginSavedView = _loginRequestedView || (currentUser ? (localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view')) : null);
     // Always land users on their personal dashboard after authentication.
     currentView = 'dashboard';
+    viewHistory = [];
+    appHistoryInitialized = false;
     startNotificationsRealtime();
     renderView(currentView);
 }
@@ -10416,6 +10464,11 @@ window.renderView = async function (viewId, isBack = false) {
         currentView = 'dashboard';
     }
 
+    // Give every in-app page a real browser history entry. Android's system
+    // Back button and mobile browser Back controls can now traverse app views.
+    if (!isBack) syncAppBrowserHistory(viewId, viewId === 'login');
+    else if (window.history?.state?.[APP_HISTORY_VIEW_KEY] !== viewId) syncAppBrowserHistory(viewId, true);
+
     const isTaskManagerView = viewId === 'tasks';
     const taskPanel = document.getElementById('taskSidePanel');
     const taskPanelOverlay = document.getElementById('taskSidePanelOverlay');
@@ -13157,6 +13210,8 @@ async function initApp() {
             currentUser = null;
             currentUserRole = null;
             currentUserProfile = null;
+            viewHistory = [];
+            appHistoryInitialized = false;
             document.querySelector('.sidebar').style.display = 'none';
             document.querySelector('.topbar').style.display = 'none';
             if (currentView !== 'login') {
