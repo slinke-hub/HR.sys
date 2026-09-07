@@ -1382,6 +1382,238 @@ const arabicRuntimeUiText = Object.freeze({
     ,'Unauthorized: You do not have permission to view this contract.': 'غير مصرح: ليس لديك صلاحية لعرض هذا العقد.'
     ,'Unknown template type': 'نوع القالب غير معروف'
     ,'The database permissions migration has not been applied. Run onboarding_create_user_permission_repair.sql; for task creation, also run tasks_insert_permission_repair.sql, then try again.': 'لم يتم تطبيق ترحيل صلاحيات قاعدة البيانات. شغّل onboarding_create_user_permission_repair.sql، ولإنشاء المهام شغّل أيضًا tasks_insert_permission_repair.sql، ثم حاول مرة أخرى.'
+    ,'API & Integrations': 'واجهات API والتكاملات'
+    ,'Absences': 'الغيابات'
+    ,'Access archived requests, legacy contracts, and deleted employee records.': 'الوصول إلى الطلبات المؤرشفة والعقود السابقة وسجلات الموظفين المحذوفة.'
+    ,'Access employee directory, request overrides, system settings, security logs & role simulations.': 'الوصول إلى دليل الموظفين وتجاوزات الطلبات وإعدادات النظام وسجلات الأمان ومحاكاة الأدوار.'
+    ,'Action': 'الإجراء'
+    ,'Active Employee Loans': 'قروض الموظفين النشطة'
+    ,'Active User Logins': 'جلسات المستخدمين النشطة'
+    ,'Actual Sales': 'المبيعات الفعلية'
+    ,'Additional / Optional Clauses': 'بنود إضافية / اختيارية'
+    ,'Admin Approve': 'موافقة المسؤول'
+    ,'Admin Control Center': 'مركز تحكم المسؤول'
+    ,'Admin Override': 'تجاوز المسؤول'
+    ,'Admin Reject': 'رفض المسؤول'
+    ,'Administrator Request Override Center': 'مركز تجاوز طلبات المسؤول'
+    ,'All Fields': 'جميع الحقول'
+    ,'All job levels': 'جميع المستويات الوظيفية'
+    ,'Archived On': 'تاريخ الأرشفة'
+    ,'Archived Records': 'السجلات المؤرشفة'
+    ,'As System Administrator, you can approve or reject any pending employee request or task completion override directly.': 'بصفتك مسؤول النظام، يمكنك الموافقة على أي طلب موظف معلق أو تجاوز إكمال مهمة أو رفضه مباشرة.'
+    ,'Assigned to another approver': 'مُسند إلى معتمد آخر'
+    ,'Attendance & Absences Ledger': 'سجل الحضور والغيابات'
+    ,'Available Events:': 'الأحداث المتاحة:'
+    ,'BETA': 'تجريبي'
+    ,'Back': 'رجوع'
+    ,'Back to Users': 'العودة إلى المستخدمين'
+    ,'Base Salary (SAR)': 'الراتب الأساسي (ر.س)'
+    ,'Basic Wage (SAR)': 'الأجر الأساسي (ر.س)'
+    ,'Broadcast company-wide notices to all employee dashboards.': 'نشر إعلانات على مستوى الشركة في لوحات جميع الموظفين.'
+    ,'Calculated Gratuity:': 'مكافأة نهاية الخدمة المحتسبة:'
+    ,'Calculates gratuity based on Saudi Labor Law.': 'يحتسب مكافأة نهاية الخدمة وفق نظام العمل السعودي.'
+    ,'Change stage': 'تغيير المرحلة'
+    ,'Clock Logs & Reports': 'سجلات وتقارير الحضور'
+    ,'Clocked in now': 'حاضرون الآن'
+    ,'Commission Tiers': 'شرائح العمولات'
+    ,'Commissions': 'العمولات'
+    ,'Configure bulk import templates and official contract formats.': 'تهيئة قوالب الاستيراد الجماعي وصيغ العقود الرسمية.'
+    ,'Configured Webhooks': 'روابط Webhook المهيأة'
+    ,'Contract Period': 'مدة العقد'
+    ,'Contract document': 'مستند العقد'
+    ,'Contracts retained after an employee account is removed.': 'العقود المحفوظة بعد إزالة حساب الموظف.'
+    ,'Create Contract': 'إنشاء عقد'
+    ,'Current document:': 'المستند الحالي:'
+    ,'Custody & Asset Handover': 'تسليم العهد والأصول'
+    ,'Date of Absence': 'تاريخ الغياب'
+    ,'Dates:': 'التواريخ:'
+    ,'Deductions': 'الاستقطاعات'
+    ,'Deductions (Loans/Abs)': 'الاستقطاعات (القروض/الغياب)'
+    ,'Delete permanently': 'حذف نهائي'
+    ,'Department (English)': 'القسم (بالإنجليزية)'
+    ,'Departments & Titles': 'الأقسام والمسميات'
+    ,'Document / Financial': 'المستندات / المالية'
+    ,'Download Excel': 'تنزيل Excel'
+    ,'EOS Calculation Result': 'نتيجة احتساب نهاية الخدمة'
+    ,'Earnings': 'الاستحقاقات'
+    ,'Employee (English)': 'الموظف (بالإنجليزية)'
+    ,'Employee Name (Arabic)': 'اسم الموظف (بالعربية)'
+    ,'Employee No.': 'رقم الموظف'
+    ,'Employee not found.': 'لم يتم العثور على الموظف.'
+    ,'Employee:': 'الموظف:'
+    ,'Employees': 'الموظفون'
+    ,'Employees Radar': 'رادار الموظفين'
+    ,'Employees:': 'الموظفون:'
+    ,'Employer Name (Arabic)': 'اسم صاحب العمل (بالعربية)'
+    ,'Employer Name (English)': 'اسم صاحب العمل (بالإنجليزية)'
+    ,'Enable Overtime Calculations System-wide': 'تفعيل احتساب العمل الإضافي على مستوى النظام'
+    ,'End-of-Service (EOS) Calculator': 'حاسبة مكافأة نهاية الخدمة'
+    ,'English (Read-only)': 'الإنجليزية (للقراءة فقط)'
+    ,'Entry-Level': 'مبتدئ'
+    ,'Error: Contract or Employee not found.': 'خطأ: لم يتم العثور على العقد أو الموظف.'
+    ,'Error: No contract selected for printing.': 'خطأ: لم يتم اختيار عقد للطباعة.'
+    ,'Excel & Contract Templates': 'قوالب Excel والعقود'
+    ,'Excel Template': 'قالب Excel'
+    ,'Excused': 'بعذر'
+    ,'Excused absences are typically not deducted from payroll.': 'عادةً لا تُخصم الغيابات بعذر من الراتب.'
+    ,'Export JSON': 'تصدير JSON'
+    ,'Failed to load news.': 'تعذر تحميل الأخبار.'
+    ,'Final Date': 'التاريخ النهائي'
+    ,'Fixed-term': 'محدد المدة'
+    ,'Former Employee': 'موظف سابق'
+    ,'Generate Payslips': 'إنشاء مسيرات الرواتب'
+    ,'Generate Performance Report': 'إنشاء تقرير الأداء'
+    ,'HR Payroll Settings': 'إعدادات الرواتب للموارد البشرية'
+    ,'Head:': 'المدير:'
+    ,'Hire Date': 'تاريخ التعيين'
+    ,'Housing Allowance (SAR)': 'بدل السكن (ر.س)'
+    ,'How to use Integrations': 'كيفية استخدام التكاملات'
+    ,'Hybrid': 'هجين'
+    ,'ID': 'المعرّف'
+    ,'ID:': 'المعرّف:'
+    ,'If disabled, overtime inputs will be hidden and not calculated in payslips.': 'عند التعطيل، تُخفى حقول العمل الإضافي ولا تُحتسب في مسيرات الرواتب.'
+    ,'Import JSON': 'استيراد JSON'
+    ,'Include Probation Period': 'تضمين فترة التجربة'
+    ,'Indefinite-term': 'غير محدد المدة'
+    ,'Interface Translations': 'ترجمات الواجهة'
+    ,'Iqama Number/Saudi ID': 'رقم الإقامة / الهوية السعودية'
+    ,'Item Purchase': 'شراء بند'
+    ,'Job Title (Arabic)': 'المسمى الوظيفي (بالعربية)'
+    ,'Job Title (English)': 'المسمى الوظيفي (بالإنجليزية)'
+    ,'KPI overview': 'نظرة عامة على مؤشرات الأداء'
+    ,'Leadership': 'القيادة'
+    ,'Live': 'مباشر'
+    ,'Live view of today’s clocked-in and clocked-out employees': 'عرض مباشر لموظفي اليوم المسجلين حضورًا وانصرافًا'
+    ,'Loan Request': 'طلب قرض'
+    ,'Loans': 'القروض'
+    ,'Lock Status': 'حالة القفل'
+    ,'Locked': 'مقفل'
+    ,'Locked Accounts': 'الحسابات المقفلة'
+    ,'Manage Arabic & English UI text strings and custom labels.': 'إدارة نصوص الواجهة العربية والإنجليزية والتسميات المخصصة.'
+    ,'Manage Departments & Titles': 'إدارة الأقسام والمسميات'
+    ,'Manage clients and deals': 'إدارة العملاء والصفقات'
+    ,'Manage commissions, attendance, loans, and generate payslips.': 'إدارة العمولات والحضور والقروض وإنشاء مسيرات الرواتب.'
+    ,'Manage departments, reporting leads, and the job architecture from the company workbook.': 'إدارة الأقسام والمديرين المباشرين والهيكل الوظيفي من ملف الشركة.'
+    ,'Managers assigned': 'المديرون المعيّنون'
+    ,'Mid-Level': 'متوسط الخبرة'
+    ,'Missing AR': 'العربية مفقودة'
+    ,'Missing AR:': 'العربية مفقودة:'
+    ,'Monthly Installment': 'القسط الشهري'
+    ,'Name (Arabic)': 'الاسم (بالعربية)'
+    ,'No absences logged this month.': 'لا توجد غيابات مسجلة هذا الشهر.'
+    ,'No active loans.': 'لا توجد قروض نشطة.'
+    ,'No archived contracts.': 'لا توجد عقود مؤرشفة.'
+    ,'No attendance recorded today.': 'لا يوجد حضور مسجل اليوم.'
+    ,'No department assigned': 'لم يتم تعيين قسم'
+    ,'No departments configured.': 'لا توجد أقسام مهيأة.'
+    ,'No employees are available. Apply the company watcher directory migration and refresh.': 'لا يوجد موظفون متاحون. طبّق ترحيل دليل متابعي الشركة ثم حدّث الصفحة.'
+    ,'No files have been uploaded for this contract.': 'لم تُرفع ملفات لهذا العقد.'
+    ,'No job titles added yet.': 'لم تتم إضافة مسميات وظيفية بعد.'
+    ,'No locked accounts. All user accounts are active.': 'لا توجد حسابات مقفلة. جميع حسابات المستخدمين نشطة.'
+    ,'No matching departments': 'لا توجد أقسام مطابقة'
+    ,'No messages yet. Be the first to post!': 'لا توجد رسائل بعد. كن أول من يكتب!'
+    ,'No payslips generated yet.': 'لم يتم إنشاء مسيرات رواتب بعد.'
+    ,'No pending request workflows awaiting approval.': 'لا توجد مسارات طلبات معلقة بانتظار الموافقة.'
+    ,'No pending tasks awaiting approval.': 'لا توجد مهام معلقة بانتظار الموافقة.'
+    ,'No sales logged.': 'لا توجد مبيعات مسجلة.'
+    ,'No task data available to generate a report.': 'لا توجد بيانات مهام لإنشاء تقرير.'
+    ,'No task list': 'لا توجد قائمة مهام'
+    ,'No tasks here': 'لا توجد مهام هنا'
+    ,'No users found': 'لم يتم العثور على مستخدمين'
+    ,'No users found.': 'لم يتم العثور على مستخدمين.'
+    ,'No webhooks configured': 'لا توجد روابط Webhook مهيأة'
+    ,'Non-Saudi': 'غير سعودي'
+    ,'Not Translated': 'غير مترجم'
+    ,'Note: Any outstanding loans should be deducted from this final settlement amount.': 'ملاحظة: يجب خصم أي قروض مستحقة من مبلغ التسوية النهائية.'
+    ,'Notifications Center': 'مركز الإشعارات'
+    ,'OT/Commissions': 'العمل الإضافي/العمولات'
+    ,'On-site': 'من مقر العمل'
+    ,'Open Admin Hub': 'فتح مركز الإدارة'
+    ,'Optional. Accepted formats: PDF, Word, or image.': 'اختياري. الصيغ المقبولة: PDF أو Word أو صورة.'
+    ,'Order location photo': 'صورة موقع الطلب'
+    ,'Org Structure & Job Titles': 'الهيكل التنظيمي والمسميات الوظيفية'
+    ,'Overtime': 'العمل الإضافي'
+    ,'Overview & Hub': 'النظرة العامة والمركز'
+    ,'PAYSLIP': 'مسير راتب'
+    ,'Pay Slip': 'مسير الراتب'
+    ,'Pending Leave Requests': 'طلبات الإجازة المعلقة'
+    ,'Pending Overrides': 'التجاوزات المعلقة'
+    ,'Pending Workflow Overrides': 'تجاوزات سير العمل المعلقة'
+    ,'Please login to view projects.': 'يرجى تسجيل الدخول لعرض المشاريع.'
+    ,'Please select your logout location:': 'يرجى اختيار موقع تسجيل الانصراف:'
+    ,'Print Document': 'طباعة المستند'
+    ,'Quick Administration Hub': 'مركز الإدارة السريع'
+    ,'Remaining': 'المتبقي'
+    ,'Remote': 'عن بُعد'
+    ,'Request Date': 'تاريخ الطلب'
+    ,'Requested': 'المطلوب'
+    ,'Required for Fixed-term': 'مطلوب للعقد محدد المدة'
+    ,'Resignation': 'استقالة'
+    ,'Rest Days': 'أيام الراحة'
+    ,'Retake': 'إعادة الالتقاط'
+    ,'Role & Status': 'الدور والحالة'
+    ,'Role Simulation Studio': 'استوديو محاكاة الأدوار'
+    ,'Run calculations for all active employees.': 'تشغيل الحسابات لجميع الموظفين النشطين.'
+    ,'Saudi': 'سعودي'
+    ,'Save All Changes': 'حفظ جميع التغييرات'
+    ,'Save Draft': 'حفظ كمسودة'
+    ,'Select Contract to Print': 'اختر عقدًا للطباعة'
+    ,'Select Employee...': 'اختر موظفًا...'
+    ,'Select Job Title': 'اختر المسمى الوظيفي'
+    ,'Select a department employee...': 'اختر موظفًا من القسم...'
+    ,'Send real-time data to external services (Slack, Make, Zapier, Custom API)': 'إرسال البيانات لحظيًا إلى خدمات خارجية (Slack وMake وZapier وواجهة API مخصصة)'
+    ,'Stage': 'المرحلة'
+    ,'Status:': 'الحالة:'
+    ,'System Administrators': 'مسؤولو النظام'
+    ,'System Announcements': 'إعلانات النظام'
+    ,'System Task Assignments': 'تعيينات مهام النظام'
+    ,'System Tools': 'أدوات النظام'
+    ,'Tag Value': 'قيمة الوسم'
+    ,'Take a current photo at the order location to complete clock out.': 'التقط صورة حالية في موقع الطلب لإكمال تسجيل الانصراف.'
+    ,'Take photo': 'التقاط صورة'
+    ,'Termination & Notice Period': 'إنهاء الخدمة وفترة الإشعار'
+    ,'Termination (Employer)': 'إنهاء الخدمة (صاحب العمل)'
+    ,'Termination Reason': 'سبب إنهاء الخدمة'
+    ,'Test app experience as Department Supervisor': 'اختبار تجربة التطبيق كمشرف قسم'
+    ,'Test app experience as HR / Department Manager': 'اختبار تجربة التطبيق كمدير موارد بشرية / قسم'
+    ,'Test app experience as standard Employee': 'اختبار تجربة التطبيق كموظف عادي'
+    ,'Title:': 'العنوان:'
+    ,'Total Employees': 'إجمالي الموظفين'
+    ,'Total Monthly Wage:': 'إجمالي الأجر الشهري:'
+    ,'Total employees': 'إجمالي الموظفين'
+    ,'Total:': 'الإجمالي:'
+    ,'Track company assets, custody forms, and equipment sign-offs.': 'تتبع أصول الشركة ونماذج العهد وتوقيعات استلام المعدات.'
+    ,'Track unexcused absences for deductions.': 'تتبع الغيابات دون عذر لاحتساب الاستقطاعات.'
+    ,'Translated': 'مترجم'
+    ,'Translated:': 'مترجم:'
+    ,'Transport Allowance (SAR)': 'بدل النقل (ر.س)'
+    ,'Try another name, title, or level.': 'جرّب اسمًا أو مسمى أو مستوى آخر.'
+    ,'UI Strings': 'نصوص الواجهة'
+    ,'Unauthorized. System Admin access required.': 'غير مصرح. يلزم وصول مسؤول النظام.'
+    ,'Unexcused': 'دون عذر'
+    ,'Unlock Account': 'فتح الحساب'
+    ,'Upload Excel': 'رفع Excel'
+    ,'Uploaded Contract Files': 'ملفات العقد المرفوعة'
+    ,'Use device camera': 'استخدام كاميرا الجهاز'
+    ,'Use photo': 'استخدام الصورة'
+    ,'User Directory': 'دليل المستخدمين'
+    ,'User Directory & Permissions': 'دليل المستخدمين والصلاحيات'
+    ,'Users, Roles & Reset Passwords': 'المستخدمون والأدوار وإعادة تعيين كلمات المرور'
+    ,'View Map': 'عرض الخريطة'
+    ,'View only': 'عرض فقط'
+    ,'View uploaded policy': 'عرض السياسة المرفوعة'
+    ,'View your monthly payslips and history.': 'عرض مسيرات رواتبك الشهرية وسجلها.'
+    ,'Webhooks allow MUQAM HR to push data to other applications in real-time. Whenever an event occurs (like a new client added or a deal won), we will send an HTTP POST request to your provided URL containing a JSON payload with the event details.': 'تتيح روابط Webhook لنظام مُقام للموارد البشرية إرسال البيانات إلى التطبيقات الأخرى لحظيًا. عند وقوع حدث، مثل إضافة عميل أو الفوز بصفقة، سيُرسل طلب HTTP POST إلى الرابط المحدد متضمنًا تفاصيل الحدث بصيغة JSON.'
+    ,'Webhooks, CRM integration parameters, and external APIs.': 'روابط Webhook ومعلمات تكامل CRM وواجهات API الخارجية.'
+    ,'Workbook catalog': 'دليل ملف العمل'
+    ,'Workbook job titles': 'المسميات الوظيفية في ملف العمل'
+    ,'Workplace Location': 'موقع العمل'
+    ,'Years of Service:': 'سنوات الخدمة:'
+    ,'You are not authorized to view this page.': 'غير مصرح لك بعرض هذه الصفحة.'
+    ,'You do not have permission to view archived contracts.': 'ليس لديك صلاحية لعرض العقود المؤرشفة.'
+    ,'all': 'الكل'
+    ,'clocked in now': 'حاضرون الآن'
+    ,'with': 'مع'
 });
 const arabicRuntimeUiTextLower = Object.freeze(Object.fromEntries(
     Object.entries(arabicRuntimeUiText).map(([key, value]) => [key.toLocaleLowerCase('en'), value])
@@ -1444,47 +1676,92 @@ function localizeNotificationMessage(value) {
     return localized;
 }
 
+const arabicOriginalText = new WeakMap();
+const arabicOriginalAttributes = new WeakMap();
+const arabicTranslationProtectedSelector = [
+    '[data-no-translate]', '[contenteditable="true"]', 'script', 'style', 'textarea',
+    '.task-v2-row-title', '.task-detail-description', '.notification-comment span',
+    '.notification-title-button', '.message-content', '.chat-message', '.user-generated-content'
+].join(',');
+
 function translateArabicInterface(root = document) {
-    if (currentLang !== 'ar' || !root?.querySelectorAll) return;
-    const selectors = [
-        'button', 'label', 'legend', 'th', 'dt', 'option', '[role="tab"]',
-        '.topbar', '.sidebar-nav', '.page-header', '.page-title', '.section-header',
-        '.modal-header', '.modal-footer', '.modal-content > h1', '.modal-content > h2',
-        '.modal-content > h3', '.view-container h1', '.view-container h2',
-        '.view-container h3', '.view-container h4', '.view-container p',
-        '.form-label', '.card-title', '.page-subtitle', '.empty-state',
-        '.task-assignee-picker-help', '.task-assignee-picker-empty',
-        '.modal-header h2', '.status-badge', '.property-cell > span',
-        '.hierarchy-square-title', '.hierarchy-employee-card-header p',
-        '.task-health-heading', '.task-health-item', '.task-health-total',
-        '.task-health-new-task', '.task-focus-kicker', '.task-focus-header h3',
-        '.task-v2-view-toggles', '#taskSidePanel h3',
-        '.create-task-attachments-heading', '.create-task-upload-zone span',
-        '.employee-details-kicker', '.employee-details-grid > div > span',
-        '.edit-task-list-indicator', '.select-ui-value', '.date-ui-value',
-        '.estimate-ui-value', '.watchers-ui-value', '.category-ui-value',
-        '.file-dropzone p', '.files-section > span', '.floating-input-group label',
-        '.edit-task-tabs', '.text-muted', '.alert', '.task-list-name',
-        '.task-v2-sidebar-header h3', '.custom-multi-select-header'
-    ].join(',');
-    root.querySelectorAll(selectors).forEach(element => {
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-        const nodes = [];
-        while (walker.nextNode()) nodes.push(walker.currentNode);
-        nodes.forEach(node => {
-            const translated = localizeRuntimeText(node.nodeValue);
-            if (translated !== node.nodeValue) node.nodeValue = translated;
-        });
+    if (!root?.querySelectorAll) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            const parent = node.parentElement;
+            if (!parent || parent.matches(arabicTranslationProtectedSelector) || parent.closest(arabicTranslationProtectedSelector)) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+        }
     });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node => {
+        if (currentLang === 'ar') {
+            const translated = localizeRuntimeText(node.nodeValue);
+            if (translated !== node.nodeValue) {
+                if (!arabicOriginalText.has(node)) arabicOriginalText.set(node, node.nodeValue);
+                node.nodeValue = translated;
+            }
+        } else if (arabicOriginalText.has(node)) {
+            node.nodeValue = arabicOriginalText.get(node);
+            arabicOriginalText.delete(node);
+        }
+    });
+
     root.querySelectorAll('[placeholder], [title], [aria-label]').forEach(element => {
         ['placeholder', 'title', 'aria-label'].forEach(attribute => {
             if (!element.hasAttribute(attribute)) return;
             const value = element.getAttribute(attribute);
-            const translated = localizeRuntimeText(value);
-            if (translated !== value) element.setAttribute(attribute, translated);
+            if (currentLang === 'ar') {
+                const translated = localizeRuntimeText(value);
+                if (translated !== value) {
+                    const originals = arabicOriginalAttributes.get(element) || {};
+                    if (!(attribute in originals)) originals[attribute] = value;
+                    arabicOriginalAttributes.set(element, originals);
+                    element.setAttribute(attribute, translated);
+                }
+            } else {
+                const originals = arabicOriginalAttributes.get(element);
+                if (originals && attribute in originals) {
+                    element.setAttribute(attribute, originals[attribute]);
+                    delete originals[attribute];
+                }
+            }
         });
     });
 }
+
+let arabicTranslationObserver = null;
+let arabicTranslationQueued = false;
+const arabicTranslationRoots = new Set();
+function scheduleArabicInterfaceTranslation(root = document) {
+    const translationRoot = root?.nodeType === Node.TEXT_NODE ? root.parentElement : root;
+    if (translationRoot?.querySelectorAll) arabicTranslationRoots.add(translationRoot);
+    if (arabicTranslationQueued || !arabicTranslationRoots.size) return;
+    arabicTranslationQueued = true;
+    queueMicrotask(() => {
+        arabicTranslationQueued = false;
+        const roots = [...arabicTranslationRoots];
+        arabicTranslationRoots.clear();
+        roots
+            .filter(candidate => !roots.some(other => other !== candidate && other.contains?.(candidate)))
+            .forEach(translateArabicInterface);
+    });
+}
+
+function startArabicTranslationObserver() {
+    if (arabicTranslationObserver || !document.body || typeof MutationObserver === 'undefined') return;
+    arabicTranslationObserver = new MutationObserver(mutations => {
+        mutations.forEach(mutation => mutation.addedNodes.forEach(scheduleArabicInterfaceTranslation));
+    });
+    arabicTranslationObserver.observe(document.body, { childList: true, subtree: true });
+    scheduleArabicInterfaceTranslation();
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startArabicTranslationObserver, { once: true });
+else startArabicTranslationObserver();
 
 // Generate Ring SVG
 function getRingSVG(percentage, color, labelKey) {
@@ -6003,7 +6280,8 @@ async function renderTasks() {
     ]);
     
     window.taskDepartmentSupervisors = departmentSupervisors || [];
-    const viewerProfile = currentUserProfile || allUsers.find(user => user.id === currentUser?.id);
+    const usersById = new Map((allUsers || []).map(user => [String(user.id), user]));
+    const viewerProfile = currentUserProfile || usersById.get(String(currentUser?.id));
     const taskLists = (fetchedTaskLists || []).filter(list => {
         if (isTaskAdmin()) return true;
         if (list.owner_id === currentUser?.id) return true;
@@ -6021,9 +6299,10 @@ async function renderTasks() {
     window.taskDepartmentsCache = allDepartments;
     window.taskListsCache = taskLists || [];
     
+    const taskListsById = new Map((taskLists || []).map(list => [String(list.id), list]));
     let tasks = fetchedTasks.filter(t => !t.archived_at).map(t => {
-        const assignee = allUsers.find(u => u.id === t.assignee_id) || (t.assignee_id === currentUser?.id ? (currentUserProfile || currentUser) : null);
-        const creator = allUsers.find(u => u.id === t.created_by) || (t.created_by === currentUser?.id ? (currentUserProfile || currentUser) : null);
+        const assignee = usersById.get(String(t.assignee_id)) || (t.assignee_id === currentUser?.id ? (currentUserProfile || currentUser) : null);
+        const creator = usersById.get(String(t.created_by)) || (t.created_by === currentUser?.id ? (currentUserProfile || currentUser) : null);
         const displayTitle = getLocalizedTaskTitle(t);
         const taskObj = {
             ...t,
@@ -6057,7 +6336,7 @@ async function renderTasks() {
         if ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') && (teamIds.includes(task.assignee_id) || (task.assignee_ids || []).some(id => teamIds.includes(id)))) return true;
         
         if (task.task_list_id) {
-            const list = taskLists.find(l => l.id === task.task_list_id);
+            const list = taskListsById.get(String(task.task_list_id));
             if (list && (list.owner_id === currentUser.id || list.visible_to_all || list.department_id === viewerProfile?.department_id || (list.shared_with && list.shared_with.includes(currentUser.id)))) {
                 return true;
             }
@@ -6085,7 +6364,7 @@ async function renderTasks() {
     }).join('');
 
     const ownTaskLists = (taskLists || []).filter(list => list.owner_id === currentUser.id);
-    const currentProfile = allUsers.find(user => user.id === currentUser.id) || currentUser;
+    const currentProfile = usersById.get(String(currentUser.id)) || currentUser;
     // Administrators and department managers may choose a department in the
     // access tab, so keep the full active directory available for filtering.
     const canManageTaskListDepartments = isTaskAdmin();
@@ -6339,6 +6618,37 @@ async function renderTasksV2() {
     `).join('');
 
     const viewerIsTaskAdmin = isTaskAdmin();
+    const taskListsById = new Map(taskLists.map(list => [String(list.id), list]));
+    const projectsById = new Map(projects.map(project => [String(project.id), project]));
+    const usersById = new Map((window.taskAllUsersCache || []).map(user => [String(user.id), user]));
+    const taskCountByListId = new Map();
+    const taskChildrenByParentId = new Map();
+    tasks.forEach(task => {
+        if (task.task_list_id) {
+            const listId = String(task.task_list_id);
+            taskCountByListId.set(listId, (taskCountByListId.get(listId) || 0) + 1);
+        }
+        if (task.parent_task_id) {
+            const parentId = String(task.parent_task_id);
+            if (!taskChildrenByParentId.has(parentId)) taskChildrenByParentId.set(parentId, []);
+            taskChildrenByParentId.get(parentId).push(task);
+        }
+    });
+    const taskById = new Map(tasks.map(task => [String(task.id), task]));
+    const taskDepthById = new Map();
+    const orderedFocusTasks = [];
+    const appendedTaskIds = new Set();
+    const appendTaskFamily = (task, depth = 0) => {
+        const taskId = String(task.id);
+        if (appendedTaskIds.has(taskId)) return;
+        appendedTaskIds.add(taskId);
+        taskDepthById.set(taskId, depth);
+        orderedFocusTasks.push(task);
+        (taskChildrenByParentId.get(taskId) || []).forEach(child => appendTaskFamily(child, depth + 1));
+    };
+    tasks.filter(task => !task.parent_task_id || !taskById.has(String(task.parent_task_id)))
+        .forEach(task => appendTaskFamily(task));
+    tasks.forEach(task => appendTaskFamily(task));
     const ownTaskLists = taskLists.filter(list => list.owner_id === currentUser.id);
     const sharedTaskLists = taskLists.filter(list => list.owner_id !== currentUser.id && list.shared_with && list.shared_with.includes(currentUser.id));
     const departmentTaskLists = taskLists.filter(list => {
@@ -6349,7 +6659,7 @@ async function renderTasksV2() {
     let personalListItems = '';
     if (ownTaskLists.length > 0) {
         personalListItems += ownTaskLists.map(list => {
-            const listTasksCount = tasks.filter(t => t.task_list_id === list.id).length;
+            const listTasksCount = taskCountByListId.get(String(list.id)) || 0;
             return `
             <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')" oncontextmenu="window.showTaskListContextMenu(event, '${list.id}', ${currentUserRole === 'ADMIN'})">
                 <span class="task-list-name">${escapeHTML(list.name)}</span>
@@ -6363,8 +6673,8 @@ async function renderTasksV2() {
     }
     if (sharedTaskLists.length > 0) {
         personalListItems += sharedTaskLists.map(list => {
-            const listTasksCount = tasks.filter(t => t.task_list_id === list.id).length;
-            const owner = window.taskAllUsersCache?.find(u => u.id === list.owner_id);
+            const listTasksCount = taskCountByListId.get(String(list.id)) || 0;
+            const owner = usersById.get(String(list.owner_id));
             const ownerName = owner ? owner.full_name.split(' ')[0] : 'Unknown';
             return `
             <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')" oncontextmenu="window.showTaskListContextMenu(event, '${list.id}', ${currentUserRole === 'ADMIN'})">
@@ -6376,7 +6686,7 @@ async function renderTasksV2() {
     }
     if (departmentTaskLists.length > 0) {
         personalListItems += departmentTaskLists.map(list => {
-            const listTasksCount = tasks.filter(task => task.task_list_id === list.id).length;
+            const listTasksCount = taskCountByListId.get(String(list.id)) || 0;
             return `
             <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')" oncontextmenu="window.showTaskListContextMenu(event, '${list.id}', ${currentUserRole === 'ADMIN'})">
                 <span class="task-list-name" title="Department task list">${escapeHTML(list.name)}</span>
@@ -6385,12 +6695,12 @@ async function renderTasksV2() {
         }).join('');
     }
 
-    const taskRows = tasks.map(task => {
+    const taskRows = orderedFocusTasks.map(task => {
         const canManageTask = isTaskAdmin() || task.created_by === currentUser?.id || (task.task_list_id
-            ? taskLists.find(l => l.id === task.task_list_id)?.owner_id === currentUser?.id
+            ? taskListsById.get(String(task.task_list_id))?.owner_id === currentUser?.id
             : [task.assignee_id, task.supervisor_id].includes(currentUser?.id));
         const canEditTask = isTaskAdmin() || task.created_by === currentUser?.id;
-        const taskList = taskLists.find(list => list.id === task.task_list_id);
+        const taskList = taskListsById.get(String(task.task_list_id));
         const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id
             || (taskList?.can_delete_users || []).includes(currentUser?.id);
         const prioColor = task.priority === 'high' || task.priority === 'urgent' ? 'var(--color-warning)' : (task.priority === 'critical' ? 'var(--color-danger)' : 'var(--color-text-secondary)');
@@ -6403,20 +6713,22 @@ async function renderTasksV2() {
             Approved: '#059669'
         }[task.status] || 'var(--color-text-secondary)';
         
-        const listName = taskList?.name || (task.project_id ? (projects.find(project => project.id === task.project_id)?.project_name || 'Project tasks') : 'Personal tasks');
-        const childCount = tasks.filter(child => child.parent_task_id === task.id).length;
+        const listName = taskList?.name || (task.project_id ? (projectsById.get(String(task.project_id))?.project_name || 'Project tasks') : 'Personal tasks');
+        const childCount = (taskChildrenByParentId.get(String(task.id)) || []).length;
+        const taskDepth = taskDepthById.get(String(task.id)) || 0;
+        const isNestedSubtask = taskDepth > 0;
         const dueClass = task.due_date && !['completed', 'Approved'].includes(task.status) && new Date(`${task.due_date}T23:59:59`) < new Date() ? ' overdue' : '';
         const daysUntilDue = task.due_date ? (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000 : null;
         const isClosedTask = task.status === 'completed' || task.status === 'Approved';
         const isFocusTask = !isClosedTask && (task.status === 'Rejected' || task.priority === 'urgent' || task.priority === 'critical' || (daysUntilDue !== null && daysUntilDue <= 7));
         const rowAssigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean);
-        const rowAssignedUsers = (window.taskAllUsersCache || []).filter(user => rowAssigneeIds.includes(user.id));
+        const rowAssignedUsers = rowAssigneeIds.map(id => usersById.get(String(id))).filter(Boolean);
         const rowAssigneeProfiles = rowAssignedUsers.length ? rowAssignedUsers : [task.assignee].filter(Boolean);
         const rowAssigneeFirstNames = rowAssigneeProfiles.map(user => (window.formatEmployeeName(user) || '').trim().split(/\s+/)[0]).filter(Boolean);
         const rowAssigneeFirstName = rowAssigneeFirstNames.length
             ? `${rowAssigneeFirstNames[0]}${rowAssigneeIds.length > 1 ? ` +${rowAssigneeIds.length - 1}` : ''}`
             : taskDetailText('Unassigned', 'غير معيّن');
-        const rowCreator = (window.taskAllUsersCache || []).find(user => user.id === task.created_by) || task.creator;
+        const rowCreator = usersById.get(String(task.created_by)) || task.creator;
         const formattedRowCreatorName = rowCreator ? window.formatEmployeeName(rowCreator) : '';
         const rowCreatorName = formattedRowCreatorName && formattedRowCreatorName !== 'Unknown'
             ? formattedRowCreatorName
@@ -6424,7 +6736,7 @@ async function renderTasksV2() {
         const avatarHTML = rowAssignedUsers.length ? `<span class="task-assignee-avatar-stack">${rowAssignedUsers.slice(0, 4).map(user => { const name = window.formatEmployeeName(user) || 'Employee'; return `<span class="avatar-circle" title="${escapeHTML(name)}">${escapeHTML(name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase())}</span>`; }).join('')}</span>` : `<span class="avatar-circle" title="Unassigned"><i data-lucide="user" style="width:14px;height:14px;"></i></span>`;
 
         return `
-            <article class="task-v2-row ${isCompleted ? 'completed' : ''}" data-task-id="${task.id}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="cursor:pointer; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--color-border); background: var(--color-surface); transition: background 0.2s; flex-wrap: wrap; gap: 0.5rem;">
+            <article class="task-v2-row ${isCompleted ? 'completed' : ''} ${isNestedSubtask ? 'task-v2-subtask-row' : 'task-v2-main-row'}" data-task-id="${task.id}" data-parent-task-id="${task.parent_task_id || ''}" data-task-depth="${taskDepth}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="--task-subtask-depth:${taskDepth}; cursor:pointer; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--color-border); background: var(--color-surface); transition: background 0.2s; flex-wrap: wrap; gap: 0.5rem;">
                 <div class="task-v2-row-left" style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
                     <button class="task-v2-check-btn" onclick="event.stopPropagation(); window.taskV2ToggleComplete('${task.id}', event)" ${!canManageTask ? 'disabled' : ''} style="background:none; border:none; cursor:pointer; display:flex; align-items:center; padding:0;">
                         <i data-lucide="check-circle-2" style="width: 20px; height: 20px; color: ${stageCheckColor};"></i>
@@ -6989,7 +7301,11 @@ async function refreshTaskWorkspaceInBackground() {
     };
     try {
         const content = await renderTasksV2();
+        const previousContent = window.viewHTMLCache.tasks;
         window.viewHTMLCache.tasks = content;
+        // Realtime events can arrive in bursts. If the rendered result did not
+        // change, keep the existing DOM so the user never sees a needless reset.
+        if (content === previousContent) return;
         if (currentView !== 'tasks' && currentView !== 'tasks_v2') return;
         viewContainer.innerHTML = content;
         const search = document.getElementById('taskV2Search');
@@ -7031,30 +7347,23 @@ window.filterTasksV2 = function () {
     const priority = document.getElementById('taskV2PriorityFilter')?.value || 'all';
     const dateFilter = document.getElementById('taskV2DateFilter')?.value || '';
     const project = window.taskV2SelectedProject || 'all';
-    
     const visibleIds = new Set(window.visibleTaskIds || []);
-    
-    document.querySelectorAll('.task-v2-row, .task-item-card').forEach(el => {
-        const taskId = el.getAttribute('data-task-id');
-        const task = window.taskCache[taskId];
-        if (!task || !visibleIds.has(taskId)) {
-            el.style.display = 'none';
-            return;
-        }
-        
+    const tasks = Object.values(window.taskCache || {}).filter(task => visibleIds.has(String(task.id)));
+    const projectsById = new Map((window.projectsCache || []).map(item => [String(item.id), item]));
+    const taskListsById = new Map((window.taskListsCache || []).map(item => [String(item.id), item]));
+
+    const matchesFilters = task => {
         let matchesSearch = true;
         if (query) {
-            const projectObj = (window.projectsCache || []).find(item => item.id === task.project_id);
+            const projectObj = projectsById.get(String(task.project_id));
             const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
-            const privateList = (window.taskListsCache || []).find(l => l.id === task.task_list_id);
+            const privateList = taskListsById.get(String(task.task_list_id));
             const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, projectObj?.project_name, privateList?.name, parentTask?.displayTitle].filter(Boolean).join(' ').toLowerCase();
             matchesSearch = searchable.includes(query);
         }
-        
         const matchesStatus = (status === 'all') || (status === 'open' && task.status !== 'completed') || (task.status === status);
         const matchesPriority = (priority === 'all') || (task.priority === priority);
         const matchesDate = !dateFilter || String(task.due_date || '').slice(0, 10) === dateFilter;
-        
         let matchesProject = true;
         if (project !== 'all') {
             if (project.startsWith('list_')) {
@@ -7063,13 +7372,41 @@ window.filterTasksV2 = function () {
                 matchesProject = String(task.project_id) === project;
             }
         }
-        
-        const matchesMode = window.taskV2Mode !== 'focus' || el.classList.contains('task-item-card') || el.dataset.focus === 'true';
-        if (matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesProject && matchesMode) {
-            el.style.display = '';
-        } else {
-            el.style.display = 'none';
+        return matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesProject;
+    };
+    const isFocusCandidate = task => {
+        if (task.status === 'completed' || task.status === 'Approved') return false;
+        const daysUntilDue = task.due_date ? (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000 : null;
+        return task.status === 'Rejected'
+            || task.priority === 'urgent'
+            || task.priority === 'critical'
+            || (daysUntilDue !== null && daysUntilDue <= 7);
+    };
+    const rootTaskId = task => {
+        let current = task;
+        const visited = new Set();
+        while (current?.parent_task_id && window.taskCache?.[current.parent_task_id] && !visited.has(String(current.id))) {
+            visited.add(String(current.id));
+            current = window.taskCache[current.parent_task_id];
         }
+        return String(current?.id || task.id);
+    };
+    const directMatchesById = new Map(tasks.map(task => [String(task.id), matchesFilters(task)]));
+    const visibleFocusRoots = new Set(tasks
+        .filter(task => directMatchesById.get(String(task.id)) && isFocusCandidate(task))
+        .map(rootTaskId));
+
+    document.querySelectorAll('.task-v2-row, .task-item-card').forEach(el => {
+        const taskId = String(el.getAttribute('data-task-id') || '');
+        const task = window.taskCache[taskId];
+        let matches = !!task && visibleIds.has(taskId) && directMatchesById.get(taskId);
+        if (task && visibleIds.has(taskId) && window.taskV2Mode === 'focus' && el.classList.contains('task-v2-row')) {
+            // Focus is grouped by main task. Once any member needs attention,
+            // keep the main task and every subtask together and permanently expanded,
+            // even when a filter matched only one member of the family.
+            matches = visibleFocusRoots.has(rootTaskId(task));
+        }
+        el.style.display = matches ? '' : 'none';
     });
 };
 
@@ -10070,8 +10407,15 @@ window.renderView = async function (viewId, isBack = false) {
             case 'profile': content = await renderProfile(); break;
             case 'projects': content = await renderProjects(); break;
             case 'approvals': content = await renderApprovals(); break;
-            case 'tasks': content = await renderTasksV2(); break;
-            case 'tasks_v2': content = await renderTasksV2(); break;
+            case 'tasks':
+            case 'tasks_v2':
+                if (hasCache) {
+                    content = window.viewHTMLCache.tasks;
+                    setTimeout(() => window.scheduleTaskWorkspaceRefresh?.(0), 0);
+                } else {
+                    content = await renderTasksV2();
+                }
+                break;
             case 'archived_tasks': content = await renderArchivedTasks(); break;
             case 'departments': content = await renderDepartments(); break;
             case 'translations': content = await renderTranslationsPage(); break;
@@ -10255,18 +10599,25 @@ function playNotificationRing() {
         const context = notificationAudioContext;
         if (context.state === 'suspended') context.resume?.().catch?.(() => { });
         const startAt = context.currentTime + 0.02;
-        [0, 0.22].forEach((delay, index) => {
-            const oscillator = context.createOscillator();
-            const gain = context.createGain();
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(index === 0 ? 880 : 1046.5, startAt + delay);
-            gain.gain.setValueAtTime(0.0001, startAt + delay);
-            gain.gain.exponentialRampToValueAtTime(0.075, startAt + delay + 0.015);
-            gain.gain.exponentialRampToValueAtTime(0.0001, startAt + delay + 0.18);
-            oscillator.connect(gain);
-            gain.connect(context.destination);
-            oscillator.start(startAt + delay);
-            oscillator.stop(startAt + delay + 0.2);
+        const dingDongChimes = [
+            { delay: 0, frequency: 783.99, duration: .72, volume: .09 },
+            { delay: .38, frequency: 523.25, duration: .95, volume: .105 }
+        ];
+        dingDongChimes.forEach(chime => {
+            [1, 2.01].forEach((harmonic, harmonicIndex) => {
+                const oscillator = context.createOscillator();
+                const gain = context.createGain();
+                const noteAt = startAt + chime.delay;
+                oscillator.type = harmonicIndex === 0 ? 'sine' : 'triangle';
+                oscillator.frequency.setValueAtTime(chime.frequency * harmonic, noteAt);
+                gain.gain.setValueAtTime(0.0001, noteAt);
+                gain.gain.exponentialRampToValueAtTime(chime.volume / (harmonicIndex ? 4 : 1), noteAt + .018);
+                gain.gain.exponentialRampToValueAtTime(0.0001, noteAt + chime.duration);
+                oscillator.connect(gain);
+                gain.connect(context.destination);
+                oscillator.start(noteAt);
+                oscillator.stop(noteAt + chime.duration + .02);
+            });
         });
     } catch (_) { }
 }

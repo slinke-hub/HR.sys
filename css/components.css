@@ -7528,6 +7528,28 @@ input[type="date"].date-picker::-webkit-calendar-picker-indicator {
   pointer-events: none;
 }
 
+/* Focus view keeps subtasks visibly attached to their main task. */
+#task-v2-rows-container .task-v2-subtask-row {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+
+html[dir="rtl"] #task-v2-rows-container .task-v2-subtask-row {
+  box-shadow: inset -3px 0 0 color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+
+#task-v2-rows-container .task-v2-subtask-row .task-v2-row-left {
+  padding-inline-start: clamp(.75rem, 2vw, 1.5rem);
+}
+
+[data-theme="dark"] #task-v2-rows-container .task-v2-subtask-row {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, #93c5fd 42%, transparent);
+}
+
+[data-theme="dark"] html[dir="rtl"] #task-v2-rows-container .task-v2-subtask-row,
+html[dir="rtl"][data-theme="dark"] #task-v2-rows-container .task-v2-subtask-row {
+  box-shadow: inset -3px 0 0 color-mix(in srgb, #93c5fd 42%, transparent);
+}
+
 .property-cell > div:has(> input.date-picker) {
   min-width: 0;
   min-height: 2.2rem;
@@ -8063,4 +8085,69 @@ html[dir="rtl"] select.form-control[multiple]:not([hidden]) { background-positio
   .archived-task-filters { align-items:stretch; flex-direction:column; }
   .archived-task-filters select, .archived-task-search { width:100%; min-width:0; }
   .archived-task-count { align-self:flex-end; }
+}
+
+/* Universal compact modal shell for small phones. Long forms scroll inside
+   the dialog while the overlay and page remain locked to the viewport. */
+@media (max-width: 600px), (max-height: 520px) {
+  body.modal-open { overflow: hidden !important; }
+  .modal,
+  .modal-overlay {
+    inset: 0 !important;
+    width: 100dvw !important;
+    height: 100dvh !important;
+    padding: max(.35rem, env(safe-area-inset-top)) max(.35rem, env(safe-area-inset-right)) max(.35rem, env(safe-area-inset-bottom)) max(.35rem, env(safe-area-inset-left)) !important;
+    align-items: center !important;
+    overflow: hidden !important;
+  }
+  .modal .modal-content,
+  .modal .modal-content[style],
+  .modal.slide-panel .modal-content,
+  .task-detail-modal,
+  .edit-task-modal {
+    box-sizing: border-box !important;
+    width: min(100%, 440px) !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - .7rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+    margin: 0 auto !important;
+    padding: .65rem !important;
+    border-radius: 12px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+  .modal-content > *,
+  .modal-content form,
+  .modal-content fieldset { min-width: 0; max-width: 100%; }
+  .modal-content .dashboard-grid,
+  .modal-content .form-row,
+  .modal-content .modal-grid,
+  .modal-content [style*="grid-template-columns"] { grid-template-columns: minmax(0, 1fr) !important; }
+  .modal-content form > div[style*="display: flex"],
+  .modal-content .modal-actions,
+  .modal-content .form-actions { flex-wrap: wrap !important; }
+  .modal-content img,
+  .modal-content video,
+  .modal-content canvas,
+  .modal-content iframe { max-width: 100% !important; height: auto; }
+  .modal-content .table-responsive { max-width: 100%; overflow-x: auto; }
+  .modal-content .modal-header {
+    position: sticky;
+    top: -.65rem;
+    z-index: 25;
+    margin: -.65rem -.65rem .55rem !important;
+    padding: .55rem .65rem !important;
+  }
+  .modal-content .modal-footer,
+  .modal-content .modal-actions,
+  .modal-content .form-actions { gap: .4rem !important; padding: .5rem .65rem !important; }
+}
+
+@media (max-width: 380px) {
+  .modal .modal-content,
+  .modal .modal-content[style] { padding: .55rem !important; border-radius: 10px !important; }
+  .modal-content .modal-header { top: -.55rem; margin: -.55rem -.55rem .45rem !important; padding: .5rem .55rem !important; }
+  .modal-content .modal-footer .btn,
+  .modal-content .modal-actions .btn,
+  .modal-content .form-actions .btn { flex: 1 1 100% !important; width: 100%; }
 }

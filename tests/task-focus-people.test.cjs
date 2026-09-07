@@ -7,7 +7,7 @@ const appSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'u
 const cssSource = fs.readFileSync(path.join(__dirname, '..', 'css', 'components.css'), 'utf8');
 
 assert.match(appSource, /const rowAssigneeFirstNames = rowAssigneeProfiles\.map/);
-assert.match(appSource, /const rowCreator = \(window\.taskAllUsersCache \|\| \[\]\)\.find\(user => user\.id === task\.created_by\) \|\| task\.creator/);
+assert.match(appSource, /const rowCreator = usersById\.get\(String\(task\.created_by\)\) \|\| task\.creator/);
 assert.match(appSource, /class="task-focus-people"/);
 assert.match(appSource, /class="task-focus-assignee"/);
 assert.match(appSource, /class="task-focus-creator"/);

@@ -9,7 +9,7 @@ assert.match(source, /function bypassesTaskCompletionApproval\(task\) \{[\s\S]*i
 assert.match(source, /status === 'completed' && task && !isDepartmentManager && !bypassesTaskCompletionApproval\(task\)/);
 assert.match(source, /const bypassesCompletionApproval = bypassesTaskCompletionApproval\(task\)/);
 
-const taskRowsStart = source.indexOf('const taskRows = tasks.map(task =>');
+const taskRowsStart = source.indexOf('const taskRows = orderedFocusTasks.map(task =>');
 const taskRowsEnd = source.indexOf("}).join('');", taskRowsStart);
 assert.ok(taskRowsStart >= 0 && taskRowsEnd > taskRowsStart, 'Focus-view task rows were not found');
 const taskRowsSource = source.slice(taskRowsStart, taskRowsEnd);
