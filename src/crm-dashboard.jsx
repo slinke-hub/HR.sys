@@ -133,7 +133,7 @@ function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails }) {
         const stageDeals = deals.filter(deal => normalizeStage(deal.stage) === stage.key);
         return <section key={stage.key} id={`crm-col-${stage.dbStage}`} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, stage)} className={`kanban-col tw-min-h-[390px] tw-w-[286px] tw-flex-none tw-snap-start tw-rounded-2xl tw-border tw-p-3 ${stage.soft} ${stage.border}`}>
           <header className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-px-1"><h3 id={`crm-header-${stage.dbStage}`} className="tw-m-0 tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-black tw-uppercase tw-tracking-[.08em] tw-text-slate-700"><i className={`tw-h-2.5 tw-w-2.5 tw-rounded-full ${stage.tone}`} />{text[stage.label]}</h3><span className="tw-grid tw-h-6 tw-min-w-6 tw-place-items-center tw-rounded-full tw-bg-white tw-px-1.5 tw-text-[10px] tw-font-black tw-text-slate-600 tw-shadow-sm">{stageDeals.length}</span></header>
-          <div className="tw-min-h-[320px]">{stageDeals.map(deal => <DealCard key={deal.id} deal={deal} lang={lang} canOpenDetails={canOpenDetails} />)}{!stageDeals.length && <div className="tw-grid tw-min-h-32 tw-place-items-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-white/50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-400">{text.noDeals}</div>}</div>
+          <div data-crm-stage-cards className="tw-min-h-[320px]">{stageDeals.map(deal => <DealCard key={deal.id} deal={deal} lang={lang} canOpenDetails={canOpenDetails} />)}{stageDeals.length === 0 && <div data-crm-stage-empty className="tw-grid tw-min-h-32 tw-place-items-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-white/50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-400">{text.noDeals}</div>}</div>
         </section>;
       })}
     </div>
@@ -228,6 +228,12 @@ function CrmDashboard({ payload = {} }) {
   const handleDealStageChange = (dealId, stage) => {
     setDeals(previous => previous.map(deal => String(deal.id) === String(dealId) ? { ...deal, stage } : deal));
   };
+  useEffect(() => {
+    window.setCrmDealStageLocally = handleDealStageChange;
+    return () => {
+      if (window.setCrmDealStageLocally === handleDealStageChange) delete window.setCrmDealStageLocally;
+    };
+  }, []);
   const filteredDeals = useMemo(() => {
     const value = query.trim().toLocaleLowerCase(lang === 'ar' ? 'ar' : 'en');
     if (!value) return deals;

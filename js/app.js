@@ -168,6 +168,9 @@ let dashboardKpiPollInterval = null;
 let dashboardKpiRefreshTimer = null;
 let dashboardKpiRefreshInFlight = false;
 let dashboardKpiRefreshQueued = false;
+let crmAnalyticsRealtimeChannel = null;
+let crmAnalyticsPollInterval = null;
+let crmAnalyticsRefreshTimer = null;
 
 window.canCurrentUserEditContracts = function (profile = currentUserProfile) {
     return String(currentUserRole || '').toUpperCase() === 'ADMIN' ||
@@ -7921,7 +7924,7 @@ function renderMarketingDesignFields(prefix) {
         <div class="marketing-design-grid">
             <div class="form-group"><label class="form-label">Download Source</label><div id="${id}ContentLinks" class="marketing-links-list"></div><button type="button" class="btn btn-secondary marketing-add-link" onclick="window.addMarketingLink('${id}ContentLinks')" disabled><i data-lucide="plus"></i> Add another URL</button></div>
             <div class="form-group"><label class="form-label">Upload Source</label><div id="${id}SubmissionLinks" class="marketing-links-list"></div><button type="button" class="btn btn-secondary marketing-add-link" onclick="window.addMarketingLink('${id}SubmissionLinks')" disabled><i data-lucide="plus"></i> Add another URL</button></div>
-            <div class="form-group"><label class="form-label">Account</label><select id="${id}MarketingDepartment" class="form-control" required disabled><option value="">Select Account</option><option value="Party">Party</option><option value="Main">Main</option><option value="Coffee Corner">Coffee Corner</option></select></div>
+            <div class="form-group"><label class="form-label">Account</label><select id="${id}MarketingDepartment" class="form-control" required disabled><option value="">Select Account</option><option value="Muqam.party">Party</option><option value="Muqamsa">Main</option><option value="Coffee Corner">Coffee Corner</option></select></div>
             <div class="form-group"><label class="form-label">Design Type</label><select id="${id}ContentType" class="form-control" required disabled><option value="">Select Design Type</option><option value="Post">Post</option><option value="Reel">Reel</option><option value="Story">Story</option><option value="Promo Video">Promo Video</option><option value="Cover">Cover</option><option value="Commercial Video">Commercial Video</option><option value="Advertisement Video">Advertisement Video</option><option value="Proposal">Proposal</option></select></div>
         </div>`;
 }
@@ -10465,6 +10468,8 @@ window.renderView = async function (viewId, isBack = false) {
         else stopRecentLoginsRealtime();
         if (viewId === 'dashboard') startDashboardKpiRealtime();
         else stopDashboardKpiRealtime();
+        if (viewId === 'crm') startCrmAnalyticsRealtime();
+        else stopCrmAnalyticsRealtime();
         console.log("renderView: done updating DOM.");
     } else {
         console.log("renderView: skipped DOM update because currentView changed.");
@@ -11620,6 +11625,41 @@ window.refreshCrmDashboardInBackground = async function () {
     mountCrmDashboardPayload(crmPayload);
 };
 
+function scheduleCrmAnalyticsRefresh() {
+    if (crmAnalyticsRefreshTimer) clearTimeout(crmAnalyticsRefreshTimer);
+    crmAnalyticsRefreshTimer = setTimeout(() => {
+        crmAnalyticsRefreshTimer = null;
+        if (currentView === 'crm') void window.refreshCrmDashboardInBackground?.();
+    }, 150);
+}
+
+function stopCrmAnalyticsRealtime() {
+    if (crmAnalyticsPollInterval) clearInterval(crmAnalyticsPollInterval);
+    if (crmAnalyticsRefreshTimer) clearTimeout(crmAnalyticsRefreshTimer);
+    crmAnalyticsPollInterval = null;
+    crmAnalyticsRefreshTimer = null;
+    if (crmAnalyticsRealtimeChannel && window.supabaseClient?.removeChannel) {
+        window.supabaseClient.removeChannel(crmAnalyticsRealtimeChannel);
+    }
+    crmAnalyticsRealtimeChannel = null;
+}
+
+function startCrmAnalyticsRealtime() {
+    stopCrmAnalyticsRealtime();
+    if (currentView !== 'crm' || !document.getElementById('crm-react-root')) return;
+    if (window.supabaseClient?.channel) {
+        crmAnalyticsRealtimeChannel = window.supabaseClient
+            .channel(`crm-analytics-live-${currentUser?.id || 'viewer'}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_clients' }, scheduleCrmAnalyticsRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_deals' }, scheduleCrmAnalyticsRefresh)
+            .subscribe();
+    }
+    // Periodic reconciliation covers temporary socket interruptions.
+    crmAnalyticsPollInterval = setInterval(() => {
+        if (currentView === 'crm') void window.refreshCrmDashboardInBackground?.();
+    }, 15000);
+}
+
 async function renderCRM() {
     const crmPayload = await fetchCrmDashboardPayload();
     setTimeout(() => mountCrmDashboardPayload(crmPayload), 0);
@@ -11940,6 +11980,7 @@ window.dropDeal = async (ev, newStage) => {
 
     if (newStage === 'WON') {
         document.getElementById('orderDealId').value = dealId;
+        document.getElementById('crmOrderModal').dataset.oldStage = oldStage || '';
         document.getElementById('orderStartDate').value = '';
         document.getElementById('orderEndDate').value = '';
         document.getElementById('orderLocation').value = '';
@@ -11983,14 +12024,21 @@ window.handleLostReasonSubmit = async (e) => {
     const oldStage = document.getElementById('lostOldStage').value;
 
     closeLostReasonModal();
-    window.moveDealCard(dealId, 'LOST');
+    const reactManaged = Boolean(document.getElementById('crm-react-root')?.contains(document.getElementById(`deal-card-${dealId}`)));
+    if (reactManaged) window.setCrmDealStageLocally?.(dealId, 'LOST');
+    else window.moveDealCard(dealId, 'LOST');
 
     // Instead of updateDealStage, we update the full deal or updateDeal with reason
     const res = await db.updateDeal(dealId, { stage: 'LOST', lost_reason: reason });
     if (res.success) {
         showToast(t('toast_deal_marked_as_lost'), "success");
+        void window.refreshCrmDashboardInBackground?.();
     } else {
         showToast(t('toast_failed_to_update_deal'), "danger");
+        if (oldStage) {
+            if (reactManaged) window.setCrmDealStageLocally?.(dealId, oldStage);
+            else window.moveDealCard(dealId, oldStage);
+        }
     }
 };
 
@@ -12001,6 +12049,7 @@ window.closeCRMOrderModal = () => {
 window.handleOrderSubmit = async (e) => {
     e.preventDefault();
     const dealId = document.getElementById('orderDealId').value;
+    const oldStage = document.getElementById('crmOrderModal').dataset.oldStage || '';
 
     const projectData = {
         start_date: document.getElementById('orderStartDate').value || null,
@@ -12015,14 +12064,21 @@ window.handleOrderSubmit = async (e) => {
     };
 
     closeCRMOrderModal();
-    window.moveDealCard(dealId, 'WON');
+    const reactManaged = Boolean(document.getElementById('crm-react-root')?.contains(document.getElementById(`deal-card-${dealId}`)));
+    if (reactManaged) window.setCrmDealStageLocally?.(dealId, 'WON');
+    else window.moveDealCard(dealId, 'WON');
 
     const res = await db.createProjectFromWonDeal(projectData, dealId);
     if (res.success) {
         showToast(t('crm_project_created_deal_won') || 'Project created and deal marked as won.', "success");
         await db.triggerWebhooks('deal_won', { deal_id: dealId });
+        void window.refreshCrmDashboardInBackground?.();
     } else {
         showToast(res.error?.message || t('crm_project_create_failed') || 'Failed to create the project.', "danger");
+        if (oldStage) {
+            if (reactManaged) window.setCrmDealStageLocally?.(dealId, oldStage);
+            else window.moveDealCard(dealId, oldStage);
+        }
     }
 };
 

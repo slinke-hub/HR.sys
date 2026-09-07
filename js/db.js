@@ -44,6 +44,12 @@ function applyI18nGetters(obj) {
     return obj;
 }
 
+function normalizeMarketingAccount(value) {
+    if (value === 'Party') return 'Muqam.party';
+    if (value === 'Main') return 'Muqamsa';
+    return value || null;
+}
+
 // Global DB helper functions for the prototype
 let appCache = {
     profiles: { data: null, time: 0 },
@@ -1447,7 +1453,7 @@ const db = {
                 sub_type: subType,
                 watchers: watchers,
                 parent_task_id: parentTaskId || null,
-                marketing_department: marketingDepartment,
+                marketing_department: normalizeMarketingAccount(marketingDepartment),
                 content_links: contentLinks,
                 submission_links: submissionLinks,
                 delivery_status: deliveryStatus,
@@ -1564,6 +1570,9 @@ const db = {
             nullableFields.forEach(field => {
                 if (normalizedUpdates[field] === '') normalizedUpdates[field] = null;
             });
+            if (Object.prototype.hasOwnProperty.call(normalizedUpdates, 'marketing_department')) {
+                normalizedUpdates.marketing_department = normalizeMarketingAccount(normalizedUpdates.marketing_department);
+            }
 
             [
                 'assignee_ids', 'watchers', 'visible_to', 'tags', 'content_links',
