@@ -6584,7 +6584,24 @@ input.btn-primary,
   white-space: nowrap;
 }
 .task-health-new-task svg { width: 15px; height: 15px; }
-.task-health-item { gap: .35rem; padding: .38rem .55rem; border-radius: 999px; color: var(--color-text-secondary); font-size: .74rem; }
+.task-health-item {
+  gap: .35rem;
+  padding: .38rem .55rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: .74rem;
+  cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.task-health-item:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.task-health-item:focus-visible { outline: 3px solid color-mix(in srgb, currentColor 28%, transparent); outline-offset: 2px; }
+.task-health-item.active {
+  border-color: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 14%, transparent);
+}
+.task-health-item:active { transform: translateY(0) scale(.97); }
 .task-health-item strong { color: var(--color-text); font-size: .82rem; }
 .task-health-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .task-health-item.tone-slate { color: var(--pipeline-slate); background: color-mix(in srgb, var(--pipeline-slate) 9%, transparent); }

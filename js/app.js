@@ -6669,6 +6669,8 @@ async function renderTasksV2() {
     console.log("renderTasksV2: Loading tasks natively...");
     await renderTasks();
 
+    window.taskV2HealthFilter = window.taskV2HealthFilter || 'all';
+
     const visibleIds = new Set(window.visibleTaskIds || []);
     const tasks = Object.values(window.taskCache || {}).filter(task => visibleIds.has(String(task.id)));
     
@@ -7281,10 +7283,10 @@ async function renderTasksV2() {
                 
                 <div class="task-pipeline-health" aria-label="Pipeline health summary">
                     <div class="task-health-heading"><i data-lucide="activity"></i><span>Pipeline health</span></div>
-                    <div class="task-health-item tone-slate"><span class="task-health-dot"></span><strong>${todo.length + pending.length}</strong><span>waiting</span></div>
-                    <div class="task-health-item tone-blue"><span class="task-health-dot"></span><strong>${inProgress.length}</strong><span>active</span></div>
-                    <div class="task-health-item tone-amber"><span class="task-health-dot"></span><strong>${dueSoonCount}</strong><span>due this week</span></div>
-                    <div class="task-health-item tone-red"><span class="task-health-dot"></span><strong>${overdueCount}</strong><span>overdue</span></div>
+                    <button type="button" class="task-health-item tone-slate ${window.taskV2HealthFilter === 'waiting' ? 'active' : ''}" data-task-health-filter="waiting" aria-pressed="${window.taskV2HealthFilter === 'waiting'}" onclick="window.setTaskV2HealthFilter('waiting')"><span class="task-health-dot"></span><strong>${todo.length + pending.length}</strong><span>waiting</span></button>
+                    <button type="button" class="task-health-item tone-blue ${window.taskV2HealthFilter === 'active' ? 'active' : ''}" data-task-health-filter="active" aria-pressed="${window.taskV2HealthFilter === 'active'}" onclick="window.setTaskV2HealthFilter('active')"><span class="task-health-dot"></span><strong>${inProgress.length}</strong><span>active</span></button>
+                    <button type="button" class="task-health-item tone-amber ${window.taskV2HealthFilter === 'due_this_week' ? 'active' : ''}" data-task-health-filter="due_this_week" aria-pressed="${window.taskV2HealthFilter === 'due_this_week'}" onclick="window.setTaskV2HealthFilter('due_this_week')"><span class="task-health-dot"></span><strong>${dueSoonCount}</strong><span>due this week</span></button>
+                    <button type="button" class="task-health-item tone-red ${window.taskV2HealthFilter === 'overdue' ? 'active' : ''}" data-task-health-filter="overdue" aria-pressed="${window.taskV2HealthFilter === 'overdue'}" onclick="window.setTaskV2HealthFilter('overdue')"><span class="task-health-dot"></span><strong>${overdueCount}</strong><span>overdue</span></button>
                     <div class="task-health-total"><strong>${tasks.length}</strong><span>total</span></div>
                     ${canCreateTask ? `<button class="btn btn-primary task-health-new-task" onclick="window.toggleTaskV2Create()"><i data-lucide="plus"></i><span>New Task</span></button>` : ''}
                 </div>
@@ -7449,6 +7451,7 @@ window.filterTasksV2 = function () {
     const status = document.getElementById('taskV2StatusFilter')?.value || 'all';
     const priority = document.getElementById('taskV2PriorityFilter')?.value || 'all';
     const dateFilter = document.getElementById('taskV2DateFilter')?.value || '';
+    const healthFilter = window.taskV2HealthFilter || 'all';
     const project = window.taskV2SelectedProject || 'all';
     const visibleIds = new Set(window.visibleTaskIds || []);
     const tasks = Object.values(window.taskCache || {}).filter(task => visibleIds.has(String(task.id)));
@@ -7467,6 +7470,14 @@ window.filterTasksV2 = function () {
         const matchesStatus = (status === 'all') || (status === 'open' && task.status !== 'completed') || (task.status === status);
         const matchesPriority = (priority === 'all') || (task.priority === priority);
         const matchesDate = !dateFilter || String(task.due_date || '').slice(0, 10) === dateFilter;
+        const isClosed = task.status === 'completed' || task.status === 'Approved';
+        const dueAt = task.due_date ? new Date(`${task.due_date}T23:59:59`) : null;
+        const daysUntilDue = dueAt ? (dueAt - new Date()) / 86400000 : null;
+        const matchesHealth = healthFilter === 'all'
+            || (healthFilter === 'waiting' && ['todo', 'Pending Approval'].includes(task.status))
+            || (healthFilter === 'active' && task.status === 'in_progress')
+            || (healthFilter === 'due_this_week' && !isClosed && daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 7)
+            || (healthFilter === 'overdue' && !isClosed && dueAt && dueAt < new Date());
         let matchesProject = true;
         if (project !== 'all') {
             if (project.startsWith('list_')) {
@@ -7475,7 +7486,7 @@ window.filterTasksV2 = function () {
                 matchesProject = String(task.project_id) === project;
             }
         }
-        return matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesProject;
+        return matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesHealth && matchesProject;
     };
     const isFocusCandidate = task => {
         if (task.status === 'completed' || task.status === 'Approved') return false;
@@ -7496,7 +7507,7 @@ window.filterTasksV2 = function () {
     };
     const directMatchesById = new Map(tasks.map(task => [String(task.id), matchesFilters(task)]));
     const visibleFocusRoots = new Set(tasks
-        .filter(task => directMatchesById.get(String(task.id)) && isFocusCandidate(task))
+        .filter(task => directMatchesById.get(String(task.id)) && (healthFilter !== 'all' || isFocusCandidate(task)))
         .map(rootTaskId));
 
     document.querySelectorAll('.task-v2-row, .task-item-card').forEach(el => {
@@ -7511,6 +7522,17 @@ window.filterTasksV2 = function () {
         }
         el.style.display = matches ? '' : 'none';
     });
+};
+
+window.setTaskV2HealthFilter = function (filter) {
+    const nextFilter = window.taskV2HealthFilter === filter ? 'all' : filter;
+    window.taskV2HealthFilter = nextFilter;
+    document.querySelectorAll('[data-task-health-filter]').forEach(button => {
+        const isActive = button.dataset.taskHealthFilter === nextFilter;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', String(isActive));
+    });
+    window.filterTasksV2();
 };
 
 window.selectTaskV2Project = function (projectId) {
@@ -7759,6 +7781,11 @@ window.clearTaskV2Filters = function () {
     if (status) status.value = 'all';
     if (priority) priority.value = 'all';
     if (date) date.value = '';
+    window.taskV2HealthFilter = 'all';
+    document.querySelectorAll('[data-task-health-filter]').forEach(button => {
+        button.classList.remove('active');
+        button.setAttribute('aria-pressed', 'false');
+    });
     window.taskV2SelectedProject = 'all';
     document.querySelectorAll('.task-v2-list-link').forEach((button, index) => button.classList.toggle('active', index === 0));
     window.filterTasksV2();
