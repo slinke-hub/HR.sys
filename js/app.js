@@ -165,7 +165,16 @@ window.hideSupervisorTooltip = function () {
 
 let currentUserRole = null;
 let currentUserProfile = null;
-const isTaskAdmin = () => ['ADMIN', 'OWNER', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(String(currentUserRole || '').trim().toUpperCase());
+const normalizeAccessValue = value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+const isExecutiveAdminProfile = (profile = currentUserProfile) => {
+    const executiveTitles = new Set(['GM', 'GENERAL MANAGER', 'CEO', 'CHIEF EXECUTIVE', 'CHIEF EXECUTIVE OFFICER']);
+    return [profile?.job_title, profile?.role].some(value => executiveTitles.has(normalizeAccessValue(value)));
+};
+const isAdminRole = role => ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMIN'].includes(normalizeAccessValue(role));
+const canCurrentUserManageUsers = () => isAdminRole(currentUserRole) && !isExecutiveAdminProfile();
+window.isExecutiveAdminProfile = isExecutiveAdminProfile;
+window.canCurrentUserManageUsers = canCurrentUserManageUsers;
+const isTaskAdmin = () => isAdminRole(currentUserRole);
 const isITManagerProfile = (profile = currentUserProfile) => {
     const values = [profile?.job_title, profile?.role].map(value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' '));
     return values.some(value => value === 'IT MANAGER' || value.includes('IT MANAGER'));
@@ -218,7 +227,7 @@ let crmAnalyticsPollInterval = null;
 let crmAnalyticsRefreshTimer = null;
 
 window.canCurrentUserEditContracts = function (profile = currentUserProfile) {
-    return String(currentUserRole || '').toUpperCase() === 'ADMIN' ||
+    return isTaskAdmin() ||
         String(profile?.job_title || '').trim().toUpperCase() === 'HR MANAGER';
 };
 
@@ -254,6 +263,10 @@ function showInstallBanner() {
 
 // User Management Actions
 window.showEditUserModal = async (userId) => {
+    if (!canCurrentUserManageUsers()) {
+        showToast(t('analy_unauth') || 'You do not have access to User Management.', 'warning');
+        return;
+    }
     const [user, loginEmailResult] = await Promise.all([
         db.getUserProfile(userId),
         db.getUserLoginEmail(userId)
@@ -324,6 +337,10 @@ window.refreshUserRowInPlace = async function (userId, knownUpdates = null) {
 
 window.handleUpdateUser = async (e) => {
     e.preventDefault();
+    if (!canCurrentUserManageUsers()) {
+        showToast(t('analy_unauth') || 'You do not have access to User Management.', 'warning');
+        return;
+    }
     const userId = document.getElementById('editUserId').value;
     const email = document.getElementById('editEmail').value.trim().toLowerCase();
     const updates = {
@@ -383,7 +400,7 @@ window.handleUpdateUser = async (e) => {
 };
 
 window.showAdminPasswordResetModal = (userId) => {
-    if (currentUserRole !== 'ADMIN') {
+    if (!canCurrentUserManageUsers()) {
         showToast(t('password_reset_admin_only'), 'danger');
         return;
     }
@@ -420,7 +437,7 @@ window.toggleAdminPasswordVisibility = (showPasswords) => {
 
 window.handleAdminPasswordReset = async (event) => {
     event.preventDefault();
-    if (currentUserRole !== 'ADMIN') {
+    if (!canCurrentUserManageUsers()) {
         showToast(t('password_reset_admin_only'), 'danger');
         return;
     }
@@ -456,6 +473,10 @@ window.handleAdminPasswordReset = async (event) => {
 window.handleResetUserPassword = window.showAdminPasswordResetModal;
 
 window.handleDeleteUser = (userId) => {
+    if (!canCurrentUserManageUsers()) {
+        showToast(t('analy_unauth') || 'You do not have access to User Management.', 'warning');
+        return;
+    }
     window.showConfirmModal(t('modal_title_delete_user'), 'This permanently removes the user and their data. Their contract will be moved to Archived Contracts.', async () => {
         const result = await db.deleteUser(userId);
         if (result.success) {
@@ -2111,7 +2132,8 @@ async function getCurrentDepartmentName() {
 
 async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
-    const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    const isAdmin = isAdminRole(normalizedRole);
+    if (viewId === 'users') return canCurrentUserManageUsers();
     if (isAdmin) return true;
     if (viewId === 'leave_calculator') return normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
     if (normalizedRole === 'EMPLOYEE') {
@@ -2145,7 +2167,8 @@ window.updateSidebarVisibility = async function () {
     const clientsNav = document.querySelector('.nav-item[data-view="clients"]');
     const leaveCalculatorNav = document.getElementById('navLeaveCalculator');
 
-    const isAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    const isAdmin = isAdminRole(normalizedRole);
+    const canManageUsers = canCurrentUserManageUsers();
     const isHrManager = normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
     const employeeAllowedViews = new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'employees']);
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
@@ -2159,7 +2182,7 @@ window.updateSidebarVisibility = async function () {
     });
     if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
     if (headerNavAdmin) headerNavAdmin.style.display = isAdmin ? 'inline-flex' : 'none';
-    if (usersNav) usersNav.style.display = isAdmin ? 'flex' : 'none';
+    if (usersNav) usersNav.style.display = canManageUsers ? 'flex' : 'none';
     if (analyticsNav) analyticsNav.style.display = 'none';
     if (employeesNav) employeesNav.style.display = 'flex';
     if (departmentsNav) departmentsNav.style.display = isAdmin ? 'flex' : 'none';
@@ -2232,7 +2255,7 @@ window.handleLoginSubmit = async function (e) {
     if (profile) {
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
-        currentUserRole = profile.role;
+        currentUserRole = isExecutiveAdminProfile(profile) ? 'ADMIN' : profile.role;
         applyPreferredTheme(profile);
         updateTopbarProfile(profile);
         // Check for Birthday
@@ -3362,7 +3385,7 @@ async function renderTime() {
     const viewerProfile = currentUserProfile || await db.getUserProfile(currentUser?.id);
     const normalizedRole = String(currentUserRole || viewerProfile?.role || '').toUpperCase();
     const jobTitle = String(viewerProfile?.job_title || '').trim().toUpperCase();
-    const canViewAllAttendance = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole) ||
+    const canViewAllAttendance = isAdminRole(normalizedRole) || isExecutiveAdminProfile(viewerProfile) ||
         ['HR MANAGER', 'FINANCE MANAGER', 'ACCOUNTANT MANAGER'].includes(jobTitle);
     const [punches, employees] = await Promise.all([
         db.fetchTimePunches(canViewAllAttendance ? null : currentUser?.id),
@@ -3374,7 +3397,7 @@ async function renderTime() {
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     };
     const todayKey = dateKey(new Date());
-    const initialVisibleCount = canViewAllAttendance ? punches.filter(punch => dateKey(punch.punch_time) === todayKey).length : punches.length;
+    const initialVisibleCount = punches.length;
     const mapLink = location => {
         const match = String(location || '').trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
         if (!match) return '<span class="text-muted">—</span>';
@@ -3384,7 +3407,7 @@ async function renderTime() {
     };
 
     let tableRows = punches.map(p => `
-        <tr class="attendance-record-row" data-attendance-date="${dateKey(p.punch_time)}" data-employee-name="${escapeHTML(String(window.formatEmployeeName(employeeMap[p.employee_id]) || '').toLowerCase())}" data-employee-id="${escapeHTML(String(employeeMap[p.employee_id]?.iqama_number || p.employee_id || '').toLowerCase())}" ${canViewAllAttendance && dateKey(p.punch_time) !== todayKey ? 'hidden' : ''}>
+        <tr class="attendance-record-row" data-attendance-date="${dateKey(p.punch_time)}" data-employee-name="${escapeHTML(String(window.formatEmployeeName(employeeMap[p.employee_id]) || '').toLowerCase())}" data-employee-id="${escapeHTML(String(employeeMap[p.employee_id]?.iqama_number || p.employee_id || '').toLowerCase())}">
             <td>${new Date(p.punch_time).toLocaleDateString()}</td>
             <td>${new Date(p.punch_time).toLocaleTimeString()}</td>
             ${canViewAllAttendance ? `<td><strong>${escapeHTML(window.formatEmployeeName(employeeMap[p.employee_id]) || 'Unknown employee')}</strong></td><td>${escapeHTML(employeeMap[p.employee_id]?.iqama_number || p.employee_id)}</td>` : ''}
@@ -3399,7 +3422,7 @@ async function renderTime() {
     }
 
     const empName = window.formatEmployeeName(viewerProfile) || window.formatEmployeeName(currentUser?.user_metadata) || 'Employee';
-    const isSystemAdmin = ['ADMIN', 'ROLE_SYSTEM_ADMIN', 'SYSTEM_ADMIN'].includes(normalizedRole);
+    const isSystemAdmin = isAdminRole(normalizedRole) || isExecutiveAdminProfile(viewerProfile);
     const pageTitle = isSystemAdmin ? t('nav_time') : `${t('nav_time')} - ${escapeHTML(empName)}`;
     return `
         <div class="page-header">
@@ -3411,7 +3434,7 @@ async function renderTime() {
         <div class="card">
             <div class="card-title">${t('timesheet')}</div>
             ${canViewAllAttendance ? `<div class="attendance-filters" aria-label="Attendance filters">
-                <div class="form-group"><label class="form-label" for="attendanceFilterDate">Date</label><input type="date" id="attendanceFilterDate" class="form-control" value="${todayKey}" onchange="applyAttendanceFilters()"></div>
+                <div class="form-group"><label class="form-label" for="attendanceFilterDate">Date</label><input type="date" id="attendanceFilterDate" class="form-control" value="" onchange="applyAttendanceFilters()"></div>
                 <div class="form-group"><label class="form-label" for="attendanceFilterName">Employee Name</label><input type="search" id="attendanceFilterName" class="form-control" placeholder="Search employee name" oninput="applyAttendanceFilters()"></div>
                 <div class="form-group"><label class="form-label" for="attendanceFilterId">ID Number</label><input type="search" id="attendanceFilterId" class="form-control" placeholder="Search Iqama / ID" oninput="applyAttendanceFilters()"></div>
                 <button type="button" class="btn btn-secondary attendance-filter-clear" onclick="clearAttendanceFilters()"><i data-lucide="rotate-ccw"></i> Clear</button>
@@ -4476,6 +4499,7 @@ window.previewRole = function (role) {
 };
 
 window.setAdminTab = function (tab) {
+    if (!canCurrentUserManageUsers() && (tab === 'users' || tab === 'security')) tab = 'overview';
     document.querySelectorAll('[data-admin-panel]').forEach(panel => {
         panel.hidden = panel.dataset.adminPanel !== tab;
     });
@@ -4490,6 +4514,7 @@ async function renderAdmin() {
     if (currentUserRole !== 'ADMIN') {
         return `<div class="page-header"><h1 class="page-title">${t('analy_unauth')}</h1></div>`;
     }
+    const canManageUsers = canCurrentUserManageUsers();
 
     const [allUsers, employees, pendingLeaves, departments, workflows, jobTitles, tasks] = await Promise.all([
         db.fetchUsers(true),
@@ -4624,9 +4649,9 @@ async function renderAdmin() {
                 <button class="btn btn-secondary" type="button" onclick="window.showAnnouncementModal()">
                     <i data-lucide="megaphone"></i> Post Announcement
                 </button>
-                <button class="btn-primary" type="button" onclick="showAddUserModal()">
+                ${canManageUsers ? `<button class="btn-primary" type="button" onclick="showAddUserModal()">
                     <i data-lucide="user-plus"></i> ${t('users_add_new') || 'Add New User'}
-                </button>
+                </button>` : ''}
             </div>
         </div>
 
@@ -4635,18 +4660,18 @@ async function renderAdmin() {
             <button class="btn-primary" data-admin-tab="overview" onclick="setAdminTab('overview')">
                 <i data-lucide="layout-dashboard" style="width:16px;height:16px;margin-inline-end:4px;"></i> Overview & Hub
             </button>
-            <button class="btn-secondary" data-admin-tab="users" onclick="setAdminTab('users')">
+            ${canManageUsers ? `<button class="btn-secondary" data-admin-tab="users" onclick="setAdminTab('users')">
                 <i data-lucide="user-cog" style="width:16px;height:16px;margin-inline-end:4px;"></i> User Directory <span class="status-badge">${(allUsers || []).length}</span>
-            </button>
+            </button>` : ''}
             <button class="btn-secondary" data-admin-tab="approvals" onclick="setAdminTab('approvals')">
                 <i data-lucide="check-circle-2" style="width:16px;height:16px;margin-inline-end:4px;"></i> Pending Overrides <span class="status-badge">${pendingWorkflows.length + pendingTasks.length + (pendingLeaves || []).length}</span>
             </button>
             <button class="btn-secondary" data-admin-tab="departments" onclick="setAdminTab('departments')">
                 <i data-lucide="building-2" style="width:16px;height:16px;margin-inline-end:4px;"></i> Departments <span class="status-badge">${(departments || []).length}</span>
             </button>
-            <button class="btn-secondary" data-admin-tab="security" onclick="setAdminTab('security')">
+            ${canManageUsers ? `<button class="btn-secondary" data-admin-tab="security" onclick="setAdminTab('security')">
                 <i data-lucide="shield-alert" style="width:16px;height:16px;margin-inline-end:4px;"></i> Security & Locks ${lockedUsers.length > 0 ? `<span class="status-badge danger">${lockedUsers.length}</span>` : ''}
-            </button>
+            </button>` : ''}
             <button class="btn-secondary" data-admin-tab="tools" onclick="setAdminTab('tools')">
                 <i data-lucide="wrench" style="width:16px;height:16px;margin-inline-end:4px;"></i> System Tools
             </button>
@@ -4677,11 +4702,11 @@ async function renderAdmin() {
             <!-- Quick Action Hub Cards -->
             <h3 style="margin-bottom: 1rem; font-size: 1.1rem;"><i data-lucide="sparkles" style="width:18px;height:18px;margin-inline-end:6px;color:var(--color-primary);"></i>Quick Administration Hub</h3>
             <div class="dashboard-grid" style="margin-bottom: 2rem;">
-                <div class="card col-span-3" style="text-align: center; cursor: pointer; transition: transform 0.2s;" onclick="renderView('users')">
+                ${canManageUsers ? `<div class="card col-span-3" style="text-align: center; cursor: pointer; transition: transform 0.2s;" onclick="renderView('users')">
                     <i data-lucide="user-cog" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 28px; height: 28px;"></i>
                     <h4 style="margin:0;">User Management</h4>
                     <p style="font-size:0.75rem; color:var(--color-text-secondary); margin-top:4px;">Users, Roles & Reset Passwords</p>
-                </div>
+                </div>` : ''}
                 <div class="card col-span-3" style="text-align: center; cursor: pointer; transition: transform 0.2s;" onclick="renderView('departments')">
                     <i data-lucide="building-2" style="margin-bottom: 0.5rem; color: var(--color-primary); width: 28px; height: 28px;"></i>
                     <h4 style="margin:0;">Departments & Titles</h4>
@@ -4929,6 +4954,10 @@ async function renderAdmin() {
 // Render User Management (Admin Only)
 window.handleCreateUser = async function (e) {
     e.preventDefault();
+    if (!canCurrentUserManageUsers()) {
+        showToast(t('analy_unauth') || 'You do not have access to User Management.', 'warning');
+        return;
+    }
     const employeeId = '';
     const fullName = document.getElementById('newFullName').value;
     const email = document.getElementById('newEmail').value.trim().toLowerCase();
@@ -4954,6 +4983,7 @@ window.handleCreateUser = async function (e) {
 }
 
 window.handleChangeRole = async function (id, role) {
+    if (!canCurrentUserManageUsers()) return;
     const { success } = await db.updateUserRole(id, role);
     if (success) {
         showToast(t('toast_role_updated'), "success");
@@ -4965,6 +4995,7 @@ window.handleChangeRole = async function (id, role) {
 }
 
 window.handleChangeJobTitle = async function (id, jobTitle, selectElement = null) {
+    if (!canCurrentUserManageUsers()) return;
     const departmentId = selectElement?.closest('tr')?.querySelector('[data-directory-department]')?.value || null;
     const { success } = await db.updateUserJobTitle(id, jobTitle, departmentId);
     if (success) {
@@ -4977,6 +5008,7 @@ window.handleChangeJobTitle = async function (id, jobTitle, selectElement = null
 }
 
 window.handleDirectoryDepartmentChange = async function (userId, departmentId, selectElement) {
+    if (!canCurrentUserManageUsers()) return;
     const jobTitleSelect = selectElement.closest('tr')?.querySelector('[data-directory-job-title]');
     if (!departmentId) {
         if (jobTitleSelect) {
@@ -5009,7 +5041,7 @@ window.handleDirectoryDepartmentChange = async function (userId, departmentId, s
 };
 
 async function renderUsers() {
-    if (currentUserRole !== 'ADMIN') return '<div style="padding: 2rem;">Unauthorized</div>';
+    if (!canCurrentUserManageUsers()) return '<div style="padding: 2rem;">Unauthorized</div>';
 
     const [users, departments] = await Promise.all([db.fetchUsers(true), db.fetchDepartments(), db.fetchJobTitles(true)]);
     window.currentAdminUsers = users;
@@ -5079,7 +5111,7 @@ async function renderUsers() {
 }
 
 window.toggleUserLock = async function (userId, currentlyActive) {
-    if (currentUserRole !== 'ADMIN' || userId === currentUser?.id) {
+    if (!canCurrentUserManageUsers() || userId === currentUser?.id) {
         showToast('You cannot lock your own account.', 'warning');
         return;
     }
@@ -5100,6 +5132,7 @@ window.toggleUserLock = async function (userId, currentlyActive) {
 };
 
 window.downloadUserDirectoryExcel = function () {
+    if (!canCurrentUserManageUsers()) return;
     if (typeof XLSX === 'undefined') {
         showToast(window.t('msg_toast_22') || 'Excel export is unavailable. Please reload the page and try again.', 'danger');
         return;
@@ -5130,6 +5163,10 @@ window.downloadUserDirectoryExcel = function () {
 };
 
 window.showAddUserModal = async () => {
+    if (!canCurrentUserManageUsers()) {
+        showToast(t('analy_unauth') || 'You do not have access to User Management.', 'warning');
+        return;
+    }
     document.getElementById('addUserForm').reset();
     document.getElementById('addUserModal').classList.add('show');
 
@@ -5144,6 +5181,7 @@ window.closeAddUserModal = () => {
 
 
 window.handleAssignManager = async function (id, managerId) {
+    if (!canCurrentUserManageUsers()) return;
     const { success } = await db.assignManager(id, managerId);
     if (success) {
         showToast(t('toast_manager_assigned'), "success");
@@ -8987,8 +9025,9 @@ window.handleSaveContract = async function (e) {
                 renderView(currentView);
             }
         } else {
-            currentView = 'users';
-            renderView('users');
+            const returnView = canCurrentUserManageUsers() ? 'users' : 'employees';
+            currentView = returnView;
+            renderView(returnView);
         }
 
     } else {
@@ -9050,6 +9089,8 @@ async function renderContractPage() {
     addContractDocument(contract?.policy_document_url, 'Contract Policy Document');
     (Array.isArray(contract?.attachment_urls) ? contract.attachment_urls : []).forEach((url, index) => addContractDocument(url, `Contract attachment ${index + 1}`));
     storedContractDocuments.forEach(document => addContractDocument(document.file_url, document.file_name || 'Contract document'));
+    const returnView = canCurrentUserManageUsers() ? 'users' : 'employees';
+    const returnLabel = canCurrentUserManageUsers() ? 'Back to Users' : 'Back to Employees';
     const departmentOptions = `<option value="">Select Department</option>${departments.map(department => `<option value="${department.id}" ${department.id === selectedDepartmentId ? 'selected' : ''}>${escapeHTML(department.name)}</option>`).join('')}`;
     const contractTitleOptions = `<option value="">Select Job Title</option>${(jobTitles || []).filter(title => title.department_id === selectedDepartmentId).map(title => `<option value="${escapeHTML(title.name)}" ${title.name === jobTitle ? 'selected' : ''}>${escapeHTML(title.name)}</option>`).join('')}`;
 
@@ -9059,8 +9100,8 @@ async function renderContractPage() {
                 <h1 class="page-title">${t('users_contract') || 'Contract'}</h1>
                 <p class="page-subtitle">${currentContractEmployeeName}</p>
             </div>
-            <button class="btn-secondary" onclick="currentView='users'; renderView('users');">
-                <i data-lucide="arrow-left" style="width:16px;height:16px;margin-right:4px;"></i> Back to Users
+            <button class="btn-secondary" onclick="currentView='${returnView}'; renderView('${returnView}');">
+                <i data-lucide="arrow-left" style="width:16px;height:16px;margin-right:4px;"></i> ${returnLabel}
             </button>
         </div>
 
@@ -9209,7 +9250,7 @@ async function renderContractPage() {
 
                 <!-- Action Buttons -->
                 <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 0.5rem;">
-                    <button type="button" class="btn-secondary" onclick="currentView='users'; renderView('users');">${t('contract_cancel') || 'Cancel'}</button>
+                    <button type="button" class="btn-secondary" onclick="currentView='${returnView}'; renderView('${returnView}');">${t('contract_cancel') || 'Cancel'}</button>
                     <button type="submit" class="btn-primary" style="min-width: 150px;">
                         <i data-lucide="save" style="width:16px;height:16px;margin-right:8px;"></i> ${t('contract_save') || 'Save Contract'}
                     </button>
@@ -9296,7 +9337,7 @@ async function renderEmployeesDirectory() {
                                     <td>
                                         <div class="directory-actions">
                                             <button type="button" class="btn-secondary btn-sm directory-view-button" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View employee details"><i data-lucide="eye"></i><span>View</span></button>
-                                            ${canEditContracts ? `<button type="button" class="btn-primary btn-sm directory-edit-button" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>` : ''}
+                                            ${canCurrentUserManageUsers() ? `<button type="button" class="btn-primary btn-sm directory-edit-button" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>` : ''}
                                             <button type="button" class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="${canEditContracts ? 'Edit Contract' : 'View Contract'}"><i data-lucide="file-signature"></i><span>${canEditContracts ? 'Edit Contract' : 'View Contract'}</span></button>
                                             ${canEditContracts ? `<button type="button" class="btn-secondary btn-sm" style="color:var(--color-danger)" onclick="handleDeleteContract('${u.id}')" title="Delete Contract"><i data-lucide="trash-2"></i><span>Delete Contract</span></button>` : ''}
                                         </div>
@@ -13226,7 +13267,7 @@ async function initApp() {
         const profile = await db.getUserProfile(currentUser.id);
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
-        currentUserRole = profile.role;
+        currentUserRole = isExecutiveAdminProfile(profile) ? 'ADMIN' : profile.role;
         applyPreferredTheme(profile);
 
         // TEMPORARY OVERRIDE: Force Admin role for privatepple@gmail.com in frontend
@@ -13249,7 +13290,7 @@ async function initApp() {
         const approvalsNav = document.getElementById('navApprovals');
 
         if (adminNav) adminNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
-        if (usersNav) usersNav.style.display = currentUserRole === 'ADMIN' ? 'flex' : 'none';
+        if (usersNav) usersNav.style.display = canCurrentUserManageUsers() ? 'flex' : 'none';
         if (analyticsNav) analyticsNav.style.display = (currentUserRole === 'ADMIN' || ((currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR') || currentUserRole === 'SUPERVISOR')) ? 'flex' : 'none';
         if (employeesNav) employeesNav.style.display = 'flex';
 
