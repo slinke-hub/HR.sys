@@ -1,0 +1,103 @@
+@config "../tailwind.crm.config.cjs";
+@tailwind components;
+@tailwind utilities;
+
+/* The CRM lives inside the shared app shell. These mappings keep Tailwind's
+   component utilities on the same live light/dark theme tokens as the rest
+   of the application. */
+#crm-react-root .mogam-crm-react {
+  background: transparent !important;
+  color: var(--color-text-primary) !important;
+}
+
+#crm-react-root .mogam-crm-react .tw-bg-white,
+#crm-react-root .mogam-crm-react .tw-bg-white\/50,
+#crm-react-root .mogam-crm-react .tw-bg-white\/95 {
+  background-color: var(--color-bg-surface) !important;
+}
+
+#crm-react-root .mogam-crm-react .tw-bg-slate-50,
+#crm-react-root .mogam-crm-react .tw-bg-slate-50\/70,
+#crm-react-root .mogam-crm-react .tw-bg-slate-100 {
+  background-color: color-mix(in srgb, var(--color-bg-elevated) 76%, transparent) !important;
+}
+
+#crm-react-root .mogam-crm-react .tw-text-ink,
+#crm-react-root .mogam-crm-react .tw-text-slate-950,
+#crm-react-root .mogam-crm-react .tw-text-slate-900,
+#crm-react-root .mogam-crm-react .tw-text-slate-800,
+#crm-react-root .mogam-crm-react .tw-text-slate-700 {
+  color: var(--color-text-primary) !important;
+}
+
+#crm-react-root .mogam-crm-react .tw-text-slate-600,
+#crm-react-root .mogam-crm-react .tw-text-slate-500,
+#crm-react-root .mogam-crm-react .tw-text-slate-400,
+#crm-react-root .mogam-crm-react .tw-text-slate-300 {
+  color: var(--color-text-secondary) !important;
+}
+
+#crm-react-root .mogam-crm-react .tw-border-slate-100,
+#crm-react-root .mogam-crm-react .tw-border-slate-200,
+#crm-react-root .mogam-crm-react .tw-border-slate-300 {
+  border-color: var(--color-border) !important;
+}
+
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-bg-blue-50,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-bg-cyan-50,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-bg-indigo-50,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-bg-violet-50,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-bg-amber-50,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-bg-emerald-50,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-bg-sky-50 {
+  background-color: color-mix(in srgb, var(--color-primary) 11%, var(--color-bg-elevated)) !important;
+}
+
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-text-blue-700,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-text-indigo-700,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-text-violet-700 {
+  color: var(--color-primary) !important;
+}
+
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-text-cyan-700 {
+  color: var(--color-accent) !important;
+}
+
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-text-amber-700 {
+  color: var(--color-warning) !important;
+}
+
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-text-emerald-700 {
+  color: var(--color-success) !important;
+}
+
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-border-blue-100,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-border-blue-200,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-border-cyan-200,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-border-indigo-200,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-border-amber-200,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-border-emerald-200,
+[data-theme="dark"] #crm-react-root .mogam-crm-react .tw-border-sky-200 {
+  border-color: var(--color-border) !important;
+}
+
+#crm-react-root .mogam-crm-react .crm-dashboard-search {
+  min-height: 42px !important;
+  padding: .5rem .875rem !important;
+}
+
+#crm-react-root .mogam-crm-react .crm-dashboard-search .search-input {
+  width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--color-text-primary) !important;
+  box-shadow: none !important;
+}
+
+#crm-react-root .mogam-crm-react .crm-dashboard-search .search-input::placeholder {
+  color: var(--color-text-secondary) !important;
+  opacity: 1 !important;
+}

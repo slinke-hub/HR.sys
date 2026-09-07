@@ -10324,6 +10324,8 @@ window.renderView = async function (viewId, isBack = false) {
     if (viewId === 'tasks_v2') viewId = 'tasks';
     // Community has been retired; send old links/bookmarks to the dashboard.
     if (viewId === 'community') viewId = 'dashboard';
+    if (viewId !== 'crm') window.MogamCrmDashboard?.unmount?.();
+    document.body.classList.remove('crm-dashboard-active');
     currentView = viewId;
 
     if (!currentUser && viewId !== 'login') {
@@ -11566,9 +11568,41 @@ async function renderOrders() {
 }
 
 async function renderCRM() {
-    const clients = await db.fetchClients();
-    const deals = await db.fetchDeals();
-    const users = await db.fetchUsers();
+    const [clients, deals, users, tasks, activity] = await Promise.all([
+        db.fetchClients(),
+        db.fetchDeals(),
+        db.fetchUsers(),
+        db.fetchTasks(),
+        db.fetchRecentCrmActivity(8)
+    ]);
+
+    const crmPayload = {
+        lang: currentLang,
+        clients: clients || [],
+        deals: deals || [],
+        users: users || [],
+        tasks: (tasks || []).filter(task => {
+            const assigneeIds = Array.isArray(task.assignee_ids) ? task.assignee_ids : [];
+            return task.assignee_id === currentUser?.id || assigneeIds.includes(currentUser?.id);
+        }),
+        activity: activity || [],
+        profile: currentUserProfile || currentUser || {}
+    };
+    window.pendingCrmDashboardPayload = crmPayload;
+    setTimeout(() => {
+        const root = document.getElementById('crm-react-root');
+        if (!root || currentView !== 'crm') return;
+        if (!window.MogamCrmDashboard?.mount) {
+            root.innerHTML = `<div class="crm-react-load-error">${taskDetailText('Unable to load the CRM dashboard.', 'تعذر تحميل لوحة إدارة علاقات العملاء.')}</div>`;
+            return;
+        }
+        window.MogamCrmDashboard.mount(root, window.pendingCrmDashboardPayload);
+    }, 0);
+
+    return `<div id="crm-react-root" class="crm-react-root" aria-live="polite"><div class="crm-react-loading"><div class="spinner"></div></div></div>`;
+
+    /* Legacy CRM markup is retained below temporarily for backwards-compatible
+       modal and workflow handlers; the React dashboard above is the active view. */
 
     const stages = ['LEAD', 'QUALIFICATION', 'PITCH', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
 
@@ -12588,6 +12622,7 @@ window.handleCreateDepartment = async (e) => {
 
 // CRM Modals
 window.showCRMClientModal = (client = null) => {
+    const newDealBtn = document.getElementById('crmClientNewDealBtn');
     if (client) {
         document.getElementById('crmClientId').value = client.id;
         document.getElementById('crmClientName').value = client.name || '';
@@ -12596,6 +12631,7 @@ window.showCRMClientModal = (client = null) => {
         document.getElementById('crmClientPhone').value = client.phone || '';
         document.getElementById('crmClientModalTitle').innerText = t('ui_edit_client') || 'Edit Client';
         document.getElementById('crmClientSubmitBtn').innerHTML = `<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> ${t('html_save_changes')}`;
+        if (newDealBtn) newDealBtn.style.display = 'inline-flex';
     } else {
         document.getElementById('crmClientId').value = '';
         document.getElementById('crmClientName').value = '';
@@ -12604,12 +12640,21 @@ window.showCRMClientModal = (client = null) => {
         document.getElementById('crmClientPhone').value = '';
         document.getElementById('crmClientModalTitle').innerText = t('ui_new_client') || 'New Client';
         document.getElementById('crmClientSubmitBtn').innerHTML = `<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> ${t('btn_create_client')}`;
+        if (newDealBtn) newDealBtn.style.display = 'none';
     }
     document.getElementById('crmClientModal').classList.add('show');
     if (window.lucide) window.lucide.createIcons();
 };
 window.closeCRMClientModal = () => {
     document.getElementById('crmClientModal').classList.remove('show');
+};
+
+window.openCRMDealForClient = async () => {
+    const clientId = document.getElementById('crmClientId')?.value || '';
+    window.closeCRMClientModal();
+    await window.showCRMDealModal();
+    const clientSelect = document.getElementById('crmDealClient');
+    if (clientSelect && clientId) clientSelect.value = clientId;
 };
 
 window.editClient = async (id) => {

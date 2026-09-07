@@ -2635,6 +2635,22 @@ const db = {
             return [];
         }
     },
+    async fetchRecentCrmActivity(limit = 8) {
+        if (!supabaseClient) return [];
+        try {
+            const safeLimit = Math.max(1, Math.min(Number(limit) || 8, 30));
+            const { data, error } = await supabaseClient
+                .from('crm_deal_activity')
+                .select('id, action, note, created_at, profiles:actor_id(id, full_name, display_name_ar, avatar_url), crm_deals:deal_id(id, title, crm_clients(name))')
+                .order('created_at', { ascending: false })
+                .limit(safeLimit);
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.warn('CRM activity feed unavailable:', error?.message || error);
+            return [];
+        }
+    },
     async createDeal(dealData) {
         if (!supabaseClient) return { success: false };
         try {

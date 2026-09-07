@@ -1062,6 +1062,41 @@ select.form-control option:checked { background: var(--color-accent); color: #ff
   #createTaskModal .create-task-footer > * { flex: 1 1 100%; }
 }
 
+.crm-react-root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  color-scheme: inherit;
+}
+
+.crm-react-loading,
+.crm-react-load-error {
+  display: grid;
+  min-height: min(420px, 60dvh);
+  place-items: center;
+  padding: 2rem;
+  color: var(--color-text-secondary);
+  background: transparent;
+  text-align: center;
+}
+
+.mogam-crm-react *,
+.mogam-crm-react *::before,
+.mogam-crm-react *::after {
+  box-sizing: border-box;
+}
+
+.mogam-crm-react button,
+.mogam-crm-react input,
+.mogam-crm-react select {
+  font: inherit;
+}
+
+.mogam-crm-react .kanban-col,
+.mogam-crm-react .kanban-card {
+  min-width: 0;
+}
+
 .task-assignee {
   border: 0;
   background: transparent;
@@ -7950,6 +7985,14 @@ body.multi-select-modal-open { overflow: hidden !important; }
 .custom-multi-select.open .custom-multi-select-dropdown,
 .custom-multi-select-dropdown.open,
 .native-multi-select-modal { display: flex !important; }
+
+/* A multi-select opened from inside a project/task modal is appended to the
+   document body, so it must sit above every parent modal layer. */
+#nativeMultiSelectModal.native-multi-select-modal {
+  z-index: 2147482600 !important;
+  isolation: isolate;
+}
+
 .multi-select-modal-backdrop {
   position: absolute;
   inset: 0;

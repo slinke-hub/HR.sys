@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mogam CRM Dashboard Preview</title>
+    <link rel="stylesheet" href="../../css/variables.css">
+    <link rel="stylesheet" href="../../css/layout.css">
+    <link rel="stylesheet" href="../../css/components.css">
+    <link rel="stylesheet" href="../../css/android.css">
+    <link rel="stylesheet" href="../../css/crm-tailwind.css">
+  <style>html,body{width:100%;height:100%;margin:0}.fixture-brand{font-weight:800;color:var(--color-text-primary)}#crm-react-root{width:100%}</style>
+</head>
+<body>
+  <div class="app-container">
+    <main class="main-content">
+      <header class="topbar">
+        <div class="header-logo fixture-brand">مُقام</div>
+        <nav class="header-navigation" aria-label="Primary navigation">
+          <button class="header-nav-item nav-item">Dashboard</button>
+          <button class="header-nav-item nav-item active">CRM</button>
+        </nav>
+        <div class="topbar-actions"><button class="icon-btn" aria-label="Notifications">●</button><div class="user-profile"><span class="user-name">Rana Al Harbi</span></div></div>
+      </header>
+      <div class="view-container"><div id="crm-react-root"></div></div>
+    </main>
+  </div>
+  <script src="../../js/crm-dashboard.bundle.js"></script>
+  <script>
+    if (new URLSearchParams(location.search).get('theme') === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+    window.MogamCrmDashboard.mount(document.getElementById('crm-react-root'), {
+      lang: new URLSearchParams(location.search).get('lang') === 'ar' ? 'ar' : 'en',
+      clients: [], deals: [], users: [], activity: [],
+      profile: { full_name: 'Rana Al Harbi', display_name_ar: 'رنا الحربي' },
+      tasks: [
+        { id: 'task-1', title: 'Prepare onboarding plan', due_date: '2026-09-10' },
+        { id: 'task-2', title: 'Review staffing proposal', due_date: '2026-09-12' },
+        { id: 'task-3', title: 'Confirm payroll integration', due_date: '2026-09-15' }
+      ]
+    });
+  </script>
+</body>
+</html>
