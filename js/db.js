@@ -2325,6 +2325,44 @@ const db = {
         }
     },
 
+    async updateAttendancePunch(attendanceId, punchType, changes = {}) {
+        if (!supabaseClient || !attendanceId) return { success: false };
+        try {
+            const type = String(punchType || '').toUpperCase();
+            const punchTime = new Date(changes.punchTime);
+            if (!['IN', 'OUT'].includes(type) || Number.isNaN(punchTime.getTime())) {
+                throw new Error('A valid attendance time is required.');
+            }
+            const location = String(changes.location || '').trim();
+            if (!/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(location)) {
+                throw new Error('Attendance location must contain latitude and longitude.');
+            }
+            const updates = type === 'IN'
+                ? {
+                    date: String(changes.localDate || '').slice(0, 10),
+                    clock_in_time: punchTime.toISOString(),
+                    clock_in_location: location
+                }
+                : {
+                    clock_out_time: punchTime.toISOString(),
+                    clock_out_location: location,
+                    clock_out_type: changes.clockOutType || null,
+                    overtime_hours: Math.max(0, Number(changes.overtimeHours) || 0)
+                };
+            const { data, error } = await supabaseClient
+                .from('attendance')
+                .update(updates)
+                .eq('id', attendanceId)
+                .select()
+                .single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('updateAttendancePunch Error:', error);
+            return { success: false, error };
+        }
+    },
+
     async postAnnouncement(adminId, title, content) {
         if (!supabaseClient) return { success: false };
         try {

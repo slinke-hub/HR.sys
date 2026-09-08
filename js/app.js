@@ -1207,6 +1207,14 @@ const arabicRuntimeUiText = Object.freeze({
     'Location received — opening camera...': 'تم استلام الموقع — جارٍ فتح الكاميرا...',
     'Uploading photo…': 'جارٍ رفع الصورة…',
     'Photo received — clocking out…': 'تم استلام الصورة — جارٍ تسجيل الانصراف…',
+    'Edit Attendance': 'تعديل سجل الحضور',
+    'Date and time': 'التاريخ والوقت',
+    'Location coordinates': 'إحداثيات الموقع',
+    'Latitude and longitude are required.': 'خط العرض وخط الطول مطلوبان.',
+    'Clock-out location type': 'نوع موقع تسجيل الانصراف',
+    'Office': 'المكتب',
+    'Order location': 'موقع الطلب',
+    'Overtime hours': 'ساعات العمل الإضافي',
     'Unassigned': 'غير معيّن',
     'No Manager': 'لا يوجد مدير',
     'No job title': 'لا يوجد مسمى وظيفي',
@@ -2989,7 +2997,7 @@ async function renderDashboard() {
                 </div>
                 <p style="margin-bottom: 1.5rem; color:var(--color-text-secondary);">Please select your logout location:</p>
                 <div style="display: flex; flex-direction:column; gap: 1rem;">
-                    <button class="btn-primary" onclick="executeClockOut('OFFICE')">${t('attendance_location_office')}</button>
+                    <button id="officeLocationClockOutButton" class="btn-primary" onclick="executeClockOut('OFFICE')">${t('attendance_location_office')}</button>
                     <button id="orderLocationClockOutButton" class="btn-primary" style="background:var(--color-warning);" onclick="executeClockOut('ORDER')">${t('attendance_location_order')}</button>
                 </div>
             </div>
@@ -3295,48 +3303,78 @@ window.cancelOrderClockOutPhoto = function () {
     reject?.(new Error('Photo capture cancelled'));
 };
 
-window.handleClockIn = async () => {
-    const fallbackClockIn = async (loc) => {
-        const button = document.getElementById('attendanceClockButton');
-        if (button?.disabled) return;
-        if (button) {
-            button.disabled = true;
-            button.dataset.originalText = button.textContent;
-            button.textContent = 'Clocking in...';
-        }
-        try {
-            const result = await db.clockIn(currentUser.id, loc);
-            if (!result.success || !result.data) throw result.error || new Error('Clock in was not saved.');
-            showToast(t('toast_clocked_in_successfully'), "success");
-            currentAttendanceId = result.data.id;
-            window.currentTodayAttendance = result.data;
-            if (button) {
-                button.disabled = false;
-                button.textContent = t('attendance_clock_out');
-                button.style.background = 'var(--color-danger)';
-                button.setAttribute('onclick', `handleClockOutPrompt('${result.data.id}')`);
-                button.setAttribute('aria-label', t('attendance_clock_out'));
-            }
-        } catch (err) {
-            console.error(err);
-            showToast(t('toast_error_clocking_in'), "danger");
-            if (button) {
-                button.disabled = false;
-                button.textContent = button.dataset.originalText || t('attendance_clock_in');
-            }
-        }
-    };
+function getAttendanceLocationErrorMessage(error, action = 'record attendance') {
+    if (error?.code === 1) {
+        return currentLang === 'ar'
+            ? `يجب تفعيل إذن الموقع في إعدادات الجهاز والمتصفح من أجل ${action}.`
+            : `Location permission must be enabled in your device and browser settings to ${action}.`;
+    }
+    if (error?.code === 3) {
+        return currentLang === 'ar'
+            ? 'انتهت مهلة تحديد الموقع. انتقل إلى مكان مفتوح وحاول مرة أخرى.'
+            : 'Location detection timed out. Move to an open area and try again.';
+    }
+    return currentLang === 'ar'
+        ? 'تعذر تحديد موقعك الحالي. فعّل خدمات الموقع وحاول مرة أخرى.'
+        : (error?.message || 'Your current location could not be verified. Enable location services and try again.');
+}
 
-    if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((position) => {
-            const loc = position.coords.latitude + ',' + position.coords.longitude;
-            fallbackClockIn(loc);
-        }, (error) => {
-            console.warn("Geolocation failed or denied, using fallback location.");
-            fallbackClockIn("Location Unavailable");
-        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
-    } else {
-        fallbackClockIn("Location Unavailable");
+async function requestRequiredAttendanceLocation(action = 'record attendance') {
+    if (!navigator.geolocation) {
+        throw Object.assign(new Error(currentLang === 'ar'
+            ? 'هذا الجهاز لا يدعم مشاركة الموقع.'
+            : 'Location sharing is not supported by this device.'), { code: 'UNSUPPORTED' });
+    }
+    const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0
+    }));
+    const latitude = Number(position.coords.latitude);
+    const longitude = Number(position.coords.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error(currentLang === 'ar' ? 'بيانات الموقع غير صالحة.' : 'The device returned an invalid location.');
+    }
+    return {
+        latitude: Number(latitude.toFixed(7)),
+        longitude: Number(longitude.toFixed(7)),
+        accuracy: Number(Number(position.coords.accuracy || 0).toFixed(2)),
+        capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
+        label: `${latitude.toFixed(7)},${longitude.toFixed(7)}`,
+        action
+    };
+}
+
+window.handleClockIn = async () => {
+    const button = document.getElementById('attendanceClockButton');
+    if (button?.disabled) return;
+    if (button) {
+        button.disabled = true;
+        button.dataset.originalText = button.textContent;
+        button.textContent = currentLang === 'ar' ? 'بانتظار إذن الموقع...' : 'Waiting for location permission...';
+    }
+    try {
+        const location = await requestRequiredAttendanceLocation(currentLang === 'ar' ? 'تسجيل الحضور' : 'clock in');
+        if (button) button.textContent = currentLang === 'ar' ? 'جارٍ تسجيل الحضور...' : 'Clocking in...';
+        const result = await db.clockIn(currentUser.id, location.label);
+        if (!result.success || !result.data) throw result.error || new Error('Clock in was not saved.');
+        showToast(t('toast_clocked_in_successfully'), 'success');
+        currentAttendanceId = result.data.id;
+        window.currentTodayAttendance = result.data;
+        if (button) {
+            button.disabled = false;
+            button.textContent = t('attendance_clock_out');
+            button.style.background = 'var(--color-danger)';
+            button.setAttribute('onclick', `handleClockOutPrompt('${result.data.id}')`);
+            button.setAttribute('aria-label', t('attendance_clock_out'));
+        }
+    } catch (error) {
+        console.warn('Clock-in location verification failed:', error);
+        showToast(getAttendanceLocationErrorMessage(error, currentLang === 'ar' ? 'تسجيل الحضور' : 'clock in'), 'danger');
+        if (button) {
+            button.disabled = false;
+            button.textContent = button.dataset.originalText || t('attendance_clock_in');
+        }
     }
 };
 
@@ -3357,37 +3395,28 @@ window.executeClockOut = async (type) => {
 
     let locationDetails = null;
     let orderPhotoPath = null;
-    let locationLabel = 'Location Unavailable';
-    const locationButton = document.getElementById('orderLocationClockOutButton');
+    let locationLabel = '';
+    const clockOutButtons = [document.getElementById('officeLocationClockOutButton'), document.getElementById('orderLocationClockOutButton')].filter(Boolean);
+    const locationButton = document.getElementById(type === 'ORDER' ? 'orderLocationClockOutButton' : 'officeLocationClockOutButton');
+    const restoreClockOutButtons = () => clockOutButtons.forEach(button => {
+        button.disabled = false;
+        button.textContent = button.dataset.originalText || (button.id === 'orderLocationClockOutButton' ? t('attendance_location_order') : t('attendance_location_office'));
+    });
+    clockOutButtons.forEach(button => {
+        button.disabled = true;
+        button.dataset.originalText = button.dataset.originalText || button.textContent;
+    });
     if (locationButton) {
-        locationButton.disabled = true;
-        locationButton.dataset.originalText = locationButton.textContent;
-        locationButton.textContent = 'Waiting for location permission...';
+        locationButton.textContent = currentLang === 'ar' ? 'بانتظار إذن الموقع...' : 'Waiting for location permission...';
     }
     try {
-        if (!navigator.geolocation) throw Object.assign(new Error('Location sharing is not supported by this device.'), { code: 'UNSUPPORTED' });
-        const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 0
-        }));
-        locationDetails = {
-            latitude: Number(position.coords.latitude.toFixed(7)),
-            longitude: Number(position.coords.longitude.toFixed(7)),
-            accuracy: Number(position.coords.accuracy.toFixed(2)),
-            capturedAt: new Date(position.timestamp || Date.now()).toISOString()
-        };
-        locationLabel = `${locationDetails.latitude},${locationDetails.longitude}`;
+        locationDetails = await requestRequiredAttendanceLocation(currentLang === 'ar' ? 'تسجيل الانصراف' : 'clock out');
+        locationLabel = locationDetails.label;
     } catch (error) {
-        if (type === 'ORDER') {
-            if (locationButton) {
-                locationButton.disabled = false;
-                locationButton.textContent = locationButton.dataset.originalText || t('attendance_location_order');
-            }
-            showToast(error?.code === 1 ? 'Location permission is required to clock out from an order location.' : error?.message || 'Unable to get your current location.', 'danger');
-            return;
-        }
-        console.warn('Clock-out location unavailable; saving the punch without coordinates.', error);
+        restoreClockOutButtons();
+        console.warn('Clock-out location verification failed:', error);
+        showToast(getAttendanceLocationErrorMessage(error, currentLang === 'ar' ? 'تسجيل الانصراف' : 'clock out'), 'danger');
+        return;
     }
     if (type === 'ORDER') {
         try {
@@ -3400,10 +3429,7 @@ window.executeClockOut = async (type) => {
             locationDetails.photoPath = orderPhotoPath;
             if (locationButton) locationButton.textContent = 'Photo received — clocking out…';
         } catch (error) {
-            if (locationButton) {
-                locationButton.disabled = false;
-                locationButton.textContent = locationButton.dataset.originalText || t('attendance_location_order');
-            }
+            restoreClockOutButtons();
             const message = error?.message === 'Photo capture cancelled'
                 ? 'A current photo is required to clock out from an order location.'
                 : error?.code === 1
@@ -3413,6 +3439,7 @@ window.executeClockOut = async (type) => {
             return;
         }
     }
+    restoreClockOutButtons();
     const overtime = Math.max(0, (Date.now() - new Date(attendance.clock_in_time).getTime()) / 3600000 - 8).toFixed(2);
     const button = document.getElementById('attendanceClockButton');
 
@@ -3462,6 +3489,8 @@ async function renderTime() {
     const viewerProfile = currentUserProfile || await db.getUserProfile(currentUser?.id);
     const normalizedRole = String(currentUserRole || viewerProfile?.role || '').toUpperCase();
     const jobTitle = String(viewerProfile?.job_title || '').trim().toUpperCase();
+    const isSystemAdmin = isAdminRole(normalizedRole) || isExecutiveAdminProfile(viewerProfile);
+    const canEditAttendance = isSystemAdmin;
     const canViewAllAttendance = isAdminRole(normalizedRole) || isExecutiveAdminProfile(viewerProfile) ||
         ['HR MANAGER', 'FINANCE MANAGER', 'ACCOUNTANT MANAGER'].includes(jobTitle);
     const [punches, employees] = await Promise.all([
@@ -3469,6 +3498,8 @@ async function renderTime() {
         canViewAllAttendance ? db.fetchUsers() : Promise.resolve([viewerProfile || currentUser])
     ]);
     const employeeMap = Object.fromEntries((employees || []).filter(Boolean).map(employee => [employee.id, employee]));
+    window.attendanceEmployeeCache = employeeMap;
+    window.attendancePunchCache = Object.fromEntries((punches || []).map(punch => [punch.id, punch]));
     const dateKey = value => {
         const date = new Date(value);
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -3491,15 +3522,15 @@ async function renderTime() {
             <td>${p.punch_type}</td>
             <td><span class="status-badge ${p.punch_type === 'IN' ? 'success' : 'info'}">${p.punch_type}</span></td>
             <td>${mapLink(p.location)}</td>
+            ${canEditAttendance ? `<td><button type="button" class="icon-btn attendance-edit-button" onclick="openAttendanceEditModal('${escapeHTML(p.id)}')" aria-label="${currentLang === 'ar' ? 'تعديل سجل الحضور' : 'Edit attendance record'}" title="${currentLang === 'ar' ? 'تعديل' : 'Edit'}"><i data-lucide="pencil"></i></button></td>` : ''}
         </tr>
     `).join('');
 
     if (punches.length === 0) {
-        tableRows = `<tr><td colspan="${canViewAllAttendance ? 7 : 5}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
+        tableRows = `<tr><td colspan="${canViewAllAttendance ? (canEditAttendance ? 8 : 7) : 5}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
     }
 
     const empName = window.formatEmployeeName(viewerProfile) || window.formatEmployeeName(currentUser?.user_metadata) || 'Employee';
-    const isSystemAdmin = isAdminRole(normalizedRole) || isExecutiveAdminProfile(viewerProfile);
     const pageTitle = isSystemAdmin ? t('nav_time') : `${t('nav_time')} - ${escapeHTML(empName)}`;
     return `
         <div class="page-header">
@@ -3526,17 +3557,124 @@ async function renderTime() {
                             <th>${t('time_punch_type')}</th>
                             <th>${t('status')}</th>
                             <th>Location</th>
+                            ${canEditAttendance ? `<th>${currentLang === 'ar' ? 'الإجراءات' : 'Actions'}</th>` : ''}
                         </tr>
                     </thead>
                     <tbody>
                         ${tableRows}
-                        ${punches.length ? `<tr id="attendanceNoFilterResults" ${initialVisibleCount ? 'hidden' : ''}><td colspan="${canViewAllAttendance ? 7 : 5}" style="text-align:center;padding:2rem;color:var(--color-text-secondary);">No attendance records match these filters.</td></tr>` : ''}
+                        ${punches.length ? `<tr id="attendanceNoFilterResults" ${initialVisibleCount ? 'hidden' : ''}><td colspan="${canViewAllAttendance ? (canEditAttendance ? 8 : 7) : 5}" style="text-align:center;padding:2rem;color:var(--color-text-secondary);">No attendance records match these filters.</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
         </div>
     `;
 }
+
+function toAttendanceDateTimeLocal(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = number => String(number).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+window.closeAttendanceEditModal = function () {
+    document.getElementById('attendanceEditModal')?.classList.remove('show');
+};
+
+window.openAttendanceEditModal = function (punchId) {
+    const canEdit = isAdminRole(currentUserRole) || isExecutiveAdminProfile();
+    if (!canEdit) {
+        showToast(currentLang === 'ar' ? 'هذه الخاصية متاحة للمسؤول فقط.' : 'Only administrators can edit attendance.', 'danger');
+        return;
+    }
+    const punch = window.attendancePunchCache?.[punchId];
+    if (!punch) {
+        showToast(currentLang === 'ar' ? 'تعذر العثور على سجل الحضور.' : 'Attendance record was not found.', 'danger');
+        return;
+    }
+    let modal = document.getElementById('attendanceEditModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'attendanceEditModal';
+        modal.className = 'modal attendance-edit-modal';
+        modal.innerHTML = `
+            <div class="modal-content attendance-edit-modal-content">
+                <div class="modal-header">
+                    <div><h3 id="attendanceEditTitle">Edit Attendance</h3><p class="text-muted" id="attendanceEditEmployee"></p></div>
+                    <button type="button" class="icon-btn" onclick="closeAttendanceEditModal()" aria-label="Close"><i data-lucide="x"></i></button>
+                </div>
+                <form id="attendanceEditForm" onsubmit="handleAttendanceEditSubmit(event)">
+                    <input type="hidden" id="attendanceEditPunchId">
+                    <input type="hidden" id="attendanceEditRecordId">
+                    <input type="hidden" id="attendanceEditPunchType">
+                    <div class="attendance-edit-grid">
+                        <div class="form-group"><label class="form-label" for="attendanceEditTime" id="attendanceEditTimeLabel">Date and time</label><input id="attendanceEditTime" type="datetime-local" class="form-control" required></div>
+                        <div class="form-group"><label class="form-label" for="attendanceEditLocation" id="attendanceEditLocationLabel">Location coordinates</label><input id="attendanceEditLocation" type="text" class="form-control" required inputmode="decimal" placeholder="24.7136,46.6753"><small class="text-muted" id="attendanceEditLocationHint">Latitude and longitude are required.</small></div>
+                        <div class="form-group attendance-edit-out-field"><label class="form-label" for="attendanceEditClockOutType" id="attendanceEditTypeLabel">Clock-out location type</label><select id="attendanceEditClockOutType" class="form-control"><option value="OFFICE">Office</option><option value="ORDER">Order location</option></select></div>
+                        <div class="form-group attendance-edit-out-field"><label class="form-label" for="attendanceEditOvertime" id="attendanceEditOvertimeLabel">Overtime hours</label><input id="attendanceEditOvertime" type="number" min="0" step="0.01" class="form-control" value="0"></div>
+                    </div>
+                    <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeAttendanceEditModal()" id="attendanceEditCancel">Cancel</button><button type="submit" class="btn btn-primary" id="attendanceEditSave"><i data-lucide="save"></i><span>Save changes</span></button></div>
+                </form>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    const employee = window.attendanceEmployeeCache?.[punch.employee_id];
+    modal.dataset.punchId = punchId;
+    document.getElementById('attendanceEditPunchId').value = punchId;
+    document.getElementById('attendanceEditRecordId').value = punch.attendance_id;
+    document.getElementById('attendanceEditPunchType').value = punch.punch_type;
+    document.getElementById('attendanceEditTime').value = toAttendanceDateTimeLocal(punch.punch_time);
+    document.getElementById('attendanceEditLocation').value = punch.location || '';
+    document.getElementById('attendanceEditClockOutType').value = punch.clock_out_type || 'OFFICE';
+    document.getElementById('attendanceEditOvertime').value = String(Math.max(0, Number(punch.overtime_hours) || 0));
+    modal.querySelectorAll('.attendance-edit-out-field').forEach(field => { field.hidden = punch.punch_type !== 'OUT'; });
+    document.getElementById('attendanceEditTitle').textContent = currentLang === 'ar' ? 'تعديل سجل الحضور' : `Edit ${punch.punch_type === 'IN' ? 'clock-in' : 'clock-out'}`;
+    document.getElementById('attendanceEditEmployee').textContent = window.formatEmployeeName(employee) || punch.employee_id;
+    document.getElementById('attendanceEditTimeLabel').textContent = currentLang === 'ar' ? 'التاريخ والوقت' : 'Date and time';
+    document.getElementById('attendanceEditLocationLabel').textContent = currentLang === 'ar' ? 'إحداثيات الموقع' : 'Location coordinates';
+    document.getElementById('attendanceEditLocationHint').textContent = currentLang === 'ar' ? 'خط العرض وخط الطول مطلوبان.' : 'Latitude and longitude are required.';
+    document.getElementById('attendanceEditTypeLabel').textContent = currentLang === 'ar' ? 'نوع موقع تسجيل الانصراف' : 'Clock-out location type';
+    document.getElementById('attendanceEditOvertimeLabel').textContent = currentLang === 'ar' ? 'ساعات العمل الإضافي' : 'Overtime hours';
+    document.getElementById('attendanceEditCancel').textContent = currentLang === 'ar' ? 'إلغاء' : 'Cancel';
+    document.querySelector('#attendanceEditSave span').textContent = currentLang === 'ar' ? 'حفظ التغييرات' : 'Save changes';
+    modal.classList.add('show');
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.handleAttendanceEditSubmit = async function (event) {
+    event.preventDefault();
+    if (!(isAdminRole(currentUserRole) || isExecutiveAdminProfile())) {
+        showToast(currentLang === 'ar' ? 'هذه الخاصية متاحة للمسؤول فقط.' : 'Only administrators can edit attendance.', 'danger');
+        return;
+    }
+    const punchId = document.getElementById('attendanceEditPunchId').value;
+    const attendanceId = document.getElementById('attendanceEditRecordId').value;
+    const punchType = document.getElementById('attendanceEditPunchType').value;
+    const localTime = document.getElementById('attendanceEditTime').value;
+    const location = document.getElementById('attendanceEditLocation').value.trim();
+    if (!/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(location)) {
+        showToast(currentLang === 'ar' ? 'أدخل إحداثيات صحيحة بصيغة خط العرض،خط الطول.' : 'Enter valid coordinates as latitude,longitude.', 'warning');
+        return;
+    }
+    const saveButton = document.getElementById('attendanceEditSave');
+    if (saveButton) saveButton.disabled = true;
+    const result = await db.updateAttendancePunch(attendanceId, punchType, {
+        punchTime: localTime,
+        localDate: localTime.slice(0, 10),
+        location,
+        clockOutType: document.getElementById('attendanceEditClockOutType').value,
+        overtimeHours: document.getElementById('attendanceEditOvertime').value
+    });
+    if (saveButton) saveButton.disabled = false;
+    if (!result.success) {
+        showToast(result.error?.message || (currentLang === 'ar' ? 'تعذر تحديث سجل الحضور.' : 'Attendance could not be updated.'), 'danger');
+        return;
+    }
+    delete window.attendancePunchCache?.[punchId];
+    window.closeAttendanceEditModal();
+    showToast(currentLang === 'ar' ? 'تم تحديث سجل الحضور.' : 'Attendance updated successfully.', 'success');
+    await renderView('time');
+};
 
 window.openTaskDetailsModal = async function (id) {
     let task = window.taskCache?.[id];
@@ -8982,7 +9120,6 @@ window.handleEditTaskSubmit = async function (e) {
             return;
         }
     }
-
     const updates = {
         title: title,
         description: document.getElementById('editTaskDescription').value.trim(),

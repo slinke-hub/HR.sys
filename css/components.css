@@ -3942,6 +3942,57 @@ input,
   height: 15px;
 }
 
+.attendance-edit-button {
+  width: 34px;
+  height: 34px;
+  color: var(--color-primary);
+}
+
+.attendance-edit-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.attendance-edit-modal {
+  z-index: 2147483002;
+}
+
+.attendance-edit-modal-content {
+  width: min(620px, calc(100vw - 2rem));
+  max-height: min(720px, calc(100dvh - 2rem));
+  overflow: auto;
+}
+
+.attendance-edit-modal-content .modal-header > div {
+  min-width: 0;
+}
+
+.attendance-edit-modal-content .modal-header h3,
+.attendance-edit-modal-content .modal-header p {
+  margin: 0;
+}
+
+.attendance-edit-modal-content .modal-header p {
+  margin-top: .3rem;
+}
+
+.attendance-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 1rem 0;
+}
+
+.attendance-edit-grid .form-group {
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .attendance-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .contract-documents-card>h3 {
   margin: 0 0 1rem;
   padding-bottom: .75rem;
