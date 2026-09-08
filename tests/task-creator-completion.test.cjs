@@ -13,6 +13,7 @@ const taskRowsStart = source.indexOf('const taskRows = orderedFocusTasks.map(tas
 const taskRowsEnd = source.indexOf("}).join('');", taskRowsStart);
 assert.ok(taskRowsStart >= 0 && taskRowsEnd > taskRowsStart, 'Focus-view task rows were not found');
 const taskRowsSource = source.slice(taskRowsStart, taskRowsEnd);
-assert.match(taskRowsSource, /const canManageTask = isTaskAdmin\(\) \|\| task\.created_by === currentUser\?\.id/);
+assert.match(taskRowsSource, /const canManageTask = !isMq20Profile\(\) && \(canEditTaskRecord\(task\)/);
+assert.match(source, /const canEditTaskRecord = task => !!task && \(isTaskAdmin\(\) \|\| task\.created_by === currentUser\?\.id/);
 
 console.log('Task creator completion tests passed.');

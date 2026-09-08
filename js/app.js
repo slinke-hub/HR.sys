@@ -175,6 +175,50 @@ const canCurrentUserManageUsers = () => isAdminRole(currentUserRole) && !isExecu
 window.isExecutiveAdminProfile = isExecutiveAdminProfile;
 window.canCurrentUserManageUsers = canCurrentUserManageUsers;
 const isTaskAdmin = () => isAdminRole(currentUserRole);
+const isSalesMarketingAccessProfile = (profile = currentUserProfile) => {
+    const values = [profile?.role, profile?.job_title].map(normalizeAccessValue).filter(Boolean);
+    return values.some(value => /(^|\b)(SALES|MARKETING)(\b|$)/.test(value) || /المبيعات|التسويق/.test(value));
+};
+const isSalesMarketingDepartmentName = value => /sales|marketing|المبيعات|التسويق/i.test(String(value || '').trim());
+async function canCurrentUserUseCRM() {
+    if (isTaskAdmin() || isExecutiveAdminProfile() || isSalesMarketingAccessProfile()) return true;
+    return isSalesMarketingDepartmentName(await getCurrentDepartmentName());
+}
+const isMq07Profile = (profile = currentUserProfile) => Number(profile?.emp_index) === 7;
+const isMq20Profile = (profile = currentUserProfile) => String(profile?.employee_id || '').trim().toUpperCase() === 'MQ-20';
+const isDesignTaskList = list => /design|تصميم/i.test(String(list?.name || '').trim());
+const isMarketingManagedTaskList = list => /design|marketing|sales|تصميم|تسويق|مبيعات/i.test(String(list?.name || '').trim());
+const isMarketingManagerProfile = (profile = currentUserProfile) => {
+    const values = [profile?.role, profile?.job_title].map(normalizeAccessValue).filter(Boolean);
+    return values.some(value => value === 'MARKETING MANAGER' || value.includes('MARKETING MANAGER') || /مدير\s*التسويق/.test(value));
+};
+const taskBelongsToEmployee = (task, employeeId) => !!task && !!employeeId && (
+    task.created_by === employeeId
+    || task.assignee_id === employeeId
+    || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(employeeId))
+);
+const canViewTaskViaEmployeeGrant = task => (window.taskEmployeeAccessGrants || []).some(grant =>
+    grant.viewer_id === currentUser?.id && taskBelongsToEmployee(task, grant.subject_id)
+);
+const canMarketingManagerEditTask = task => {
+    if (!window.isMarketingDepartmentManager || !task?.task_list_id) return false;
+    const list = (window.taskListsCache || []).find(item => item.id === task.task_list_id);
+    return isMarketingManagedTaskList(list);
+};
+const canEditTaskRecord = task => !!task && (isTaskAdmin() || task.created_by === currentUser?.id || canMarketingManagerEditTask(task));
+const canChangeTaskStageRecord = task => {
+    if (!task || isMq20Profile()) return false;
+    const list = (window.taskListsCache || []).find(item => item.id === task.task_list_id);
+    return canEditTaskRecord(task)
+        || task.assignee_id === currentUser?.id
+        || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser?.id))
+        || task.supervisor_id === currentUser?.id
+        || !!(list && (list.owner_id === currentUser?.id || (list.can_add_users || []).includes(currentUser?.id)));
+};
+const canMq07UseDesignTaskList = list => !!list && isMq07Profile()
+    && isDesignTaskList(list)
+    && !!currentUserProfile?.department_id
+    && list.department_id === currentUserProfile.department_id;
 const isITManagerProfile = (profile = currentUserProfile) => {
     const values = [profile?.job_title, profile?.role].map(value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' '));
     return values.some(value => value === 'IT MANAGER' || value.includes('IT MANAGER'));
@@ -185,7 +229,7 @@ const canViewEmployeesRadar = () => {
     const permittedValues = ['MANAGER', 'SUPERVISOR', 'GENERAL MANAGER', 'GM', 'CEO', 'CHIEF EXECUTIVE OFFICER'];
     return isTaskAdmin() || isITManagerProfile() || accessValues.some(value => permittedValues.includes(value));
 };
-const canInteractWithTask = task => !!task && (isTaskAdmin() || [task.created_by, task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
+const canInteractWithTask = task => !!task && !isMq20Profile() && (canEditTaskRecord(task) || [task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
 
 // Allow open dialogs to be repositioned by dragging their headers. This is
 // delegated so dynamically-rendered modals receive the same behavior.
@@ -2135,6 +2179,7 @@ async function canCurrentUserAccessView(viewId) {
     const isAdmin = isAdminRole(normalizedRole);
     if (viewId === 'users') return canCurrentUserManageUsers();
     if (isAdmin) return true;
+    if (viewId === 'crm') return canCurrentUserUseCRM();
     if (viewId === 'leave_calculator') return normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
     if (normalizedRole === 'EMPLOYEE') {
         return new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'profile']).has(viewId);
@@ -2195,7 +2240,7 @@ window.updateSidebarVisibility = async function () {
     const isAccountantManager = currentUserProfile && /accountant manager|finance manager/i.test(currentUserProfile.job_title || '');
     if (payrollNav) payrollNav.style.display = (isAdmin || isAccountantManager) ? 'flex' : 'none';
 
-    const canUseMarketingPages = isAdmin || (normalizedRole === 'EMPLOYEE' && (['marketing & sales', 'sales', 'marketing'].includes((await getCurrentDepartmentName()).trim().toLowerCase())));
+    const canUseMarketingPages = await canCurrentUserUseCRM();
     if (projectsNav) projectsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (crmNav) crmNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (clientsNav) clientsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
@@ -3514,7 +3559,7 @@ window.openTaskDetailsModal = async function (id) {
     // Check permission to create tasks
     const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
     const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
-    const canCreateTask = !!currentUser && (!task.task_list_id || privateList?.owner_id === currentUser.id || privateList?.department_id === viewerDepartmentId);
+    const canCreateTask = !!currentUser && !isMq20Profile() && (!task.task_list_id || privateList?.owner_id === currentUser.id || privateList?.department_id === viewerDepartmentId);
     const btnCreateSubTask = document.getElementById('btnCreateSubTask');
     if (btnCreateSubTask) {
         btnCreateSubTask.style.display = canCreateTask ? 'inline-block' : 'none';
@@ -3579,7 +3624,7 @@ window.handleTaskViewClick = function (event, id) {
 
 window.openTaskAssigneePicker = function (taskId) {
     const task = window.taskCache?.[taskId];
-    if (!task || (!isTaskAdmin() && task.created_by !== currentUser?.id)) {
+    if (!canEditTaskRecord(task) || isMq20Profile()) {
         showToast(window.t('msg_toast_11') || 'Only the task creator or an administrator can change assignees.', 'warning');
         return;
     }
@@ -3636,8 +3681,8 @@ function prepareTeamworkTaskDetail(task) {
     const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
     const canManagePrivateTask = !task.task_list_id || taskList?.owner_id === currentUser?.id;
     if (header) {
-        const canEdit = isTaskAdmin() || task.created_by === currentUser?.id;
-        const canApproveCompletion = task.status === 'Pending Approval' && (isTaskAdmin()
+        const canEdit = canEditTaskRecord(task) && !isMq20Profile();
+        const canApproveCompletion = !isMq20Profile() && task.status === 'Pending Approval' && (isTaskAdmin()
             || (!task.task_list_id && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id));
         let actions = header.querySelector('.task-detail-actions');
         if (!actions) {
@@ -3902,7 +3947,7 @@ window.setTaskDetailInfoTab = function (tab) {
     const contentLinks = task.content_links || (task.source_link ? [task.source_link] : []);
     const proofLinks = task.submission_links || (task.upload_link ? [task.upload_link] : []);
     const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
-    const canManageTask = !task.task_list_id || privateList?.owner_id === currentUser?.id;
+    const canManageTask = !isMq20Profile() && (canEditTaskRecord(task) || !task.task_list_id || privateList?.owner_id === currentUser?.id);
     if (tab === 'custom-fields') {
         const fields = [
             [taskDetailText('Department', 'القسم'), task.department], [taskDetailText('Task type', 'نوع المهمة'), task.sub_type], [taskDetailText('Business', 'النشاط'), task.marketing_department],
@@ -3920,7 +3965,8 @@ window.setTaskDetailInfoTab = function (tab) {
                 const iconColor = isDone ? '#059669' : 'var(--color-text-secondary)';
                 const iconName = isDone ? 'check-circle-2' : 'circle';
                 const titleStyle = isDone ? 'text-decoration:line-through;opacity:0.55;' : '';
-                return `<button type="button" class="task-detail-subtask-row${isDone ? ' subtask-done' : ''}" data-task-id="${subtask.id}" onclick="openTaskDetailsModal('${subtask.id}')"><span class="subtask-check-btn" onclick="event.stopPropagation();window.toggleSubtaskComplete('${subtask.id}',this)" style="display:flex;align-items:center;flex-shrink:0;cursor:pointer;padding:0 4px 0 0;"><i data-lucide="${iconName}" style="width:18px;height:18px;color:${iconColor};transition:color 0.2s ease;pointer-events:none;"></i></span><span style="${titleStyle}">${escapeHTML(getLocalizedTaskTitle(subtask))}</span><small>${escapeHTML(subtask.due_date || taskDetailText('No due date', 'بدون تاريخ استحقاق'))}</small></button>`;
+                const canChangeSubtask = canChangeTaskStageRecord(subtask);
+                return `<button type="button" class="task-detail-subtask-row${isDone ? ' subtask-done' : ''}" data-task-id="${subtask.id}" onclick="openTaskDetailsModal('${subtask.id}')"><span class="subtask-check-btn${canChangeSubtask ? '' : ' is-disabled'}" ${canChangeSubtask ? `onclick="event.stopPropagation();window.toggleSubtaskComplete('${subtask.id}',this)"` : ''} style="display:flex;align-items:center;flex-shrink:0;cursor:${canChangeSubtask ? 'pointer' : 'default'};padding:0 4px 0 0;"><i data-lucide="${iconName}" style="width:18px;height:18px;color:${iconColor};transition:color 0.2s ease;pointer-events:none;"></i></span><span style="${titleStyle}">${escapeHTML(getLocalizedTaskTitle(subtask))}</span><small>${escapeHTML(subtask.due_date || taskDetailText('No due date', 'بدون تاريخ استحقاق'))}</small></button>`;
             }).join('') : `<div class="task-tab-empty">${taskDetailText('No subtasks yet.', 'لا توجد مهام فرعية بعد.')}</div>`}</div></section>`;
     }
     if (window.lucide) window.lucide.createIcons();
@@ -3936,7 +3982,7 @@ window.setTaskActivityTab = function (tab) {
     panel.querySelectorAll('[data-task-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.taskActivityTab === tab));
     comments.style.display = tab === 'comments' ? 'flex' : 'none';
     const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
-    const canComment = !task.task_list_id || privateList?.owner_id === currentUser?.id;
+    const canComment = canInteractWithTask(task) && (!task.task_list_id || privateList?.owner_id === currentUser?.id);
     if (composer) composer.style.display = tab === 'comments' && canComment ? '' : 'none';
     activityPanel.style.display = tab === 'comments' ? 'none' : 'block';
     if (tab === 'activity') {
@@ -3959,7 +4005,7 @@ window.approveTaskCompletion = async function (taskId) {
         const departments = await db.fetchDepartments();
         window.taskDepartmentManagerByName = Object.fromEntries(departments.map(department => [department.name, department.head_id || department.manager_id || null]));
     }
-    const canApproveCompletion = !!task && (isTaskAdmin() || window.taskDepartmentManagerByName?.[task.department] === currentUser?.id);
+    const canApproveCompletion = !!task && !isMq20Profile() && (isTaskAdmin() || window.taskDepartmentManagerByName?.[task.department] === currentUser?.id);
     if (!canApproveCompletion) {
         showToast(window.t('msg_toast_17') || 'Only an administrator or this task’s department manager can approve completion.', 'danger');
         return;
@@ -6358,7 +6404,7 @@ window.handleUpdateProfileDetails = async function (e) {
 async function renderTasks() {
     console.log("renderTasks: Fetching data for V2...");
     const tasksPromise = db.fetchTasks();
-    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists, watcherDirectory, taskListDirectory, projects] = await Promise.all([
+    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists, watcherDirectory, taskListDirectory, projects, employeeAccessGrants] = await Promise.all([
         db.fetchUsers(),
         tasksPromise,
         db.fetchMyDepartmentSupervisors(),
@@ -6366,21 +6412,31 @@ async function renderTasks() {
         db.fetchTaskLists(),
         db.fetchTaskWatcherDirectory(),
         db.fetchTaskListDepartmentDirectory(),
-        db.fetchProjects(currentUser.id)
+        db.fetchProjects(currentUser.id),
+        db.fetchTaskEmployeeAccessGrants()
     ]);
     
     window.taskDepartmentSupervisors = departmentSupervisors || [];
     const usersById = new Map((allUsers || []).map(user => [String(user.id), user]));
     const viewerProfile = currentUserProfile || usersById.get(String(currentUser?.id));
+    window.taskEmployeeAccessGrants = employeeAccessGrants || [];
+    const marketingDepartments = (allDepartments || []).filter(department => /marketing|التسويق/i.test(String(department.name || '')));
+    window.isMarketingDepartmentManager = !!currentUser && (
+        isMarketingManagerProfile(viewerProfile)
+        || marketingDepartments.some(department => [department.head_id, department.manager_id].includes(currentUser.id))
+    );
     const taskLists = (fetchedTaskLists || []).filter(list => {
+        const hasGrantedTask = (fetchedTasks || []).some(task => task.task_list_id === list.id && canViewTaskViaEmployeeGrant(task));
+        if (isMq20Profile(viewerProfile)) return hasGrantedTask;
         if (isTaskAdmin()) return true;
+        if (window.isMarketingDepartmentManager && isMarketingManagedTaskList(list)) return true;
         if (list.owner_id === currentUser?.id) return true;
         if (list.visible_to_all) return true;
+        if (canMq07UseDesignTaskList(list)) return true;
+        if (hasGrantedTask) return true;
         if (!viewerProfile?.department_id || !list.department_id) return false;
         return list.department_id === viewerProfile.department_id;
     });
-    const marketingDepartmentRecord = allDepartments.find(department => department.name === 'Marketing & Sales');
-    window.isMarketingDepartmentManager = !!currentUser && [marketingDepartmentRecord?.head_id, marketingDepartmentRecord?.manager_id].includes(currentUser.id);
     window.taskDepartmentManagerByName = Object.fromEntries(allDepartments.map(department => [department.name, department.head_id || department.manager_id || null]));
     window.taskCache = {};
     window.taskAssigneeOptionsCache = ''; 
@@ -6416,7 +6472,10 @@ async function renderTasks() {
     }
 
     window.visibleTaskIds = tasks.filter(task => {
+        if (isMq20Profile(viewerProfile)) return canViewTaskViaEmployeeGrant(task);
         if (currentUserRole === 'ADMIN') return true;
+        if (canMarketingManagerEditTask(task)) return true;
+        if (canViewTaskViaEmployeeGrant(task)) return true;
         if (task.created_by === currentUser.id) return true;
         if (task.assignee_id === currentUser.id) return true;
         if (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser.id)) return true;
@@ -6568,22 +6627,17 @@ window.filterArchivedTasks = function () {
 
 function renderTaskCard(task) {
     const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
-    const canManageTask = isTaskAdmin() || (task.task_list_id
+    const canManageTask = canEditTaskRecord(task) || (task.task_list_id
         ? taskList?.owner_id === currentUser?.id
         : [task.created_by, task.assignee_id, task.supervisor_id].includes(currentUser?.id) || (task.department === 'Marketing & Sales' && window.isMarketingDepartmentManager));
     // Stage changes are intentionally available to the people working on the
     // task, not only to the list owner. List-level permissions still apply to
     // adding/removing tasks, while assignees and creators can move the work
     // through the pipeline.
-    const canChangeTaskStage = isTaskAdmin()
-        || task.created_by === currentUser?.id
-        || task.assignee_id === currentUser?.id
-        || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser?.id))
-        || task.supervisor_id === currentUser?.id
-        || (taskList && (taskList.owner_id === currentUser?.id || (taskList.can_add_users || []).includes(currentUser?.id)));
-    const canEditTask = isTaskAdmin() || task.created_by === currentUser?.id;
-    const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id
-        || (taskList?.can_delete_users || []).includes(currentUser?.id);
+    const canChangeTaskStage = canChangeTaskStageRecord(task);
+    const canEditTask = canEditTaskRecord(task) && !isMq20Profile();
+    const canDeleteTask = !isMq20Profile() && (isTaskAdmin() || task.created_by === currentUser?.id
+        || (taskList?.can_delete_users || []).includes(currentUser?.id));
     const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
     const priorityLabel = task.priority === 'urgent' ? 'Urgent' : `${task.priority || 'medium'}`.replace(/^./, value => value.toUpperCase());
     const assigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean);
@@ -6606,7 +6660,7 @@ function renderTaskCard(task) {
                 ${canChangeTaskStage ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
                     ['todo','To do'],['in_progress','In progress'],['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done']
                 ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
-                <button type="button" class="task-assignee" title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">
+                <button type="button" class="task-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>
                     <i data-lucide="users"></i>
                     <span class="task-assignee-full-name">${escapeHTML(assigneeLabel)}</span>
                 </button>
@@ -6679,21 +6733,38 @@ async function renderTasksV2() {
 
     const visibleIds = new Set(window.visibleTaskIds || []);
     const tasks = Object.values(window.taskCache || {}).filter(task => visibleIds.has(String(task.id)));
-    
-    const dueSoonCount = tasks.filter(task => {
+    const selectedProject = window.taskV2SelectedProject || 'all';
+    const matchesSelectedTaskScope = task => {
+        if (selectedProject === 'all') return true;
+        if (selectedProject.startsWith('list_')) return String(task.task_list_id) === selectedProject.substring(5);
+        return String(task.project_id) === selectedProject;
+    };
+    const selectedScopeTasks = tasks.filter(matchesSelectedTaskScope);
+    const selectedTaskList = selectedProject.startsWith('list_')
+        ? (window.taskListsCache || []).find(list => String(list.id) === selectedProject.substring(5))
+        : null;
+    const taskAssigneeOptions = canMq07UseDesignTaskList(selectedTaskList)
+        ? (window.taskAllUsersCache || [])
+            .filter(user => user.is_active !== false && user.department_id === currentUserProfile?.department_id)
+            .map(user => {
+                const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
+                return `<option value="${escapeHTML(user.id)}" ${user.id === currentUser.id ? 'selected' : ''}>${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(user.role || 'EMPLOYEE'))})</option>`;
+            }).join('')
+        : window.taskAssigneeOptionsCache;
+
+    const dueSoonCount = selectedScopeTasks.filter(task => {
         if (!task.due_date || task.status === 'completed' || task.status === 'Approved') return false;
         const days = (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000;
         return days >= 0 && days <= 7;
     }).length;
-    const overdueCount = tasks.filter(task => task.due_date && task.status !== 'completed' && task.status !== 'Approved' && new Date(`${task.due_date}T23:59:59`) < new Date()).length;
+    const overdueCount = selectedScopeTasks.filter(task => task.due_date && task.status !== 'completed' && task.status !== 'Approved' && new Date(`${task.due_date}T23:59:59`) < new Date()).length;
     
     const projects = window.projectsCache || [];
     const taskLists = window.taskListsCache || [];
-    const selectedProject = window.taskV2SelectedProject || 'all';
     const taskViewMode = window.taskV2Mode || 'focus';
     
     const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
-    let canCreateTask = !!currentUser;
+    let canCreateTask = !!currentUser && !isMq20Profile();
     if (selectedProject.startsWith('list_') && !isTaskAdmin()) {
         const listId = selectedProject.substring(5);
         const list = taskLists.find(l => l.id === listId);
@@ -6701,6 +6772,7 @@ async function renderTasksV2() {
             canCreateTask = false;
             if (list.owner_id === currentUser.id) canCreateTask = true;
             else if (list.can_add_users && list.can_add_users.includes(currentUser.id)) canCreateTask = true;
+            else if (canMq07UseDesignTaskList(list)) canCreateTask = true;
             else if (list.department_id && viewerDepartmentId && list.department_id === viewerDepartmentId) canCreateTask = true;
         }
     }
@@ -6791,13 +6863,13 @@ async function renderTasksV2() {
     }
 
     const taskRows = orderedFocusTasks.map(task => {
-        const canManageTask = isTaskAdmin() || task.created_by === currentUser?.id || (task.task_list_id
+        const canManageTask = !isMq20Profile() && (canEditTaskRecord(task) || (task.task_list_id
             ? taskListsById.get(String(task.task_list_id))?.owner_id === currentUser?.id
-            : [task.assignee_id, task.supervisor_id].includes(currentUser?.id));
-        const canEditTask = isTaskAdmin() || task.created_by === currentUser?.id;
+            : [task.assignee_id, task.supervisor_id].includes(currentUser?.id)));
+        const canEditTask = canEditTaskRecord(task) && !isMq20Profile();
         const taskList = taskListsById.get(String(task.task_list_id));
-        const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id
-            || (taskList?.can_delete_users || []).includes(currentUser?.id);
+        const canDeleteTask = !isMq20Profile() && (isTaskAdmin() || task.created_by === currentUser?.id
+            || (taskList?.can_delete_users || []).includes(currentUser?.id));
         const prioColor = task.priority === 'high' || task.priority === 'urgent' ? 'var(--color-warning)' : (task.priority === 'critical' ? 'var(--color-danger)' : 'var(--color-text-secondary)');
         const isCompleted = task.status === 'completed';
         const stageCheckColor = {
@@ -6849,7 +6921,7 @@ async function renderTasksV2() {
                 </div>
                 
                 <div class="task-v2-row-actions" style="display: flex; align-items: center; gap: 1rem; flex-shrink: 0;">
-                    <button type="button" class="task-assignee task-row-assignee" title="Change assignee" onclick="window.handleTaskAssigneeClick(event, '${task.id}')">${assigneeHTML}</button>
+                    <button type="button" class="task-assignee task-row-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignee" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>${assigneeHTML}</button>
                     ${task.due_date ? `<span class="task-row-due${dueClass}" style="display:flex; align-items: center; gap:4px; font-size:0.8rem; color:var(--color-text-secondary); white-space:nowrap; flex-shrink:0;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date}</span>` : ''}
                     ${task.category && task.category !== 'General' ? `<span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--color-primary); font-size: 0.75rem;">${escapeHTML(task.category)}</span>` : ''}
                     <button class="icon-btn ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.stopPropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator or an administrator can edit this task'}" style="color:var(--color-text-secondary);"><i data-lucide="pencil" style="width:16px;height:16px;"></i></button>
@@ -6862,6 +6934,8 @@ async function renderTasksV2() {
     const pending = tasks.filter(t => t.status === 'Pending Approval');
     const todo = tasks.filter(t => t.status === 'todo');
     const inProgress = tasks.filter(t => t.status === 'in_progress');
+    const selectedWaitingCount = selectedScopeTasks.filter(task => ['todo', 'Pending Approval'].includes(task.status)).length;
+    const selectedActiveCount = selectedScopeTasks.filter(task => task.status === 'in_progress').length;
     const review = tasks.filter(t => t.status === 'review');
     const done = tasks.filter(t => t.status === 'completed');
     
@@ -6892,7 +6966,7 @@ async function renderTasksV2() {
                             <div class="task-stage-panel">
                                 <header class="task-stage-header">
                                     <div class="task-stage-title"><span class="task-stage-dot"></span><h3>${stage.label}</h3></div>
-                                    <span id="badge-${stage.badge}" class="task-stage-count">${stage.tasks.length}</span>
+                                    <span id="badge-${stage.badge}" class="task-stage-count">${stage.tasks.filter(matchesSelectedTaskScope).length}</span>
                                 </header>
                                 <div id="col-${stage.status}" class="task-column" ondragover="handleTaskDragOver(event)" ondrop="handleTaskDrop(event, '${stage.status}')">
                                     ${stage.tasks.map(renderTaskCard).join('')}
@@ -7024,7 +7098,7 @@ async function renderTasksV2() {
                                 <label class="form-label">${t('task_assign_to') || 'Assign To'}</label>
                                 <select id="taskAssignee" class="form-control" required onchange="window.handleTaskAssigneeChange('new')">
                                     ${!isRegularEmployee ? `<option value="">${t('task_sel_emp') || 'Select Employee'}</option>` : ''}
-                                    ${window.taskAssigneeOptionsCache}
+                                    ${taskAssigneeOptions}
                                 </select>
                             </div>
 
@@ -7225,6 +7299,25 @@ async function renderTasksV2() {
         </div>
     ` : '';
 
+    const taskAccessManagerModal = window.isMarketingDepartmentManager ? `
+        <div class="modal task-employee-access-modal" id="taskEmployeeAccessModal">
+            <div class="modal-content task-employee-access-content">
+                <div class="modal-header">
+                    <div>
+                        <h2>${taskDetailText('Employee task access', 'صلاحيات عرض مهام الموظفين')}</h2>
+                        <p>${taskDetailText('Grant view-only access between Sales and Marketing employees.', 'امنح صلاحية عرض فقط بين موظفي المبيعات والتسويق.')}</p>
+                    </div>
+                    <button type="button" class="icon-btn" onclick="window.closeTaskEmployeeAccessModal()" aria-label="${taskDetailText('Close', 'إغلاق')}"><i data-lucide="x"></i></button>
+                </div>
+                <form class="task-employee-access-form" onsubmit="window.handleSaveTaskEmployeeAccess(event)">
+                    <label class="form-group"><span class="form-label">${taskDetailText('Employee who can view', 'الموظف الذي يمكنه العرض')}</span><select id="taskAccessViewer" class="form-control" required></select></label>
+                    <label class="form-group"><span class="form-label">${taskDetailText('Whose tasks they can view', 'مهام الموظف التي يمكنه عرضها')}</span><select id="taskAccessSubject" class="form-control" required></select></label>
+                    <button type="submit" class="btn btn-primary"><i data-lucide="eye"></i>${taskDetailText('Grant view access', 'منح صلاحية العرض')}</button>
+                </form>
+                <div class="task-employee-access-list" id="taskEmployeeAccessList"></div>
+            </div>
+        </div>` : '';
+
     return `
         <div class="task-v2-shell fade-in-up">
             <div class="task-v2-workspace">
@@ -7242,10 +7335,11 @@ async function renderTasksV2() {
                         ${personalListItems}
                     </ul>
                     
-                    <div style="margin-top: auto; padding-top: 1rem; padding-bottom: 1rem; text-align: center;">
-                        <button class="btn btn-secondary btn-sm" style="width: calc(100% - 2rem); margin: 0 auto; justify-content: center; background: none; border: 1px dashed var(--color-border);" onclick="window.openTaskListModal()">
+                    <div class="task-list-sidebar-actions" style="margin-top: auto; padding-top: 1rem; padding-bottom: 1rem; text-align: center;">
+                        ${!isMq20Profile() ? `<button class="btn btn-secondary btn-sm" onclick="window.openTaskListModal()">
                             <i data-lucide="plus" style="width: 14px; height: 14px; margin-right: 4px;"></i> Add new list
-                        </button>
+                        </button>` : ''}
+                        ${window.isMarketingDepartmentManager ? `<button class="btn btn-secondary btn-sm" onclick="window.openTaskEmployeeAccessModal()"><i data-lucide="users-round"></i>${taskDetailText('Manage viewing access', 'إدارة صلاحيات العرض')}</button>` : ''}
                     </div>
                 </aside>
             
@@ -7281,7 +7375,9 @@ async function renderTasksV2() {
                             <option value="all">${taskDetailText('All assignees', 'كل المكلّفين')}</option>
                             ${window.taskPeopleFilterOptionsCache || ''}
                         </select>
-                        <input type="date" id="taskV2DateFilter" class="form-control task-v2-date-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}" title="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}">
+                        <div class="task-v2-date-control">
+                            <input type="date" id="taskV2DateFilter" class="form-control task-v2-date-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}" title="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}">
+                        </div>
                     </div>
                     <div class="task-v2-toolbar-right">
                         <div class="task-v2-view-toggles">
@@ -7297,11 +7393,11 @@ async function renderTasksV2() {
                 
                 <div class="task-pipeline-health" aria-label="Pipeline health summary">
                     <div class="task-health-heading"><i data-lucide="activity"></i><span>Pipeline health</span></div>
-                    <button type="button" class="task-health-item tone-slate ${window.taskV2HealthFilter === 'waiting' ? 'active' : ''}" data-task-health-filter="waiting" aria-pressed="${window.taskV2HealthFilter === 'waiting'}" onclick="window.setTaskV2HealthFilter('waiting')"><span class="task-health-dot"></span><strong>${todo.length + pending.length}</strong><span>waiting</span></button>
-                    <button type="button" class="task-health-item tone-blue ${window.taskV2HealthFilter === 'active' ? 'active' : ''}" data-task-health-filter="active" aria-pressed="${window.taskV2HealthFilter === 'active'}" onclick="window.setTaskV2HealthFilter('active')"><span class="task-health-dot"></span><strong>${inProgress.length}</strong><span>active</span></button>
-                    <button type="button" class="task-health-item tone-amber ${window.taskV2HealthFilter === 'due_this_week' ? 'active' : ''}" data-task-health-filter="due_this_week" aria-pressed="${window.taskV2HealthFilter === 'due_this_week'}" onclick="window.setTaskV2HealthFilter('due_this_week')"><span class="task-health-dot"></span><strong>${dueSoonCount}</strong><span>due this week</span></button>
-                    <button type="button" class="task-health-item tone-red ${window.taskV2HealthFilter === 'overdue' ? 'active' : ''}" data-task-health-filter="overdue" aria-pressed="${window.taskV2HealthFilter === 'overdue'}" onclick="window.setTaskV2HealthFilter('overdue')"><span class="task-health-dot"></span><strong>${overdueCount}</strong><span>overdue</span></button>
-                    <div class="task-health-total"><strong>${tasks.length}</strong><span>total</span></div>
+                    <button type="button" class="task-health-item tone-slate ${window.taskV2HealthFilter === 'waiting' ? 'active' : ''}" data-task-health-filter="waiting" aria-pressed="${window.taskV2HealthFilter === 'waiting'}" onclick="window.setTaskV2HealthFilter('waiting')"><span class="task-health-dot"></span><strong data-task-health-count="waiting">${selectedWaitingCount}</strong><span>waiting</span></button>
+                    <button type="button" class="task-health-item tone-blue ${window.taskV2HealthFilter === 'active' ? 'active' : ''}" data-task-health-filter="active" aria-pressed="${window.taskV2HealthFilter === 'active'}" onclick="window.setTaskV2HealthFilter('active')"><span class="task-health-dot"></span><strong data-task-health-count="active">${selectedActiveCount}</strong><span>active</span></button>
+                    <button type="button" class="task-health-item tone-amber ${window.taskV2HealthFilter === 'due_this_week' ? 'active' : ''}" data-task-health-filter="due_this_week" aria-pressed="${window.taskV2HealthFilter === 'due_this_week'}" onclick="window.setTaskV2HealthFilter('due_this_week')"><span class="task-health-dot"></span><strong data-task-health-count="due_this_week">${dueSoonCount}</strong><span>due this week</span></button>
+                    <button type="button" class="task-health-item tone-red ${window.taskV2HealthFilter === 'overdue' ? 'active' : ''}" data-task-health-filter="overdue" aria-pressed="${window.taskV2HealthFilter === 'overdue'}" onclick="window.setTaskV2HealthFilter('overdue')"><span class="task-health-dot"></span><strong data-task-health-count="overdue">${overdueCount}</strong><span>overdue</span></button>
+                    <div class="task-health-total"><strong data-task-health-total>${selectedScopeTasks.length}</strong><span>total</span></div>
                     ${canCreateTask ? `<button class="btn btn-primary task-health-new-task" onclick="window.toggleTaskV2Create()"><i data-lucide="plus"></i><span>New Task</span></button>` : ''}
                 </div>
 
@@ -7316,6 +7412,7 @@ async function renderTasksV2() {
                 ${boardHTML}
                 
                 ${adminForm}
+                ${taskAccessManagerModal}
             </section>
         </div>
     </div>`;
@@ -7549,6 +7646,43 @@ window.filterTasksV2 = function () {
         }
         el.style.display = matches ? '' : 'none';
     });
+
+    const matchesSelectedScope = task => {
+        if (project === 'all') return true;
+        if (project.startsWith('list_')) return String(task.task_list_id) === project.substring(5);
+        return String(task.project_id) === project;
+    };
+    const scopedTasks = tasks.filter(matchesSelectedScope);
+    const now = new Date();
+    const isClosed = task => task.status === 'completed' || task.status === 'Approved';
+    const healthCounts = {
+        waiting: scopedTasks.filter(task => ['todo', 'Pending Approval'].includes(task.status)).length,
+        active: scopedTasks.filter(task => task.status === 'in_progress').length,
+        due_this_week: scopedTasks.filter(task => {
+            if (!task.due_date || isClosed(task)) return false;
+            const days = (new Date(`${task.due_date}T23:59:59`) - now) / 86400000;
+            return days >= 0 && days <= 7;
+        }).length,
+        overdue: scopedTasks.filter(task => task.due_date && !isClosed(task) && new Date(`${task.due_date}T23:59:59`) < now).length
+    };
+    Object.entries(healthCounts).forEach(([key, count]) => {
+        const counter = document.querySelector(`[data-task-health-count="${key}"]`);
+        if (counter) counter.textContent = String(count);
+    });
+    const totalCounter = document.querySelector('[data-task-health-total]');
+    if (totalCounter) totalCounter.textContent = String(scopedTasks.length);
+
+    document.querySelectorAll('#tasks-view-board .task-stage-panel').forEach(panel => {
+        const column = panel.querySelector('.task-column');
+        const counter = panel.querySelector('.task-stage-count');
+        if (!column || !counter) return;
+        const stage = String(column.id || '').replace(/^col-/, '');
+        const count = tasks.filter(task => {
+            const normalizedStage = task.status === 'Pending Approval' ? 'Pending Approval' : task.status;
+            return normalizedStage === stage && matchesFilters(task);
+        }).length;
+        counter.textContent = String(count);
+    });
 };
 
 window.setTaskV2HealthFilter = function (filter) {
@@ -7641,6 +7775,10 @@ window.taskV2ToggleComplete = async function (taskId, event) {
 window.toggleSubtaskComplete = async function (subtaskId, iconEl) {
     const subtask = window.taskCache?.[subtaskId];
     if (!subtask) return;
+    if (!canChangeTaskStageRecord(subtask)) {
+        showToast(taskDetailText('This task is available in view-only mode.', 'هذه المهمة متاحة للعرض فقط.'), 'warning');
+        return;
+    }
 
     const isCurrentlyDone = subtask.status === 'completed' || subtask.status === 'Approved';
     const newStatus = isCurrentlyDone ? 'todo' : 'completed';
@@ -7754,6 +7892,10 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus) {
     if (!taskId) return { error: new Error('Invalid task ID') };
     const task = window.taskCache?.[taskId];
     if (!task || task.status === requestedStatus) return;
+    if (!canChangeTaskStageRecord(task)) {
+        showToast(taskDetailText('This task is available in view-only mode.', 'هذه المهمة متاحة للعرض فقط.'), 'warning');
+        return { error: new Error('Task is view-only') };
+    }
     const previousStatus = task.status;
     const result = await window.handleUpdateTaskStatus(taskId, requestedStatus);
     if (result?.error) return;
@@ -7836,7 +7978,7 @@ window.toggleAITaskMode = function () {
 
 window.handleAICreateTask = async function (e) {
     e.preventDefault();
-    const canCreateTask = !!currentUser;
+    const canCreateTask = !!currentUser && !isMq20Profile();
     if (!canCreateTask) {
         showToast("You do not have permission to create tasks.", "danger");
         return;
@@ -7894,13 +8036,17 @@ window.handleTaskProjectChange = function (prefix = 'new') {
 // to the list the employee selected instead of silently creating an unlisted
 // task.
 window.toggleTaskV2Create = function () {
+    if (isMq20Profile()) {
+        showToast(taskDetailText('This account has view-only task access.', 'هذا الحساب لديه صلاحية عرض المهام فقط.'), 'warning');
+        return;
+    }
     const modal = document.getElementById('createTaskModal');
     if (!modal) return;
     const selected = String(window.taskV2SelectedProject || 'all');
     const listId = selected.startsWith('list_') ? selected.slice(5) : '';
     const list = (window.taskListsCache || []).find(item => item.id === listId);
     const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
-    const canUseList = !listId || list?.owner_id === currentUser?.id || list?.can_add_users?.includes(currentUser?.id) || (list?.department_id && list.department_id === viewerDepartmentId) || isTaskAdmin();
+    const canUseList = !listId || list?.owner_id === currentUser?.id || list?.can_add_users?.includes(currentUser?.id) || (list?.department_id && list.department_id === viewerDepartmentId) || canMq07UseDesignTaskList(list) || isTaskAdmin();
     if (!canUseList) {
         showToast(window.t('msg_toast_29') || 'You do not have permission to add tasks to this list.', 'danger');
         return;
@@ -8224,7 +8370,7 @@ window.handleQuickAddTask = async function(e) {
     const title = e.target.value.trim();
     if (!title) return;
 
-    if (!currentUser) {
+    if (!currentUser || isMq20Profile()) {
         showToast("You do not have permission to create tasks.", "danger");
         return;
     }
@@ -8241,6 +8387,13 @@ window.handleQuickAddTask = async function(e) {
     const taskListId = activeSelection.startsWith('list_') ? activeSelection.slice(5) : null;
     const projectId = taskListId ? null : (activeSelection === 'all' || activeSelection.startsWith('list_') ? null : activeSelection);
     const supervisorId = window.taskDepartmentSupervisors?.[0]?.id || null;
+    const taskList = (window.taskListsCache || []).find(list => String(list.id) === String(taskListId));
+    const assignee = (window.taskAllUsersCache || []).find(user => user.id === assigneeId);
+    if (canMq07UseDesignTaskList(taskList) && assignee?.department_id !== currentUserProfile?.department_id) {
+        showToast(taskDetailText('Design tasks can only be assigned within your department.', 'لا يمكن إسناد مهام التصميم إلا لموظفي قسمك.'), 'warning');
+        e.target.disabled = false;
+        return;
+    }
 
     const { success, error, data: createdTask } = await db.createTask(
         title, '', assigneeId, dueStr, currentUser.id, priority, 'General', 
@@ -8298,7 +8451,7 @@ window.handleQuickAddTask = async function(e) {
 window.handleCreateTask = async function (e) {
     e.preventDefault();
 
-    const canCreateTask = !!currentUser;
+    const canCreateTask = !!currentUser && !isMq20Profile();
     if (!canCreateTask) {
         showToast("You do not have permission to create tasks.", "danger");
         return;
@@ -8320,6 +8473,11 @@ window.handleCreateTask = async function (e) {
     // Check if assignee is in Designing
     const allUsers = window.taskAllUsersCache || await db.fetchUsers();
     const assigneeObj = allUsers.find(u => u.id === effectiveAssignee);
+    const selectedTaskList = (window.taskListsCache || []).find(list => String(list.id) === String(taskListId));
+    if (canMq07UseDesignTaskList(selectedTaskList) && assigneeObj?.department_id !== currentUserProfile?.department_id) {
+        showToast(taskDetailText('Design tasks can only be assigned within your department.', 'لا يمكن إسناد مهام التصميم إلا لموظفي قسمك.'), 'warning');
+        return;
+    }
     const depts = window.taskDepartmentsCache || await db.fetchDepartments();
     const userDept = assigneeObj ? depts.find(d => d.id === assigneeObj.department_id) : null;
     const isDesigner = userDept && userDept.name.toLowerCase().includes('designing');
@@ -8427,6 +8585,10 @@ function bypassesTaskCompletionApproval(task) {
 
 window.handleUpdateTaskStatus = async function (id, status) {
     const task = window.taskCache ? window.taskCache[id] : null;
+    if (task && !canChangeTaskStageRecord(task)) {
+        showToast(taskDetailText('This task is available in view-only mode.', 'هذه المهمة متاحة للعرض فقط.'), 'warning');
+        return { error: new Error('Task is view-only'), status: task.status };
+    }
     let actualStatus = status;
     let needsManagerApproval = false;
 
@@ -8559,6 +8721,7 @@ window.handleTaskDrop = async function (e, status) {
         if (savedColumn && taskCard.parentElement !== savedColumn) savedColumn.appendChild(taskCard);
     }
     window.syncTaskStageEmptyStates();
+    window.filterTasksV2?.();
 };
 
 window.openEditTaskModal = async function (id) {
@@ -8568,7 +8731,7 @@ window.openEditTaskModal = async function (id) {
             console.error('Task not found in cache for ID:', id);
             return;
         }
-        if (!isTaskAdmin() && task.created_by !== currentUser?.id) {
+        if (!canEditTaskRecord(task) || isMq20Profile()) {
             showToast(window.t('msg_toast_31') || 'Only the task creator or an administrator can edit this task.', 'warning');
             return;
         }
@@ -8658,7 +8821,7 @@ window.openEditTaskModal = async function (id) {
         selectProject.innerHTML = `<option value="">No Project / Independent</option>`;
         const moveListSelect = document.getElementById('editTaskMoveList');
         const viewerDepartmentId = currentUserProfile?.department_id || currentUser?.department_id;
-        const editableLists = (window.taskListsCache || []).filter(list => !list.is_archived && (list.id === task.task_list_id || isTaskAdmin() || list.owner_id === currentUser?.id || (list.can_add_users || []).includes(currentUser?.id) || (list.department_id && list.department_id === viewerDepartmentId)));
+        const editableLists = (window.taskListsCache || []).filter(list => !list.is_archived && (list.id === task.task_list_id || isTaskAdmin() || list.owner_id === currentUser?.id || (list.can_add_users || []).includes(currentUser?.id) || (list.department_id && list.department_id === viewerDepartmentId) || canMq07UseDesignTaskList(list)));
         if (moveListSelect) {
             moveListSelect.innerHTML = `<option value="">No task list</option>` + editableLists.map(list => `<option value="${escapeHTML(list.id)}">${escapeHTML(list.name)}</option>`).join('');
             moveListSelect.value = task.task_list_id || '';
@@ -8714,8 +8877,8 @@ window.openEditTaskModal = async function (id) {
         document.getElementById('editTaskFilesList').innerHTML = '';
 
         const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
-        const canDeleteTask = isTaskAdmin() || task.created_by === currentUser?.id
-            || (taskList?.can_delete_users || []).includes(currentUser?.id);
+        const canDeleteTask = !isMq20Profile() && (isTaskAdmin() || task.created_by === currentUser?.id
+            || (taskList?.can_delete_users || []).includes(currentUser?.id));
         const deleteBtn = document.getElementById('editTaskDeleteBtn');
         if (deleteBtn) {
             deleteBtn.style.display = canDeleteTask ? '' : 'none';
@@ -8750,7 +8913,7 @@ window.handleEditTaskSubmit = async function (e) {
     e.preventDefault();
     const id = document.getElementById('editTaskId').value;
     const taskBeingEdited = window.taskCache?.[id];
-    if (!taskBeingEdited || (!isTaskAdmin() && taskBeingEdited.created_by !== currentUser?.id)) {
+    if (!canEditTaskRecord(taskBeingEdited) || isMq20Profile()) {
         showToast(window.t('msg_toast_31') || 'Only the task creator or an administrator can edit this task.', 'warning');
         return;
     }
@@ -8769,6 +8932,16 @@ window.handleEditTaskSubmit = async function (e) {
     const estimate = document.getElementById('editTaskEstimate').value;
     const projectId = document.getElementById('editTaskProject').value || null;
     const moveTaskListId = document.getElementById('editTaskMoveList')?.value || null;
+    const targetTaskList = (window.taskListsCache || []).find(list => list.id === (moveTaskListId || taskBeingEdited.task_list_id));
+    if (isMq07Profile() && isDesignTaskList(targetTaskList)) {
+        const sameDepartmentIds = new Set((window.taskAllUsersCache || [])
+            .filter(user => user.department_id === currentUserProfile?.department_id)
+            .map(user => user.id));
+        if (assigneeIds.some(userId => !sameDepartmentIds.has(userId))) {
+            showToast(taskDetailText('Design tasks can only be assigned within your department.', 'لا يمكن إسناد مهام التصميم إلا لموظفي قسمك.'), 'warning');
+            return;
+        }
+    }
 
     const updates = {
         title: title,
@@ -8902,7 +9075,7 @@ window.handleEditTaskSubmit = async function (e) {
 window.handleDeleteTask = async function (id) {
     const task = window.taskCache?.[id];
     const taskList = task ? (window.taskListsCache || []).find(list => list.id === task.task_list_id) : null;
-    const canDeleteTask = !!task && (isTaskAdmin() || task.created_by === currentUser?.id
+    const canDeleteTask = !!task && !isMq20Profile() && (isTaskAdmin() || task.created_by === currentUser?.id
         || (taskList?.can_delete_users || []).includes(currentUser?.id));
     if (!canDeleteTask) {
         showToast(window.t('msg_toast_32') || 'Only the task creator or an administrator can delete this task.', 'warning');
@@ -8988,6 +9161,26 @@ window.updateTaskAssigneePickerSelectAll = function () {
     master.checked = items.length > 0 && items.every(input => input.checked);
 };
 
+window.isGoogleMapsLocationLink = function (value) {
+    const rawValue = String(value || '').trim();
+    if (!rawValue) return true;
+    try {
+        const url = new URL(rawValue);
+        const host = url.hostname.toLowerCase().replace(/^www\./, '');
+        const googleDomain = host === 'google.com'
+            || host.endsWith('.google.com')
+            || /^google\.[a-z.]+$/.test(host)
+            || /^[a-z0-9-]+\.google\.[a-z.]+$/.test(host);
+        return ['http:', 'https:'].includes(url.protocol) && (
+            host === 'maps.app.goo.gl'
+            || (host === 'goo.gl' && url.pathname.startsWith('/maps'))
+            || (googleDomain && (host.startsWith('maps.') || url.pathname.startsWith('/maps')))
+        );
+    } catch (_) {
+        return false;
+    }
+};
+
 window.handleSaveContract = async function (e) {
     e.preventDefault();
     const viewerProfile = await db.getUserProfile(currentUser?.id);
@@ -8999,6 +9192,14 @@ window.handleSaveContract = async function (e) {
     const departmentSelect = document.getElementById('contractDepartment');
     const departmentId = departmentSelect?.value || null;
     const departmentName = departmentSelect?.selectedOptions?.[0]?.textContent || '';
+    const workplaceInput = document.getElementById('contractWorkplace');
+    const workplaceLocation = workplaceInput?.value.trim() || '';
+    workplaceInput?.setCustomValidity('');
+    if (workplaceLocation && !window.isGoogleMapsLocationLink(workplaceLocation)) {
+        workplaceInput?.setCustomValidity(t('contract_google_maps_invalid') || 'Enter a valid Google Maps location link.');
+        workplaceInput?.reportValidity();
+        return;
+    }
     const policyFiles = Array.from(document.getElementById('contractPolicyDocument')?.files || []);
     let policyUrl = document.getElementById('existingContractPolicyUrl')?.value || null;
     const uploadedDocs = [];
@@ -9035,7 +9236,7 @@ window.handleSaveContract = async function (e) {
         probation_period_days: document.getElementById('contractProbation').value || null,
         notice_period_days: document.getElementById('contractNotice').value || null,
         annual_leave_days: document.getElementById('contractLeave').value || null,
-        primary_workplace: document.getElementById('contractWorkplace').value || null,
+        primary_workplace: workplaceLocation || null,
         weekly_rest_day: document.getElementById('contractRestDays').value || null,
         confidentiality_policy_url: policyUrl,
         status: document.getElementById('contractStatus').value,
@@ -9114,7 +9315,8 @@ async function renderContractPage() {
 
     // Default values if no contract exists
     const contractType = contract?.contract_type || 'Full-time';
-    const nationality = contract?.nationality || userProfile?.nationality || 'Saudi';
+    const nationalityValue = String(contract?.nationality || userProfile?.nationality || 'Saudi').trim().toLowerCase();
+    const nationality = nationalityValue.includes('non') ? 'Non-Saudi' : 'Saudi';
     const selectedDepartmentId = contract?.department_id || userProfile?.department_id || '';
     const selectedDepartment = departments.find(department => department.id === selectedDepartmentId);
     const jobTitle = contract?.job_title || contract?.job_title_en || userProfile?.job_title || '';
@@ -9179,7 +9381,14 @@ async function renderContractPage() {
                             <input type="text" id="contractEmployeeNameAr" class="form-control" value="${escapeHTML(displayNameAr)}" placeholder="الاسم بالعربية">
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
-                            <label class="form-label">${t('prof_iqama')}</label>
+                            <label class="form-label" for="contractNationality">${t('contract_nationality') || 'Nationality'}</label>
+                            <select id="contractNationality" class="form-control" required>
+                                <option value="Saudi" ${nationality === 'Saudi' ? 'selected' : ''}>${t('contract_nationality_saudi') || 'Saudi'}</option>
+                                <option value="Non-Saudi" ${nationality === 'Non-Saudi' ? 'selected' : ''}>${t('contract_nationality_non_saudi') || 'Non-Saudi'}</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-span-12 md:col-span-6">
+                            <label class="form-label" for="contractIdentityNumber">${t('contract_identity_number') || 'Iqama/ National ID Number'}</label>
                             <input type="text" id="contractIdentityNumber" class="form-control" value="${escapeHTML(identityNumber)}" required>
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
@@ -9195,13 +9404,6 @@ async function renderContractPage() {
                             <select id="contractJobTitle" class="form-control" required>${contractTitleOptions}</select>
                         </div>
                         <input type="hidden" id="contractType" value="${escapeHTML(contractType || 'Full-time')}">
-                        <div class="form-group col-span-12 md:col-span-6">
-                            <label class="form-label">${t('contract_nationality') || 'Nationality'}</label>
-                            <select id="contractNationality" class="form-control" disabled>
-                                <option value="Saudi" ${nationality === 'Saudi' ? 'selected' : ''}>Saudi</option>
-                                <option value="Non-Saudi" ${nationality === 'Non-Saudi' ? 'selected' : ''}>Non-Saudi</option>
-                            </select>
-                        </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">${t('contract_status')}</label>
                             <select id="contractStatus" class="form-control" required>
@@ -9267,8 +9469,9 @@ async function renderContractPage() {
                             <input type="number" id="contractLeave" class="form-control" value="${leave}">
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
-                            <label class="form-label">Workplace Location</label>
-                            <input type="text" id="contractWorkplace" class="form-control" value="${escapeHTML(workplace)}" placeholder="Office or worksite location">
+                            <label class="form-label" for="contractWorkplace">${t('contract_workplace_location') || 'Workplace Location'}</label>
+                            <input type="url" inputmode="url" autocomplete="url" id="contractWorkplace" class="form-control" value="${escapeHTML(workplace)}" placeholder="https://maps.app.goo.gl/..." oninput="this.setCustomValidity('')">
+                            <small class="contract-field-hint">${t('contract_google_maps_hint') || 'Paste a Google Maps location link.'}</small>
                         </div>
                         <div class="form-group col-span-12 md:col-span-6">
                             <label class="form-label">Rest Days</label>
@@ -11542,7 +11745,90 @@ window.toggleCustomMultiSelectAll = function(optionsContainerId, textContainerId
     window.updateCustomMultiSelectText(optionsContainerId, textContainerId);
 };
 
+function getSalesMarketingTaskAccessEmployees() {
+    const departmentIds = new Set((window.taskDepartmentsCache || [])
+        .filter(department => isSalesMarketingDepartmentName(department.name))
+        .map(department => department.id));
+    return (window.taskAllUsersCache || [])
+        .filter(user => user?.id && user.is_active !== false && departmentIds.has(user.department_id))
+        .sort((a, b) => (window.formatEmployeeName(a) || '').localeCompare(window.formatEmployeeName(b) || '', currentLang === 'ar' ? 'ar' : 'en'));
+}
+
+window.renderTaskEmployeeAccessList = function () {
+    const container = document.getElementById('taskEmployeeAccessList');
+    if (!container) return;
+    const usersById = new Map((window.taskAllUsersCache || []).map(user => [user.id, user]));
+    const grants = window.taskEmployeeAccessGrants || [];
+    container.innerHTML = grants.length ? grants.map(grant => {
+        const viewer = usersById.get(grant.viewer_id);
+        const subject = usersById.get(grant.subject_id);
+        const action = grant.is_locked
+            ? `<span class="task-access-locked"><i data-lucide="lock-keyhole"></i>${taskDetailText('Required access', 'صلاحية مطلوبة')}</span>`
+            : `<button type="button" class="icon-btn" onclick="window.removeTaskEmployeeAccess('${escapeHTML(grant.viewer_id)}', '${escapeHTML(grant.subject_id)}')" aria-label="${taskDetailText('Remove access', 'إزالة الصلاحية')}" title="${taskDetailText('Remove access', 'إزالة الصلاحية')}"><i data-lucide="trash-2"></i></button>`;
+        return `<div class="task-employee-access-row"><div><strong>${escapeHTML(window.formatEmployeeName(viewer) || taskDetailText('Unknown employee', 'موظف غير معروف'))}</strong><span><i data-lucide="eye"></i>${taskDetailText('Can view', 'يمكنه عرض')} <b>${escapeHTML(window.formatEmployeeName(subject) || taskDetailText('Unknown employee', 'موظف غير معروف'))}</b></span></div>${action}</div>`;
+    }).join('') : `<div class="empty-state-inline">${taskDetailText('No employee viewing access has been granted.', 'لم يتم منح أي صلاحيات لعرض مهام الموظفين.')}</div>`;
+    if (window.lucide) window.lucide.createIcons({ elements: [container] });
+};
+
+window.openTaskEmployeeAccessModal = function () {
+    if (!window.isMarketingDepartmentManager) return;
+    const modal = document.getElementById('taskEmployeeAccessModal');
+    if (!modal) return;
+    const employees = getSalesMarketingTaskAccessEmployees();
+    const options = employees.map(user => `<option value="${escapeHTML(user.id)}">${escapeHTML(window.formatEmployeeName(user) || user.id)}</option>`).join('');
+    const viewerSelect = document.getElementById('taskAccessViewer');
+    const subjectSelect = document.getElementById('taskAccessSubject');
+    if (viewerSelect) viewerSelect.innerHTML = `<option value="">${taskDetailText('Select employee', 'اختر الموظف')}</option>${options}`;
+    if (subjectSelect) subjectSelect.innerHTML = `<option value="">${taskDetailText('Select employee', 'اختر الموظف')}</option>${options}`;
+    window.renderTaskEmployeeAccessList();
+    translateArabicInterface(modal);
+    modal.classList.add('active');
+    if (window.lucide) window.lucide.createIcons({ elements: [modal] });
+};
+
+window.closeTaskEmployeeAccessModal = function () {
+    document.getElementById('taskEmployeeAccessModal')?.classList.remove('active');
+};
+
+window.handleSaveTaskEmployeeAccess = async function (event) {
+    event.preventDefault();
+    if (!window.isMarketingDepartmentManager) return;
+    const viewerId = document.getElementById('taskAccessViewer')?.value || '';
+    const subjectId = document.getElementById('taskAccessSubject')?.value || '';
+    if (!viewerId || !subjectId || viewerId === subjectId) {
+        showToast(taskDetailText('Select two different employees.', 'اختر موظفين مختلفين.'), 'warning');
+        return;
+    }
+    const submit = event.currentTarget.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    const result = await db.setTaskEmployeeAccessGrant(viewerId, subjectId, true);
+    if (submit) submit.disabled = false;
+    if (!result.success) {
+        showToast(result.error?.message || taskDetailText('Unable to grant access.', 'تعذر منح الصلاحية.'), 'danger');
+        return;
+    }
+    window.taskEmployeeAccessGrants = await db.fetchTaskEmployeeAccessGrants();
+    window.renderTaskEmployeeAccessList();
+    showToast(taskDetailText('View-only task access granted.', 'تم منح صلاحية عرض المهام فقط.'), 'success');
+};
+
+window.removeTaskEmployeeAccess = async function (viewerId, subjectId) {
+    if (!window.isMarketingDepartmentManager) return;
+    const result = await db.setTaskEmployeeAccessGrant(viewerId, subjectId, false);
+    if (!result.success) {
+        showToast(result.error?.message || taskDetailText('Unable to remove access.', 'تعذر إزالة الصلاحية.'), 'danger');
+        return;
+    }
+    window.taskEmployeeAccessGrants = await db.fetchTaskEmployeeAccessGrants();
+    window.renderTaskEmployeeAccessList();
+    showToast(taskDetailText('Viewing access removed.', 'تمت إزالة صلاحية العرض.'), 'success');
+};
+
 window.openTaskListModal = function (listId = '') {
+    if (isMq20Profile()) {
+        showToast(taskDetailText('This account has view-only task access.', 'هذا الحساب لديه صلاحية عرض المهام فقط.'), 'warning');
+        return;
+    }
     const modal = document.getElementById('taskListModal');
     if (!modal) return;
     const list = (window.taskListsCache || []).find(item => item.id === listId && item.owner_id === currentUser?.id);
@@ -11822,7 +12108,8 @@ async function fetchCrmDashboardPayload() {
         }),
         activity: activity || [],
         profile: currentUserProfile || currentUser || {},
-        role: currentUserRole || currentUserProfile?.role || ''
+        role: currentUserRole || currentUserProfile?.role || '',
+        canInteractCrm: await canCurrentUserUseCRM()
     };
 }
 

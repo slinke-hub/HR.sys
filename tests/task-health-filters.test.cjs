@@ -20,5 +20,13 @@ assert.match(app, /matchesSearch && matchesStatus && matchesPriority && matchesC
 assert.match(app, /window\.taskV2HealthFilter = 'all'/);
 assert.match(css, /\.task-health-item\.active/);
 assert.match(css, /\.task-health-item:focus-visible/);
+assert.match(app, /class="task-v2-date-control"[\s\S]*id="taskV2DateFilter"/);
+assert.match(app, /<input type="date" id="taskV2DateFilter"/);
+assert.doesNotMatch(app, /task-v2-date-picker-button/);
+assert.doesNotMatch(app, /window\.openTaskV2DatePicker/);
+assert.match(css, /\.task-v2-date-control \{/);
+assert.doesNotMatch(css, /\.task-v2-date-picker-button \{/);
+assert.match(app, /const ownTaskLists = taskLists\.filter/);
+assert.match(app, /personalListItems \+= ownTaskLists\.map/);
 
 console.log('Task pipeline health chips act as accessible, composable filters.');

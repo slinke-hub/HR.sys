@@ -225,7 +225,10 @@ function CrmDashboard({ payload = {} }) {
   const [query, setQuery] = useState('');
   const accessValues = [payload.role, payload.profile?.role, payload.profile?.job_title]
     .map(value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' '));
-  const canOpenDetails = accessValues.some(value => ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMIN', 'MANAGER'].includes(value) || /\bMANAGER\b/.test(value));
+  const canOpenDetails = payload.canInteractCrm === true || accessValues.some(value =>
+    ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMIN', 'MANAGER', 'CEO', 'GM', 'GENERAL MANAGER'].includes(value)
+      || /\b(MANAGER|SALES|MARKETING)\b/.test(value)
+  );
   const sourceDeals = useMemo(() => (payload.deals || []).map(deal => ({
     ...deal,
     clientName: deal.crm_clients?.name,

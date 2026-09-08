@@ -1361,6 +1361,35 @@ const db = {
         }
     },
 
+    async fetchTaskEmployeeAccessGrants() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('get_task_employee_access_grants');
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            const missingRpc = error?.code === 'PGRST202' || error?.code === '42883' || String(error?.message || '').includes('get_task_employee_access_grants');
+            if (!missingRpc) console.warn('Unable to load employee task access grants.', error?.message || error);
+            return [];
+        }
+    },
+
+    async setTaskEmployeeAccessGrant(viewerId, subjectId, enabled = true) {
+        if (!supabaseClient) return { success: false, error: new Error('Not connected') };
+        try {
+            const { data, error } = await supabaseClient.rpc('set_task_employee_access_grant', {
+                p_viewer_id: viewerId,
+                p_subject_id: subjectId,
+                p_enabled: !!enabled
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('Unable to update employee task access.', error);
+            return { success: false, error };
+        }
+    },
+
     async createTaskList(name, ownerId, sharedWith = [], payload = {}) {
         if (!supabaseClient) return { success: false, error: new Error('Not connected') };
         try {
