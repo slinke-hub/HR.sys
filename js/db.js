@@ -18,19 +18,23 @@ if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE
 
 function applyI18nGetters(obj) {
     if (!obj) return obj;
-    const origFullName = obj.full_name;
-    const origJobTitle = obj.job_title;
+    const origFullName = obj.full_name_en || obj.full_name;
+    const origJobTitle = obj.job_title_en || obj.job_title;
     
     if (origFullName !== undefined) {
+        obj.full_name_en = origFullName;
         Object.defineProperty(obj, 'full_name', {
             get: function() { return (window.currentLang === 'ar' && this.display_name_ar) ? this.display_name_ar : origFullName; },
-            enumerable: true
+            enumerable: true,
+            configurable: true
         });
     }
     if (origJobTitle !== undefined) {
+        obj.job_title_en = origJobTitle;
         Object.defineProperty(obj, 'job_title', {
             get: function() { return (window.currentLang === 'ar' && this.job_title_ar) ? this.job_title_ar : origJobTitle; },
-            enumerable: true
+            enumerable: true,
+            configurable: true
         });
     }
     
@@ -385,7 +389,9 @@ const db = {
             const profiles = await this.fetchAllProfiles();
             return (profiles || []).map(profile => ({
                 employee_id: profile.id,
-                full_name: profile.full_name || 'Unknown User',
+                full_name: profile.full_name_en || profile.full_name || 'Unknown User',
+                full_name_en: profile.full_name_en || profile.full_name || '',
+                display_name_ar: profile.display_name_ar || '',
                 email: profile.id === window.currentUser?.id ? (window.currentUser?.email || '') : '',
                 department_id: profile.department_id || null
             }));
@@ -1357,6 +1363,11 @@ const db = {
             console.warn('Department task-list directory unavailable; using visible profiles.', error?.message || error);
             const profiles = await this.fetchAllProfiles(true);
             const own = profiles.find(profile => profile.id === window.currentUser?.id);
+            const accessValues = [own?.role, own?.job_title_en, own?.job_title]
+                .map(value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' '));
+            if (accessValues.some(value => ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMIN', 'GM', 'GENERAL MANAGER', 'CEO', 'CHIEF EXECUTIVE', 'CHIEF EXECUTIVE OFFICER'].includes(value))) {
+                return profiles;
+            }
             return profiles.filter(profile => own?.department_id && profile.department_id === own.department_id);
         }
     },
@@ -2113,7 +2124,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('id, full_name, role, avatar_url, job_title, department_id, manager_id, last_login')
+                .select('id, emp_index, full_name, display_name_ar, role, avatar_url, job_title, job_title_ar, department_id, manager_id, last_login, is_active')
                 .eq('is_active', true);
             if (error) throw error;
             const mapped = (data || []).map(applyI18nGetters);

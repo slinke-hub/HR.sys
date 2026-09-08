@@ -52,8 +52,8 @@ const money = value => new Intl.NumberFormat('en-SA', { maximumFractionDigits: 0
 const localizedEmployeeName = (profile, lang) => {
   if (!profile) return '';
   const candidates = lang === 'ar'
-    ? [profile.display_name_ar, profile.full_name, profile.display_name, profile.name]
-    : [profile.full_name, profile.display_name, profile.name, profile.display_name_ar];
+    ? [profile.display_name_ar, profile.full_name_ar, profile.full_name_en, profile.full_name, profile.display_name, profile.name]
+    : [profile.full_name_en, profile.full_name, profile.display_name, profile.name, profile.display_name_ar];
   return String(candidates.find(value => typeof value === 'string' && value.trim()) || '').trim();
 };
 const dateLabel = (value, locale) => value

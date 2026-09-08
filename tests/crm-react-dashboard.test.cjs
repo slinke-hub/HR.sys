@@ -36,7 +36,7 @@ assert.match(source, /newDeal: 'New Deal'/);
 assert.match(source, /newDeal: 'صفقة جديدة'/);
 assert.match(source, /function EmployeeName\(\{ profile, lang \}\)/);
 assert.match(source, /lang === 'ar'[\s\S]*profile\.display_name_ar[\s\S]*profile\.full_name/);
-assert.match(source, /:\s*\[profile\.full_name, profile\.display_name, profile\.name, profile\.display_name_ar\]/);
+assert.match(source, /:\s*\[profile\.full_name_en, profile\.full_name, profile\.display_name, profile\.name, profile\.display_name_ar\]/);
 assert.match(source, /<EmployeeName profile=\{profile\} lang=\{lang\} \/>/);
 assert.doesNotMatch(source, /const initials =|profile\?\.initials \|\| initials\(name\)/);
 assert.doesNotMatch(source, /SAMPLE_DEALS|__demo|demo-\d+|Al Noor Medical Group/);

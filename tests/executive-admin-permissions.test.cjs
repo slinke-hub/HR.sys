@@ -4,7 +4,10 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8');
+const db = fs.readFileSync(path.join(root, 'js', 'db.js'), 'utf8');
 const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260907150000_executive_admin_access.sql'), 'utf8');
+const namesMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260908120000_executive_employee_name_directory.sql'), 'utf8');
+const assignmentMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260908130000_executive_companywide_task_assignment.sql'), 'utf8');
 
 assert.match(app, /const isExecutiveAdminProfile/);
 assert.match(app, /'GM', 'GENERAL MANAGER', 'CEO', 'CHIEF EXECUTIVE', 'CHIEF EXECUTIVE OFFICER'/);
@@ -21,5 +24,23 @@ assert.match(migration, /NEW\.role := 'ADMIN'/);
 assert.match(migration, /UPDATE public\.profiles[\s\S]*SET role = 'ADMIN'[\s\S]*is_executive_admin_title\(job_title\)/);
 assert.match(migration, /CREATE POLICY executive_admin_full_attendance_select/);
 assert.match(migration, /USING \(public\.can_view_all_attendance\(auth\.uid\(\)\)\)/);
+assert.match(app, /async function primeExecutiveEmployeeNameDirectory/);
+assert.equal((app.match(/await primeExecutiveEmployeeNameDirectory\(profile\)/g) || []).length, 2);
+assert.match(app, /window\.companyEmployeeNamesById/);
+assert.match(app, /resolvedProfile\.display_name_ar/);
+assert.match(app, /resolvedProfile\.full_name_en/);
+assert.match(db, /full_name, display_name_ar/);
+assert.match(db, /job_title, job_title_ar/);
+assert.match(db, /full_name_en: profile\.full_name_en \|\| profile\.full_name/);
+assert.match(app, /profilesMap\[person\.employee_id\] = profilesMap\[person\.employee_id\] \|\| window\.formatEmployeeName\(person\)/);
+assert.match(namesMigration, /CREATE OR REPLACE FUNCTION public\.can_view_company_employee_names/);
+assert.match(namesMigration, /'GM', 'GENERAL MANAGER', 'CEO', 'CHIEF EXECUTIVE', 'CHIEF EXECUTIVE OFFICER'/);
+assert.match(namesMigration, /CREATE POLICY executive_company_employee_names_select/);
+assert.match(app, /const canAssignTasksCompanyWide = \(\) => isTaskAdmin\(\) \|\| isExecutiveAdminProfile\(\)/);
+assert.match(app, /if \(canAssignTasksCompanyWide\(\)\) \{\s*employees = \(window\.taskAllUsersCache \|\| \[\]\)\.filter\(user => user\.is_active !== false\)/);
+assert.match(app, /const users = canAssignTasksCompanyWide\(\)/);
+assert.match(assignmentMigration, /CREATE OR REPLACE FUNCTION public\.can_assign_tasks_company_wide/);
+assert.match(assignmentMigration, /CREATE POLICY executive_company_tasks_update/);
+assert.match(assignmentMigration, /CREATE POLICY executive_company_task_lists_select/);
 
 console.log('GM and CEO accounts receive admin access without User Management UI access.');

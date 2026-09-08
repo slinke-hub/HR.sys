@@ -75,6 +75,7 @@ const getLocalizedTaskTitle = task => {
 function getProfileDisplayName(profile) {
     const candidates = [
         currentLang === 'ar' ? profile?.display_name_ar : null,
+        currentLang !== 'ar' ? profile?.full_name_en : null,
         profile?.full_name,
         profile?.display_name,
         currentUser?.email?.split('@')[0],
@@ -170,11 +171,23 @@ const isExecutiveAdminProfile = (profile = currentUserProfile) => {
     const executiveTitles = new Set(['GM', 'GENERAL MANAGER', 'CEO', 'CHIEF EXECUTIVE', 'CHIEF EXECUTIVE OFFICER']);
     return [profile?.job_title, profile?.role].some(value => executiveTitles.has(normalizeAccessValue(value)));
 };
+async function primeExecutiveEmployeeNameDirectory(profile = currentUserProfile) {
+    if (!isExecutiveAdminProfile(profile)) {
+        window.companyEmployeeNameDirectory = [];
+        window.companyEmployeeNamesById = {};
+        return [];
+    }
+    const profiles = await db.fetchAllProfiles(true);
+    window.companyEmployeeNameDirectory = profiles || [];
+    window.companyEmployeeNamesById = Object.fromEntries((profiles || []).map(employee => [String(employee.id), employee]));
+    return profiles || [];
+}
 const isAdminRole = role => ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMIN'].includes(normalizeAccessValue(role));
 const canCurrentUserManageUsers = () => isAdminRole(currentUserRole) && !isExecutiveAdminProfile();
 window.isExecutiveAdminProfile = isExecutiveAdminProfile;
 window.canCurrentUserManageUsers = canCurrentUserManageUsers;
 const isTaskAdmin = () => isAdminRole(currentUserRole);
+const canAssignTasksCompanyWide = () => isTaskAdmin() || isExecutiveAdminProfile();
 const isSalesMarketingAccessProfile = (profile = currentUserProfile) => {
     const values = [profile?.role, profile?.job_title].map(normalizeAccessValue).filter(Boolean);
     return values.some(value => /(^|\b)(SALES|MARKETING)(\b|$)/.test(value) || /المبيعات|التسويق/.test(value));
@@ -881,10 +894,13 @@ window.toggleTheme = function () {
 window.formatEmployeeName = (profile) => {
     if (!profile) return 'Unknown';
     if (typeof profile === 'string') return profile;
-    if (typeof currentLang !== 'undefined' && currentLang === 'ar' && profile.display_name_ar) {
-        return profile.display_name_ar;
+    const employeeId = profile.id || profile.employee_id || profile.user_id;
+    const directoryProfile = employeeId ? window.companyEmployeeNamesById?.[String(employeeId)] : null;
+    const resolvedProfile = directoryProfile ? { ...directoryProfile, ...profile } : profile;
+    if (typeof currentLang !== 'undefined' && currentLang === 'ar') {
+        return resolvedProfile.display_name_ar || resolvedProfile.full_name_ar || resolvedProfile.full_name_en || resolvedProfile.full_name || resolvedProfile.display_name || 'Unknown';
     }
-    return profile.full_name || profile.display_name || 'Unknown';
+    return resolvedProfile.full_name_en || resolvedProfile.full_name || resolvedProfile.display_name || resolvedProfile.display_name_ar || 'Unknown';
 };
 
 window.toggleLanguage = function () {
@@ -2301,6 +2317,7 @@ window.handleLoginSubmit = async function (e) {
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
         currentUserRole = isExecutiveAdminProfile(profile) ? 'ADMIN' : profile.role;
+        await primeExecutiveEmployeeNameDirectory(profile);
         applyPreferredTheme(profile);
         updateTopbarProfile(profile);
         // Check for Birthday
@@ -2996,7 +3013,8 @@ function renderEmployeesRadarRows(records) {
         const isClockedOut = Boolean(record.clock_out_time);
         const eventTime = isClockedOut ? record.clock_out_time : record.clock_in_time;
         const status = isClockedOut ? 'Clocked out' : 'Clocked in';
-        const employeeName = record.full_name || window.formatEmployeeName(record.profile) || 'Employee';
+        const employeeProfile = window.companyEmployeeNamesById?.[String(record.employee_id)] || record.profile || record;
+        const employeeName = window.formatEmployeeName(employeeProfile) || 'Employee';
         return `<li class="${isClockedOut ? 'is-clocked-out' : 'is-clocked-in'}"><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(employeeName)}</span><span class="employees-radar-meta"><span class="employees-radar-status">${status}</span><time>${eventTime ? new Date(eventTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '&mdash;'}</time></span></li>`;
     }).join('');
 }
@@ -4104,7 +4122,7 @@ async function renderLeaveCalculator() {
         const allowance = Number(profile.annual_leave_allowance) > 0 ? Number(profile.annual_leave_allowance) : 30;
         const requested = mine.filter(r => String(r.status || '').toUpperCase().startsWith('PENDING')).reduce((n, r) => n + days(r.start_date, r.end_date), 0);
         const approved = mine.filter(r => String(r.status || '').toUpperCase().startsWith('APPROVED')).reduce((n, r) => n + days(r.start_date, r.end_date), 0);
-        return { name: profile.full_name || '—', department: departmentMap[profile.department_id] || '—', allowance, requested, approved, remaining: Math.max(0, allowance - approved), annual: sum('annual leave'), sick: sum('sick leave') };
+        return { name: window.formatEmployeeName(profile) || '—', department: departmentMap[profile.department_id] || '—', allowance, requested, approved, remaining: Math.max(0, allowance - approved), annual: sum('annual leave'), sick: sum('sick leave') };
     });
     window.leaveCalculatorRows = rows;
     const e = value => escapeHTML(String(value ?? ''));
@@ -6842,7 +6860,7 @@ async function renderTasksV2() {
         personalListItems += sharedTaskLists.map(list => {
             const listTasksCount = taskCountByListId.get(String(list.id)) || 0;
             const owner = usersById.get(String(list.owner_id));
-            const ownerName = owner ? owner.full_name.split(' ')[0] : 'Unknown';
+            const ownerName = owner ? (window.formatEmployeeName(owner) || 'Unknown').split(' ')[0] : 'Unknown';
             return `
             <li class="${selectedProject === 'list_' + String(list.id) ? 'active' : ''}" onclick="window.selectTaskV2Project('list_${list.id}')" oncontextmenu="window.showTaskListContextMenu(event, '${list.id}', ${currentUserRole === 'ADMIN'})">
                 <span class="task-list-name" title="Shared by ${ownerName}">${escapeHTML(list.name)} (Shared)</span>
@@ -7583,7 +7601,7 @@ window.filterTasksV2 = function () {
             const projectObj = projectsById.get(String(task.project_id));
             const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
             const privateList = taskListsById.get(String(task.task_list_id));
-            const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name, projectObj?.project_name, privateList?.name, parentTask?.displayTitle].filter(Boolean).join(' ').toLowerCase();
+            const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name_en, task.assignee?.full_name, task.assignee?.display_name_ar, projectObj?.project_name, privateList?.name, parentTask?.displayTitle].filter(Boolean).join(' ').toLowerCase();
             matchesSearch = searchable.includes(query);
         }
         const matchesStatus = (status === 'all') || (status === 'open' && task.status !== 'completed') || (task.status === status);
@@ -8122,7 +8140,9 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
     const department = (window.taskDepartmentsCache || []).find(item => item.name === departmentName || item.id === departmentName || getCanonicalDepartmentName(item) === departmentName);
     
     let employees = [];
-    if (department) {
+    if (canAssignTasksCompanyWide()) {
+        employees = (window.taskAllUsersCache || []).filter(user => user.is_active !== false);
+    } else if (department) {
         employees = (window.taskAllUsersCache || []).filter(user => user.department_id === department.id);
         // Include former IT staff in the merged Administrative department even
         // when an older profile record still carries the retired IT id.
@@ -8133,8 +8153,6 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
             );
             employees = [...new Map([...employees, ...formerIt].map(user => [user.id, user])).values()];
         }
-    } else if (isTaskAdmin()) {
-        employees = window.taskAllUsersCache || [];
     }
 
     const creator = (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id);
@@ -8142,7 +8160,7 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
         employees = [creator, ...employees];
     }
     const preferredAssigneeId = selectedAssigneeId || (prefix === 'new' ? currentUser?.id : '');
-    select.innerHTML = `<option value="">${(department || isTaskAdmin()) ? (t('task_sel_emp') || 'Select Employee') : 'Select a department first'}</option>` + employees.map(user => {
+    select.innerHTML = `<option value="">${(department || canAssignTasksCompanyWide()) ? (t('task_sel_emp') || 'Select Employee') : 'Select a department first'}</option>` + employees.map(user => {
         const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
         return `<option value="${escapeHTML(user.id)}">${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(user.role || 'EMPLOYEE'))})</option>`;
     }).join('');
@@ -8155,7 +8173,9 @@ window.filterEditTaskAssigneeOptions = function (departmentIdOrName) {
     const root = document.getElementById('editTaskAssigneeOptions');
     if (!root) return;
     const department = (window.taskDepartmentsCache || []).find(item => item.id === departmentIdOrName || item.name === departmentIdOrName || getCanonicalDepartmentName(item) === departmentIdOrName);
-    const users = department ? (window.taskAllUsersCache || []).filter(user => user.department_id === department.id) : [];
+    const users = canAssignTasksCompanyWide()
+        ? (window.taskAllUsersCache || []).filter(user => user.is_active !== false)
+        : (department ? (window.taskAllUsersCache || []).filter(user => user.department_id === department.id) : []);
     const selected = new Set(Array.from(root.querySelectorAll('input[type="checkbox"]:checked')).map(input => input.value));
     root.innerHTML = `<label class="picker-select-all" for="editTaskAssigneeSelectAll"><input id="editTaskAssigneeSelectAll" type="checkbox" onchange="window.toggleEditTaskAssignees(this.checked)"><span>Select all employees</span></label>` + users.map((user, index) => {
         const inputId = `editTaskAssigneeOption-${index}`;
@@ -13614,6 +13634,7 @@ async function initApp() {
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
         currentUserRole = isExecutiveAdminProfile(profile) ? 'ADMIN' : profile.role;
+        await primeExecutiveEmployeeNameDirectory(profile);
         applyPreferredTheme(profile);
 
         // TEMPORARY OVERRIDE: Force Admin role for privatepple@gmail.com in frontend
@@ -13812,7 +13833,7 @@ async function renderRequests() {
         profilesMap[profile.id] = window.formatEmployeeName(profile) || 'Unknown User';
     });
     requestDirectory.forEach(person => {
-        profilesMap[person.employee_id] = window.formatEmployeeName(person) || profilesMap[person.employee_id] || 'Unknown User';
+        profilesMap[person.employee_id] = profilesMap[person.employee_id] || window.formatEmployeeName(person) || 'Unknown User';
     });
     const emailMap = Object.fromEntries((requestDirectory || []).map(person => [person.employee_id, person.email || '']));
 
