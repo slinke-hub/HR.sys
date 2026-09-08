@@ -1211,6 +1211,8 @@ const arabicRuntimeUiText = Object.freeze({
     'Date and time': 'التاريخ والوقت',
     'Location coordinates': 'إحداثيات الموقع',
     'Latitude and longitude are required.': 'خط العرض وخط الطول مطلوبان.',
+    'Google Maps location link': 'رابط الموقع على خرائط Google',
+    'Paste a valid Google Maps location link.': 'ألصق رابط موقع صالحًا من خرائط Google.',
     'Clock-out location type': 'نوع موقع تسجيل الانصراف',
     'Office': 'المكتب',
     'Order location': 'موقع الطلب',
@@ -3507,11 +3509,13 @@ async function renderTime() {
     const todayKey = dateKey(new Date());
     const initialVisibleCount = punches.length;
     const mapLink = location => {
-        const match = String(location || '').trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
-        if (!match) return '<span class="text-muted">—</span>';
-        const query = `${match[1]},${match[2]}`;
-        const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-        return `<a class="attendance-location-link" href="${href}" target="_blank" rel="noopener noreferrer" title="${escapeHTML(localizeRuntimeText('Open map'))}"><i data-lucide="map-pin"></i><span>${escapeHTML(localizeRuntimeText('Open map'))}</span></a>`;
+        const value = String(location || '').trim();
+        const match = value.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+        const href = match
+            ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${match[1]},${match[2]}`)}`
+            : (window.isGoogleMapsLocationLink?.(value) ? value : '');
+        if (!href) return '<span class="text-muted">—</span>';
+        return `<a class="attendance-location-link" href="${escapeHTML(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHTML(localizeRuntimeText('Open map'))}"><i data-lucide="map-pin"></i><span>${escapeHTML(localizeRuntimeText('Open map'))}</span></a>`;
     };
 
     let tableRows = punches.map(p => `
@@ -3577,6 +3581,14 @@ function toAttendanceDateTimeLocal(value) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function attendanceLocationToMapsUrl(value) {
+    const location = String(value || '').trim();
+    if (window.isGoogleMapsLocationLink?.(location)) return location;
+    const match = location.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+    if (!match) return '';
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${match[1]},${match[2]}`)}`;
+}
+
 window.closeAttendanceEditModal = function () {
     document.getElementById('attendanceEditModal')?.classList.remove('show');
 };
@@ -3609,7 +3621,7 @@ window.openAttendanceEditModal = function (punchId) {
                     <input type="hidden" id="attendanceEditPunchType">
                     <div class="attendance-edit-grid">
                         <div class="form-group"><label class="form-label" for="attendanceEditTime" id="attendanceEditTimeLabel">Date and time</label><input id="attendanceEditTime" type="datetime-local" class="form-control" required></div>
-                        <div class="form-group"><label class="form-label" for="attendanceEditLocation" id="attendanceEditLocationLabel">Location coordinates</label><input id="attendanceEditLocation" type="text" class="form-control" required inputmode="decimal" placeholder="24.7136,46.6753"><small class="text-muted" id="attendanceEditLocationHint">Latitude and longitude are required.</small></div>
+                        <div class="form-group"><label class="form-label" for="attendanceEditLocation" id="attendanceEditLocationLabel">Google Maps location link</label><input id="attendanceEditLocation" type="url" class="form-control" required inputmode="url" placeholder="https://maps.google.com/..."><small class="text-muted" id="attendanceEditLocationHint">Paste a valid Google Maps location link.</small></div>
                         <div class="form-group attendance-edit-out-field"><label class="form-label" for="attendanceEditClockOutType" id="attendanceEditTypeLabel">Clock-out location type</label><select id="attendanceEditClockOutType" class="form-control"><option value="OFFICE">Office</option><option value="ORDER">Order location</option></select></div>
                         <div class="form-group attendance-edit-out-field"><label class="form-label" for="attendanceEditOvertime" id="attendanceEditOvertimeLabel">Overtime hours</label><input id="attendanceEditOvertime" type="number" min="0" step="0.01" class="form-control" value="0"></div>
                     </div>
@@ -3624,15 +3636,15 @@ window.openAttendanceEditModal = function (punchId) {
     document.getElementById('attendanceEditRecordId').value = punch.attendance_id;
     document.getElementById('attendanceEditPunchType').value = punch.punch_type;
     document.getElementById('attendanceEditTime').value = toAttendanceDateTimeLocal(punch.punch_time);
-    document.getElementById('attendanceEditLocation').value = punch.location || '';
+    document.getElementById('attendanceEditLocation').value = attendanceLocationToMapsUrl(punch.location);
     document.getElementById('attendanceEditClockOutType').value = punch.clock_out_type || 'OFFICE';
     document.getElementById('attendanceEditOvertime').value = String(Math.max(0, Number(punch.overtime_hours) || 0));
     modal.querySelectorAll('.attendance-edit-out-field').forEach(field => { field.hidden = punch.punch_type !== 'OUT'; });
     document.getElementById('attendanceEditTitle').textContent = currentLang === 'ar' ? 'تعديل سجل الحضور' : `Edit ${punch.punch_type === 'IN' ? 'clock-in' : 'clock-out'}`;
     document.getElementById('attendanceEditEmployee').textContent = window.formatEmployeeName(employee) || punch.employee_id;
     document.getElementById('attendanceEditTimeLabel').textContent = currentLang === 'ar' ? 'التاريخ والوقت' : 'Date and time';
-    document.getElementById('attendanceEditLocationLabel').textContent = currentLang === 'ar' ? 'إحداثيات الموقع' : 'Location coordinates';
-    document.getElementById('attendanceEditLocationHint').textContent = currentLang === 'ar' ? 'خط العرض وخط الطول مطلوبان.' : 'Latitude and longitude are required.';
+    document.getElementById('attendanceEditLocationLabel').textContent = currentLang === 'ar' ? 'رابط الموقع على خرائط Google' : 'Google Maps location link';
+    document.getElementById('attendanceEditLocationHint').textContent = currentLang === 'ar' ? 'ألصق رابط موقع صالحًا من خرائط Google.' : 'Paste a valid Google Maps location link.';
     document.getElementById('attendanceEditTypeLabel').textContent = currentLang === 'ar' ? 'نوع موقع تسجيل الانصراف' : 'Clock-out location type';
     document.getElementById('attendanceEditOvertimeLabel').textContent = currentLang === 'ar' ? 'ساعات العمل الإضافي' : 'Overtime hours';
     document.getElementById('attendanceEditCancel').textContent = currentLang === 'ar' ? 'إلغاء' : 'Cancel';
@@ -3652,8 +3664,8 @@ window.handleAttendanceEditSubmit = async function (event) {
     const punchType = document.getElementById('attendanceEditPunchType').value;
     const localTime = document.getElementById('attendanceEditTime').value;
     const location = document.getElementById('attendanceEditLocation').value.trim();
-    if (!/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(location)) {
-        showToast(currentLang === 'ar' ? 'أدخل إحداثيات صحيحة بصيغة خط العرض،خط الطول.' : 'Enter valid coordinates as latitude,longitude.', 'warning');
+    if (!location || !window.isGoogleMapsLocationLink?.(location)) {
+        showToast(currentLang === 'ar' ? 'أدخل رابط موقع صالحًا من خرائط Google.' : 'Enter a valid Google Maps location link.', 'warning');
         return;
     }
     const saveButton = document.getElementById('attendanceEditSave');

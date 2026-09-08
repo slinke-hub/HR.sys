@@ -2334,8 +2334,24 @@ const db = {
                 throw new Error('A valid attendance time is required.');
             }
             const location = String(changes.location || '').trim();
-            if (!/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(location)) {
-                throw new Error('Attendance location must contain latitude and longitude.');
+            let isGoogleMapsLink = false;
+            try {
+                const url = new URL(location);
+                const host = url.hostname.toLowerCase().replace(/^www\./, '');
+                const googleDomain = host === 'google.com'
+                    || host.endsWith('.google.com')
+                    || /^google\.[a-z.]+$/.test(host)
+                    || /^[a-z0-9-]+\.google\.[a-z.]+$/.test(host);
+                isGoogleMapsLink = ['http:', 'https:'].includes(url.protocol) && (
+                    host === 'maps.app.goo.gl'
+                    || (host === 'goo.gl' && url.pathname.startsWith('/maps'))
+                    || (googleDomain && (host.startsWith('maps.') || url.pathname.startsWith('/maps')))
+                );
+            } catch (_) {
+                isGoogleMapsLink = false;
+            }
+            if (!isGoogleMapsLink) {
+                throw new Error('Attendance location must be a valid Google Maps link.');
             }
             const updates = type === 'IN'
                 ? {
