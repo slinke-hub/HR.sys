@@ -169,7 +169,12 @@ let currentUserProfile = null;
 const normalizeAccessValue = value => String(value || '').trim().toUpperCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
 const isExecutiveAdminProfile = (profile = currentUserProfile) => {
     const executiveTitles = new Set(['GM', 'GENERAL MANAGER', 'CEO', 'CHIEF EXECUTIVE', 'CHIEF EXECUTIVE OFFICER']);
-    return [profile?.job_title, profile?.role].some(value => executiveTitles.has(normalizeAccessValue(value)));
+    return [profile?.job_title, profile?.job_title_ar, profile?.role].some(value => {
+        const normalized = normalizeAccessValue(value);
+        return executiveTitles.has(normalized)
+            || /^(GENERAL MANAGER|CHIEF EXECUTIVE OFFICER) \((GM|CEO)\)$/.test(normalized)
+            || ['المدير العام', 'الرئيس التنفيذي'].includes(String(value || '').trim());
+    });
 };
 async function primeExecutiveEmployeeNameDirectory(profile = currentUserProfile) {
     if (!isExecutiveAdminProfile(profile)) {
@@ -188,6 +193,15 @@ window.isExecutiveAdminProfile = isExecutiveAdminProfile;
 window.canCurrentUserManageUsers = canCurrentUserManageUsers;
 const isTaskAdmin = () => isAdminRole(currentUserRole);
 const canAssignTasksCompanyWide = () => isTaskAdmin() || isExecutiveAdminProfile();
+const getTaskAssignmentDirectory = () => {
+    const cachedUsers = Array.isArray(window.taskAllUsersCache) ? window.taskAllUsersCache : [];
+    const executiveDirectory = canAssignTasksCompanyWide() && Array.isArray(window.companyEmployeeNameDirectory)
+        ? window.companyEmployeeNameDirectory
+        : [];
+    return [...new Map([...executiveDirectory, ...cachedUsers]
+        .filter(user => user?.id && user.is_active !== false)
+        .map(user => [String(user.id), user])).values()];
+};
 const isSalesMarketingAccessProfile = (profile = currentUserProfile) => {
     const values = [profile?.role, profile?.job_title].map(normalizeAccessValue).filter(Boolean);
     return values.some(value => /(^|\b)(SALES|MARKETING)(\b|$)/.test(value) || /المبيعات|التسويق/.test(value));
@@ -3660,7 +3674,7 @@ window.openTaskAssigneePicker = function (taskId) {
             if (!selected.length) return showToast(window.t('msg_toast_12') || 'Select at least one employee.', 'warning');
             const save = await db.updateTask(modal.dataset.taskId, { assignee_id: selected[0], assignee_ids: selected });
             if (!save.success) return showToast(save.error?.message || 'Unable to update assignment.', 'danger');
-            const selectedUsers = (window.taskAllUsersCache || []).filter(user => selected.includes(user.id));
+            const selectedUsers = getTaskAssignmentDirectory().filter(user => selected.includes(user.id));
             const current = window.taskCache?.[modal.dataset.taskId];
             if (current) {
                 current.assignee_id = selected[0];
@@ -3676,7 +3690,7 @@ window.openTaskAssigneePicker = function (taskId) {
     modal.dataset.taskId = taskId;
     const selectedIds = new Set(Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean));
     const options = modal.querySelector('#taskAssigneePickerOptions');
-    options.innerHTML = `<label class="picker-select-all task-assignee-picker-option" for="taskAssigneeSelectAll"><input id="taskAssigneeSelectAll" type="checkbox" onchange="window.toggleTaskAssigneePickerAll(this.checked)"><span>Select all employees</span></label>` + (window.taskAllUsersCache || []).map((user, index) => {
+    options.innerHTML = `<label class="picker-select-all task-assignee-picker-option" for="taskAssigneeSelectAll"><input id="taskAssigneeSelectAll" type="checkbox" onchange="window.toggleTaskAssigneePickerAll(this.checked)"><span>Select all employees</span></label>` + getTaskAssignmentDirectory().map((user, index) => {
         const inputId = `taskAssigneeOption-${index}`;
         return `<label class="task-assignee-picker-option" for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${selectedIds.has(user.id) ? 'checked' : ''} onchange="window.updateTaskAssigneePickerSelectAll()"><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
     }).join('') || '<p class="task-assignee-picker-empty">No employees available.</p>';
@@ -6422,8 +6436,9 @@ window.handleUpdateProfileDetails = async function (e) {
 async function renderTasks() {
     console.log("renderTasks: Fetching data for V2...");
     const tasksPromise = db.fetchTasks();
-    const [allUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists, watcherDirectory, taskListDirectory, projects, employeeAccessGrants] = await Promise.all([
-        db.fetchUsers(),
+    const taskUsersPromise = canAssignTasksCompanyWide() ? db.fetchAllProfiles(true) : db.fetchUsers();
+    const [fetchedUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists, watcherDirectory, taskListDirectory, projects, employeeAccessGrants] = await Promise.all([
+        taskUsersPromise,
         tasksPromise,
         db.fetchMyDepartmentSupervisors(),
         db.fetchDepartments(),
@@ -6433,6 +6448,11 @@ async function renderTasks() {
         db.fetchProjects(currentUser.id),
         db.fetchTaskEmployeeAccessGrants()
     ]);
+    const allUsers = canAssignTasksCompanyWide()
+        ? [...new Map([...(window.companyEmployeeNameDirectory || []), ...(fetchedUsers || [])]
+            .filter(user => user?.id && user.is_active !== false)
+            .map(user => [String(user.id), user])).values()]
+        : (fetchedUsers || []);
     
     window.taskDepartmentSupervisors = departmentSupervisors || [];
     const usersById = new Map((allUsers || []).map(user => [String(user.id), user]));
@@ -8023,7 +8043,7 @@ window.handleAICreateTask = async function (e) {
 
     // Try to find a user name match
     let assigneeId = currentUser.id;
-    const users = window.taskAllUsersCache || await db.fetchUsers();
+    const users = getTaskAssignmentDirectory();
     for (let u of users) {
         if (u.full_name && input.toLowerCase().includes(u.full_name.split(' ')[0].toLowerCase())) {
             assigneeId = u.id;
@@ -8141,7 +8161,7 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
     
     let employees = [];
     if (canAssignTasksCompanyWide()) {
-        employees = (window.taskAllUsersCache || []).filter(user => user.is_active !== false);
+        employees = getTaskAssignmentDirectory();
     } else if (department) {
         employees = (window.taskAllUsersCache || []).filter(user => user.department_id === department.id);
         // Include former IT staff in the merged Administrative department even
@@ -8174,7 +8194,7 @@ window.filterEditTaskAssigneeOptions = function (departmentIdOrName) {
     if (!root) return;
     const department = (window.taskDepartmentsCache || []).find(item => item.id === departmentIdOrName || item.name === departmentIdOrName || getCanonicalDepartmentName(item) === departmentIdOrName);
     const users = canAssignTasksCompanyWide()
-        ? (window.taskAllUsersCache || []).filter(user => user.is_active !== false)
+        ? getTaskAssignmentDirectory()
         : (department ? (window.taskAllUsersCache || []).filter(user => user.department_id === department.id) : []);
     const selected = new Set(Array.from(root.querySelectorAll('input[type="checkbox"]:checked')).map(input => input.value));
     root.innerHTML = `<label class="picker-select-all" for="editTaskAssigneeSelectAll"><input id="editTaskAssigneeSelectAll" type="checkbox" onchange="window.toggleEditTaskAssignees(this.checked)"><span>Select all employees</span></label>` + users.map((user, index) => {
@@ -8352,7 +8372,7 @@ window.handleTaskAssigneeChange = async function (prefix = 'new') {
         return;
     }
 
-    const allUsers = await db.fetchUsers();
+    const allUsers = getTaskAssignmentDirectory();
     const assignee = allUsers.find(u => u.id === assigneeId);
     if (!assignee) return;
 
@@ -8491,7 +8511,7 @@ window.handleCreateTask = async function (e) {
     const effectiveAssignee = assignee || currentUser.id;
 
     // Check if assignee is in Designing
-    const allUsers = window.taskAllUsersCache || await db.fetchUsers();
+    const allUsers = getTaskAssignmentDirectory();
     const assigneeObj = allUsers.find(u => u.id === effectiveAssignee);
     const selectedTaskList = (window.taskListsCache || []).find(list => String(list.id) === String(taskListId));
     if (canMq07UseDesignTaskList(selectedTaskList) && assigneeObj?.department_id !== currentUserProfile?.department_id) {
@@ -8807,7 +8827,7 @@ window.openEditTaskModal = async function (id) {
         const assigneeIds = new Set(Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids : [task.assignee_id].filter(Boolean));
         const assigneeOptions = document.getElementById('editTaskAssigneeOptions');
         if (assigneeOptions) {
-            assigneeOptions.innerHTML = `<label class="picker-select-all" for="editTaskAssigneeSelectAll"><input id="editTaskAssigneeSelectAll" type="checkbox" onchange="window.toggleEditTaskAssignees(this.checked)"><span>Select all employees</span></label>` + (window.taskAllUsersCache || []).map((user, index) => {
+            assigneeOptions.innerHTML = `<label class="picker-select-all" for="editTaskAssigneeSelectAll"><input id="editTaskAssigneeSelectAll" type="checkbox" onchange="window.toggleEditTaskAssignees(this.checked)"><span>Select all employees</span></label>` + getTaskAssignmentDirectory().map((user, index) => {
                 const inputId = `editTaskAssigneeOption-${index}`;
                 return `<label for="${inputId}"><input id="${inputId}" type="checkbox" value="${escapeHTML(user.id)}" ${assigneeIds.has(user.id) ? 'checked' : ''} onchange="window.updateEditTaskSelectAllState('assignee')"><span>${escapeHTML(window.formatEmployeeName(user) || user.id)}</span></label>`;
             }).join('');

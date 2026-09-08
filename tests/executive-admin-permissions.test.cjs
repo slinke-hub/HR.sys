@@ -37,8 +37,11 @@ assert.match(namesMigration, /CREATE OR REPLACE FUNCTION public\.can_view_compan
 assert.match(namesMigration, /'GM', 'GENERAL MANAGER', 'CEO', 'CHIEF EXECUTIVE', 'CHIEF EXECUTIVE OFFICER'/);
 assert.match(namesMigration, /CREATE POLICY executive_company_employee_names_select/);
 assert.match(app, /const canAssignTasksCompanyWide = \(\) => isTaskAdmin\(\) \|\| isExecutiveAdminProfile\(\)/);
-assert.match(app, /if \(canAssignTasksCompanyWide\(\)\) \{\s*employees = \(window\.taskAllUsersCache \|\| \[\]\)\.filter\(user => user\.is_active !== false\)/);
+assert.match(app, /const getTaskAssignmentDirectory = \(\) =>/);
+assert.match(app, /taskUsersPromise = canAssignTasksCompanyWide\(\) \? db\.fetchAllProfiles\(true\) : db\.fetchUsers\(\)/);
+assert.match(app, /if \(canAssignTasksCompanyWide\(\)\) \{\s*employees = getTaskAssignmentDirectory\(\)/);
 assert.match(app, /const users = canAssignTasksCompanyWide\(\)/);
+assert.match(app, /getTaskAssignmentDirectory\(\)\.map\(\(user, index\) =>/);
 assert.match(assignmentMigration, /CREATE OR REPLACE FUNCTION public\.can_assign_tasks_company_wide/);
 assert.match(assignmentMigration, /CREATE POLICY executive_company_tasks_update/);
 assert.match(assignmentMigration, /CREATE POLICY executive_company_task_lists_select/);
