@@ -16,7 +16,7 @@ assert.match(app, /healthFilter === 'waiting'[\s\S]*\['todo', 'Pending Approval'
 assert.match(app, /healthFilter === 'active' && task\.status === 'in_progress'/);
 assert.match(app, /healthFilter === 'due_this_week'[\s\S]*daysUntilDue >= 0 && daysUntilDue <= 7/);
 assert.match(app, /healthFilter === 'overdue'[\s\S]*dueAt < new Date\(\)/);
-assert.match(app, /matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesHealth && matchesProject/);
+assert.match(app, /matchesSearch && matchesStatus && matchesPriority && matchesCreator && matchesAssignee && matchesDate && matchesHealth && matchesProject/);
 assert.match(app, /window\.taskV2HealthFilter = 'all'/);
 assert.match(css, /\.task-health-item\.active/);
 assert.match(css, /\.task-health-item:focus-visible/);

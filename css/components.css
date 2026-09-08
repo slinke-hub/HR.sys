@@ -8452,3 +8452,36 @@ html[dir="rtl"] select.form-control[multiple]:not([hidden]) { background-positio
     min-height: 42px;
   }
 }
+
+/* Watcher selection is portaled to <body>; keep it above the full-screen
+   New Task sheet and every other application modal. */
+body > .task-watcher-dropdown.multi-select-modal-layer {
+  z-index: 2147483600 !important;
+  isolation: isolate;
+}
+
+/* Creator and assignee filters share the existing toolbar without creating
+   horizontal page overflow on compact screens. */
+.task-v2-toolbar-left { flex-wrap: wrap !important; }
+.task-v2-person-filter { flex: 0 1 150px !important; width: 150px !important; }
+
+@media (max-width: 767px) {
+  .task-v2-toolbar-left {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .35rem;
+  }
+  .task-v2-toolbar-left .task-v2-search { grid-column: 1 / -1; width: 100%; }
+  .task-v2-toolbar-left > select,
+  .task-v2-toolbar-left > select.form-control,
+  .task-v2-toolbar-left > .task-v2-date-filter {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .task-v2-toolbar-left { grid-template-columns: minmax(0, 1fr); }
+  .task-v2-toolbar-left .task-v2-search { grid-column: 1; }
+}

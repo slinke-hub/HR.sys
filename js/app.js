@@ -6461,6 +6461,12 @@ async function renderTasks() {
         const label = window.formatEmployeeName(u) || u.id.substring(0, 8);
         return `<option value="${escapeHTML(u.id)}">${escapeHTML(label)} (${escapeHTML(localizeRuntimeText(u.role || 'EMPLOYEE'))})</option>`;
     }).join('');
+    window.taskPeopleFilterOptionsCache = (allUsers || [])
+        .filter(user => user?.id && user.is_active !== false)
+        .map(user => ({ user, label: window.formatEmployeeName(user) || user.id.substring(0, 8) }))
+        .sort((a, b) => a.label.localeCompare(b.label, currentLang === 'ar' ? 'ar' : 'en'))
+        .map(({ user, label }) => `<option value="${escapeHTML(user.id)}">${escapeHTML(label)}</option>`)
+        .join('');
     
     return ''; 
 }
@@ -7267,6 +7273,14 @@ async function renderTasksV2() {
                             <option value="urgent">Urgent</option>
                             <option value="critical">Critical</option>
                         </select>
+                        <select id="taskV2CreatorFilter" class="form-control task-v2-person-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by task creator', 'تصفية حسب منشئ المهمة')}">
+                            <option value="all">${taskDetailText('All creators', 'كل المنشئين')}</option>
+                            ${window.taskPeopleFilterOptionsCache || ''}
+                        </select>
+                        <select id="taskV2AssigneeFilter" class="form-control task-v2-person-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by assignee', 'تصفية حسب المكلّف')}">
+                            <option value="all">${taskDetailText('All assignees', 'كل المكلّفين')}</option>
+                            ${window.taskPeopleFilterOptionsCache || ''}
+                        </select>
                         <input type="date" id="taskV2DateFilter" class="form-control task-v2-date-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}" title="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}">
                     </div>
                     <div class="task-v2-toolbar-right">
@@ -7400,6 +7414,8 @@ async function refreshTaskWorkspaceInBackground() {
         search: document.getElementById('taskV2Search')?.value || '',
         status: document.getElementById('taskV2StatusFilter')?.value || 'all',
         priority: document.getElementById('taskV2PriorityFilter')?.value || 'all',
+        creator: document.getElementById('taskV2CreatorFilter')?.value || 'all',
+        assignee: document.getElementById('taskV2AssigneeFilter')?.value || 'all',
         date: document.getElementById('taskV2DateFilter')?.value || '',
         pageScroll: document.scrollingElement?.scrollTop || 0,
         boardScroll: document.querySelector('#tasks-view-board .task-board-wrapper')?.scrollLeft || 0
@@ -7416,10 +7432,14 @@ async function refreshTaskWorkspaceInBackground() {
         const search = document.getElementById('taskV2Search');
         const status = document.getElementById('taskV2StatusFilter');
         const priority = document.getElementById('taskV2PriorityFilter');
+        const creator = document.getElementById('taskV2CreatorFilter');
+        const assignee = document.getElementById('taskV2AssigneeFilter');
         const date = document.getElementById('taskV2DateFilter');
         if (search) search.value = controls.search;
         if (status) status.value = controls.status;
         if (priority) priority.value = controls.priority;
+        if (creator) creator.value = controls.creator;
+        if (assignee) assignee.value = controls.assignee;
         if (date) date.value = controls.date;
         translateArabicInterface(viewContainer);
         window.filterTasksV2?.();
@@ -7450,6 +7470,8 @@ window.filterTasksV2 = function () {
     const query = (document.getElementById('taskV2Search')?.value || '').trim().toLowerCase();
     const status = document.getElementById('taskV2StatusFilter')?.value || 'all';
     const priority = document.getElementById('taskV2PriorityFilter')?.value || 'all';
+    const creator = document.getElementById('taskV2CreatorFilter')?.value || 'all';
+    const assignee = document.getElementById('taskV2AssigneeFilter')?.value || 'all';
     const dateFilter = document.getElementById('taskV2DateFilter')?.value || '';
     const healthFilter = window.taskV2HealthFilter || 'all';
     const project = window.taskV2SelectedProject || 'all';
@@ -7469,6 +7491,11 @@ window.filterTasksV2 = function () {
         }
         const matchesStatus = (status === 'all') || (status === 'open' && task.status !== 'completed') || (task.status === status);
         const matchesPriority = (priority === 'all') || (task.priority === priority);
+        const matchesCreator = creator === 'all' || String(task.created_by || '') === creator;
+        const taskAssigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length
+            ? task.assignee_ids.map(String)
+            : [String(task.assignee_id || '')];
+        const matchesAssignee = assignee === 'all' || taskAssigneeIds.includes(assignee);
         const matchesDate = !dateFilter || String(task.due_date || '').slice(0, 10) === dateFilter;
         const isClosed = task.status === 'completed' || task.status === 'Approved';
         const dueAt = task.due_date ? new Date(`${task.due_date}T23:59:59`) : null;
@@ -7486,7 +7513,7 @@ window.filterTasksV2 = function () {
                 matchesProject = String(task.project_id) === project;
             }
         }
-        return matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesHealth && matchesProject;
+        return matchesSearch && matchesStatus && matchesPriority && matchesCreator && matchesAssignee && matchesDate && matchesHealth && matchesProject;
     };
     const isFocusCandidate = task => {
         if (task.status === 'completed' || task.status === 'Approved') return false;
@@ -7776,10 +7803,14 @@ window.clearTaskV2Filters = function () {
     const search = document.getElementById('taskV2Search');
     const status = document.getElementById('taskV2StatusFilter');
     const priority = document.getElementById('taskV2PriorityFilter');
+    const creator = document.getElementById('taskV2CreatorFilter');
+    const assignee = document.getElementById('taskV2AssigneeFilter');
     const date = document.getElementById('taskV2DateFilter');
     if (search) search.value = '';
     if (status) status.value = 'all';
     if (priority) priority.value = 'all';
+    if (creator) creator.value = 'all';
+    if (assignee) assignee.value = 'all';
     if (date) date.value = '';
     window.taskV2HealthFilter = 'all';
     document.querySelectorAll('[data-task-health-filter]').forEach(button => {
@@ -7896,6 +7927,7 @@ window.toggleTaskV2Create = function () {
 window.closeCreateTaskModal = function () {
     const modal = document.getElementById('createTaskModal');
     if (!modal) return;
+    window.closeTaskWatcherDropdown?.('taskWatchers');
     modal.classList.remove('active', 'show');
     document.body.classList.remove('modal-open', 'create-task-modal-open');
     const home = window.createTaskModalPortalHome;
@@ -8028,7 +8060,7 @@ window.toggleTaskWatcherDropdown = function (selectId) {
     dropdown.hidden = false;
     button.setAttribute('aria-expanded', 'true');
     document.body.classList.add('multi-select-modal-open');
-    requestAnimationFrame(() => picker.querySelector('.task-watcher-search')?.focus());
+    requestAnimationFrame(() => dropdown.querySelector('.task-watcher-search')?.focus());
 };
 
 window.closeTaskWatcherDropdown = function (selectId) {
