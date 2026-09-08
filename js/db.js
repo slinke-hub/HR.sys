@@ -500,7 +500,7 @@ const db = {
         try {
             let query = supabaseClient
                 .from('attendance')
-                .select('id, employee_id, date, clock_in_time, clock_out_time, clock_in_location, clock_out_location, clock_out_type, overtime_hours, created_at')
+                .select('id, employee_id, date, clock_in_time, clock_out_time, clock_in_location, clock_out_location, clock_out_type, overtime_hours, clock_in_edited_by, clock_in_edited_at, clock_out_edited_by, clock_out_edited_at, created_at')
                 .order('clock_in_time', { ascending: false })
                 .limit(userId ? 250 : 1000);
             if (userId) {
@@ -509,8 +509,8 @@ const db = {
             const { data, error } = await query;
             if (error) throw error;
             return (data || []).flatMap(record => {
-                const punches = [{ id: `${record.id}-in`, attendance_id: record.id, employee_id: record.employee_id, punch_time: record.clock_in_time, punch_type: 'IN', location: record.clock_in_location }];
-                if (record.clock_out_time) punches.push({ id: `${record.id}-out`, attendance_id: record.id, employee_id: record.employee_id, punch_time: record.clock_out_time, punch_type: 'OUT', location: record.clock_out_location, clock_out_type: record.clock_out_type, overtime_hours: record.overtime_hours });
+                const punches = [{ id: `${record.id}-in`, attendance_id: record.id, employee_id: record.employee_id, punch_time: record.clock_in_time, punch_type: 'IN', location: record.clock_in_location, edited_by: record.clock_in_edited_by, edited_at: record.clock_in_edited_at }];
+                if (record.clock_out_time) punches.push({ id: `${record.id}-out`, attendance_id: record.id, employee_id: record.employee_id, punch_time: record.clock_out_time, punch_type: 'OUT', location: record.clock_out_location, clock_out_type: record.clock_out_type, overtime_hours: record.overtime_hours, edited_by: record.clock_out_edited_by, edited_at: record.clock_out_edited_at });
                 return punches;
             }).sort((a, b) => new Date(b.punch_time) - new Date(a.punch_time));
         } catch (error) {

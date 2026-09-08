@@ -3526,12 +3526,13 @@ async function renderTime() {
             <td>${p.punch_type}</td>
             <td><span class="status-badge ${p.punch_type === 'IN' ? 'success' : 'info'}">${p.punch_type}</span></td>
             <td>${mapLink(p.location)}</td>
+            ${canViewAllAttendance ? `<td>${p.edited_by ? `<strong>${escapeHTML(window.formatEmployeeName(employeeMap[p.edited_by]) || (currentLang === 'ar' ? 'مسؤول' : 'Administrator'))}</strong>` : '<span class="text-muted">—</span>'}</td>` : ''}
             ${canEditAttendance ? `<td><button type="button" class="icon-btn attendance-edit-button" onclick="openAttendanceEditModal('${escapeHTML(p.id)}')" aria-label="${currentLang === 'ar' ? 'تعديل سجل الحضور' : 'Edit attendance record'}" title="${currentLang === 'ar' ? 'تعديل' : 'Edit'}"><i data-lucide="pencil"></i></button></td>` : ''}
         </tr>
     `).join('');
 
     if (punches.length === 0) {
-        tableRows = `<tr><td colspan="${canViewAllAttendance ? (canEditAttendance ? 8 : 7) : 5}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
+        tableRows = `<tr><td colspan="${canViewAllAttendance ? (canEditAttendance ? 9 : 8) : 5}" style="text-align: center; color: var(--color-text-secondary); padding: 2rem;">${t('time_no_punches')}</td></tr>`;
     }
 
     const empName = window.formatEmployeeName(viewerProfile) || window.formatEmployeeName(currentUser?.user_metadata) || 'Employee';
@@ -3561,12 +3562,13 @@ async function renderTime() {
                             <th>${t('time_punch_type')}</th>
                             <th>${t('status')}</th>
                             <th>Location</th>
+                            ${canViewAllAttendance ? `<th>${currentLang === 'ar' ? 'تم التعديل بواسطة' : 'Edited by'}</th>` : ''}
                             ${canEditAttendance ? `<th>${currentLang === 'ar' ? 'الإجراءات' : 'Actions'}</th>` : ''}
                         </tr>
                     </thead>
                     <tbody>
                         ${tableRows}
-                        ${punches.length ? `<tr id="attendanceNoFilterResults" ${initialVisibleCount ? 'hidden' : ''}><td colspan="${canViewAllAttendance ? (canEditAttendance ? 8 : 7) : 5}" style="text-align:center;padding:2rem;color:var(--color-text-secondary);">No attendance records match these filters.</td></tr>` : ''}
+                        ${punches.length ? `<tr id="attendanceNoFilterResults" ${initialVisibleCount ? 'hidden' : ''}><td colspan="${canViewAllAttendance ? (canEditAttendance ? 9 : 8) : 5}" style="text-align:center;padding:2rem;color:var(--color-text-secondary);">No attendance records match these filters.</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
