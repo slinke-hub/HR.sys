@@ -2365,13 +2365,18 @@ const db = {
                     clock_out_type: changes.clockOutType || null,
                     overtime_hours: Math.max(0, Number(changes.overtimeHours) || 0)
                 };
-            const { data, error } = await supabaseClient
+            let updateQuery = supabaseClient
                 .from('attendance')
                 .update(updates)
-                .eq('id', attendanceId)
+                .eq('id', attendanceId);
+            if (type === 'OUT' && changes.onlyIfOpen) {
+                updateQuery = updateQuery.is('clock_out_time', null);
+            }
+            const { data, error } = await updateQuery
                 .select()
-                .single();
+                .maybeSingle();
             if (error) throw error;
+            if (!data) throw new Error('This employee has already been clocked out.');
             return { success: true, data };
         } catch (error) {
             console.error('updateAttendancePunch Error:', error);

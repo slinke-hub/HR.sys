@@ -1213,6 +1213,8 @@ const arabicRuntimeUiText = Object.freeze({
     'Latitude and longitude are required.': 'خط العرض وخط الطول مطلوبان.',
     'Google Maps location link': 'رابط الموقع على خرائط Google',
     'Paste a valid Google Maps location link.': 'ألصق رابط موقع صالحًا من خرائط Google.',
+    'Clock out employee': 'تسجيل انصراف الموظف',
+    'The employee will be clocked out at the current time.': 'سيتم تسجيل انصراف الموظف في الوقت الحالي.',
     'Clock-out location type': 'نوع موقع تسجيل الانصراف',
     'Office': 'المكتب',
     'Order location': 'موقع الطلب',
@@ -3039,7 +3041,10 @@ function renderEmployeesRadarRows(records) {
         const status = isClockedOut ? 'Clocked out' : 'Clocked in';
         const employeeProfile = window.companyEmployeeNamesById?.[String(record.employee_id)] || record.profile || record;
         const employeeName = window.formatEmployeeName(employeeProfile) || 'Employee';
-        return `<li class="${isClockedOut ? 'is-clocked-out' : 'is-clocked-in'}"><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(employeeName)}</span><span class="employees-radar-meta"><span class="employees-radar-status">${status}</span><time>${eventTime ? new Date(eventTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '&mdash;'}</time></span></li>`;
+        const adminClockOut = !isClockedOut && isTaskAdmin()
+            ? `<button type="button" class="employees-radar-clockout" onclick="openEmployeesRadarClockOut('${escapeHTML(record.attendance_id)}')" aria-label="${currentLang === 'ar' ? 'تسجيل انصراف الموظف' : 'Clock out employee'}" title="${currentLang === 'ar' ? 'تسجيل انصراف الموظف' : 'Clock out employee'}"><i data-lucide="log-out"></i><span>${currentLang === 'ar' ? 'تسجيل الانصراف' : 'Clock out'}</span></button>`
+            : '';
+        return `<li class="${isClockedOut ? 'is-clocked-out' : 'is-clocked-in'}"><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(employeeName)}</span><span class="employees-radar-meta"><span class="employees-radar-status">${status}</span><time>${eventTime ? new Date(eventTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '&mdash;'}</time></span>${adminClockOut}</li>`;
     }).join('');
 }
 
@@ -3051,10 +3056,13 @@ window.initializeEmployeesRadar = function (attendance) {
         const outCount = document.getElementById('employeesRadarOutCount');
         const list = document.getElementById('employeesRadarList');
         if (!count || !list) return;
+        window.employeesRadarAttendanceCache = Object.fromEntries((records || []).map(record => [String(record.attendance_id), record]));
         count.textContent = String(active.length);
         if (outCount) outCount.textContent = `${clockedOut.length} clocked out`;
         list.innerHTML = renderEmployeesRadarRows(records) || '<li class="employees-radar-empty">No attendance recorded today.</li>';
+        if (window.lucide) window.lucide.createIcons();
     };
+    window.refreshEmployeesRadar = refresh;
     setTimeout(() => refresh(), 0);
     if (employeesRadarTimer) clearInterval(employeesRadarTimer);
     employeesRadarTimer = setInterval(async () => refresh(await db.fetchEmployeesRadarAttendance()), 10000);
@@ -3064,6 +3072,93 @@ window.initializeEmployeesRadar = function (attendance) {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, async () => refresh(await db.fetchEmployeesRadarAttendance()))
             .subscribe();
     }
+};
+
+window.closeEmployeesRadarClockOut = function () {
+    document.getElementById('employeesRadarClockOutModal')?.classList.remove('show');
+};
+
+window.openEmployeesRadarClockOut = function (attendanceId) {
+    if (!isTaskAdmin()) {
+        showToast(currentLang === 'ar' ? 'هذه الخاصية متاحة للمسؤول فقط.' : 'Only administrators can clock out employees.', 'danger');
+        return;
+    }
+    const record = window.employeesRadarAttendanceCache?.[String(attendanceId)];
+    if (!record || record.clock_out_time) {
+        showToast(currentLang === 'ar' ? 'سجل الحضور غير متاح أو تم تسجيل الانصراف بالفعل.' : 'This attendance record is unavailable or already clocked out.', 'warning');
+        return;
+    }
+    const employeeProfile = window.companyEmployeeNamesById?.[String(record.employee_id)] || record.profile || record;
+    const employeeName = window.formatEmployeeName(employeeProfile) || 'Employee';
+    let modal = document.getElementById('employeesRadarClockOutModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'employeesRadarClockOutModal';
+        modal.className = 'modal employees-radar-clockout-modal';
+        modal.innerHTML = `
+            <div class="modal-content attendance-edit-modal-content">
+                <div class="modal-header">
+                    <div><h3 id="employeesRadarClockOutTitle">Clock out employee</h3><p class="text-muted" id="employeesRadarClockOutEmployee"></p></div>
+                    <button type="button" class="icon-btn" onclick="closeEmployeesRadarClockOut()" aria-label="Close"><i data-lucide="x"></i></button>
+                </div>
+                <form id="employeesRadarClockOutForm" onsubmit="handleEmployeesRadarClockOut(event)">
+                    <input type="hidden" id="employeesRadarClockOutAttendanceId">
+                    <div class="form-group">
+                        <label class="form-label" for="employeesRadarClockOutLocation" id="employeesRadarClockOutLocationLabel">Google Maps location link</label>
+                        <input id="employeesRadarClockOutLocation" type="url" class="form-control" required inputmode="url" placeholder="https://maps.google.com/...">
+                        <small class="text-muted" id="employeesRadarClockOutHint">The employee will be clocked out at the current time.</small>
+                    </div>
+                    <div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeEmployeesRadarClockOut()" id="employeesRadarClockOutCancel">Cancel</button><button type="submit" class="btn btn-primary" id="employeesRadarClockOutSave"><i data-lucide="log-out"></i><span>Clock out</span></button></div>
+                </form>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    document.getElementById('employeesRadarClockOutAttendanceId').value = String(attendanceId);
+    document.getElementById('employeesRadarClockOutLocation').value = '';
+    document.getElementById('employeesRadarClockOutTitle').textContent = currentLang === 'ar' ? 'تسجيل انصراف الموظف' : 'Clock out employee';
+    document.getElementById('employeesRadarClockOutEmployee').textContent = employeeName;
+    document.getElementById('employeesRadarClockOutLocationLabel').textContent = currentLang === 'ar' ? 'رابط الموقع على خرائط Google' : 'Google Maps location link';
+    document.getElementById('employeesRadarClockOutHint').textContent = currentLang === 'ar' ? 'سيتم تسجيل انصراف الموظف في الوقت الحالي.' : 'The employee will be clocked out at the current time.';
+    document.getElementById('employeesRadarClockOutCancel').textContent = currentLang === 'ar' ? 'إلغاء' : 'Cancel';
+    document.querySelector('#employeesRadarClockOutSave span').textContent = currentLang === 'ar' ? 'تسجيل الانصراف' : 'Clock out';
+    modal.classList.add('show');
+    document.getElementById('employeesRadarClockOutLocation').focus();
+    if (window.lucide) window.lucide.createIcons();
+};
+
+window.handleEmployeesRadarClockOut = async function (event) {
+    event.preventDefault();
+    if (!isTaskAdmin()) return;
+    const attendanceId = document.getElementById('employeesRadarClockOutAttendanceId').value;
+    const location = document.getElementById('employeesRadarClockOutLocation').value.trim();
+    if (!location || !window.isGoogleMapsLocationLink?.(location)) {
+        showToast(currentLang === 'ar' ? 'أدخل رابط موقع صالحًا من خرائط Google.' : 'Enter a valid Google Maps location link.', 'warning');
+        return;
+    }
+    const record = window.employeesRadarAttendanceCache?.[String(attendanceId)];
+    if (!record || record.clock_out_time) return;
+    const now = new Date();
+    const overtimeHours = Math.max(0, (now.getTime() - new Date(record.clock_in_time).getTime()) / 3600000 - 8).toFixed(2);
+    const saveButton = document.getElementById('employeesRadarClockOutSave');
+    if (saveButton) saveButton.disabled = true;
+    const result = await db.updateAttendancePunch(attendanceId, 'OUT', {
+        punchTime: now.toISOString(),
+        location,
+        clockOutType: 'OFFICE',
+        overtimeHours,
+        onlyIfOpen: true
+    });
+    if (saveButton) saveButton.disabled = false;
+    if (!result.success) {
+        showToast(result.error?.message || (currentLang === 'ar' ? 'تعذر تسجيل انصراف الموظف.' : 'The employee could not be clocked out.'), 'danger');
+        return;
+    }
+    record.clock_out_time = now.toISOString();
+    window.closeEmployeesRadarClockOut();
+    await window.refreshEmployeesRadar?.(Object.values(window.employeesRadarAttendanceCache || {}));
+    showToast(currentLang === 'ar' ? 'تم تسجيل انصراف الموظف.' : 'Employee clocked out successfully.', 'success');
+    const freshRecords = await db.fetchEmployeesRadarAttendance();
+    await window.refreshEmployeesRadar?.(freshRecords);
 };
 
 function isOpenDashboardTask(task) {

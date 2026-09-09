@@ -45,6 +45,14 @@ vm.runInContext(`${dbSource}\nglobalThis.__testDb = db;`, context);
     }
     assert.match(appSource, /isClockedOut \? 'Clocked out' : 'Clocked in'/);
     assert.match(appSource, /fetchEmployeesRadarAttendance\(\)/);
+    assert.match(appSource, /window\.openEmployeesRadarClockOut = function/);
+    assert.match(appSource, /window\.handleEmployeesRadarClockOut = async function/);
+    assert.match(appSource, /!isClockedOut && isTaskAdmin\(\)/);
+    assert.match(appSource, /db\.updateAttendancePunch\(attendanceId, 'OUT'/);
+    assert.match(appSource, /onlyIfOpen: true/);
+    assert.match(dbSource, /changes\.onlyIfOpen/);
+    assert.match(appSource, /window\.refreshEmployeesRadar/);
+    assert.match(componentStyles, /\.employees-radar-clockout \{/);
     assert.match(componentStyles, /\.employees-radar-card span,[\s\S]*\.employees-radar-card time \{ color:#fff !important; \}/);
     assert.match(migrationSource, /CREATE POLICY employees_radar_company_attendance_select/);
     assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.get_employees_radar/);
