@@ -3463,6 +3463,70 @@ const db = {
             return { success: false, error };
         }
     },
+    async fetchHrSuiteBetaItems() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('hr_suite_beta_items')
+                .select('*')
+                .neq('status', 'ARCHIVED')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchHrSuiteBetaItems Error:', error);
+            return [];
+        }
+    },
+    async saveHrSuiteBetaItem(item, itemId = null) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const payload = {
+                category: item.category,
+                title: item.title,
+                title_ar: item.title_ar || null,
+                employee_id: item.employee_id || null,
+                owner_id: item.owner_id || null,
+                status: item.status || 'DRAFT',
+                priority: item.priority || 'MEDIUM',
+                due_date: item.due_date || null,
+                amount: item.amount === '' || item.amount == null ? null : Number(item.amount),
+                notes: item.notes || null,
+                metadata: item.metadata || {}
+            };
+            let query = itemId
+                ? supabaseClient.from('hr_suite_beta_items').update(payload).eq('id', itemId)
+                : supabaseClient.from('hr_suite_beta_items').insert([payload]);
+            const { data, error } = await query.select().single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('saveHrSuiteBetaItem Error:', error);
+            return { success: false, error };
+        }
+    },
+    async updateHrSuiteBetaItemStatus(itemId, status) {
+        if (!supabaseClient || !itemId) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('hr_suite_beta_items')
+                .update({ status })
+                .eq('id', itemId)
+                .select()
+                .single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('updateHrSuiteBetaItemStatus Error:', error);
+            return { success: false, error };
+        }
+    },
+    subscribeToHrSuiteBetaItems(callback) {
+        if (!supabaseClient) return null;
+        return supabaseClient.channel('hr-suite-beta-live')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_suite_beta_items' }, callback)
+            .subscribe();
+    },
     async updateJobTitleTranslation(jobTitleId, nameAr) {
         if (!supabaseClient) return { success: false };
         try {

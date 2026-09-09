@@ -41,6 +41,7 @@
     <link rel="stylesheet" href="css/variables.css?v=1788202890005">
     <link rel="stylesheet" href="css/layout.css?v=1788202890007">
     <link rel="stylesheet" href="css/components.css?v=2026090901">
+    <link rel="stylesheet" href="css/hr-suite-beta.css?v=2026090901">
     <link rel="stylesheet" href="css/android.css?v=2026090702">
     <link rel="stylesheet" href="css/crm-tailwind.css?v=2026090716">
     <style>
@@ -100,6 +101,7 @@
                 <a href="#" class="nav-item" id="navLeaveCalculator" data-view="leave_calculator" style="display:none"><i data-lucide="calculator"></i><span data-i18n="nav_leave_calculator">Leave Calculator</span></a>
                 <a href="#" class="nav-item" data-view="payroll" id="navPayroll"><i data-lucide="banknote"></i><span data-i18n="nav_payroll">Payroll</span></a>
                 <a href="#" class="nav-item" data-view="performance"><i data-lucide="target"></i><span data-i18n="nav_performance">Performance</span></a>
+                <a href="#" class="nav-item" data-view="hr_suite_beta" id="navHrSuiteBeta" style="display:none"><i data-lucide="flask-conical"></i><span>HR Suite Beta</span><small class="nav-beta-badge">BETA</small></a>
             </nav>
         </aside>
 
@@ -243,8 +245,8 @@
                 </div>
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="dollar-sign" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_amount_sar">Amount (SAR)</span> *</label>
-                        <input type="number" id="crmDealAmount" class="form-control" required>
+                        <label class="form-label"><i data-lucide="dollar-sign" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_amount_sar">Amount (SAR)</span></label>
+                        <input type="number" id="crmDealAmount" class="form-control" min="0" step="0.01">
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label"><i data-lucide="calendar" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_closing_date">Closing Date</span></label>
@@ -257,14 +259,14 @@
                         <input type="text" id="crmDealEventType" class="form-control">
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="calendar-clock" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_first_contact_date">First Contact Date</span></label>
-                        <input type="date" id="crmDealFirstContactDate" class="form-control">
+                        <label class="form-label"><i data-lucide="calendar-clock" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_first_contact_date">First Contact Date</span> *</label>
+                        <input type="date" id="crmDealFirstContactDate" class="form-control" required>
                     </div>
                 </div>
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label"><i data-lucide="message-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_contacted_via">Contacted Via</span></label>
-                        <select id="crmDealContactMethod" class="form-control">
+                        <label class="form-label"><i data-lucide="message-circle" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_contacted_via">Contact Via</span> *</label>
+                        <select id="crmDealContactMethod" class="form-control" required>
                             <option value="" data-i18n="html_select_method">Select Method</option>
                             <option value="Phone call" data-i18n="html_phone_call">Phone call</option>
                             <option value="WhatsApp" data-i18n="html_whatsapp">WhatsApp</option>
@@ -277,8 +279,8 @@
                     </div>
                 </div>
                 <div class="form-group" style="margin-bottom: 1rem;">
-                    <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_assigned_to">Assigned To</span></label>
-                    <select id="crmDealAssignee" class="form-control"></select>
+                    <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_assigned_to">Assigned To</span> *</label>
+                    <select id="crmDealAssignee" class="form-control" required></select>
                 </div>
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label class="form-label" data-i18n="crm_technical_description">Technical Presentation / Project Description</label>
@@ -1652,12 +1654,13 @@
     <script src="js/vendor/supabase.js"></script>
     <script src="js/vendor/chart.umd.min.js"></script>
     <script src="js/vendor/xlsx.full.min.js"></script>
-    <script src="js/db.js?v=2026090901"></script>
-    <script src="js/data.js?v=2026090801"></script>
+    <script src="js/db.js?v=2026090902"></script>
+    <script src="js/data.js?v=2026090901"></script>
     <script src="js/contract.js?v=1788202890003"></script>
     <script src="js/payroll.js"></script>
     <script src="js/crm-dashboard.bundle.js?v=2026090802"></script>
-    <script src="js/app.js?v=2026090901"></script>
+    <script src="js/hr-suite-beta.js?v=2026090901"></script>
+    <script src="js/app.js?v=2026090903"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

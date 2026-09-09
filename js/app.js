@@ -1215,6 +1215,8 @@ const arabicRuntimeUiText = Object.freeze({
     'Paste a valid Google Maps location link.': 'ألصق رابط موقع صالحًا من خرائط Google.',
     'Clock out employee': 'تسجيل انصراف الموظف',
     'The employee will be clocked out at the current time.': 'سيتم تسجيل انصراف الموظف في الوقت الحالي.',
+    'HR Suite Beta': 'حزمة الموارد البشرية التجريبية',
+    'BETA': 'تجريبي',
     'Clock-out location type': 'نوع موقع تسجيل الانصراف',
     'Office': 'المكتب',
     'Order location': 'موقع الطلب',
@@ -2220,6 +2222,7 @@ async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const isAdmin = isAdminRole(normalizedRole);
     if (viewId === 'users') return canCurrentUserManageUsers();
+    if (viewId === 'hr_suite_beta') return window.canCurrentUserUseHrSuiteBeta?.() === true;
     if (isAdmin) return true;
     if (viewId === 'crm') return canCurrentUserUseCRM();
     if (viewId === 'leave_calculator') return normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
@@ -2253,6 +2256,7 @@ window.updateSidebarVisibility = async function () {
     const crmNav = document.querySelector('.nav-item[data-view="crm"]');
     const clientsNav = document.querySelector('.nav-item[data-view="clients"]');
     const leaveCalculatorNav = document.getElementById('navLeaveCalculator');
+    const hrSuiteBetaNav = document.getElementById('navHrSuiteBeta');
 
     const isAdmin = isAdminRole(normalizedRole);
     const canManageUsers = canCurrentUserManageUsers();
@@ -2276,6 +2280,7 @@ window.updateSidebarVisibility = async function () {
     if (translationsNav) translationsNav.style.display = isAdmin ? 'flex' : 'none';
     if (templatesNav) templatesNav.style.display = isAdmin ? 'flex' : 'none';
     if (leaveCalculatorNav) leaveCalculatorNav.style.display = (isAdmin || isHrManager) ? 'flex' : 'none';
+    if (hrSuiteBetaNav) hrSuiteBetaNav.style.display = window.canCurrentUserUseHrSuiteBeta?.() ? 'flex' : 'none';
     const custodyHandoverNav = document.getElementById('navCustodyHandover');
     if (custodyHandoverNav) custodyHandoverNav.style.display = (isAdmin || isHrManager) ? 'flex' : 'none';
 
@@ -2378,7 +2383,7 @@ window.handleLoginSubmit = async function (e) {
         'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
         'archived_contracts', 'messages', 'notifications', 'performance',
         'documents', 'profile', 'projects', 'approvals', 'tasks',
-        'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover'
+        'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta'
     ]);
     const _loginRequestedView = new URLSearchParams(window.location.search).get('view');
     const _loginSavedView = _loginRequestedView || (currentUser ? (localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view')) : null);
@@ -11140,6 +11145,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'clients': content = await renderClients(); break;
             case 'crm': content = await renderCRM(); break;
             case 'integrations': content = await renderIntegrations(); break;
+            case 'hr_suite_beta': content = await window.renderHrSuiteBeta(); break;
             default:
                 content = `
                     <div class="page-header">
@@ -13620,7 +13626,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     const users = await db.fetchUsers();
     const assigneeSelect = document.getElementById('crmDealAssignee');
     if (assigneeSelect) {
-        assigneeSelect.innerHTML = `<option value="">${t('crm_unassigned')}</option>` +
+        assigneeSelect.innerHTML = `<option value="">${t('crm_select_assignee')}</option>` +
             users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
     }
 
@@ -13654,7 +13660,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
         if (deal) {
             document.getElementById('crmDealTitle').value = deal.title || '';
             document.getElementById('crmDealClient').value = deal.client_id || '';
-            document.getElementById('crmDealAmount').value = deal.amount || 0;
+            document.getElementById('crmDealAmount').value = deal.amount ?? '';
             document.getElementById('crmDealClosingDate').value = deal.closing_date || '';
 
             if (document.getElementById('crmDealEventType')) document.getElementById('crmDealEventType').value = deal.event_type || '';
@@ -13703,10 +13709,15 @@ window.handleCreateDeal = async (e) => {
     const firstContactDateEl = document.getElementById('crmDealFirstContactDate');
     const contactMethodEl = document.getElementById('crmDealContactMethod');
     const leadSourceEl = document.getElementById('crmDealLeadSource');
+    const amountValue = document.getElementById('crmDealAmount').value.trim();
+
+    if (!firstContactDateEl?.value || !contactMethodEl?.value || !assigneeVal) {
+        return showToast(window.t('msg_toast_26') || 'Please fill in all required fields.', 'danger');
+    }
 
     const data = {
         title: document.getElementById('crmDealTitle').value,
-        amount: parseFloat(document.getElementById('crmDealAmount').value) || 0,
+        amount: amountValue === '' ? null : Number(amountValue),
         client_id: document.getElementById('crmDealClient').value,
         closing_date: (closingDateEl && closingDateEl.value) ? closingDateEl.value : null,
         event_type: (eventTypeEl && eventTypeEl.value) ? eventTypeEl.value : null,
@@ -13714,7 +13725,7 @@ window.handleCreateDeal = async (e) => {
         contact_method: (contactMethodEl && contactMethodEl.value) ? contactMethodEl.value : null,
         lead_source: (leadSourceEl && leadSourceEl.value) ? leadSourceEl.value : null,
         technical_description: document.getElementById('crmDealTechnicalDescription').value || null,
-        assigned_to: assigneeVal ? assigneeVal : currentUser.id
+        assigned_to: assigneeVal
     };
     if (!id) data.stage = 'LEAD'; // Only set stage on creation
 
@@ -13936,7 +13947,7 @@ async function initApp() {
             'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
             'archived_contracts', 'messages', 'notifications', 'performance',
             'documents', 'profile', 'projects', 'approvals', 'tasks',
-            'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover'
+            'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta'
         ]);
         const requestedView = new URLSearchParams(window.location.search).get('view');
         const savedView = requestedView || localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view');
