@@ -1956,6 +1956,8 @@ button.btn-icon [data-lucide] {
   border-top: 1px solid var(--color-border);
 }
 
+.deal-workflow-section[hidden] { display: none; }
+
 .deal-workflow-section h3 { margin-bottom: .75rem; }
 
 .deal-lifecycle-stepper {
@@ -2538,6 +2540,10 @@ button.btn-icon [data-lucide] {
 .crm-request-file-section { display: grid; gap: .55rem; margin-bottom: 1rem; }
 .crm-request-file-section[hidden] { display: none; }
 .crm-request-file-section small { color: var(--color-text-secondary); }
+.crm-client-identity-section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
 #presentationProposalSection {
   padding-top: 1rem;
   border-top: 1px solid var(--color-border);
@@ -4869,6 +4875,70 @@ input,
   background: var(--color-bg-base);
   box-shadow: var(--shadow-sm);
 }
+
+.task-crm-presentation-assets {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-bg-elevated) 94%, var(--color-primary) 6%);
+}
+.task-crm-presentation-assets > header {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+}
+.task-crm-presentation-assets > header > svg { width: 1.35rem; height: 1.35rem; color: var(--color-primary); }
+.task-crm-presentation-assets > header h3,
+.task-crm-presentation-assets > header p,
+.task-crm-asset-group h4 { margin: 0; }
+.task-crm-presentation-assets > header p { margin-top: .2rem; color: var(--color-text-secondary); font-size: .78rem; }
+.task-crm-asset-group { display: grid; gap: .65rem; }
+.task-crm-asset-group h4 { display: flex; align-items: center; gap: .4rem; font-size: .88rem; }
+.task-crm-asset-group h4 svg { width: 1rem; height: 1rem; color: var(--color-primary); }
+.task-crm-quote-files { display: grid; gap: .5rem; }
+.task-crm-quote-files a,
+.task-crm-identity-image {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: .65rem;
+  padding: .75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: var(--color-bg-elevated);
+  text-decoration: none;
+}
+.task-crm-identity-image {
+  width: 100%;
+  text-align: start;
+  cursor: zoom-in;
+}
+.task-crm-quote-files a > svg,
+.task-crm-identity-image > svg { color: var(--color-primary); }
+.task-crm-quote-files span { display: grid; gap: .15rem; min-width: 0; }
+.task-crm-quote-files strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-crm-quote-files small { color: var(--color-text-secondary); }
+.task-crm-proposal-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: .85rem;
+}
+.task-crm-proposal-gallery figure {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+}
+.task-crm-proposal-gallery button { display: block; width: 100%; padding: 0; border: 0; background: color-mix(in srgb, var(--color-bg-elevated) 80%, #000 20%); cursor: zoom-in; }
+.task-crm-proposal-gallery img { display: block; width: 100%; height: clamp(220px, 34vw, 420px); object-fit: contain; }
+.task-crm-proposal-gallery figcaption { display: grid; gap: .3rem; padding: .75rem .85rem; border-top: 1px solid var(--color-border); }
+.task-crm-proposal-gallery figcaption p { margin: 0; color: var(--color-text); line-height: 1.55; }
+.task-crm-proposal-gallery figcaption small { color: var(--color-text-secondary); overflow-wrap: anywhere; }
 .task-comment-meta {
   display: flex;
   align-items: center;

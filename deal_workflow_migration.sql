@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS public.crm_deal_approval_steps (
 CREATE TABLE IF NOT EXISTS public.crm_deal_attachments (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     deal_id UUID NOT NULL REFERENCES public.crm_deals(id) ON DELETE CASCADE,
-    category TEXT NOT NULL DEFAULT 'OTHER' CHECK (category IN ('QUOTATION', 'TECHNICAL_PRESENTATION', 'PROPOSAL', 'PHOTO', 'OTHER')),
+    category TEXT NOT NULL DEFAULT 'OTHER' CHECK (category IN ('QUOTATION', 'CLIENT_IDENTITY', 'TECHNICAL_PRESENTATION', 'PROPOSAL', 'PHOTO', 'OTHER')),
     file_name TEXT NOT NULL,
     file_url TEXT NOT NULL,
     description TEXT,

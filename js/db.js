@@ -3032,6 +3032,26 @@ const db = {
             return { approvals: [], designApprovals: [], attachments: [], activity: [], project: null, error };
         }
     },
+    async fetchDealPresentationAttachments(dealId) {
+        if (!supabaseClient || !dealId) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('crm_deal_attachments')
+                .select('id, deal_id, category, file_name, file_url, description, created_at')
+                .eq('deal_id', dealId)
+                .in('category', ['QUOTATION', 'CLIENT_IDENTITY', 'PROPOSAL'])
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            return Promise.all((data || []).map(async attachment => ({
+                ...attachment,
+                storage_reference: attachment.file_url,
+                file_url: await this.resolveStorageReference(attachment.file_url)
+            })));
+        } catch (error) {
+            console.error('fetchDealPresentationAttachments Error:', error);
+            return [];
+        }
+    },
     async closeWonDealProject(projectId) {
         if (!supabaseClient) return { success: false };
         try {
@@ -3133,9 +3153,9 @@ const db = {
     },
     async replaceDealPresentationAttachments(dealId, userId, entries, options = {}) {
         if (!supabaseClient) return { success: false };
-        const replacementCategories = options.replaceProposal === false
-            ? ['QUOTATION']
-            : ['QUOTATION', 'PROPOSAL'];
+        const replacementCategories = ['QUOTATION'];
+        if (options.replaceClientIdentity === true) replacementCategories.push('CLIENT_IDENTITY');
+        if (options.replaceProposal !== false) replacementCategories.push('PROPOSAL');
         const uploadedPaths = [];
         let insertedRows = [];
         try {

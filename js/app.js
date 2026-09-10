@@ -4037,16 +4037,37 @@ async function prepareTeamworkTaskDetail(task) {
             grid.insertAdjacentElement('afterend', content);
         }
         const storedLinks = [...(task.content_links || []), ...(task.submission_links || [])].filter(Boolean);
-        const links = (await db.resolveStorageReferences(storedLinks)).map(safeExternalUrl).filter(Boolean);
+        const [resolvedTaskLinks, crmPresentationAttachments] = await Promise.all([
+            db.resolveStorageReferences(storedLinks),
+            task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN' && task.crm_deal_id
+                ? db.fetchDealPresentationAttachments(task.crm_deal_id)
+                : Promise.resolve([])
+        ]);
+        const links = resolvedTaskLinks.map(safeExternalUrl).filter(Boolean);
         const imageExtensions = /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i;
         const fileNameFromUrl = link => decodeURIComponent(String(link).split('?')[0].split('/').pop() || 'Attachment');
-        const attachmentHTML = links.length ? links.map(link => {
+        const attachmentHTML = links.map(link => {
             const safeLink = escapeHTML(link);
             const label = escapeHTML(fileNameFromUrl(link));
             return imageExtensions.test(String(link))
                 ? `<button type="button" class="task-detail-image-attachment" data-image-url="${safeLink}" data-image-name="${label}" onclick="openDealImagePreview(this)" title="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}" aria-label="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}: ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></button>`
                 : `<a href="${safeLink}" target="_blank" rel="noopener"><i data-lucide="download"></i>${label}</a>`;
-        }).join('') : `<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>${taskDetailText('No files or links have been added', 'لم تتم إضافة ملفات أو روابط')}</span></div>`;
+        }).join('');
+        const crmQuoteFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION' && safeExternalUrl(file.file_url));
+        const crmClientIdentityFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY' && safeExternalUrl(file.file_url));
+        const crmProposalImages = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'PROPOSAL' && safeExternalUrl(file.file_url));
+        const crmPresentationAssetsHTML = crmQuoteFiles.length || crmClientIdentityFiles.length || crmProposalImages.length ? `<section class="task-crm-presentation-assets">
+            <header><i data-lucide="briefcase-business"></i><div><h3>${taskDetailText('CRM quote and proposal', 'عرض السعر والمقترح في CRM')}</h3><p>${taskDetailText('Files attached automatically from the linked deal.', 'ملفات مرفقة تلقائياً من الصفقة المرتبطة.')}</p></div></header>
+            ${crmQuoteFiles.length ? `<section class="task-crm-asset-group"><h4><i data-lucide="file-text"></i>${taskDetailText('Quote', 'عرض السعر')}</h4><div class="task-crm-quote-files">${crmQuoteFiles.map(file => `<a href="${escapeHTML(safeExternalUrl(file.file_url))}" target="_blank" rel="noopener"><i data-lucide="file-down"></i><span><strong>${escapeHTML(file.file_name || taskDetailText('Quote document', 'مستند عرض السعر'))}</strong>${file.description ? `<small>${escapeHTML(file.description)}</small>` : ''}</span></a>`).join('')}</div></section>` : ''}
+            ${crmClientIdentityFiles.length ? `<section class="task-crm-asset-group"><h4><i data-lucide="badge-check"></i>${taskDetailText('Client identity', 'هوية العميل')}</h4><div class="task-crm-quote-files">${crmClientIdentityFiles.map(file => {
+                const url = safeExternalUrl(file.file_url);
+                const name = file.file_name || taskDetailText('Client identity file', 'ملف هوية العميل');
+                return imageExtensions.test(String(name))
+                    ? `<button type="button" class="task-crm-identity-image" data-image-url="${escapeHTML(url)}" data-image-name="${escapeHTML(name)}" onclick="openDealImagePreview(this)"><i data-lucide="image"></i><span><strong>${escapeHTML(name)}</strong><small>${taskDetailText('Open image', 'فتح الصورة')}</small></span></button>`
+                    : `<a href="${escapeHTML(url)}" target="_blank" rel="noopener"><i data-lucide="file-down"></i><span><strong>${escapeHTML(name)}</strong><small>PDF</small></span></a>`;
+            }).join('')}</div></section>` : ''}
+            ${crmProposalImages.length ? `<section class="task-crm-asset-group"><h4><i data-lucide="images"></i>${taskDetailText('Proposal images', 'صور المقترح')}</h4><div class="task-crm-proposal-gallery">${crmProposalImages.map(file => `<figure><button type="button" data-image-url="${escapeHTML(safeExternalUrl(file.file_url))}" data-image-name="${escapeHTML(file.file_name || '')}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)" aria-label="${escapeHTML(taskDetailText('Open proposal image', 'فتح صورة المقترح'))}"><img src="${escapeHTML(safeExternalUrl(file.file_url))}" alt="${escapeHTML(file.description || file.file_name || taskDetailText('Proposal image', 'صورة المقترح'))}" loading="lazy"></button><figcaption><p>${escapeHTML(file.description || taskDetailText('No description provided.', 'لم تتم إضافة وصف.'))}</p><small>${escapeHTML(file.file_name || '')}</small></figcaption></figure>`).join('')}</div></section>` : ''}
+        </section>` : '';
         const canUploadFiles = canInteractWithTask(task);
         content.innerHTML = `
             <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : `<span>${taskDetailText('Add a description', 'أضف وصفاً')}</span>`}</p></section>
@@ -4054,7 +4075,7 @@ async function prepareTeamworkTaskDetail(task) {
             <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
             <section class="task-detail-files">
                 <div class="task-detail-files-heading"><h3>${taskDetailText('Files & links', 'الملفات والروابط')}</h3>${canUploadFiles ? `<button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> ${taskDetailText('Upload files', 'رفع الملفات')}</button><input id="taskAttachmentInput" type="file" multiple style="display: none;" onchange="uploadTaskAttachment(this)">` : ''}</div>
-                <div id="taskDetailFileList"><div class="task-detail-link-list">${attachmentHTML}</div></div>
+                <div id="taskDetailFileList">${attachmentHTML ? `<div class="task-detail-link-list">${attachmentHTML}</div>` : ''}${crmPresentationAssetsHTML || attachmentHTML ? crmPresentationAssetsHTML : `<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>${taskDetailText('No files or links have been added', 'لم تتم إضافة ملفات أو روابط')}</span></div>`}</div>
             </section>`;
     }
     const commentsHeading = Array.from(panel.querySelectorAll('h3')).find(item => item.textContent.includes('Activity') || item.textContent.includes('Comments'));
@@ -13142,8 +13163,9 @@ function renderDealPresentationAssets(attachments) {
     if (!container) return;
     const files = Array.isArray(attachments) ? attachments : [];
     const quotes = files.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION');
+    const clientIdentities = files.filter(file => String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY');
     const proposalImages = files.filter(file => String(file.category || '').toUpperCase() === 'PROPOSAL');
-    if (!quotes.length && !proposalImages.length) {
+    if (!quotes.length && !clientIdentities.length && !proposalImages.length) {
         container.innerHTML = `<p class="empty-state-inline">${escapeHTML(t('crm_no_presentation_assets') || 'No quote document or proposal images uploaded yet.')}</p>`;
         return;
     }
@@ -13154,6 +13176,19 @@ function renderDealPresentationAssets(attachments) {
             <span><strong>${escapeHTML(file.file_name || (t('crm_quotation') || 'Quotation'))}</strong>${file.description ? `<small>${escapeHTML(file.description)}</small>` : ''}</span>
             <a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(t('crm_open_file') || 'Open file')}</a>
         </article>`).join('')}</div>
+    </section>` : '';
+    const identitySection = clientIdentities.length ? `<section class="deal-presentation-group deal-presentation-identity-section">
+        <h4><i data-lucide="badge-check"></i>${escapeHTML(t('crm_client_identity_files') || 'Client identity files')}</h4>
+        <div class="deal-presentation-quote-list">${clientIdentities.map(file => {
+            const isImage = /\.(png|jpe?g|webp|gif|bmp)(?:\?|$)/i.test(String(file.file_url || '')) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(file.file_name || ''));
+            return `<article class="deal-presentation-quote">
+                <i data-lucide="${isImage ? 'image' : 'file-text'}"></i>
+                <span><strong>${escapeHTML(file.file_name || (t('crm_client_identity') || 'Client identity'))}</strong><small>${escapeHTML(isImage ? (t('crm_image') || 'Image') : 'PDF')}</small></span>
+                ${isImage
+                    ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" onclick="openDealImagePreview(this)"><i data-lucide="expand"></i>${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
+                    : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
+            </article>`;
+        }).join('')}</div>
     </section>` : '';
     const proposalSection = proposalImages.length ? `<section class="deal-presentation-group deal-presentation-proposal-section">
         <h4><i data-lucide="images"></i>${escapeHTML(t('crm_uploaded_proposal_images') || 'Proposal images')}</h4>
@@ -13167,11 +13202,15 @@ function renderDealPresentationAssets(attachments) {
             </figcaption>
         </figure>`).join('')}</div>
     </section>` : '';
-    container.innerHTML = quoteSection + proposalSection;
+    container.innerHTML = quoteSection + identitySection + proposalSection;
 }
 
 function renderDealWorkflowContents(workflow) {
     if (activeDealWorkflowContext) activeDealWorkflowContext.workflow = workflow;
+    const documentsSection = document.getElementById('dealDocumentsSection');
+    if (documentsSection) {
+        documentsSection.hidden = canonicalDealLifecycleStage(activeDealWorkflowContext?.deal?.stage) === 'LEAD';
+    }
     const setupSection = document.getElementById('workflowSetupSection');
     const canRestartApproval = !workflow.approvals.length || workflow.approvals.some(step => step.status === 'REJECTED');
     if (setupSection) setupSection.style.display = canRestartApproval ? 'block' : 'none';
@@ -13231,10 +13270,12 @@ function renderDealWorkflowContents(workflow) {
         </article>`;
     }).join('');
     const quoteAttachments = workflow.attachments.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION');
+    const identityAttachments = workflow.attachments.filter(file => String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY');
     const proposalAttachments = workflow.attachments.filter(file => String(file.category || '').toUpperCase() === 'PROPOSAL');
-    const otherAttachments = workflow.attachments.filter(file => !['QUOTATION', 'PROPOSAL'].includes(String(file.category || '').toUpperCase()));
+    const otherAttachments = workflow.attachments.filter(file => !['QUOTATION', 'CLIENT_IDENTITY', 'PROPOSAL'].includes(String(file.category || '').toUpperCase()));
     const attachmentSections = [
         quoteAttachments.length ? `<section class="deal-attachment-section"><h4><i data-lucide="file-text"></i>${escapeHTML(t('crm_uploaded_quote_documents') || 'Quote')}</h4>${renderAttachmentItems(quoteAttachments)}</section>` : '',
+        identityAttachments.length ? `<section class="deal-attachment-section"><h4><i data-lucide="badge-check"></i>${escapeHTML(t('crm_client_identity_files') || 'Client identity files')}</h4>${renderAttachmentItems(identityAttachments)}</section>` : '',
         proposalAttachments.length ? `<section class="deal-attachment-section"><h4><i data-lucide="images"></i>${escapeHTML(t('crm_uploaded_proposal_images') || 'Proposal')}</h4>${renderAttachmentItems(proposalAttachments)}</section>` : '',
         otherAttachments.length ? `<section class="deal-attachment-section"><h4><i data-lucide="paperclip"></i>${escapeHTML(t('crm_other_files') || 'Other files')}</h4>${renderAttachmentItems(otherAttachments)}</section>` : ''
     ].filter(Boolean).join('');
@@ -13625,6 +13666,7 @@ window.handleCrmPresentationRequestSubmit = async function (event) {
     const dealId = document.getElementById('presentationRequestDealId').value;
     const requestType = document.getElementById('presentationRequestType').value;
     const quoteFile = document.getElementById('presentationQuoteFile').files[0];
+    const clientIdentityFiles = Array.from(document.getElementById('presentationClientIdentityFiles')?.files || []);
     const proposalEntries = requestType === 'QUOTE_PROPOSAL'
         ? Array.from(form.querySelectorAll('[data-proposal-image-row]')).map(row => ({
             file: row.querySelector('[data-proposal-file]')?.files?.[0] || null,
@@ -13640,8 +13682,14 @@ window.handleCrmPresentationRequestSubmit = async function (event) {
         return showToast(t('crm_proposal_descriptions_required') || 'Add a description for every proposal image.', 'warning');
     }
     const maximumBytes = 15 * 1024 * 1024;
-    if ([quoteFile, ...proposalFiles].some(file => file.size > maximumBytes)) {
+    if ([quoteFile, ...clientIdentityFiles, ...proposalFiles].some(file => file.size > maximumBytes)) {
         return showToast(t('crm_file_too_large') || 'Each file must be 15 MB or smaller.', 'warning');
+    }
+    const isIdentityFileAllowed = file => String(file.type || '') === 'application/pdf'
+        || String(file.type || '').startsWith('image/')
+        || /\.(pdf|png|jpe?g|webp|gif|bmp)$/i.test(String(file.name || ''));
+    if (clientIdentityFiles.some(file => !isIdentityFileAllowed(file))) {
+        return showToast(t('crm_client_identity_invalid') || 'Client identity files must be PDF files or images.', 'warning');
     }
     if (proposalFiles.some(file => !String(file.type || '').startsWith('image/'))) {
         return showToast(t('crm_proposal_images_only') || 'Proposal files must be images.', 'warning');
@@ -13650,9 +13698,11 @@ window.handleCrmPresentationRequestSubmit = async function (event) {
     try {
         const replacementEntries = [
             { file: quoteFile, category: 'QUOTATION', description: t('crm_quote_document') || 'Quote document' },
+            ...clientIdentityFiles.map(file => ({ file, category: 'CLIENT_IDENTITY', description: t('crm_client_identity') || 'Client identity' })),
             ...proposalEntries.map(entry => ({ ...entry, category: 'PROPOSAL' }))
         ];
         const replacement = await db.replaceDealPresentationAttachments(dealId, currentUser.id, replacementEntries, {
+            replaceClientIdentity: clientIdentityFiles.length > 0,
             replaceProposal: requestType === 'QUOTE_PROPOSAL'
         });
         if (!replacement.success) throw replacement.error || new Error(t('crm_upload_failed') || 'Upload failed');

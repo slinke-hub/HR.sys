@@ -331,6 +331,11 @@
                     <label class="form-label" for="presentationQuoteFile" data-i18n="crm_quote_document">Quote document *</label>
                     <input id="presentationQuoteFile" class="form-control" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" required>
                 </section>
+                <section class="crm-request-file-section crm-client-identity-section">
+                    <label class="form-label" for="presentationClientIdentityFiles" data-i18n="crm_client_identity">Client identity</label>
+                    <small data-i18n="crm_client_identity_help">Upload one or more PDF files or images.</small>
+                    <input id="presentationClientIdentityFiles" class="form-control" type="file" accept=".pdf,application/pdf,image/*" multiple>
+                </section>
                 <section id="presentationProposalSection" class="crm-request-file-section" hidden>
                     <div class="crm-proposal-section-heading">
                         <label class="form-label" data-i18n="crm_proposal_images">Proposal images *</label>
@@ -483,7 +488,7 @@
                 <h3 data-i18n="crm_approval_progress">Approval Progress</h3>
                 <div id="dealApprovalSteps" class="deal-approval-steps"></div>
             </section>
-            <section class="deal-workflow-section">
+            <section class="deal-workflow-section" id="dealDocumentsSection">
                 <h3 data-i18n="crm_documents_photos">Documents & Photos</h3>
                 <form id="dealAttachmentForm" onsubmit="handleDealAttachmentUpload(event)" class="deal-attachment-form">
                     <label class="deal-attachment-type-field" for="dealAttachmentCategory">

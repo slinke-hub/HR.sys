@@ -15,7 +15,7 @@ const autoDiscussionMigration = read('supabase/migrations/20260910110000_crm_app
 
 for (const id of [
   'crmPresentationChoiceModal', 'crmPresentationRequestModal', 'presentationQuoteFile',
-  'presentationProposalDescriptions', 'crmOrderModal',
+  'presentationClientIdentityFiles', 'presentationProposalDescriptions', 'crmOrderModal',
   'orderEmployeeName', 'orderEventDate', 'orderEventStartTime', 'orderInstallationTime',
   'orderUninstallationTime', 'orderClientName', 'orderClientCompany', 'orderClientEmail',
   'orderClientPhone', 'orderLocationUrl', 'orderLocationText', 'orderProjectAssignees',
@@ -24,7 +24,8 @@ for (const id of [
 
 for (const id of [
   'dealAttachmentCategory', 'dealQuoteUploadSection', 'dealQuoteUploadRows',
-  'dealProposalUploadSection', 'dealProposalUploadRows', 'dealAttachmentUploadButton'
+  'dealProposalUploadSection', 'dealProposalUploadRows', 'dealAttachmentUploadButton',
+  'dealDocumentsSection'
 ]) assert.match(html, new RegExp(`id="${id}"`), `Missing multi-file upload field ${id}`);
 
 assert.match(html, /name="orderInstallationType" value="INDOOR"/);
@@ -33,12 +34,15 @@ assert.match(html, /name="orderInstallationType" value="INDOOR_OUTDOOR"/);
 assert.match(html, /crm-add-proposal-image[^>]*onclick="addProposalImageRow\(\)"/);
 assert.match(html, /id="addProposalImageButton"[^>]*aria-controls="presentationProposalDescriptions"/);
 assert.match(html, /id="presentationProposalDescriptions"[\s\S]*id="addProposalImageButton"/);
+assert.match(html, /id="presentationQuoteFile"[\s\S]*id="presentationClientIdentityFiles"[\s\S]*id="presentationProposalSection"/);
+assert.match(html, /id="presentationClientIdentityFiles"[^>]*accept="\.pdf,application\/pdf,image\/\*"[^>]*multiple/);
 assert.match(html, /id="dealAttachmentCategory"[\s\S]*value="QUOTATION"[\s\S]*value="PROPOSAL"[\s\S]*value="QUOTE_PROPOSAL"/);
 assert.doesNotMatch(html.match(/<select id="dealAttachmentCategory"[\s\S]*?<\/select>/)?.[0] || '', /TECHNICAL_PRESENTATION|PHOTO|OTHER/);
 assert.match(html, /onclick="addDealQuoteUploadRow\(\)"/);
 assert.match(html, /onclick="addDealProposalUploadRow\(\)"/);
 assert.match(source, /requiresDetails = \['PITCH', 'WON', 'LOST'\]/);
 assert.match(app, /newStage === 'PITCH'.*openCrmPresentationChoiceModal/s);
+assert.match(app, /documentsSection\.hidden = canonicalDealLifecycleStage\(activeDealWorkflowContext\?\.deal\?\.stage\) === 'LEAD'/);
 assert.match(app, /window\.addProposalImageRow = function/);
 assert.match(app, /scrollIntoView\(\{ behavior: 'smooth', block: 'nearest' \}\)/);
 assert.match(app, /window\.addProposalImageRow\(false\)/);
@@ -56,6 +60,8 @@ assert.match(app, /id="dealPresentationAssetsSummary"/);
 assert.match(app, /function renderDealPresentationAssets\(attachments\)/);
 assert.match(app, /category \|\| ''\)\.toUpperCase\(\) === 'QUOTATION'/);
 assert.match(app, /category \|\| ''\)\.toUpperCase\(\) === 'PROPOSAL'/);
+assert.match(app, /category \|\| ''\)\.toUpperCase\(\) === 'CLIENT_IDENTITY'/);
+assert.match(app, /clientIdentityFiles\.map\(file => \(\{ file, category: 'CLIENT_IDENTITY'/);
 assert.match(app, /deal-presentation-image-card/);
 assert.match(app, /<figcaption>[\s\S]*file\.description/);
 assert.match(app, /db\.startCrmPresentationApproval\(dealId, requestType\)/);
