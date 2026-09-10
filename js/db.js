@@ -7,6 +7,34 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // Initialize the Supabase client
 // This uses the global supabase object loaded via the CDN in index.html
 let supabaseClient = null;
+const PRIVATE_STORAGE_BUCKETS = new Set([
+    'task-attachments',
+    'contract-documents',
+    'crm-deal-files',
+    'hr-documents'
+]);
+
+function createStorageReference(bucket, path) {
+    return `storage://${bucket}/${String(path || '').replace(/^\/+/, '')}`;
+}
+
+function parseStorageReference(value) {
+    const raw = String(value || '').trim();
+    const directMatch = raw.match(/^storage:\/\/([^/]+)\/(.+)$/);
+    if (directMatch) return { bucket: directMatch[1], path: directMatch[2] };
+    try {
+        const parsed = new URL(raw);
+        const marker = '/storage/v1/object/public/';
+        const markerIndex = parsed.pathname.indexOf(marker);
+        if (markerIndex < 0) return null;
+        const remainder = decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length));
+        const separator = remainder.indexOf('/');
+        if (separator < 1) return null;
+        return { bucket: remainder.slice(0, separator), path: remainder.slice(separator + 1) };
+    } catch (_) {
+        return null;
+    }
+}
 
 if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
     supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -62,6 +90,24 @@ let appCache = {
 };
 const CACHE_TTL = 60000; // 60 seconds
 const db = {
+
+    async resolveStorageReference(value, expiresIn = 3600) {
+        if (!supabaseClient || !value) return value || '';
+        const reference = parseStorageReference(value);
+        if (!reference || !PRIVATE_STORAGE_BUCKETS.has(reference.bucket)) return value;
+        const { data, error } = await supabaseClient.storage
+            .from(reference.bucket)
+            .createSignedUrl(reference.path, expiresIn);
+        if (error || !data?.signedUrl) {
+            console.warn(`Unable to create a signed URL for ${reference.bucket}.`, error?.message || error || 'Unknown error');
+            return '';
+        }
+        return data.signedUrl;
+    },
+
+    async resolveStorageReferences(values, expiresIn = 3600) {
+        return Promise.all((values || []).map(value => this.resolveStorageReference(value, expiresIn)));
+    },
 
 
     // Translation API
@@ -1747,9 +1793,7 @@ const db = {
                 .from('task-attachments')
                 .upload(path, file, { upsert: false });
             if (uploadError) throw uploadError;
-            const { data } = supabaseClient.storage.from('task-attachments').getPublicUrl(path);
-            if (!data?.publicUrl) throw new Error('Unable to create the attachment URL.');
-            return { success: true, url: data.publicUrl, name: file.name || safeName };
+            return { success: true, url: createStorageReference('task-attachments', path), name: file.name || safeName };
         } catch (error) {
             console.error('uploadTaskAttachment Error:', error);
             return { success: false, error };
@@ -2120,9 +2164,7 @@ const db = {
             const path = `${employeeId}/${Date.now()}-${safeName}`;
             const { error: uploadError } = await supabaseClient.storage.from('contract-documents').upload(path, file, { upsert: false });
             if (uploadError) throw uploadError;
-            const { data } = supabaseClient.storage.from('contract-documents').getPublicUrl(path);
-            if (!data?.publicUrl) throw new Error('Unable to create the policy document URL.');
-            return { success: true, url: data.publicUrl };
+            return { success: true, url: createStorageReference('contract-documents', path) };
         } catch (error) {
             console.error('uploadContractPolicy Error:', error);
             return { success: false, error };
@@ -2835,12 +2877,9 @@ const db = {
             if (attachmentError) throw attachmentError;
             const { data, error } = await supabaseClient.rpc('delete_crm_deal', { p_deal_id: dealId });
             if (error) throw error;
-            const storageMarker = '/storage/v1/object/public/crm-deal-files/';
             const storagePaths = [...new Set((attachments || []).map(item => {
-                const url = String(item.file_url || '');
-                const markerIndex = url.indexOf(storageMarker);
-                if (markerIndex < 0) return '';
-                return decodeURIComponent(url.slice(markerIndex + storageMarker.length).split('?')[0]);
+                const reference = parseStorageReference(item.file_url);
+                return reference?.bucket === 'crm-deal-files' ? reference.path : '';
             }).filter(Boolean))];
             if (storagePaths.length) {
                 const { error: storageError } = await supabaseClient.storage.from('crm-deal-files').remove(storagePaths);
@@ -2906,7 +2945,12 @@ const db = {
             ]);
             const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || project.error;
             if (firstError) throw firstError;
-            return { approvals: approvals.data || [], designApprovals: designApprovals.data || [], attachments: attachments.data || [], activity: activity.data || [], project: project.data || null };
+            const resolvedAttachments = await Promise.all((attachments.data || []).map(async attachment => ({
+                ...attachment,
+                storage_reference: attachment.file_url,
+                file_url: await this.resolveStorageReference(attachment.file_url)
+            })));
+            return { approvals: approvals.data || [], designApprovals: designApprovals.data || [], attachments: resolvedAttachments, activity: activity.data || [], project: project.data || null };
         } catch (error) {
             console.error('fetchDealWorkflow Error:', error);
             return { approvals: [], designApprovals: [], attachments: [], activity: [], project: null, error };
@@ -2996,12 +3040,11 @@ const db = {
             const path = `${dealId}/${Date.now()}-${safeName}`;
             const { error: uploadError } = await supabaseClient.storage.from('crm-deal-files').upload(path, file, { upsert: false });
             if (uploadError) throw uploadError;
-            const { data: publicData } = supabaseClient.storage.from('crm-deal-files').getPublicUrl(path);
             const { data, error } = await supabaseClient.from('crm_deal_attachments').insert([{
                 deal_id: dealId,
                 category: category || 'OTHER',
                 file_name: file.name,
-                file_url: publicData.publicUrl,
+                file_url: createStorageReference('crm-deal-files', path),
                 description: description || null,
                 uploaded_by: userId
             }]).select().single();
@@ -3237,7 +3280,12 @@ const db = {
                 }
                 throw error;
             }
-            return (data || []).map(applyI18nGetters);
+            return await Promise.all((data || []).map(async document => {
+                const normalized = applyI18nGetters(document);
+                normalized.storage_reference = normalized.file_url;
+                normalized.file_url = await this.resolveStorageReference(normalized.file_url);
+                return normalized;
+            }));
         } catch (error) {
             console.error("fetchContracts Error:", error);
             return [];

@@ -27,6 +27,21 @@ function escapeHTML(str) {
 }
 window.escapeHTML = escapeHTML;
 
+// Only allow web URLs in dynamic links. HTML escaping alone does not block
+// executable schemes such as javascript:.
+function safeExternalUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+        const parsed = new URL(raw, window.location.origin);
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+        return parsed.href;
+    } catch (_) {
+        return '';
+    }
+}
+window.safeExternalUrl = safeExternalUrl;
+
 function formatEmployeeId(value, fallback = '-') {
     const raw = String(value ?? '').trim().replace(/^MQ[-\s]*/i, '');
     if (!raw) return `MQ-${fallback}`;
@@ -2018,12 +2033,14 @@ function showToast(message, type = 'info', detail = '') {
     }
 
     toast.style.borderInlineStartColor = color;
+    const safeDisplayMessage = escapeHTML(String(displayMessage || ''));
+    const safeDisplayDetail = escapeHTML(String(displayDetail || ''));
     toast.innerHTML = `
         <div style="display:flex; align-items:flex-start; gap:0.75rem;">
             <i data-lucide="${icon}" style="color: ${color}; flex-shrink:0; margin-top:2px;"></i>
             <div>
-                <div style="font-weight:600; font-size:0.9rem;">${displayMessage}</div>
-                ${displayDetail ? `<div style="font-size:0.8rem; margin-top:0.25rem; opacity:0.85;">${displayDetail}</div>` : ''}
+                <div style="font-weight:600; font-size:0.9rem;">${safeDisplayMessage}</div>
+                ${safeDisplayDetail ? `<div style="font-size:0.8rem; margin-top:0.25rem; opacity:0.85;">${safeDisplayDetail}</div>` : ''}
             </div>
         </div>
     `;
@@ -2058,7 +2075,7 @@ window.showFieldError = function (fieldId, message) {
     err.className = '__field-error';
     err.dataset.for = fieldId;
     err.style.cssText = 'color:#ef4444; font-size:0.78rem; margin-top:0.3rem; display:flex; align-items:center; gap:0.3rem; animation: fadeIn 0.2s ease;';
-    err.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${localizeRuntimeText(message)}`;
+    err.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${escapeHTML(String(localizeRuntimeText(message) || ''))}`;
 
     el.parentNode.insertBefore(err, el.nextSibling);
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -3958,7 +3975,7 @@ window.handleTaskAssigneeClick = function (event, taskId) {
     window.openTaskAssigneePicker(taskId);
 };
 
-function prepareTeamworkTaskDetail(task) {
+async function prepareTeamworkTaskDetail(task) {
     window.activeTaskDetail = task;
     const panel = document.getElementById('taskSidePanel');
     if (!panel) return;
@@ -3987,7 +4004,8 @@ function prepareTeamworkTaskDetail(task) {
             content.className = 'task-detail-reference-content';
             grid.insertAdjacentElement('afterend', content);
         }
-        const links = [...(task.content_links || []), ...(task.submission_links || [])].filter(Boolean);
+        const storedLinks = [...(task.content_links || []), ...(task.submission_links || [])].filter(Boolean);
+        const links = (await db.resolveStorageReferences(storedLinks)).map(safeExternalUrl).filter(Boolean);
         const imageExtensions = /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i;
         const fileNameFromUrl = link => decodeURIComponent(String(link).split('?')[0].split('/').pop() || 'Attachment');
         const attachmentHTML = links.length ? links.map(link => {
@@ -9319,8 +9337,7 @@ window.handleEditTaskSubmit = async function (e) {
                 const filePath = `task_attachments/${fileName}`;
                 const { error: uploadError } = await window.supabaseClient.storage.from('hr-documents').upload(filePath, file);
                 if (!uploadError) {
-                    const { data: { publicUrl } } = window.supabaseClient.storage.from('hr-documents').getPublicUrl(filePath);
-                    uploadedUrls.push(publicUrl);
+                    uploadedUrls.push(`storage://hr-documents/${filePath}`);
                 } else {
                     console.error('File upload error:', uploadError);
                 }
@@ -9633,7 +9650,8 @@ async function renderContractPage() {
     const status = contract?.status || 'Active';
     const workplace = contract?.primary_workplace || contract?.workplace_location || '';
     const restDays = contract?.weekly_rest_day || contract?.rest_days || 'Friday, Saturday';
-    const confidentialityPolicyUrl = contract?.confidentiality_policy_url || '';
+    const confidentialityPolicyReference = contract?.confidentiality_policy_url || '';
+    const confidentialityPolicyUrl = await db.resolveStorageReference(confidentialityPolicyReference);
     const storedContractDocuments = contract?.id ? await db.fetchContractDocuments(contract.id) : [];
     const contractDocuments = [];
     const addContractDocument = (url, label) => {
@@ -9645,7 +9663,8 @@ async function renderContractPage() {
     };
     addContractDocument(confidentialityPolicyUrl, 'Company Policy and Regulations');
     addContractDocument(contract?.policy_document_url, 'Contract Policy Document');
-    (Array.isArray(contract?.attachment_urls) ? contract.attachment_urls : []).forEach((url, index) => addContractDocument(url, `Contract attachment ${index + 1}`));
+    const resolvedContractAttachments = await db.resolveStorageReferences(Array.isArray(contract?.attachment_urls) ? contract.attachment_urls : []);
+    resolvedContractAttachments.forEach((url, index) => addContractDocument(url, `Contract attachment ${index + 1}`));
     storedContractDocuments.forEach(document => addContractDocument(document.file_url, document.file_name || 'Contract document'));
     const returnView = canCurrentUserManageUsers() ? 'users' : 'employees';
     const returnLabel = canCurrentUserManageUsers() ? 'Back to Users' : 'Back to Employees';
@@ -9787,7 +9806,7 @@ async function renderContractPage() {
 
                 <div class="card">
                     <h3 style="margin-top:0; margin-bottom:1.5rem; border-bottom:1px solid var(--color-border); padding-bottom:.75rem;">Additional / Optional Clauses</h3>
-                    <input type="hidden" id="existingContractPolicyUrl" value="${escapeHTML(confidentialityPolicyUrl)}">
+                    <input type="hidden" id="existingContractPolicyUrl" value="${escapeHTML(confidentialityPolicyReference)}">
                     <div class="form-group">
                         <label class="form-label" for="contractPolicyDocument">Confidentiality Clause â€” Company Policy and Regulations</label>
                         <input type="file" id="contractPolicyDocument" class="form-control" accept=".pdf,.doc,.docx,image/*" multiple>
@@ -12334,8 +12353,9 @@ async function renderOrders() {
         const clientName = (o.crm_deals && o.crm_deals.crm_clients && o.crm_deals.crm_clients.name) ? escapeHTML(o.crm_deals.crm_clients.name) : 'Unknown Client';
 
         const locationStr = o.event_location || '-';
-        const locationHtml = locationStr.startsWith('http')
-            ? `<a href="${escapeHTML(locationStr)}" target="_blank" style="color: var(--color-primary); text-decoration: underline;"><i data-lucide="map" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>View Map</a>`
+        const safeLocationUrl = safeExternalUrl(locationStr);
+        const locationHtml = safeLocationUrl
+            ? `<a href="${escapeHTML(safeLocationUrl)}" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary); text-decoration: underline;"><i data-lucide="map" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>View Map</a>`
             : escapeHTML(locationStr);
 
         return `

@@ -1,26 +1,26 @@
 const { createClient } = require('@supabase/supabase-js');
-const fs = require('fs');
 
 async function test() {
-    // Read the supabase config from db.js
-    const dbJs = fs.readFileSync('./js/db.js', 'utf8');
-    const urlMatch = dbJs.match(/const SUPABASE_URL = '(.*?)';/);
-    const keyMatch = dbJs.match(/const SUPABASE_ANON_KEY = '(.*?)';/);
-    
-    if (!urlMatch || !keyMatch) {
-        console.error("Could not extract Supabase credentials from db.js");
-        return;
+    const supabaseUrl = process.env.MUQAM_SUPABASE_URL;
+    const supabaseAnonKey = process.env.MUQAM_SUPABASE_ANON_KEY;
+    const testEmail = process.env.MUQAM_TEST_USER_EMAIL;
+    const testPassword = process.env.MUQAM_TEST_USER_PASSWORD;
+
+    if (!supabaseUrl || !supabaseAnonKey || !testEmail || !testPassword) {
+        throw new Error(
+            'Missing required environment variables: MUQAM_SUPABASE_URL, '
+            + 'MUQAM_SUPABASE_ANON_KEY, MUQAM_TEST_USER_EMAIL, and MUQAM_TEST_USER_PASSWORD.'
+        );
     }
-    
-    const supabase = createClient(urlMatch[1], keyMatch[1]);
-    
-    // We must sign in as admin or HR manager to test this because of RLS
-    // Let's try to just call the RPC. If it fails with 42501 Unauthorized, we know the RPC exists.
-    // If it fails with something else, we will see it.
-    
+
+    if (process.env.MUQAM_ALLOW_ACCOUNT_CREATION_TEST !== 'yes') {
+        throw new Error('Cloud user creation test is disabled. Set MUQAM_ALLOW_ACCOUNT_CREATION_TEST=yes for an intentional run.');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const { data, error } = await supabase.rpc('create_user_by_admin', {
-        new_email: 'test_admin_creation_fake@example.com',
-        new_password: 'Password123!',
+        new_email: testEmail,
+        new_password: testPassword,
         new_role: 'EMPLOYEE',
         new_job_title: 'Tester',
         new_full_name: 'Test User',
@@ -28,9 +28,12 @@ async function test() {
         new_phone: '123456789',
         new_employee_id: 'EMP0001'
     });
-    
-    console.log("Data:", data);
-    console.log("Error:", JSON.stringify(error, null, 2));
+
+    console.log('Data:', data);
+    console.log('Error:', JSON.stringify(error, null, 2));
 }
 
-test();
+test().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+});

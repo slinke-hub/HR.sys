@@ -1,6 +1,9 @@
 supabase/.env
 supabase/.env.*
 !supabase/.env.example
+.env
+.env.*
+!.env.example
 supabase/.temp/
 node_modules/
 www/

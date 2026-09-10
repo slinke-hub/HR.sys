@@ -4,11 +4,12 @@
   "description": "HR Management System",
   "main": "index.js",
   "scripts": {
-    "dev": "serve",
-    "start": "serve",
+    "dev": "npm run mobile:web && node scripts/serve-local.mjs",
+    "start": "npm run dev",
     "crm:css": "tailwindcss -i ./src/crm-tailwind.css -o ./css/crm-tailwind.css --minify",
     "crm:js": "esbuild ./src/crm-dashboard.jsx --bundle --minify --format=iife --global-name=MogamCrmDashboard --outfile=./js/crm-dashboard.bundle.js",
     "crm:build": "npm run crm:css && npm run crm:js",
+    "test:security": "node tests/security-hardening.test.js",
     "mobile:web": "node scripts/build-mobile.mjs",
     "mobile:sync": "npm run mobile:web && node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor sync android",
     "mobile:open": "node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor open android",
@@ -21,7 +22,6 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
     "esbuild": "^0.25.9",
-    "serve": "^14.2.4",
     "tailwindcss": "^3.4.17"
   },
   "dependencies": {
@@ -29,7 +29,6 @@
     "@capacitor/core": "^8.5.0",
     "@supabase/supabase-js": "^2.112.4",
     "chart.js": "^4.5.0",
-    "eslint": "^8.57.1",
     "lucide": "^0.468.0",
     "lucide-react": "^0.468.0",
     "puppeteer": "^25.9.0",
