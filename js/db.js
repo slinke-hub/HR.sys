@@ -1611,14 +1611,19 @@ const db = {
         let lastError;
         for (let attempt = 0; attempt < 2; attempt += 1) {
             try {
-                const { data, error } = await supabaseClient.from('tasks').update({ status }).eq('id', taskId).select('id,status,completion_requested_at').single();
+                // Only request fields needed by the caller. Some installations
+                // can briefly have a stale PostgREST schema cache while the
+                // completion-approval columns are being deployed; selecting an
+                // unrelated column would make an otherwise valid status update
+                // fail with HTTP 400.
+                const { data, error } = await supabaseClient.from('tasks').update({ status }).eq('id', taskId).select('id,status').single();
                 if (error) throw error;
                 await this.flushTaskNotificationEmails();
                 return { success: true, data };
             } catch (error) {
                 lastError = error;
                 const message = String(error?.message || error || '').toLowerCase();
-                const isTransient = !error?.status || message.includes('failed to fetch') || message.includes('network') || message.includes('connection') || message.includes('timeout');
+                const isTransient = message.includes('failed to fetch') || message.includes('network') || message.includes('connection') || message.includes('timeout');
                 if (attempt > 0 || !isTransient) break;
                 await new Promise(resolve => setTimeout(resolve, 300));
                 try {

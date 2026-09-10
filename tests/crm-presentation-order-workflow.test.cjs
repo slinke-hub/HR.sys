@@ -11,6 +11,7 @@ const db = read('js/db.js');
 const source = read('src/crm-dashboard.jsx');
 const css = read('css/components.css');
 const migration = read('supabase/migrations/20260909110000_crm_presentation_order_workflow.sql');
+const autoDiscussionMigration = read('supabase/migrations/20260910110000_crm_approved_deals_auto_discussion.sql');
 
 for (const id of [
   'crmPresentationChoiceModal', 'crmPresentationRequestModal', 'presentationQuoteFile',
@@ -59,6 +60,12 @@ assert.match(app, /deal-presentation-image-card/);
 assert.match(app, /<figcaption>[\s\S]*file\.description/);
 assert.match(app, /db\.startCrmPresentationApproval\(dealId, requestType\)/);
 assert.match(app, /db\.decideCrmDesignTaskApproval/);
+assert.match(app, /function areDealApprovalsComplete\(workflow\)/);
+assert.match(app, /async function ensureApprovedDealIsInDiscussion\(deal, workflow\)/);
+assert.match(app, /await ensureApprovedDealIsInDiscussion\(deal, workflow\)/);
+assert.doesNotMatch(app, /allApproved\s*&&[^\n]*approval_type\s*!==\s*'QUOTE_PROPOSAL'/);
+assert.doesNotMatch(app, /crm_approval_note_prompt/, 'Approving CRM requests must not open an optional note prompt');
+assert.match(app, /decision === 'REJECTED'[\s\S]*showPromptModal[\s\S]*crm_rejection_note_prompt/);
 assert.match(app, /db\.createProjectFromWonDealV2\(orderData, dealId\)/);
 assert.match(app, /task\?\.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN'/);
 assert.match(app, /updateResult\?\.data\?\.status \|\| actualStatus/);
@@ -77,9 +84,10 @@ assert.match(db, /async startCrmPresentationApproval\(dealId, requestType\)/);
 assert.match(db, /async fetchPendingCrmDesignTaskApprovals\(\)/);
 assert.match(db, /async decideCrmDesignTaskApproval\(stepId, decision, note\)/);
 assert.match(db, /async createProjectFromWonDealV2\(orderData, dealId\)/);
-assert.match(db, /update\(\{ status \}\).*select\('id,status,completion_requested_at'\)\.single\(\)/s);
+assert.match(db, /update\(\{ status \}\).*select\('id,status'\)\.single\(\)/s);
 
 assert.match(migration, /CREATE OR REPLACE FUNCTION public\.start_crm_presentation_approval/);
+assert.match(migration, /ADD COLUMN IF NOT EXISTS completion_requested_at timestamptz/);
 assert.match(migration, /p_request_type = 'QUOTE_PROPOSAL'/);
 assert.match(migration, /'CEO'.*'GENERAL_MANAGER'.*'MQ_04'.*'MQ_05'.*'MARKETING_MANAGER'/s);
 assert.match(migration, /emp_index = 8/);
@@ -92,5 +100,10 @@ assert.match(migration, /UPDATE public\.crm_deals SET stage = 'NEGOTIATION'/);
 assert.match(migration, /always_send\).*true/s);
 assert.match(migration, /CREATE OR REPLACE FUNCTION public\.create_project_from_won_deal_v2/);
 assert.match(migration, /client_snapshot.*event_location_text.*installation_type.*equipment/s);
+
+assert.match(autoDiscussionMigration, /CREATE OR REPLACE FUNCTION public\.decide_deal_approval/);
+assert.match(autoDiscussionMigration, /SET workflow_status = 'APPROVED', stage = 'NEGOTIATION'/);
+assert.match(autoDiscussionMigration, /PERFORM public\.create_crm_design_task_for_deal\(v_deal\.id\)/);
+assert.match(autoDiscussionMigration, /Repair deals whose approvals were completed/);
 
 console.log('CRM presentation approvals, Design review, and Won order workflow tests passed.');

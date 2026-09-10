@@ -28,6 +28,10 @@ ALTER TABLE public.crm_deal_approval_steps ADD CONSTRAINT crm_deal_approval_step
     CHECK (stage_key IN ('CEO', 'GENERAL_MANAGER', 'MQ_04', 'MQ_05', 'MARKETING_MANAGER', 'OPERATIONS_MANAGER'));
 
 ALTER TABLE public.tasks
+    ADD COLUMN IF NOT EXISTS completion_requested_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS completion_requested_at timestamptz,
+    ADD COLUMN IF NOT EXISTS completion_approved_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS completion_approved_at timestamptz,
     ADD COLUMN IF NOT EXISTS crm_deal_id uuid REFERENCES public.crm_deals(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS crm_workflow_kind text;
 
@@ -342,11 +346,15 @@ BEGIN
     ELSE
         SELECT count(*) INTO v_remaining FROM public.crm_deal_approval_steps WHERE deal_id = v_deal.id AND status <> 'APPROVED';
         IF v_remaining = 0 THEN
-            UPDATE public.crm_deals SET workflow_status = 'APPROVED' WHERE id = v_deal.id;
+            -- A completed internal approval always advances the commercial
+            -- pipeline immediately. Quote + proposal requests may still create
+            -- their Design follow-up task, but that task must not leave the deal
+            -- visually stuck in Presentation.
+            UPDATE public.crm_deals
+               SET workflow_status = 'APPROVED', stage = 'NEGOTIATION'
+             WHERE id = v_deal.id;
             IF v_deal.approval_type = 'QUOTE_PROPOSAL' THEN
                 PERFORM public.create_crm_design_task_for_deal(v_deal.id);
-            ELSE
-                UPDATE public.crm_deals SET stage = 'NEGOTIATION' WHERE id = v_deal.id;
             END IF;
             IF v_owner IS NOT NULL THEN
                 INSERT INTO public.notifications(user_id, message, event_type, actor_id, action_url, metadata)

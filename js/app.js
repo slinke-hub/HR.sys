@@ -12636,6 +12636,36 @@ function dealLifecycleLabel(stage) {
     return item ? (t(item.label) || item.stage) : String(stage || 'LEAD').replace(/_/g, ' ');
 }
 
+function areDealApprovalsComplete(workflow) {
+    const approvals = Array.isArray(workflow?.approvals) ? workflow.approvals : [];
+    return approvals.length > 0 && approvals.every(step => String(step.status || '').toUpperCase() === 'APPROVED');
+}
+
+async function ensureApprovedDealIsInDiscussion(deal, workflow) {
+    if (!deal || !areDealApprovalsComplete(workflow)) return false;
+    const previousStage = canonicalDealLifecycleStage(deal.stage);
+    if (['NEGOTIATION', 'WON', 'LOST'].includes(previousStage)) return false;
+
+    // The database transition guard evaluates the new stage and workflow
+    // status together. Persist both atomically so a fully approved deal can
+    // enter Discussion without weakening the guard for unapproved deals.
+    const stageResult = await db.updateDeal(deal.id, {
+        stage: 'NEGOTIATION',
+        workflow_status: 'APPROVED'
+    });
+    if (!stageResult.success) {
+        showToast(stageResult.error?.message || t('crm_stage_update_failed') || 'Could not move the approved deal to Discussion.', 'danger');
+        return false;
+    }
+
+    await db.logDealActivity(deal.id, 'STAGE_CHANGED', previousStage, 'NEGOTIATION', t('crm_approval_completed') || 'Internal approval completed');
+    deal.stage = 'NEGOTIATION';
+    deal.workflow_status = 'APPROVED';
+    window.setCrmDealStageLocally?.(String(deal.id), 'NEGOTIATION');
+    void window.refreshCrmDashboardInBackground?.();
+    return true;
+}
+
 function renderDealLifecycle(deal) {
     const container = document.getElementById('dealLifecycleStepper');
     if (!container) return;
@@ -12703,6 +12733,7 @@ window.openDealWorkflowModal = async function (dealId) {
     const [deals, users, workflow] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDealWorkflow(dealId)]);
     const deal = deals.find(item => item.id === dealId);
     if (!deal) return showToast(t('crm_deal_not_found') || 'Deal not found.', 'danger');
+    await ensureApprovedDealIsInDiscussion(deal, workflow);
     document.getElementById('workflowDealId').value = dealId;
     document.getElementById('dealWorkflowName').textContent = deal.title;
     const clientName = deal.crm_clients?.name || (t('crm_unassigned') || 'Unassigned');
@@ -12892,20 +12923,19 @@ window.startDealApprovalWorkflow = async function () {
 };
 
 window.decideDealApproval = async function (stepId, decision) {
-    const note = await window.showPromptModal(decision === 'REJECTED' ? (t('crm_rejection_note_prompt') || 'Enter the rejection reason:') : (t('crm_approval_note_prompt') || 'Optional approval note:'), t('crm_approval'));
-    if (note === null) return;
-    if (decision === 'REJECTED' && !String(note || '').trim()) return showToast(t('crm_rejection_note_required') || 'A rejection reason is required.', 'warning');
+    let note = '';
+    if (decision === 'REJECTED') {
+        note = await window.showPromptModal(t('crm_rejection_note_prompt') || 'Enter the rejection reason:', t('crm_approval'), { required: true });
+        if (note === null || !String(note).trim()) return showToast(t('crm_rejection_note_required') || 'A rejection reason is required.', 'warning');
+    }
     const result = await db.decideDealApproval(stepId, decision, note || '');
     if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the decision.', 'danger');
     const dealId = document.getElementById('workflowDealId').value;
     let workflow = await db.fetchDealWorkflow(dealId);
-    const allApproved = workflow.approvals.length > 0 && workflow.approvals.every(step => step.status === 'APPROVED');
-    if (decision === 'APPROVED' && allApproved && activeDealWorkflowContext?.deal?.approval_type !== 'QUOTE_PROPOSAL') {
-        const previousStage = activeDealWorkflowContext?.deal?.stage || 'PITCH';
-        const stageResult = await db.updateDealStage(dealId, 'NEGOTIATION');
-        if (stageResult.success) {
-            await db.logDealActivity(dealId, 'STAGE_CHANGED', previousStage, 'NEGOTIATION', t('crm_approval_completed') || 'Internal approval completed');
-            if (activeDealWorkflowContext) activeDealWorkflowContext.deal.stage = 'NEGOTIATION';
+    const allApproved = areDealApprovalsComplete(workflow);
+    if (decision === 'APPROVED' && allApproved) {
+        const movedToDiscussion = await ensureApprovedDealIsInDiscussion(activeDealWorkflowContext?.deal, workflow);
+        if (movedToDiscussion) {
             renderDealLifecycle(activeDealWorkflowContext?.deal);
             workflow = await db.fetchDealWorkflow(dealId);
         }
@@ -12917,13 +12947,15 @@ window.decideDealApproval = async function (stepId, decision) {
 };
 
 window.decideCrmDesignTaskApproval = async function (stepId, decision) {
-    const note = await window.showPromptModal(
-        decision === 'REJECTED' ? (t('crm_rejection_note_prompt') || 'Enter the rejection reason:') : (t('crm_approval_note_prompt') || 'Optional approval note:'),
-        t('crm_design_approval') || 'Design task approval',
-        decision === 'REJECTED' ? { required: true } : undefined
-    );
-    if (note === null) return;
-    if (decision === 'REJECTED' && !String(note).trim()) return showToast(t('crm_rejection_note_required') || 'A rejection reason is required.', 'warning');
+    let note = '';
+    if (decision === 'REJECTED') {
+        note = await window.showPromptModal(
+            t('crm_rejection_note_prompt') || 'Enter the rejection reason:',
+            t('crm_design_approval') || 'Design task approval',
+            { required: true }
+        );
+        if (note === null || !String(note).trim()) return showToast(t('crm_rejection_note_required') || 'A rejection reason is required.', 'warning');
+    }
     const result = await db.decideCrmDesignTaskApproval(stepId, decision, note || '');
     if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the decision.', 'danger');
     const dealId = document.getElementById('workflowDealId').value;
@@ -15645,23 +15677,16 @@ window.handleCrmApprovalDecision = async function (dealId, stepId, decision) {
     if (decision === 'REJECTED') {
         note = await window.showPromptModal(t('crm_rejection_note_prompt') || 'Enter the rejection reason:', t('crm_approval'), { required: true });
         if (note === null || !String(note).trim()) return;
-    } else {
-        note = await window.showPromptModal(t('crm_approval_note_prompt') || 'Optional approval note:', t('crm_approval'));
-        if (note === null) return;
     }
     const result = await db.decideDealApproval(stepId, decision, note || '');
     if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the CRM decision.', 'danger');
     if (decision === 'APPROVED') {
         const workflow = await db.fetchDealWorkflow(dealId);
-        const allApproved = workflow.approvals.length > 0 && workflow.approvals.every(step => step.status === 'APPROVED');
+        const allApproved = areDealApprovalsComplete(workflow);
         if (allApproved) {
             const deals = await db.fetchDeals();
             const deal = deals.find(item => item.id === dealId);
-            const currentStage = deal?.stage || 'PITCH';
-            if (deal?.approval_type !== 'QUOTE_PROPOSAL' && !['NEGOTIATION', 'WON', 'LOST'].includes(canonicalDealLifecycleStage(currentStage))) {
-                const stageResult = await db.updateDealStage(dealId, 'NEGOTIATION');
-                if (stageResult.success) await db.logDealActivity(dealId, 'STAGE_CHANGED', currentStage, 'NEGOTIATION', t('crm_approval_completed') || 'Internal approval completed');
-            }
+            await ensureApprovedDealIsInDiscussion(deal, workflow);
         }
     }
     showToast(decision === 'APPROVED' ? (t('crm_approval_saved') || 'CRM approval saved.') : (t('crm_rejection_saved') || 'CRM rejection saved.'), 'success');
@@ -15673,9 +15698,6 @@ window.handleCrmDesignApprovalDecision = async function (dealId, stepId, decisio
     if (decision === 'REJECTED') {
         note = await window.showPromptModal(t('crm_rejection_note_prompt') || 'Enter the rejection reason:', t('crm_design_approval'), { required: true });
         if (note === null || !String(note).trim()) return;
-    } else {
-        note = await window.showPromptModal(t('crm_approval_note_prompt') || 'Optional approval note:', t('crm_design_approval'));
-        if (note === null) return;
     }
     const result = await db.decideCrmDesignTaskApproval(stepId, decision, note || '');
     if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the Design approval.', 'danger');
