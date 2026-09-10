@@ -40,7 +40,15 @@ SELECT requested.employee_number, requested.full_name, profile.id
 FROM requested_employee_ids requested
 JOIN public.profiles profile
   ON regexp_replace(lower(btrim(profile.full_name)), '\s+', '', 'g') =
-     regexp_replace(lower(btrim(requested.full_name)), '\s+', '', 'g');
+     regexp_replace(lower(btrim(requested.full_name)), '\s+', '', 'g')
+  OR (
+    requested.employee_number = 10
+    AND profile.id IN (
+      SELECT auth_user.id
+      FROM auth.users auth_user
+      WHERE lower(auth_user.email) = 'arif.alamri@muqam.net'
+    )
+  );
 
 DO $$
 DECLARE

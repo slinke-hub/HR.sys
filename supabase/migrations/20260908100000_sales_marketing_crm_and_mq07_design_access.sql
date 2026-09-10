@@ -103,29 +103,12 @@ AS $$
         WHERE profile.id = p_user_id
           AND profile.emp_index = 7
           AND profile.is_active IS DISTINCT FROM false
-          AND COALESCE(list.is_archived, false) = false
           AND COALESCE(list.name, '') ~* '(design|تصميم)'
     );
 $$;
 
 REVOKE ALL ON FUNCTION public.is_mq07_design_list(uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_mq07_design_list(uuid, uuid) TO authenticated;
-
-UPDATE public.task_lists list
-SET shared_with = CASE
-        WHEN mq07.id = ANY(COALESCE(list.shared_with, '{}'::uuid[])) THEN COALESCE(list.shared_with, '{}'::uuid[])
-        ELSE array_append(COALESCE(list.shared_with, '{}'::uuid[]), mq07.id)
-    END,
-    can_add_users = CASE
-        WHEN mq07.id = ANY(COALESCE(list.can_add_users, '{}'::uuid[])) THEN COALESCE(list.can_add_users, '{}'::uuid[])
-        ELSE array_append(COALESCE(list.can_add_users, '{}'::uuid[]), mq07.id)
-    END
-FROM public.profiles mq07
-WHERE mq07.emp_index = 7
-  AND mq07.is_active IS DISTINCT FROM false
-  AND list.department_id = mq07.department_id
-  AND COALESCE(list.is_archived, false) = false
-  AND COALESCE(list.name, '') ~* '(design|تصميم)';
 
 DROP POLICY IF EXISTS mq07_design_list_select ON public.task_lists;
 CREATE POLICY mq07_design_list_select ON public.task_lists

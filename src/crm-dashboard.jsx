@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   Activity, BarChart3, BriefcaseBusiness, Building2, CalendarDays,
   CheckCircle2, CircleDollarSign, GripVertical, MoreHorizontal, Plus,
-  Search, Target, Users
+  Search, Target, Trash2, Users
 } from 'lucide-react';
 
 const COPY = {
@@ -12,42 +12,51 @@ const COPY = {
     search: 'Search where in CRM', role: 'HR & Operations Manager', title: 'Client Relationship Management (CRM)',
     subtitle: 'Manage client relationships, active opportunities, and team follow-up from one workspace.',
     addClient: 'Add Client', newDeal: 'New Deal', pipeline: 'Deals Pipeline', pipelineHint: 'Drag cards to update the relationship stage.',
-    lead: 'Lead', contacted: 'Contacted', proposal: 'Proposal', negotiation: 'Negotiation', won: 'Won',
+    lead: 'Lead', contact: 'Contact', presentation: 'Presentation', discussion: 'Discussion', won: 'Won', lost: 'Lost',
     noDeals: 'No deals in this stage', tasks: 'My Assigned Tasks', interactions: 'Client Interaction Logs',
     assignments: 'Employee Assignments', analytics: 'Key Client Analytics', due: 'Due', linkedClient: 'Client',
     noTasks: 'No assigned CRM tasks', noActivity: 'No client activity yet', noAssignments: 'No assignments yet',
     acquisition: 'New Client Acquisition', revenue: 'Revenue by Client Industry', totalPipeline: 'Pipeline value',
     activeClients: 'Active clients', wonDeals: 'Won deals', openDeals: 'Open deals',
     activityLabel: 'Client activity', noAnalytics: 'No client analytics yet',
-    account: 'account', accounts: 'accounts', today: 'Today', daysAgo: 'days ago', viewDeal: 'View deal', editDeal: 'Edit deal', unassigned: 'Unassigned'
+    account: 'account', accounts: 'accounts', today: 'Today', daysAgo: 'days ago', viewDeal: 'View deal', editDeal: 'Edit deal', deleteDeal: 'Delete deal', unassigned: 'Unassigned',
+    approvalPending: 'Approval pending', approvalApproved: 'Approved', approvalRejected: 'Needs revision',
+    designInProgress: 'Design in progress', designApprovalPending: 'Design approval pending', designRejected: 'Design changes required'
   },
   ar: {
     dashboard: 'لوحة القيادة', employees: 'الموظفين', payroll: 'الرواتب', time: 'الوقت والحضور', crm: 'إدارة علاقات العملاء',
     search: 'ابحث في إدارة علاقات العملاء', role: 'مدير الموارد البشرية والعمليات', title: 'إدارة علاقات العملاء',
     subtitle: 'إدارة علاقات العملاء والفرص النشطة ومتابعة الفريق من مساحة عمل واحدة.',
     addClient: 'إضافة عميل', newDeal: 'صفقة جديدة', pipeline: 'مسار الصفقات', pipelineHint: 'اسحب البطاقات لتحديث مرحلة العلاقة.',
-    lead: 'إشارة', contacted: 'تم الاتصال', proposal: 'اقتراح', negotiation: 'تفاوض', won: 'فائز',
+    lead: 'عميل محتمل', contact: 'التواصل', presentation: 'العرض', discussion: 'المناقشة', won: 'مكتسبة', lost: 'مفقودة',
     noDeals: 'لا توجد صفقات في هذه المرحلة', tasks: 'المهام المعينة لي', interactions: 'سجلات تفاعل العملاء',
     assignments: 'تعيينات الموظفين', analytics: 'تحليلات العملاء الرئيسية', due: 'الاستحقاق', linkedClient: 'العميل',
     noTasks: 'لا توجد مهام CRM معيّنة', noActivity: 'لا يوجد نشاط للعملاء بعد', noAssignments: 'لا توجد تعيينات بعد',
     acquisition: 'اكتساب عملاء جدد', revenue: 'الإيرادات حسب قطاع العميل', totalPipeline: 'قيمة مسار الصفقات',
     activeClients: 'العملاء النشطون', wonDeals: 'الصفقات الفائزة', openDeals: 'الصفقات المفتوحة',
     activityLabel: 'نشاط العميل', noAnalytics: 'لا توجد تحليلات للعملاء بعد',
-    account: 'حساب', accounts: 'حسابات', today: 'اليوم', daysAgo: 'أيام مضت', viewDeal: 'عرض الصفقة', editDeal: 'تعديل الصفقة', unassigned: 'غير معيّن'
+    account: 'حساب', accounts: 'حسابات', today: 'اليوم', daysAgo: 'أيام مضت', viewDeal: 'عرض الصفقة', editDeal: 'تعديل الصفقة', deleteDeal: 'حذف الصفقة', unassigned: 'غير معيّن',
+    approvalPending: 'بانتظار الاعتماد', approvalApproved: 'معتمدة', approvalRejected: 'تحتاج تعديلاً',
+    designInProgress: 'التصميم قيد التنفيذ', designApprovalPending: 'بانتظار اعتماد التصميم', designRejected: 'التصميم يحتاج تعديلاً'
   }
 };
 
 const STAGES = [
   { key: 'LEAD', dbStage: 'LEAD', label: 'lead', tone: 'tw-bg-sky-500', soft: 'tw-bg-sky-50', border: 'tw-border-sky-200' },
-  { key: 'CONTACTED', dbStage: 'QUALIFICATION', label: 'contacted', tone: 'tw-bg-cyan-500', soft: 'tw-bg-cyan-50', border: 'tw-border-cyan-200' },
-  { key: 'PROPOSAL', dbStage: 'PROPOSAL', label: 'proposal', tone: 'tw-bg-indigo-500', soft: 'tw-bg-indigo-50', border: 'tw-border-indigo-200' },
-  { key: 'NEGOTIATION', dbStage: 'NEGOTIATION', label: 'negotiation', tone: 'tw-bg-amber-500', soft: 'tw-bg-amber-50', border: 'tw-border-amber-200' },
-  { key: 'WON', dbStage: 'WON', label: 'won', tone: 'tw-bg-emerald-500', soft: 'tw-bg-emerald-50', border: 'tw-border-emerald-200' }
+  { key: 'CONTACT', dbStage: 'QUALIFICATION', label: 'contact', tone: 'tw-bg-cyan-500', soft: 'tw-bg-cyan-50', border: 'tw-border-cyan-200' },
+  { key: 'PRESENTATION', dbStage: 'PITCH', label: 'presentation', tone: 'tw-bg-indigo-500', soft: 'tw-bg-indigo-50', border: 'tw-border-indigo-200' },
+  { key: 'DISCUSSION', dbStage: 'NEGOTIATION', label: 'discussion', tone: 'tw-bg-amber-500', soft: 'tw-bg-amber-50', border: 'tw-border-amber-200' },
+  { key: 'WON', dbStage: 'WON', label: 'won', tone: 'tw-bg-emerald-500', soft: 'tw-bg-emerald-50', border: 'tw-border-emerald-200' },
+  { key: 'LOST', dbStage: 'LOST', label: 'lost', tone: 'tw-bg-slate-500', soft: 'tw-bg-slate-50', border: 'tw-border-slate-200' }
 ];
 
-const normalizeStage = stage => ['QUALIFICATION', 'PITCH', 'CONTACTED'].includes(String(stage || '').toUpperCase())
-  ? 'CONTACTED'
-  : String(stage || 'LEAD').toUpperCase();
+const normalizeStage = stage => {
+  const value = String(stage || 'LEAD').toUpperCase();
+  if (['CONTACTED', 'QUALIFICATION'].includes(value)) return 'CONTACT';
+  if (['PITCH', 'PROPOSAL'].includes(value)) return 'PRESENTATION';
+  if (value === 'NEGOTIATION') return 'DISCUSSION';
+  return value;
+};
 const money = value => new Intl.NumberFormat('en-SA', { maximumFractionDigits: 0 }).format(Number(value || 0));
 const localizedEmployeeName = (profile, lang) => {
   if (!profile) return '';
@@ -75,13 +84,30 @@ function Metric({ icon: Icon, label, value, tone }) {
   </div>;
 }
 
-function DealCard({ deal, lang, canOpenDetails }) {
+function DealCard({ deal, lang, canOpenDetails, canDeleteDeals }) {
   const text = COPY[lang];
   const clientName = deal.clientName || deal.crm_clients?.name || deal.title || (lang === 'ar' ? 'عميل' : 'Client');
   const details = deal.details || deal.technical_description || deal.event_type || deal.title;
   const profile = deal.assignee || {};
+  const isLost = normalizeStage(deal.stage) === 'LOST';
+  const workflowStatus = String(deal.workflow_status || 'NOT_STARTED').toUpperCase();
+  const workflowBadge = workflowStatus === 'PENDING_APPROVAL'
+    ? { label: text.approvalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
+    : workflowStatus === 'APPROVED'
+      ? { label: text.approvalApproved, classes: 'tw-bg-emerald-50 tw-text-emerald-700' }
+      : workflowStatus === 'REJECTED'
+        ? { label: text.approvalRejected, classes: 'tw-bg-rose-50 tw-text-rose-700' }
+        : workflowStatus === 'DESIGN_IN_PROGRESS'
+          ? { label: text.designInProgress, classes: 'tw-bg-blue-50 tw-text-blue-700' }
+          : workflowStatus === 'DESIGN_PENDING_APPROVAL'
+            ? { label: text.designApprovalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
+            : workflowStatus === 'DESIGN_REJECTED'
+              ? { label: text.designRejected, classes: 'tw-bg-rose-50 tw-text-rose-700' }
+              : null;
   const openDetails = () => {
-    if (canOpenDetails) window.openDealWorkflowModal?.(String(deal.id));
+    if (!canOpenDetails) return;
+    if (isLost) window.openLostDealSummaryModal?.(deal);
+    else window.openDealWorkflowModal?.(String(deal.id));
   };
   return <article id={`deal-card-${deal.id}`} draggable onDragStart={event => {
     event.dataTransfer.effectAllowed = 'move';
@@ -101,6 +127,7 @@ function DealCard({ deal, lang, canOpenDetails }) {
       <div className="tw-min-w-0 tw-flex-1">
         <div className="tw-flex tw-items-start tw-justify-between tw-gap-2"><h4 className="tw-m-0 tw-line-clamp-2 tw-text-sm tw-font-extrabold tw-leading-5 tw-text-slate-900">{clientName}</h4></div>
         <p className="tw-mb-3 tw-mt-1.5 tw-line-clamp-2 tw-min-h-9 tw-text-xs tw-leading-[18px] tw-text-slate-500">{details}</p>
+        {workflowBadge && <span className={`tw-mb-2 tw-inline-flex tw-rounded-full tw-px-2 tw-py-1 tw-text-[9px] tw-font-black ${workflowBadge.classes}`}>{workflowBadge.label}</span>}
         <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-slate-100 tw-pt-3">
           <span className="tw-flex tw-items-center tw-gap-1.5 tw-text-[11px] tw-font-semibold tw-text-slate-500"><CalendarDays size={13} />{dateLabel(deal.closing_date || deal.created_at, lang)}</span>
           <span className="tw-flex tw-min-w-0 tw-flex-1 tw-justify-end"><EmployeeName profile={profile} lang={lang} /></span>
@@ -108,14 +135,15 @@ function DealCard({ deal, lang, canOpenDetails }) {
         {Number(deal.amount || 0) > 0 && <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-text-[11px] tw-font-bold tw-text-emerald-700"><CircleDollarSign size={13} />SAR {money(deal.amount)}</div>}
       </div>
       <div className="tw-flex tw-flex-col tw-gap-1 tw-opacity-0 tw-transition group-hover:tw-opacity-100 focus-within:tw-opacity-100">
-        <button aria-label={text.viewDeal} title={text.viewDeal} onClick={event => { event.stopPropagation(); window.showCRMDealModal?.(String(deal.id), true); }} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-500 hover:tw-bg-blue-50 hover:tw-text-blue-700"><Search size={13} /></button>
-        <button aria-label={text.editDeal} title={text.editDeal} onClick={event => { event.stopPropagation(); window.showCRMDealModal?.(String(deal.id)); }} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-500 hover:tw-bg-blue-50 hover:tw-text-blue-700"><MoreHorizontal size={14} /></button>
+        <button aria-label={text.viewDeal} title={text.viewDeal} onClick={event => { event.stopPropagation(); openDetails(); }} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-500 hover:tw-bg-blue-50 hover:tw-text-blue-700"><Search size={13} /></button>
+        {!isLost && <button aria-label={text.editDeal} title={text.editDeal} onClick={event => { event.stopPropagation(); window.showCRMDealModal?.(String(deal.id)); }} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-500 hover:tw-bg-blue-50 hover:tw-text-blue-700"><MoreHorizontal size={14} /></button>}
+        {canDeleteDeals && <button aria-label={text.deleteDeal} title={text.deleteDeal} onClick={event => { event.stopPropagation(); window.deleteCrmDeal?.(String(deal.id)); }} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-rose-50 tw-text-rose-600 hover:tw-bg-rose-100 hover:tw-text-rose-700"><Trash2 size={13} /></button>}
       </div>
     </div>
   </article>;
 }
 
-function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails }) {
+function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails, canDeleteDeals }) {
   const text = COPY[lang];
   const handleDrop = async (event, stage) => {
     event.preventDefault();
@@ -124,9 +152,10 @@ function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails }) {
     if (!deal) return;
     const oldStage = deal.stage;
     if (oldStage === stage.dbStage) return;
-    const requiresApproval = ['PROPOSAL', 'NEGOTIATION', 'WON'].includes(stage.dbStage)
+    const requiresApproval = ['NEGOTIATION', 'WON'].includes(stage.dbStage)
       && deal.workflow_status !== 'APPROVED';
-    const canMoveImmediately = stage.dbStage !== 'WON' && !requiresApproval;
+    const requiresDetails = ['PITCH', 'WON', 'LOST'].includes(stage.dbStage);
+    const canMoveImmediately = !requiresDetails && !requiresApproval;
     if (canMoveImmediately) onDealStageChange(dealId, stage.dbStage);
     const result = await window.dropDeal?.(event.nativeEvent, stage.dbStage);
     if (canMoveImmediately && !result?.success) onDealStageChange(dealId, oldStage);
@@ -136,12 +165,12 @@ function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails }) {
       <div><h2 className="tw-m-0 tw-flex tw-items-center tw-gap-2 tw-text-base tw-font-black tw-text-slate-900"><Target size={19} className="tw-text-blue-600" />{text.pipeline}</h2><p className="tw-mb-0 tw-mt-1 tw-text-xs tw-text-slate-500">{text.pipelineHint}</p></div>
       <span className="tw-rounded-full tw-bg-slate-100 tw-px-3 tw-py-1 tw-text-[11px] tw-font-bold tw-text-slate-600">{deals.length} {lang === 'ar' ? 'صفقة' : 'deals'}</span>
     </div>
-    <div className="tw-flex tw-snap-x tw-gap-4 tw-overflow-x-auto tw-pb-2 [scrollbar-width:thin]">
+    <div id="crmDealPipelineBoard" className="tw-flex tw-snap-x tw-gap-4 tw-overflow-x-auto tw-pb-2 [scrollbar-width:thin]">
       {STAGES.map(stage => {
         const stageDeals = deals.filter(deal => normalizeStage(deal.stage) === stage.key);
         return <section key={stage.key} id={`crm-col-${stage.dbStage}`} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, stage)} className={`kanban-col tw-min-h-[390px] tw-w-[286px] tw-flex-none tw-snap-start tw-rounded-2xl tw-border tw-p-3 ${stage.soft} ${stage.border}`}>
           <header className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-px-1"><h3 id={`crm-header-${stage.dbStage}`} className="tw-m-0 tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-black tw-uppercase tw-tracking-[.08em] tw-text-slate-700"><i className={`tw-h-2.5 tw-w-2.5 tw-rounded-full ${stage.tone}`} />{text[stage.label]}</h3><span className="tw-grid tw-h-6 tw-min-w-6 tw-place-items-center tw-rounded-full tw-bg-white tw-px-1.5 tw-text-[10px] tw-font-black tw-text-slate-600 tw-shadow-sm">{stageDeals.length}</span></header>
-          <div data-crm-stage-cards className="tw-min-h-[320px]">{stageDeals.map(deal => <DealCard key={deal.id} deal={deal} lang={lang} canOpenDetails={canOpenDetails} />)}{stageDeals.length === 0 && <div data-crm-stage-empty className="tw-grid tw-min-h-32 tw-place-items-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-white/50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-400">{text.noDeals}</div>}</div>
+          <div data-crm-stage-cards className="tw-min-h-[320px]">{stageDeals.map(deal => <DealCard key={deal.id} deal={deal} lang={lang} canOpenDetails={canOpenDetails} canDeleteDeals={canDeleteDeals} />)}{stageDeals.length === 0 && <div data-crm-stage-empty className="tw-grid tw-min-h-32 tw-place-items-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-white/50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-400">{text.noDeals}</div>}</div>
         </section>;
       })}
     </div>
@@ -229,6 +258,7 @@ function CrmDashboard({ payload = {} }) {
     ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMIN', 'MANAGER', 'CEO', 'GM', 'GENERAL MANAGER'].includes(value)
       || /\b(MANAGER|SALES|MARKETING)\b/.test(value)
   );
+  const canDeleteDeals = window.canCurrentUserDeleteCrmDeals?.() === true;
   const sourceDeals = useMemo(() => (payload.deals || []).map(deal => ({
     ...deal,
     clientName: deal.crm_clients?.name,
@@ -239,10 +269,15 @@ function CrmDashboard({ payload = {} }) {
   const handleDealStageChange = (dealId, stage) => {
     setDeals(previous => previous.map(deal => String(deal.id) === String(dealId) ? { ...deal, stage } : deal));
   };
+  const handleDealDelete = dealId => {
+    setDeals(previous => previous.filter(deal => String(deal.id) !== String(dealId)));
+  };
   useEffect(() => {
     window.setCrmDealStageLocally = handleDealStageChange;
+    window.removeCrmDealLocally = handleDealDelete;
     return () => {
       if (window.setCrmDealStageLocally === handleDealStageChange) delete window.setCrmDealStageLocally;
+      if (window.removeCrmDealLocally === handleDealDelete) delete window.removeCrmDealLocally;
     };
   }, []);
   const filteredDeals = useMemo(() => {
@@ -257,7 +292,7 @@ function CrmDashboard({ payload = {} }) {
         <div className="tw-mx-auto tw-w-full tw-max-w-[1800px]">
           <section className="page-header tw-flex-wrap tw-gap-4"><div className="tw-max-w-3xl"><span className="tw-mb-2 tw-inline-flex tw-items-center tw-gap-1.5 tw-rounded-full tw-bg-blue-50 tw-px-3 tw-py-1 tw-text-[10px] tw-font-black tw-uppercase tw-tracking-[.12em] tw-text-blue-700"><BriefcaseBusiness size={13} />Mogam CRM</span><h1 className="page-title tw-m-0">{text.title}</h1><p className="page-subtitle tw-mb-0 tw-mt-2">{text.subtitle}</p></div><div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-end tw-gap-3 sm:tw-w-auto"><label className="search-container crm-dashboard-search tw-m-0 tw-min-w-0 tw-flex-1 sm:tw-w-72 sm:tw-flex-none"><Search size={18} className="search-icon tw-m-0 tw-flex-none" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={text.search} className="search-input" /></label><button type="button" data-crm-new-deal onClick={() => window.showCRMDealModal?.()} className="btn btn-primary tw-inline-flex tw-min-h-10 tw-items-center tw-justify-center tw-gap-2"><Plus size={17} />{text.newDeal}</button><button type="button" onClick={() => window.showCRMClientModal?.()} className="btn btn-secondary tw-inline-flex tw-min-h-10 tw-items-center tw-justify-center tw-gap-2"><Building2 size={17} />{text.addClient}</button></div></section>
           <section className="tw-mb-5 tw-grid tw-grid-cols-1 tw-gap-3 sm:tw-grid-cols-2 xl:tw-grid-cols-4"><Metric icon={CircleDollarSign} label={text.totalPipeline} value={`SAR ${money(pipelineValue)}`} tone="tw-bg-blue-50 tw-text-blue-700" /><Metric icon={Building2} label={text.activeClients} value={payload.clients?.length || new Set(deals.map(deal => deal.clientName)).size} tone="tw-bg-cyan-50 tw-text-cyan-700" /><Metric icon={Target} label={text.openDeals} value={openDeals.length} tone="tw-bg-amber-50 tw-text-amber-700" /><Metric icon={CheckCircle2} label={text.wonDeals} value={wonDeals.length} tone="tw-bg-emerald-50 tw-text-emerald-700" /></section>
-          <PipelineBoard lang={lang} deals={filteredDeals} onDealStageChange={handleDealStageChange} canOpenDetails={canOpenDetails} />
+          <PipelineBoard lang={lang} deals={filteredDeals} onDealStageChange={handleDealStageChange} canOpenDetails={canOpenDetails} canDeleteDeals={canDeleteDeals} />
           <section className="tw-mt-5 tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 2xl:tw-grid-cols-4"><TasksWidget lang={lang} tasks={payload.tasks || []} deals={deals} /><ActivityWidget lang={lang} activity={payload.activity || []} /><AssignmentsWidget lang={lang} deals={deals} users={payload.users || []} /><AnalyticsWidget lang={lang} deals={deals} clients={payload.clients || []} /></section>
         </div>
   </div>;

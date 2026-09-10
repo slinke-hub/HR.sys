@@ -358,6 +358,21 @@ const db = {
         }
     },
 
+    async deleteEmployeeRequest(sourceTable, sourceId) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase is not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('admin_delete_employee_request', {
+                p_source_table: sourceTable,
+                p_source_id: sourceId
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('deleteEmployeeRequest Error:', error);
+            return { success: false, error };
+        }
+    },
+
     async fetchRequestApprovalWorkflows() {
         if (!supabaseClient) return [];
         try {
@@ -415,7 +430,12 @@ const db = {
         try {
             if (sourceTable === 'requests') {
                 const { data: req } = await supabaseClient.from('requests').select('*').eq('id', sourceId).single();
-                if (req && (req.request_type === 'Loan' || req.request_type === 'Loan Request')) {
+                const { data: workflow } = await supabaseClient.from('request_approval_workflows')
+                    .select('id')
+                    .eq('source_table', 'requests')
+                    .eq('source_id', sourceId)
+                    .maybeSingle();
+                if (!workflow && req && (req.request_type === 'Loan' || req.request_type === 'Loan Request')) {
                     let nextStatus = req.status;
                     if (decision === 'REJECTED') {
                         nextStatus = 'REJECTED';
@@ -447,6 +467,7 @@ const db = {
                         }
                     }
 
+                    await this.flushTaskNotificationEmails();
                     return { success: true, data: { status: nextStatus } };
                 }
             }
@@ -1006,83 +1027,6 @@ const db = {
         }
     },
     // ==========================================
-    // PROJECTS & TASK MANAGER
-    // ==========================================
-    async fetchProjects(userId = null) {
-        if (!supabaseClient) return [];
-        try {
-            let query = supabaseClient.from('projects').select('*, crm_clients(name, company)').order('created_at', { ascending: false });
-            // Let RLS handle user-specific project visibility, or we can explicitely filter:
-            // if (userId) { ... }
-            const { data, error } = await query;
-            if (error) throw error;
-            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
-        } catch (error) {
-            console.error("fetchProjects Error:", error);
-            return [];
-        }
-    },
-    async createProject(projectName, projectType, description, assignedPeople, projectCategory, projectTags) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { data, error } = await supabaseClient
-                .from('projects')
-                .insert([{
-                    project_name: projectName,
-                    project_type: projectType,
-                    description: description,
-                    assigned_people: assignedPeople,
-                    project_category: projectCategory,
-                    project_tags: projectTags
-                }]).select();
-            if (error) throw error;
-            return { success: true, data: data };
-        } catch (error) {
-            console.error("createProject Error:", error);
-            return { success: false, error };
-        }
-    },
-    async deleteProject(projectId) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { data, error } = await supabaseClient
-                .from('projects')
-                .delete()
-                .eq('id', projectId)
-                .select();
-            
-            if (error) throw error;
-            if (!data || data.length === 0) {
-                return { success: false, error: new Error("Permission denied or project not found.") };
-            }
-            return { success: true };
-        } catch (error) {
-            console.error("deleteProject Error:", error);
-            return { success: false, error };
-        }
-    },
-    async updateProject(projectId, projectName, projectType, description, assignedPeople, projectCategory, projectTags) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { error } = await supabaseClient
-                .from('projects')
-                .update({
-                    project_name: projectName,
-                    project_type: projectType,
-                    description: description,
-                    assigned_people: assignedPeople,
-                    project_category: projectCategory,
-                    project_tags: projectTags
-                })
-                .eq('id', projectId);
-            if (error) throw error;
-            return { success: true };
-        } catch (error) {
-            console.error("updateProject Error:", error);
-            return { success: false, error };
-        }
-    },
-    // ==========================================
     // DOCUMENT REQUESTS
     // ==========================================
     async fetchDocuments(employeeId = null) {
@@ -1230,37 +1174,32 @@ const db = {
         }
     },
     // ==========================================
-    // PROJECTS & TASK MANAGER
+    // PROJECT PORTFOLIO MANAGER (independent from Tasks Manager)
     // ==========================================
     async fetchProjects(userId = null) {
         if (!supabaseClient) return [];
         try {
             let query = supabaseClient.from('projects').select('*, crm_clients(name, company)').order('created_at', { ascending: false });
-            // Let RLS handle user-specific project visibility, or we can explicitely filter:
-            // if (userId) { ... }
             const { data, error } = await query;
-            if (error) throw error;
-            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
+            if (!error) return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
+            console.warn('fetchProjects: client relation unavailable, retrying without the optional client join.', error.message);
+            const { data: plainProjects, error: plainError } = await supabaseClient.from('projects').select('*').order('created_at', { ascending: false });
+            if (plainError) throw plainError;
+            return (plainProjects || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchProjects Error:", error);
             return [];
         }
     },
-    async createProject(projectName, projectType, description, assignedPeople, projectCategory, projectTags) {
+    async createProject(projectData) {
         if (!supabaseClient) return { success: false };
         try {
             const { data, error } = await supabaseClient
                 .from('projects')
-                .insert([{
-                    project_name: projectName,
-                    project_type: projectType,
-                    description: description,
-                    assigned_people: assignedPeople,
-                    project_category: projectCategory,
-                    project_tags: projectTags
-                }]).select();
+                .insert([{ ...projectData, created_by: projectData.created_by || (await supabaseClient.auth.getUser()).data.user?.id }])
+                .select();
             if (error) throw error;
-            return { success: true, data: data };
+            return { success: true, data };
         } catch (error) {
             console.error("createProject Error:", error);
             return { success: false, error };
@@ -1285,24 +1224,124 @@ const db = {
             return { success: false, error };
         }
     },
-    async updateProject(projectId, projectName, projectType, description, assignedPeople, projectCategory, projectTags) {
+    async updateProject(projectId, projectData) {
         if (!supabaseClient) return { success: false };
         try {
-            const { error } = await supabaseClient
+            const { data, error } = await supabaseClient
                 .from('projects')
-                .update({
-                    project_name: projectName,
-                    project_type: projectType,
-                    description: description,
-                    assigned_people: assignedPeople,
-                    project_category: projectCategory,
-                    project_tags: projectTags
-                })
-                .eq('id', projectId);
+                .update(projectData)
+                .eq('id', projectId)
+                .select();
             if (error) throw error;
-            return { success: true };
+            if (!data?.length) throw new Error('Permission denied or project not found.');
+            return { success: true, data: data[0] };
         } catch (error) {
             console.error("updateProject Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateProjectPortfolioItems(projectId, changes) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient
+                .from('projects')
+                .update(changes)
+                .eq('id', projectId)
+                .select('id, milestones, risks, health_status')
+                .maybeSingle();
+            if (error) throw error;
+            if (!data?.id) throw new Error('Permission denied or project not found.');
+            return { success: true, data };
+        } catch (error) {
+            console.error('updateProjectPortfolioItems Error:', error);
+            return { success: false, error };
+        }
+    },
+    async fetchProjectUpdates(projectId) {
+        if (!supabaseClient || !projectId) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('project_updates')
+                .select('*')
+                .eq('project_id', projectId)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchProjectUpdates Error:', error);
+            return [];
+        }
+    },
+    async createProjectUpdate(projectId, summary, updateType = 'UPDATE') {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data: authData } = await supabaseClient.auth.getUser();
+            const { data, error } = await supabaseClient
+                .from('project_updates')
+                .insert([{ project_id: projectId, author_id: authData.user?.id, summary, update_type: updateType }])
+                .select()
+                .single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('createProjectUpdate Error:', error);
+            return { success: false, error };
+        }
+    },
+    async fetchProjectTodos(projectId) {
+        if (!supabaseClient || !projectId) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('project_todos')
+                .select('*')
+                .eq('project_id', projectId)
+                .order('status', { ascending: false })
+                .order('due_at', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchProjectTodos Error:', error);
+            return [];
+        }
+    },
+    async addProjectTodo(projectId, title, assigneeIds, dueAt) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('add_project_todo', {
+                p_project_id: projectId,
+                p_title: title,
+                p_assignee_ids: assigneeIds,
+                p_due_at: dueAt
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('addProjectTodo Error:', error);
+            return { success: false, error };
+        }
+    },
+    async setProjectTodoCompleted(todoId, completed) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('set_project_todo_completed', {
+                p_todo_id: todoId,
+                p_completed: completed
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('setProjectTodoCompleted Error:', error);
+            return { success: false, error };
+        }
+    },
+    async deleteProjectTodo(todoId) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('delete_project_todo', { p_todo_id: todoId });
+            if (error) throw error;
+            return { success: data === true, data };
+        } catch (error) {
+            console.error('deleteProjectTodo Error:', error);
             return { success: false, error };
         }
     },
@@ -1572,10 +1611,10 @@ const db = {
         let lastError;
         for (let attempt = 0; attempt < 2; attempt += 1) {
             try {
-                const { error } = await supabaseClient.from('tasks').update({ status }).eq('id', taskId);
+                const { data, error } = await supabaseClient.from('tasks').update({ status }).eq('id', taskId).select('id,status,completion_requested_at').single();
                 if (error) throw error;
                 await this.flushTaskNotificationEmails();
-                return { success: true };
+                return { success: true, data };
             } catch (error) {
                 lastError = error;
                 const message = String(error?.message || error || '').toLowerCase();
@@ -2781,6 +2820,33 @@ const db = {
             return { success: false, error };
         }
     },
+    async deleteDeal(dealId) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data: attachments, error: attachmentError } = await supabaseClient
+                .from('crm_deal_attachments')
+                .select('file_url')
+                .eq('deal_id', dealId);
+            if (attachmentError) throw attachmentError;
+            const { data, error } = await supabaseClient.rpc('delete_crm_deal', { p_deal_id: dealId });
+            if (error) throw error;
+            const storageMarker = '/storage/v1/object/public/crm-deal-files/';
+            const storagePaths = [...new Set((attachments || []).map(item => {
+                const url = String(item.file_url || '');
+                const markerIndex = url.indexOf(storageMarker);
+                if (markerIndex < 0) return '';
+                return decodeURIComponent(url.slice(markerIndex + storageMarker.length).split('?')[0]);
+            }).filter(Boolean))];
+            if (storagePaths.length) {
+                const { error: storageError } = await supabaseClient.storage.from('crm-deal-files').remove(storagePaths);
+                if (storageError) console.warn('CRM deal deleted, but attachment cleanup was incomplete:', storageError.message || storageError);
+            }
+            return { success: true, data };
+        } catch (error) {
+            console.error('deleteDeal Error:', error);
+            return { success: false, error };
+        }
+    },
     async updateDealStage(dealId, newStage) {
         if (!supabaseClient) return { success: false };
         try {
@@ -2808,20 +2874,52 @@ const db = {
             return [];
         }
     },
-    async fetchDealWorkflow(dealId) {
-        if (!supabaseClient) return { approvals: [], attachments: [], activity: [] };
+    async fetchPendingCrmDesignTaskApprovals() {
+        if (!supabaseClient) return [];
         try {
-            const [approvals, attachments, activity] = await Promise.all([
-                supabaseClient.from('crm_deal_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title)').eq('deal_id', dealId).order('step_order'),
+            const { data, error } = await supabaseClient
+                .from('crm_design_task_approval_steps')
+                .select('*, task:tasks(*), deal:crm_deals(*, crm_clients(*)), profiles:approver_id(full_name, display_name_ar, job_title, emp_index)')
+                .eq('status', 'PENDING')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('fetchPendingCrmDesignTaskApprovals Error:', error);
+            return [];
+        }
+    },
+    async fetchDealWorkflow(dealId) {
+        if (!supabaseClient) return { approvals: [], designApprovals: [], attachments: [], activity: [], project: null };
+        try {
+            const [approvals, designApprovals, attachments, activity, project] = await Promise.all([
+                supabaseClient.from('crm_deal_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
+                supabaseClient.from('crm_design_task_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
                 supabaseClient.from('crm_deal_attachments').select('*').eq('deal_id', dealId).order('created_at', { ascending: false }),
-                supabaseClient.from('crm_deal_activity').select('*, profiles:actor_id(full_name, display_name_ar)').eq('deal_id', dealId).order('created_at', { ascending: false })
+                supabaseClient.from('crm_deal_activity').select('*, profiles:actor_id(full_name, display_name_ar)').eq('deal_id', dealId).order('created_at', { ascending: false }),
+                supabaseClient.from('projects').select('id, deal_id, project_name, project_status, project_amount, paid_amount, event_location, start_date, end_date').eq('deal_id', dealId).maybeSingle()
             ]);
-            const firstError = approvals.error || attachments.error || activity.error;
+            const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || project.error;
             if (firstError) throw firstError;
-            return { approvals: approvals.data || [], attachments: attachments.data || [], activity: activity.data || [] };
+            return { approvals: approvals.data || [], designApprovals: designApprovals.data || [], attachments: attachments.data || [], activity: activity.data || [], project: project.data || null };
         } catch (error) {
             console.error('fetchDealWorkflow Error:', error);
-            return { approvals: [], attachments: [], activity: [], error };
+            return { approvals: [], designApprovals: [], attachments: [], activity: [], project: null, error };
+        }
+    },
+    async closeWonDealProject(projectId) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.from('projects')
+                .update({ project_status: 'Completed' })
+                .eq('id', projectId)
+                .select('id, deal_id, project_status')
+                .single();
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('closeWonDealProject Error:', error);
+            return { success: false, error };
         }
     },
     async startDealApproval(dealId, approvers) {
@@ -2840,6 +2938,20 @@ const db = {
             return { success: false, error };
         }
     },
+    async startCrmPresentationApproval(dealId, requestType) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.rpc('start_crm_presentation_approval', {
+                p_deal_id: dealId,
+                p_request_type: requestType
+            });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('startCrmPresentationApproval Error:', error);
+            return { success: false, error };
+        }
+    },
     async decideDealApproval(stepId, decision, note) {
         if (!supabaseClient) return { success: false };
         try {
@@ -2849,9 +2961,26 @@ const db = {
                 p_note: note || null
             });
             if (error) throw error;
+            await this.flushTaskNotificationEmails();
             return { success: true };
         } catch (error) {
             console.error('decideDealApproval Error:', error);
+            return { success: false, error };
+        }
+    },
+    async decideCrmDesignTaskApproval(stepId, decision, note) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient.rpc('decide_crm_design_task_approval', {
+                p_step_id: stepId,
+                p_decision: decision,
+                p_note: note || null
+            });
+            if (error) throw error;
+            await this.flushTaskNotificationEmails();
+            return { success: true };
+        } catch (error) {
+            console.error('decideCrmDesignTaskApproval Error:', error);
             return { success: false, error };
         }
     },
@@ -2928,6 +3057,20 @@ const db = {
             return { success: true, data };
         } catch (error) {
             console.error('createProjectFromWonDeal Error:', error);
+            return { success: false, error };
+        }
+    },
+    async createProjectFromWonDealV2(orderData, dealId) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.rpc('create_project_from_won_deal_v2', {
+                p_deal_id: dealId,
+                p_order: orderData
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('createProjectFromWonDealV2 Error:', error);
             return { success: false, error };
         }
     },

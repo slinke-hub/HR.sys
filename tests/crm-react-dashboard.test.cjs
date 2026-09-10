@@ -16,12 +16,13 @@ for (const component of ['CrmDashboard', 'PipelineBoard', 'DealCard', 'TasksWidg
   assert.match(source, new RegExp(`function ${component}\\(`), `Missing modular React component: ${component}`);
 }
 
-for (const stage of ['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON']) {
+for (const stage of ['LEAD', 'CONTACT', 'PRESENTATION', 'DISCUSSION', 'WON', 'LOST']) {
   assert.match(source, new RegExp(`key: '${stage}'`), `Missing CRM stage: ${stage}`);
 }
 
 assert.match(source, /dir=\{lang === 'ar' \? 'rtl' : 'ltr'\}/);
 assert.match(source, /draggable onDragStart=/);
+assert.match(source, /id="crmDealPipelineBoard"/);
 assert.match(source, /md:tw-grid-cols-2 2xl:tw-grid-cols-4/);
 assert.doesNotMatch(source, /function Sidebar\(|function Header\(/, 'CRM must reuse the shared app shell');
 assert.match(source, /className="page-header/);
