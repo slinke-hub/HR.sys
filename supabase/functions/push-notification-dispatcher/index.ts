@@ -1,16 +1,33 @@
 import webpush from "npm:web-push@3.6.7";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://sys.muqam.net",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+const isAllowedOrigin = (origin: string) => {
+  if (origin === "https://sys.muqam.net") return true;
+  try {
+    const parsed = new URL(origin);
+    return ["localhost", "127.0.0.1"].includes(parsed.hostname) && ["http:", "https:", "capacitor:"].includes(parsed.protocol);
+  } catch (_) {
+    return false;
+  }
+};
+const corsHeadersFor = (request: Request) => {
+  const origin = request.headers.get("Origin") || "";
+  return {
+  "Access-Control-Allow-Origin": isAllowedOrigin(origin) ? origin : "https://sys.muqam.net",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-dispatch-secret",
   "Access-Control-Allow-Credentials": "true",
+  "Cache-Control": "no-store",
+  "Vary": "Origin",
+  };
 };
 
-function response(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-}
+const secureEqual = (left: string, right: string) => {
+  if (!left || !right || left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
+};
 
 function nextOccurrence(dateValue: string, type: string, interval: number) {
   const date = new Date(dateValue);
@@ -20,23 +37,44 @@ function nextOccurrence(dateValue: string, type: string, interval: number) {
 }
 
 Deno.serve(async (request) => {
+  const corsHeaders = corsHeadersFor(request);
+  const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method !== "POST") return response({ error: "Method not allowed" }, 405);
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SECRET_KEY") || "";
     const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || "";
     const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "";
     const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:info@muqam.net";
+    const configuredDispatchSecret = Deno.env.get("PUSH_DISPATCH_SECRET") || "";
+    const suppliedDispatchSecret = request.headers.get("X-Dispatch-Secret") || "";
     if (!supabaseUrl || !serviceRoleKey) return response({ error: "Supabase service configuration is missing." }, 500);
 
     const authorization = request.headers.get("Authorization") || "";
     const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
     const token = authorization.replace(/^Bearer\s+/i, "");
-    const { data: authData } = await admin.auth.getUser(token);
-    if (!authData.user) return response({ error: "Unauthorized" }, 401);
+    const { data: authData } = token ? await admin.auth.getUser(token) : { data: { user: null } };
+    const isTrustedDispatcher = secureEqual(configuredDispatchSecret, suppliedDispatchSecret);
+    if (!authData.user && !isTrustedDispatcher) return response({ error: "Unauthorized" }, 401);
 
     const input = await request.json().catch(() => ({}));
     if (input.action === "config") return response({ publicKey: vapidPublicKey });
+    if (input.action !== "dispatch") return response({ error: "Unknown action" }, 400);
+
+    let canDispatch = isTrustedDispatcher;
+    if (authData.user && !canDispatch) {
+      const { data: callerProfile } = await admin.from("profiles").select("role,job_title").eq("id", authData.user.id).maybeSingle();
+      const accessValues = [callerProfile?.role, callerProfile?.job_title]
+        .map((value) => String(value || "").trim().toUpperCase().replaceAll("_", " ").replaceAll("-", " "));
+      canDispatch = accessValues.some((value) =>
+        ["ADMIN", "OWNER", "ROLE SYSTEM ADMIN", "SYSTEM ADMIN"].includes(value)
+      );
+    }
+    if (!canDispatch) return response({ error: "Forbidden" }, 403);
     if (!vapidPublicKey || !vapidPrivateKey) return response({ error: "VAPID keys are not configured." }, 503);
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 

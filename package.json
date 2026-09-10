@@ -10,6 +10,7 @@
     "crm:js": "esbuild ./src/crm-dashboard.jsx --bundle --minify --format=iife --global-name=MogamCrmDashboard --outfile=./js/crm-dashboard.bundle.js",
     "crm:build": "npm run crm:css && npm run crm:js",
     "test:security": "node tests/security-hardening.test.js",
+    "security:check": "npm run test:security && npm audit --audit-level=high",
     "mobile:web": "node scripts/build-mobile.mjs",
     "mobile:sync": "npm run mobile:web && node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor sync android",
     "mobile:open": "node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor open android",

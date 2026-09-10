@@ -1,15 +1,32 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+const isAllowedOrigin = (origin) => {
+  if (origin === "https://sys.muqam.net") return true;
+  try {
+    const parsed = new URL(origin);
+    return ["localhost", "127.0.0.1"].includes(parsed.hostname) && ["http:", "https:", "capacitor:"].includes(parsed.protocol);
+  } catch (_) {
+    return false;
+  }
 };
 
-const json = (body, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { ...corsHeaders, "Content-Type": "application/json" },
-});
+const corsHeadersFor = (request) => {
+  const origin = request.headers.get("Origin") || "";
+  return {
+  "Access-Control-Allow-Origin": isAllowedOrigin(origin) ? origin : "https://sys.muqam.net",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-dispatch-secret",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Cache-Control": "no-store",
+  "Vary": "Origin",
+  };
+};
+
+const secureEqual = (left, right) => {
+  if (!left || !right || left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
+};
 
 const escapeHtml = (value) => String(value || "")
   .replaceAll("&", "&amp;")
@@ -59,6 +76,11 @@ const htmlDetails = (details) => {
 };
 
 Deno.serve(async (request) => {
+  const corsHeaders = corsHeadersFor(request);
+  const json = (body, status = 200) => new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
   if (request.method === "OPTIONS") return new Response("ok", { status: 200, headers: corsHeaders });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
@@ -68,6 +90,8 @@ Deno.serve(async (request) => {
   const fromAddress = Deno.env.get("TASK_EMAIL_FROM") || "MUQAM Tasks <no-reply@muqam.net>";
   const appUrl = (Deno.env.get("APP_URL") || "").replace(/\/$/, "");
   const authorization = request.headers.get("Authorization") || "";
+  const configuredDispatchSecret = Deno.env.get("TASK_EMAIL_DISPATCH_SECRET") || "";
+  const suppliedDispatchSecret = request.headers.get("X-Dispatch-Secret") || "";
 
   if (!supabaseUrl || !serviceRoleKey || !resendApiKey) {
     return json({ error: "Task email service is not configured" }, 503);
@@ -77,18 +101,42 @@ Deno.serve(async (request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const token = authorization.replace(/^Bearer\s+/i, "");
-  const { data: authData, error: authError } = await admin.auth.getUser(token);
-  if (authError || !authData?.user) return json({ error: "Unauthorized" }, 401);
+  const { data: authData, error: authError } = token
+    ? await admin.auth.getUser(token)
+    : { data: { user: null }, error: null };
+  const isTrustedDispatcher = secureEqual(configuredDispatchSecret, suppliedDispatchSecret);
+  if ((authError || !authData?.user) && !isTrustedDispatcher) return json({ error: "Unauthorized" }, 401);
 
-  const { data: queued, error: queueError } = await admin
+  let canProcessAll = isTrustedDispatcher;
+  if (authData?.user && !canProcessAll) {
+    const { data: callerProfile } = await admin.from("profiles").select("role,job_title").eq("id", authData.user.id).maybeSingle();
+    const accessValues = [callerProfile?.role, callerProfile?.job_title]
+      .map((value) => String(value || "").trim().toUpperCase().replaceAll("_", " ").replaceAll("-", " "));
+    canProcessAll = accessValues.some((value) =>
+      ["ADMIN", "OWNER", "ROLE SYSTEM ADMIN", "SYSTEM ADMIN", "CEO", "GM", "GENERAL MANAGER"].includes(value)
+    );
+  }
+
+  const { data: queuedRows, error: queueError } = await admin
     .from("task_email_outbox")
     .select("id,notification_id,task_id,recipient_email,subject,message,action_url,attempts,comment_text,attachment_links,always_send,context_type,details")
     .eq("status", "pending")
     .order("created_at", { ascending: true })
-    .limit(25);
+    .limit(100);
 
   if (queueError) return json({ error: "Unable to read email queue" }, 500);
-  if (!queued?.length) return json({ processed: 0, sent: 0, failed: 0 });
+  let queued = queuedRows || [];
+  if (!queued.length) return json({ processed: 0, sent: 0, failed: 0 });
+
+  const notificationIds = [...new Set(queued.map((item) => item.notification_id).filter(Boolean))];
+  const { data: queuedNotifications } = notificationIds.length
+    ? await admin.from("notifications").select("id,actor_id,event_type").in("id", notificationIds)
+    : { data: [] };
+  const notificationMap = new Map((queuedNotifications || []).map((notification) => [notification.id, notification]));
+  if (!canProcessAll) {
+    queued = queued.filter((item) => notificationMap.get(item.notification_id)?.actor_id === authData.user.id);
+    if (!queued.length) return json({ processed: 0, sent: 0, failed: 0 });
+  }
 
   const taskIds = [...new Set(queued.map((item) => item.task_id).filter(Boolean))];
   const { data: queuedTasks, error: taskDetailsError } = taskIds.length
@@ -114,12 +162,7 @@ Deno.serve(async (request) => {
   }
   if (!eligible.length) return json({ processed: queued.length, sent: 0, failed: 0, suppressed: suppressedIds.length });
 
-  const notificationIds = [...new Set(eligible.map((item) => item.notification_id).filter(Boolean))];
-  const { data: queuedNotifications } = notificationIds.length
-    ? await admin.from("notifications").select("id,actor_id,event_type").in("id", notificationIds)
-    : { data: [] };
   const taskMap = new Map((queuedTasks || []).map((task) => [task.id, task]));
-  const notificationMap = new Map((queuedNotifications || []).map((notification) => [notification.id, notification]));
   const profileIds = [...new Set([
     ...(queuedTasks || []).flatMap((task) => [task.created_by, task.assignee_id, task.supervisor_id]),
     ...(queuedNotifications || []).map((notification) => notification.actor_id),

@@ -3809,6 +3809,32 @@ window.handleAttendanceEditSubmit = async function (event) {
     await renderView('time');
 };
 
+function formatTaskCommentAttachmentSize(value) {
+    const bytes = Number(value || 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderTaskCommentAttachments(attachments) {
+    const files = Array.isArray(attachments) ? attachments : [];
+    if (!files.length) return '';
+    return `<div class="task-comment-attachments">${files.map(file => {
+        const url = safeExternalUrl(file?.url);
+        if (!url) return '';
+        const name = String(file?.name || taskDetailText('Attachment', 'مرفق'));
+        const escapedUrl = escapeHTML(url);
+        const escapedName = escapeHTML(name);
+        const type = String(file?.type || '').toLowerCase();
+        const isImage = type.startsWith('image/') || /\.(?:png|jpe?g|gif|webp)(?:[?#].*)?$/i.test(name);
+        const size = formatTaskCommentAttachmentSize(file?.size);
+        return isImage
+            ? `<figure class="task-comment-image"><button type="button" data-image-url="${escapedUrl}" data-image-name="${escapedName}" onclick="openDealImagePreview(this)" aria-label="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}"><img src="${escapedUrl}" alt="${escapedName}" loading="lazy"></button><figcaption>${escapedName}${size ? `<small>${escapeHTML(size)}</small>` : ''}</figcaption></figure>`
+            : `<a class="task-comment-file" href="${escapedUrl}" target="_blank" rel="noopener"><i data-lucide="file-text"></i><span><strong>${escapedName}</strong>${size ? `<small>${escapeHTML(size)}</small>` : ''}</span><i data-lucide="download"></i></a>`;
+    }).join('')}</div>`;
+}
+
 window.openTaskDetailsModal = async function (id) {
     let task = window.taskCache?.[id];
     // The action can be clicked before the task cache finishes hydrating.
@@ -3839,7 +3865,11 @@ window.openTaskDetailsModal = async function (id) {
     if (taskPanel) taskPanel.hidden = false;
     if (taskPanelOverlay) taskPanelOverlay.hidden = false;
 
-    document.getElementById('detailsTaskId').value = task.id;
+    const detailsTaskIdInput = document.getElementById('detailsTaskId');
+    if (detailsTaskIdInput?.value && String(detailsTaskIdInput.value) !== String(task.id)) {
+        window.clearTaskCommentAttachments?.();
+    }
+    detailsTaskIdInput.value = task.id;
     document.getElementById('detailsTaskTitle').textContent = getLocalizedTaskTitle(task);
     document.getElementById('detailsTaskAssignee').textContent = window.formatEmployeeName(task.assignee) || taskDetailText('Unassigned', 'غير معيّن');
     document.getElementById('detailsTaskCreator').textContent = window.formatEmployeeName(task.creator) || taskDetailText('System', 'النظام');
@@ -3899,14 +3929,16 @@ window.openTaskDetailsModal = async function (id) {
         list.innerHTML = `<div style="color: var(--color-text-secondary); font-style: italic;">${taskDetailText('No comments yet.', 'لا توجد تعليقات بعد.')}</div>`;
     } else {
         list.innerHTML = comments.map(c => `
-            <div style="background: var(--color-bg-base); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--color-border); margin-bottom: 0.5rem; box-shadow: var(--shadow-sm);">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
-                    <strong>${escapeHTML(window.formatEmployeeName(c.user) || taskDetailText('Unknown user', 'مستخدم غير معروف'))}</strong>
-                    <span style="font-size: 0.75rem; color: var(--color-text-secondary);">${new Date(c.created_at).toLocaleString()}</span>
-                </div>
-                <div>${escapeHTML(c.content)}</div>
-            </div>
+            <article class="task-comment-card">
+                <header class="task-comment-meta">
+                    <span class="task-comment-author"><i data-lucide="user-round"></i><strong>${escapeHTML(window.formatEmployeeName(c.user) || taskDetailText('Unknown user', 'مستخدم غير معروف'))}</strong></span>
+                    <time datetime="${escapeHTML(c.created_at || '')}">${c.created_at ? new Date(c.created_at).toLocaleString(currentLang === 'ar' ? 'ar-SA' : undefined) : ''}</time>
+                </header>
+                ${c.content ? `<div class="task-comment-content">${escapeHTML(c.content)}</div>` : ''}
+                ${renderTaskCommentAttachments(c.attachments)}
+            </article>
         `).join('');
+        if (window.lucide) window.lucide.createIcons();
     }
 };
 
@@ -4012,7 +4044,7 @@ async function prepareTeamworkTaskDetail(task) {
             const safeLink = escapeHTML(link);
             const label = escapeHTML(fileNameFromUrl(link));
             return imageExtensions.test(String(link))
-                ? `<a class="task-detail-image-attachment" href="${safeLink}" target="_blank" rel="noopener" title="Open ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></a>`
+                ? `<button type="button" class="task-detail-image-attachment" data-image-url="${safeLink}" data-image-name="${label}" onclick="openDealImagePreview(this)" title="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}" aria-label="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}: ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></button>`
                 : `<a href="${safeLink}" target="_blank" rel="noopener"><i data-lucide="download"></i>${label}</a>`;
         }).join('') : `<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>${taskDetailText('No files or links have been added', 'لم تتم إضافة ملفات أو روابط')}</span></div>`;
         const canUploadFiles = canInteractWithTask(task);
@@ -4042,7 +4074,13 @@ async function prepareTeamworkTaskDetail(task) {
     const legacySubtaskList = document.getElementById('taskSubTasksList');
     if (legacySubtaskList) legacySubtaskList.style.display = 'none';
     const commentForm = document.getElementById('taskCommentInput')?.closest('form');
-    if (commentForm) commentForm.style.display = canInteractWithTask(task) ? 'flex' : 'none';
+    if (commentForm) commentForm.style.display = canInteractWithTask(task) ? 'grid' : 'none';
+    const commentAttachButton = document.getElementById('taskCommentAttachButton');
+    if (commentAttachButton) {
+        const label = taskDetailText('Attach files or images', 'إرفاق ملفات أو صور');
+        commentAttachButton.title = label;
+        commentAttachButton.setAttribute('aria-label', label);
+    }
     setTaskDetailInfoTab('details');
     setTaskActivityTab('comments');
     if (window.lucide) window.lucide.createIcons();
@@ -4261,7 +4299,18 @@ window.setTaskDetailInfoTab = function (tab) {
     } else if (tab === 'dependencies') {
         panel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Parent task', 'المهمة الرئيسية')}</span><strong>${parent ? escapeHTML(getLocalizedTaskTitle(parent)) : taskDetailText('None', 'لا يوجد')}</strong></div><div><span>${taskDetailText('Subtasks', 'المهام الفرعية')}</span><strong>${subtasks.length}</strong></div><div><span>${taskDetailText('Blocking dependencies', 'التبعيات المانعة')}</span><strong>${taskDetailText('None', 'لا يوجد')}</strong></div></div>`;
     } else if (tab === 'proofs') {
-        panel.innerHTML = proofLinks.length ? `<div class="task-detail-link-list">${proofLinks.map(link => `<a href="${escapeHTML(link)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(link)}</a>`).join('')}</div>` : `<div class="task-tab-empty">${taskDetailText('No submission proofs have been added.', 'لم تتم إضافة إثباتات تسليم.')}</div>`;
+        const proofImageExtensions = /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i;
+        panel.innerHTML = proofLinks.length ? `<div class="task-detail-link-list">${proofLinks.map(link => {
+            const safeLink = safeExternalUrl(link);
+            if (!safeLink) return '';
+            const escapedLink = escapeHTML(safeLink);
+            let fileName = taskDetailText('Submission proof', 'إثبات التسليم');
+            try { fileName = decodeURIComponent(new URL(safeLink).pathname.split('/').pop() || fileName); } catch (_) { }
+            const escapedName = escapeHTML(fileName);
+            return proofImageExtensions.test(safeLink)
+                ? `<button type="button" class="task-detail-image-attachment" data-image-url="${escapedLink}" data-image-name="${escapedName}" onclick="openDealImagePreview(this)" aria-label="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}: ${escapedName}"><img src="${escapedLink}" alt="${escapedName}" loading="lazy"><span>${escapedName}</span></button>`
+                : `<a href="${escapedLink}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapedName}</a>`;
+        }).join('')}</div>` : `<div class="task-tab-empty">${taskDetailText('No submission proofs have been added.', 'لم تتم إضافة إثباتات تسليم.')}</div>`;
     } else {
         panel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Status', 'الحالة')}</span><strong>${escapeHTML(taskDetailValue(task.status, 'status'))}</strong></div><div><span>${taskDetailText('Priority', 'الأولوية')}</span><strong>${escapeHTML(taskDetailValue(task.priority, 'priority'))}</strong></div><div><span>${taskDetailText('Content links', 'روابط المحتوى')}</span><strong>${contentLinks.length}</strong></div><div><span>${taskDetailText('Due date', 'تاريخ الاستحقاق')}</span><strong>${escapeHTML(task.due_date || taskDetailText('Not set', 'غير محدد'))}</strong></div></div>
             <section class="task-detail-inline-subtasks"><div class="task-detail-subtask-heading"><strong>${taskDetailText('Subtasks', 'المهام الفرعية')} <span>${subtasks.length}</span></strong>${canManageTask ? `<button type="button" onclick="openInlineSubtaskComposer()"><i data-lucide="plus"></i> ${taskDetailText('Add a subtask', 'إضافة مهمة فرعية')}</button>` : `<span class="task-private-badge"><i data-lucide="eye"></i>${taskDetailText('View only', 'عرض فقط')}</span>`}</div><div id="taskDetailSubtaskHost">${subtasks.length ? subtasks.map(subtask => {
@@ -4336,19 +4385,57 @@ window.handleTaskCommentSubmit = async function (e) {
     e.preventDefault();
     const id = document.getElementById('detailsTaskId').value;
     const input = document.getElementById('taskCommentInput');
-    const content = input.value;
-    if (!content.trim() || !id) return;
+    const fileInput = document.getElementById('taskCommentAttachmentInput');
+    const submitButton = document.getElementById('taskCommentSubmitButton');
+    const attachButton = document.getElementById('taskCommentAttachButton');
+    const content = input.value.trim();
+    const files = Array.from(fileInput?.files || []);
+    if ((!content && !files.length) || !id) return;
     if (!canInteractWithTask(window.activeTaskDetail) || String(window.activeTaskDetail?.id) !== String(id)) {
         showToast(window.t('msg_toast_9') || 'You do not have access to this task.', 'warning');
         return;
     }
 
+    const maximumFiles = 8;
+    const maximumBytes = 15 * 1024 * 1024;
+    const maximumTotalBytes = 50 * 1024 * 1024;
+    const blockedExtensions = /\.(?:exe|msi|bat|cmd|com|scr|ps1|sh|js|jar|apk)$/i;
+    if (files.length > maximumFiles) return showToast(taskDetailText('Attach up to 8 files per comment.', 'يمكن إرفاق 8 ملفات كحد أقصى لكل تعليق.'), 'warning');
+    if (files.some(file => file.size > maximumBytes)) return showToast(taskDetailText('Each attachment must be 15 MB or smaller.', 'يجب ألا يتجاوز حجم كل مرفق 15 ميجابايت.'), 'warning');
+    if (files.reduce((total, file) => total + file.size, 0) > maximumTotalBytes) return showToast(taskDetailText('Attachments must total 50 MB or less.', 'يجب ألا يتجاوز إجمالي المرفقات 50 ميجابايت.'), 'warning');
+    if (files.some(file => blockedExtensions.test(file.name))) return showToast(taskDetailText('Executable or script files cannot be attached.', 'لا يمكن إرفاق الملفات التنفيذية أو ملفات البرامج النصية.'), 'warning');
+
     input.disabled = true;
-    const { success } = await db.addTaskComment(id, currentUser.id, content);
+    if (fileInput) fileInput.disabled = true;
+    if (submitButton) submitButton.disabled = true;
+    if (attachButton) attachButton.disabled = true;
+    const uploadedAttachments = [];
+    let uploadFailed = false;
+    for (const file of files) {
+        const upload = await db.uploadTaskAttachment(id, currentUser.id, file);
+        if (!upload.success) {
+            uploadFailed = true;
+            showToast(upload.error?.message || taskDetailText(`Unable to upload ${file.name}.`, `تعذر رفع ${file.name}.`), 'danger');
+            break;
+        }
+        uploadedAttachments.push({ url: upload.url, name: upload.name, type: file.type || '', size: file.size });
+    }
+
+    let success = false;
+    if (!uploadFailed) {
+        ({ success } = await db.addTaskComment(id, currentUser.id, content, uploadedAttachments));
+    }
+    if (!success && uploadedAttachments.length) {
+        await db.deleteTaskAttachmentObjects(uploadedAttachments.map(attachment => attachment.url));
+    }
     input.disabled = false;
+    if (fileInput) fileInput.disabled = false;
+    if (submitButton) submitButton.disabled = false;
+    if (attachButton) attachButton.disabled = false;
 
     if (success) {
         input.value = '';
+        window.clearTaskCommentAttachments();
 
         // In-app and email notifications are queued by the database trigger.
         const task = window.taskCache ? window.taskCache[id] : null;
@@ -4358,7 +4445,8 @@ window.handleTaskCommentSubmit = async function (e) {
                 task_id: id,
                 task_title: task.title,
                 assignee_id: task.assignee_id,
-                comment_content: content
+                comment_content: content,
+                attachments: uploadedAttachments.map(attachment => ({ name: attachment.name, url: attachment.url }))
             });
         }
 
@@ -6955,7 +7043,8 @@ function renderTaskCard(task) {
     const assigneeName = window.formatEmployeeName(task.assignee) || (assignedUsers[0] ? window.formatEmployeeName(assignedUsers[0]) : '') || t('task_unknown') || 'Unassigned';
     const assigneeProfiles = assignedUsers.length ? assignedUsers : [task.assignee].filter(Boolean);
     const assigneeLabel = assigneeProfiles.map(user => window.formatEmployeeName(user)).filter(Boolean).join(', ') || assigneeName;
-    const isOverdue = task.due_date && !['completed', 'Approved'].includes(task.status) && new Date(`${task.due_date}T23:59:59`) < new Date();
+    const isCrmProposalDesignTask = task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN';
+    const isOverdue = task.status === 'late' || (task.due_date && !['completed', 'Approved'].includes(task.status) && new Date(`${task.due_date}T23:59:59`) < new Date());
     const dueLabel = task.due_date
         ? new Intl.DateTimeFormat(currentLang === 'ar' ? 'ar-SA' : 'en', { month: 'short', day: 'numeric' }).format(new Date(`${task.due_date}T12:00:00`))
         : (t('task_no_date') || 'No date');
@@ -6968,7 +7057,7 @@ function renderTaskCard(task) {
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
                 ${canChangeTaskStage ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
-                    ['todo','To do'],['in_progress','In progress'],['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done']
+                    ['todo','To do'],['in_progress','In progress'], ...(isCrmProposalDesignTask ? [['late','Late']] : []), ['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done']
                 ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
                 <button type="button" class="task-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>
                     <i data-lucide="users"></i>
@@ -7184,6 +7273,7 @@ async function renderTasksV2() {
         const isCompleted = task.status === 'completed';
         const stageCheckColor = {
             in_progress: '#f59e0b',
+            late: '#dc2626',
             review: '#2563eb',
             'Pending Approval': '#7c3aed',
             completed: '#059669',
@@ -7243,9 +7333,9 @@ async function renderTasksV2() {
 
     const pending = tasks.filter(t => t.status === 'Pending Approval');
     const todo = tasks.filter(t => t.status === 'todo');
-    const inProgress = tasks.filter(t => t.status === 'in_progress');
+    const inProgress = tasks.filter(t => ['in_progress', 'late'].includes(t.status));
     const selectedWaitingCount = selectedScopeTasks.filter(task => ['todo', 'Pending Approval'].includes(task.status)).length;
-    const selectedActiveCount = selectedScopeTasks.filter(task => task.status === 'in_progress').length;
+    const selectedActiveCount = selectedScopeTasks.filter(task => ['in_progress', 'late'].includes(task.status)).length;
     const review = tasks.filter(t => t.status === 'review');
     const done = tasks.filter(t => t.status === 'completed');
     
@@ -9386,6 +9476,37 @@ window.handleEditTaskSubmit = async function (e) {
     }
 };
 
+window.clearTaskCommentAttachments = function () {
+    const input = document.getElementById('taskCommentAttachmentInput');
+    if (input) input.value = '';
+    const preview = document.getElementById('taskCommentAttachmentPreview');
+    if (preview) {
+        preview.innerHTML = '';
+        preview.hidden = true;
+    }
+};
+
+window.removeTaskCommentAttachment = function (index) {
+    const input = document.getElementById('taskCommentAttachmentInput');
+    if (!input?.files) return;
+    const transfer = new DataTransfer();
+    Array.from(input.files).forEach((file, fileIndex) => {
+        if (fileIndex !== Number(index)) transfer.items.add(file);
+    });
+    input.files = transfer.files;
+    window.renderTaskCommentAttachmentSelection();
+};
+
+window.renderTaskCommentAttachmentSelection = function () {
+    const input = document.getElementById('taskCommentAttachmentInput');
+    const preview = document.getElementById('taskCommentAttachmentPreview');
+    if (!preview) return;
+    const files = Array.from(input?.files || []);
+    preview.hidden = files.length === 0;
+    preview.innerHTML = files.map((file, index) => `<span class="task-comment-selection-item"><i data-lucide="${String(file.type || '').startsWith('image/') ? 'image' : 'file-text'}"></i><span title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</span><small>${escapeHTML(formatTaskCommentAttachmentSize(file.size))}</small><button type="button" onclick="removeTaskCommentAttachment(${index})" aria-label="${escapeHTML(taskDetailText('Remove attachment', 'إزالة المرفق'))}"><i data-lucide="x"></i></button></span>`).join('');
+    if (window.lucide) window.lucide.createIcons();
+};
+
 window.handleDeleteTask = async function (id) {
     const task = window.taskCache?.[id];
     const taskList = task ? (window.taskListsCache || []).find(list => list.id === task.task_list_id) : null;
@@ -10529,6 +10650,7 @@ window.handleBulkUpload = async function (event) {
         if (currentBulkUploadType === 'employees') {
             let successCount = 0;
             let errorCount = 0;
+            let passwordErrorCount = 0;
             showToast(`Uploading ${rows.length} users...`, 'info');
 
             for (const row of rows) {
@@ -10537,7 +10659,7 @@ window.handleBulkUpload = async function (event) {
                 const fullNameAr = row['Full Name in Arabic'] || '';
                 let email = row['email'] || '';
                 const phone = row['phone'] || '';
-                const password = row['Temp Password'] || 'Default123!';
+                const password = String(row['Temp Password'] || '').trim();
                 
                 const jobTitle = '';
                 const deptId = '';
@@ -10545,9 +10667,10 @@ window.handleBulkUpload = async function (event) {
                 const nationality = '';
                 const iqama = '';
 
-                if (!fullName) {
+                if (!fullName || password.length < 12) {
+                    if (password.length < 12) passwordErrorCount++;
                     errorCount++;
-                    continue; // Skip invalid row
+                    continue; // A unique, explicit temporary password is required for every imported employee.
                 }
                 
                 if (!email && empId) {
@@ -10565,7 +10688,10 @@ window.handleBulkUpload = async function (event) {
                 }
             }
 
-            showToast(`Bulk upload complete. Success: ${successCount}, Errors: ${errorCount}.`, 'success');
+            const passwordMessage = passwordErrorCount
+                ? ` ${passwordErrorCount} row(s) were skipped because Temp Password must contain at least 12 characters.`
+                : '';
+            showToast(`Bulk upload complete. Success: ${successCount}, Errors: ${errorCount}.${passwordMessage}`, errorCount ? 'warning' : 'success');
             if (typeof renderView === 'function') renderView('templates');
             return;
         }
@@ -11308,13 +11434,38 @@ async function renderNotifications() {
 function renderNotificationDetails(notification, compact = false) {
     const comment = String(notification?.metadata?.comment_text || '').trim();
     const attachments = Array.isArray(notification?.metadata?.attachment_links) ? notification.metadata.attachment_links.filter(Boolean) : [];
-    if (!comment && !attachments.length) return '';
+    const eventType = String(notification?.event_type || '').toLowerCase();
+    const isTaskNotification = Boolean(notification?.task_id) && (eventType.startsWith('task_') || eventType.startsWith('subtask_'));
+    const actorName = isTaskNotification
+        ? String(notification?.metadata?.actor_name || notification?.metadata?.creator_name || '').trim()
+        : '';
+    let actorLabel = taskDetailText('Updated by', 'تم التحديث بواسطة');
+    let actorIcon = 'user-round-check';
+    if (eventType === 'task_created' || eventType === 'subtask_created') {
+        actorLabel = taskDetailText('Created by', 'أنشأها');
+        actorIcon = 'user-round-plus';
+    } else if (eventType === 'task_assigned') {
+        actorLabel = taskDetailText('Assigned by', 'تم التعيين بواسطة');
+        actorIcon = 'user-round-cog';
+    } else if (eventType === 'task_comment') {
+        actorLabel = taskDetailText('Commented by', 'علّق بواسطة');
+        actorIcon = 'message-circle';
+    }
+    if (!actorName && !comment && !attachments.length) return '';
     return `<div class="notification-details ${compact ? 'compact' : ''}" onclick="event.stopPropagation()">
+        ${actorName ? `<div class="notification-actor"><i data-lucide="${actorIcon}"></i><span>${escapeHTML(actorLabel)} <strong>${escapeHTML(actorName)}</strong></span></div>` : ''}
         ${comment ? `<div class="notification-comment"><strong>${taskDetailText('Comment:', 'تعليق:')}</strong><span>${escapeHTML(comment)}</span></div>` : ''}
         ${attachments.length ? `<div class="notification-attachments"><strong>${taskDetailText('Files:', 'الملفات:')}</strong>${attachments.map((url, index) => {
+        const safeUrl = safeExternalUrl(url);
+        if (!safeUrl) return '';
         let name = taskDetailText(`Attachment ${index + 1}`, `مرفق ${index + 1}`);
-        try { name = decodeURIComponent(new URL(url).pathname.split('/').pop() || name).replace(/^\d+-/, ''); } catch (_) { }
-        return `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" download><i data-lucide="download"></i>${escapeHTML(name)}</a>`;
+        try { name = decodeURIComponent(new URL(safeUrl).pathname.split('/').pop() || name).replace(/^\d+-/, ''); } catch (_) { }
+        const escapedUrl = escapeHTML(safeUrl);
+        const escapedName = escapeHTML(name);
+        const isImage = /\.(?:png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
+        return isImage
+            ? `<button type="button" class="notification-image-link" data-image-url="${escapedUrl}" data-image-name="${escapedName}" onclick="openDealImagePreview(this)"><i data-lucide="image"></i>${escapedName}</button>`
+            : `<a href="${escapedUrl}" target="_blank" rel="noopener" download><i data-lucide="download"></i>${escapedName}</a>`;
     }).join('')}</div>` : ''}
     </div>`;
 }
@@ -12665,6 +12816,11 @@ async function ensureApprovedDealIsInDiscussion(deal, workflow) {
     if (!deal || !areDealApprovalsComplete(workflow)) return false;
     const previousStage = canonicalDealLifecycleStage(deal.stage);
     if (['NEGOTIATION', 'WON', 'LOST'].includes(previousStage)) return false;
+    const isProposalDesignWorkflow = String(deal.approval_type || '').toUpperCase() === 'QUOTE_PROPOSAL';
+    // Quote + proposal requests remain in Presentation until the MQ-08 task
+    // and its own approval cycle are complete. The database moves that deal
+    // to Discussion after the last Design approval.
+    if (isProposalDesignWorkflow) return false;
 
     // The database transition guard evaluates the new stage and workflow
     // status together. Persist both atomically so a fully approved deal can
@@ -12799,6 +12955,188 @@ window.closeDealWorkflowModal = function () {
     activeDealWorkflowContext = null;
 };
 
+window.closeDealImagePreview = function () {
+    const modal = document.getElementById('dealImagePreviewModal');
+    if (!modal) return;
+    modal.classList.remove('show');
+    const image = modal.querySelector('[data-deal-image-preview]');
+    if (image) {
+        image.removeAttribute('src');
+        image.style.width = '';
+        image.style.height = '';
+        delete image.dataset.previewBaseWidth;
+        delete image.dataset.previewBaseHeight;
+    }
+};
+
+window.setDealImagePreviewZoom = function (requestedZoom, anchorClientX, anchorClientY) {
+    const modal = document.getElementById('dealImagePreviewModal');
+    const image = modal?.querySelector('[data-deal-image-preview]');
+    const viewport = modal?.querySelector('[data-deal-image-preview-viewport]');
+    const canvas = modal?.querySelector('[data-deal-image-preview-canvas]');
+    const label = modal?.querySelector('[data-deal-image-preview-zoom]');
+    const slider = modal?.querySelector('[data-deal-image-preview-slider]');
+    if (!modal || !image || !viewport || !canvas) return;
+
+    const zoom = Math.min(8, Math.max(.1, Math.round(Number(requestedZoom || 1) * 100) / 100));
+    const beforeRect = image.getBoundingClientRect();
+    const viewportRect = viewport.getBoundingClientRect();
+    const anchorX = Number.isFinite(Number(anchorClientX)) ? Number(anchorClientX) : viewportRect.left + (viewportRect.width / 2);
+    const anchorY = Number.isFinite(Number(anchorClientY)) ? Number(anchorClientY) : viewportRect.top + (viewportRect.height / 2);
+    const imagePointX = beforeRect.width ? Math.min(1, Math.max(0, (anchorX - beforeRect.left) / beforeRect.width)) : .5;
+    const imagePointY = beforeRect.height ? Math.min(1, Math.max(0, (anchorY - beforeRect.top) / beforeRect.height)) : .5;
+    if (!Number(image.dataset.previewBaseWidth) || !Number(image.dataset.previewBaseHeight)) {
+        const rect = image.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        image.dataset.previewBaseWidth = String(rect.width);
+        image.dataset.previewBaseHeight = String(rect.height);
+    }
+
+    const width = Number(image.dataset.previewBaseWidth) * zoom;
+    const height = Number(image.dataset.previewBaseHeight) * zoom;
+    modal.dataset.imagePreviewZoom = String(zoom);
+    image.style.width = `${width}px`;
+    image.style.height = `${height}px`;
+    canvas.style.width = `${Math.max(viewport.clientWidth, width)}px`;
+    canvas.style.height = `${Math.max(viewport.clientHeight, height)}px`;
+    viewport.classList.toggle('is-zoomed', width > viewport.clientWidth || height > viewport.clientHeight);
+    const afterRect = image.getBoundingClientRect();
+    viewport.scrollLeft += (afterRect.left + (afterRect.width * imagePointX)) - anchorX;
+    viewport.scrollTop += (afterRect.top + (afterRect.height * imagePointY)) - anchorY;
+    if (label) label.textContent = `${Math.round(zoom * 100)}%`;
+    if (slider) slider.value = String(Math.round(zoom * 100));
+};
+
+window.adjustDealImagePreviewZoom = function (direction, anchorClientX, anchorClientY) {
+    const modal = document.getElementById('dealImagePreviewModal');
+    const currentZoom = Number(modal?.dataset?.imagePreviewZoom || 1);
+    window.setDealImagePreviewZoom(currentZoom + (Number(direction) || 0), anchorClientX, anchorClientY);
+};
+
+window.resetDealImagePreviewZoom = function () {
+    const modal = document.getElementById('dealImagePreviewModal');
+    const image = modal?.querySelector('[data-deal-image-preview]');
+    const viewport = modal?.querySelector('[data-deal-image-preview-viewport]');
+    const canvas = modal?.querySelector('[data-deal-image-preview-canvas]');
+    const label = modal?.querySelector('[data-deal-image-preview-zoom]');
+    const slider = modal?.querySelector('[data-deal-image-preview-slider]');
+    if (!modal || !image || !viewport || !canvas) return;
+    image.style.width = '';
+    image.style.height = '';
+    canvas.style.width = '';
+    canvas.style.height = '';
+    viewport.scrollTo({ top: 0, left: 0 });
+    viewport.classList.remove('is-zoomed');
+    delete image.dataset.previewBaseWidth;
+    delete image.dataset.previewBaseHeight;
+    modal.dataset.imagePreviewZoom = '1';
+    if (label) label.textContent = '100%';
+    if (slider) slider.value = '100';
+};
+
+window.openDealImagePreview = function (trigger) {
+    const safeUrl = safeExternalUrl(trigger?.dataset?.imageUrl);
+    if (!safeUrl) {
+        showToast(t('crm_image_unavailable') || 'This image is unavailable.', 'warning');
+        return;
+    }
+
+    let modal = document.getElementById('dealImagePreviewModal');
+    if (!modal) {
+        document.body.insertAdjacentHTML('beforeend', `<div id="dealImagePreviewModal" class="modal crm-image-preview-modal" role="dialog" aria-modal="true" aria-labelledby="dealImagePreviewTitle" onclick="if (event.target === this) closeDealImagePreview()">
+            <div class="modal-content crm-image-preview-content">
+                <div class="modal-header crm-image-preview-header">
+                    <h3 id="dealImagePreviewTitle"></h3>
+                    <button type="button" class="crm-image-preview-close" data-deal-image-preview-close aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" title="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" onclick="closeDealImagePreview()"><i data-lucide="x"></i></button>
+                </div>
+                <figure class="crm-image-preview-figure">
+                    <div class="crm-image-preview-viewport" data-deal-image-preview-viewport>
+                        <div class="crm-image-preview-canvas" data-deal-image-preview-canvas><img data-deal-image-preview alt=""></div>
+                    </div>
+                    <figcaption data-deal-image-preview-description hidden></figcaption>
+                </figure>
+                <div class="crm-image-preview-actions" role="toolbar" aria-label="${escapeHTML(taskDetailText('Image zoom controls', 'أدوات تكبير الصورة'))}">
+                    <button type="button" class="crm-image-preview-tool" aria-label="${escapeHTML(taskDetailText('Zoom out', 'تصغير'))}" title="${escapeHTML(taskDetailText('Zoom out', 'تصغير'))}" onclick="adjustDealImagePreviewZoom(-.1)"><i data-lucide="minus"></i></button>
+                    <input type="range" min="10" max="800" step="10" value="100" data-deal-image-preview-slider aria-label="${escapeHTML(taskDetailText('Zoom level', 'مستوى التكبير'))}">
+                    <button type="button" class="crm-image-preview-tool" aria-label="${escapeHTML(taskDetailText('Zoom in', 'تكبير'))}" title="${escapeHTML(taskDetailText('Zoom in', 'تكبير'))}" onclick="adjustDealImagePreviewZoom(.1)"><i data-lucide="plus"></i></button>
+                    <output data-deal-image-preview-zoom aria-live="polite">100%</output>
+                    <span class="crm-image-preview-divider" aria-hidden="true"></span>
+                    <button type="button" class="crm-image-preview-tool" aria-label="${escapeHTML(taskDetailText('Fit to screen', 'ملاءمة للشاشة'))}" title="${escapeHTML(taskDetailText('Fit to screen', 'ملاءمة للشاشة'))}" onclick="resetDealImagePreviewZoom()"><i data-lucide="scan"></i></button>
+                </div>
+            </div>
+        </div>`);
+        modal = document.getElementById('dealImagePreviewModal');
+        modal.addEventListener('keydown', event => {
+            if (event.key === 'Escape') closeDealImagePreview();
+            if (event.key === '+' || event.key === '=') adjustDealImagePreviewZoom(.25);
+            if (event.key === '-') adjustDealImagePreviewZoom(-.25);
+            if (event.key === '0') resetDealImagePreviewZoom();
+        });
+        const previewViewport = modal.querySelector('[data-deal-image-preview-viewport]');
+        const zoomSlider = modal.querySelector('[data-deal-image-preview-slider]');
+        zoomSlider?.addEventListener('input', event => {
+            setDealImagePreviewZoom(Number(event.target.value) / 100);
+        });
+        previewViewport?.addEventListener('wheel', event => {
+            event.preventDefault();
+            const currentZoom = Number(modal.dataset.imagePreviewZoom || 1);
+            const factor = event.deltaY < 0 ? 1.12 : (1 / 1.12);
+            setDealImagePreviewZoom(currentZoom * factor, event.clientX, event.clientY);
+        }, { passive: false });
+        previewViewport?.addEventListener('contextmenu', event => event.preventDefault());
+        let rightButtonPan = null;
+        previewViewport?.addEventListener('pointerdown', event => {
+            if (![0, 2].includes(event.button) || !previewViewport.classList.contains('is-zoomed')) return;
+            event.preventDefault();
+            rightButtonPan = {
+                pointerId: event.pointerId,
+                clientX: event.clientX,
+                clientY: event.clientY,
+                scrollLeft: previewViewport.scrollLeft,
+                scrollTop: previewViewport.scrollTop
+            };
+            previewViewport.classList.add('is-panning');
+            try { previewViewport.setPointerCapture(event.pointerId); } catch (_) { }
+        });
+        previewViewport?.addEventListener('pointermove', event => {
+            if (!rightButtonPan || event.pointerId !== rightButtonPan.pointerId || event.buttons === 0) return;
+            event.preventDefault();
+            previewViewport.scrollLeft = rightButtonPan.scrollLeft - (event.clientX - rightButtonPan.clientX);
+            previewViewport.scrollTop = rightButtonPan.scrollTop - (event.clientY - rightButtonPan.clientY);
+        });
+        const stopRightButtonPan = event => {
+            if (!rightButtonPan || event.pointerId !== rightButtonPan.pointerId) return;
+            try { previewViewport.releasePointerCapture(event.pointerId); } catch (_) { }
+            rightButtonPan = null;
+            previewViewport.classList.remove('is-panning');
+        };
+        previewViewport?.addEventListener('pointerup', stopRightButtonPan);
+        previewViewport?.addEventListener('pointercancel', stopRightButtonPan);
+        previewViewport?.addEventListener('dblclick', event => {
+            const currentZoom = Number(modal.dataset.imagePreviewZoom || 1);
+            if (currentZoom > 1) resetDealImagePreviewZoom();
+            else setDealImagePreviewZoom(2, event.clientX, event.clientY);
+        });
+    }
+
+    const description = String(trigger?.dataset?.imageDescription || '').trim();
+    const fileName = String(trigger?.dataset?.imageName || '').trim();
+    const title = t('crm_proposal_image') || 'Proposal image';
+    const image = modal.querySelector('[data-deal-image-preview]');
+    const caption = modal.querySelector('[data-deal-image-preview-description]');
+    modal.querySelector('#dealImagePreviewTitle').textContent = fileName || title;
+    image.alt = description || fileName || title;
+    image.onload = () => resetDealImagePreviewZoom();
+    image.src = safeUrl;
+    resetDealImagePreviewZoom();
+    caption.textContent = description;
+    caption.hidden = !description;
+    modal.classList.add('show');
+    modal.tabIndex = -1;
+    modal.focus();
+    if (window.lucide) window.lucide.createIcons();
+};
+
 function renderDealPresentationAssets(attachments) {
     const container = document.getElementById('dealPresentationAssetsSummary');
     if (!container) return;
@@ -12809,7 +13147,7 @@ function renderDealPresentationAssets(attachments) {
         container.innerHTML = `<p class="empty-state-inline">${escapeHTML(t('crm_no_presentation_assets') || 'No quote document or proposal images uploaded yet.')}</p>`;
         return;
     }
-    const quoteSection = quotes.length ? `<section class="deal-presentation-group">
+    const quoteSection = quotes.length ? `<section class="deal-presentation-group deal-presentation-quote-section">
         <h4><i data-lucide="file-text"></i>${escapeHTML(t('crm_uploaded_quote_documents') || 'Quote document')}</h4>
         <div class="deal-presentation-quote-list">${quotes.map(file => `<article class="deal-presentation-quote">
             <i data-lucide="file-text"></i>
@@ -12817,12 +13155,12 @@ function renderDealPresentationAssets(attachments) {
             <a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(t('crm_open_file') || 'Open file')}</a>
         </article>`).join('')}</div>
     </section>` : '';
-    const proposalSection = proposalImages.length ? `<section class="deal-presentation-group">
+    const proposalSection = proposalImages.length ? `<section class="deal-presentation-group deal-presentation-proposal-section">
         <h4><i data-lucide="images"></i>${escapeHTML(t('crm_uploaded_proposal_images') || 'Proposal images')}</h4>
         <div class="deal-presentation-gallery">${proposalImages.map(file => `<figure class="deal-presentation-image-card">
-            <a class="deal-presentation-image-link" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener">
+            <button type="button" class="deal-presentation-image-link" data-image-url="${escapeHTML(file.file_url)}" data-image-description="${escapeHTML(file.description || '')}" data-image-name="${escapeHTML(file.file_name || '')}" onclick="openDealImagePreview(this)" aria-label="${escapeHTML(t('crm_open_image') || 'Open image preview')}">
                 <img src="${escapeHTML(file.file_url)}" alt="${escapeHTML(file.description || file.file_name || (t('crm_proposal_image') || 'Proposal image'))}" loading="lazy">
-            </a>
+            </button>
             <figcaption>
                 <p>${escapeHTML(file.description || (t('crm_no_image_description') || 'No description provided.'))}</p>
                 <small>${escapeHTML(file.file_name || '')}</small>
@@ -12882,15 +13220,25 @@ function renderDealWorkflowContents(workflow) {
         }).join('');
     }
 
-    document.getElementById('dealAttachmentList').innerHTML = workflow.attachments.length ? workflow.attachments.map(file => {
+    const renderAttachmentItems = files => files.map(file => {
         const isImage = /\.(png|jpe?g|webp|gif|bmp|svg)(?:\?|$)/i.test(String(file.file_url || '')) || ['PROPOSAL', 'PHOTO'].includes(String(file.category || '').toUpperCase());
         return `<article class="deal-attachment-item ${isImage ? 'deal-attachment-image' : ''}">
             ${isImage ? `<img src="${escapeHTML(file.file_url)}" alt="${escapeHTML(file.description || file.file_name)}" loading="lazy">` : '<i data-lucide="paperclip"></i>'}
             <span><strong>${escapeHTML(file.file_name)}</strong><small>${escapeHTML(file.description || file.category.replace(/_/g, ' '))}</small></span>
-            <a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener">${escapeHTML(t('crm_open_file') || 'Open file')}</a>
+            ${isImage
+                ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)">${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
+                : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener">${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
         </article>`;
-    }
-    ).join('') : `<p class="empty-state-inline">${t('crm_no_files') || 'No files uploaded.'}</p>`;
+    }).join('');
+    const quoteAttachments = workflow.attachments.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION');
+    const proposalAttachments = workflow.attachments.filter(file => String(file.category || '').toUpperCase() === 'PROPOSAL');
+    const otherAttachments = workflow.attachments.filter(file => !['QUOTATION', 'PROPOSAL'].includes(String(file.category || '').toUpperCase()));
+    const attachmentSections = [
+        quoteAttachments.length ? `<section class="deal-attachment-section"><h4><i data-lucide="file-text"></i>${escapeHTML(t('crm_uploaded_quote_documents') || 'Quote')}</h4>${renderAttachmentItems(quoteAttachments)}</section>` : '',
+        proposalAttachments.length ? `<section class="deal-attachment-section"><h4><i data-lucide="images"></i>${escapeHTML(t('crm_uploaded_proposal_images') || 'Proposal')}</h4>${renderAttachmentItems(proposalAttachments)}</section>` : '',
+        otherAttachments.length ? `<section class="deal-attachment-section"><h4><i data-lucide="paperclip"></i>${escapeHTML(t('crm_other_files') || 'Other files')}</h4>${renderAttachmentItems(otherAttachments)}</section>` : ''
+    ].filter(Boolean).join('');
+    document.getElementById('dealAttachmentList').innerHTML = attachmentSections || `<p class="empty-state-inline">${t('crm_no_files') || 'No files uploaded.'}</p>`;
 
     document.getElementById('dealActivityList').innerHTML = workflow.activity.length ? workflow.activity.map(item =>
         `<div class="deal-activity-item"><span></span><div><strong>${escapeHTML(String(item.action || '').replace(/_/g, ' '))}</strong><small>${escapeHTML(dealEmployeeName(item.profiles))} · ${new Date(item.created_at).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-US')}</small>${item.note ? `<p>${escapeHTML(item.note)}</p>` : ''}</div></div>`
@@ -13300,12 +13648,14 @@ window.handleCrmPresentationRequestSubmit = async function (event) {
     }
     button.disabled = true;
     try {
-        const quoteResult = await db.uploadDealAttachment(dealId, currentUser.id, quoteFile, 'QUOTATION', t('crm_quote_document') || 'Quote document');
-        if (!quoteResult.success) throw quoteResult.error || new Error(t('crm_upload_failed') || 'Upload failed');
-        for (const proposalEntry of proposalEntries) {
-            const upload = await db.uploadDealAttachment(dealId, currentUser.id, proposalEntry.file, 'PROPOSAL', proposalEntry.description);
-            if (!upload.success) throw upload.error || new Error(t('crm_upload_failed') || 'Upload failed');
-        }
+        const replacementEntries = [
+            { file: quoteFile, category: 'QUOTATION', description: t('crm_quote_document') || 'Quote document' },
+            ...proposalEntries.map(entry => ({ ...entry, category: 'PROPOSAL' }))
+        ];
+        const replacement = await db.replaceDealPresentationAttachments(dealId, currentUser.id, replacementEntries, {
+            replaceProposal: requestType === 'QUOTE_PROPOSAL'
+        });
+        if (!replacement.success) throw replacement.error || new Error(t('crm_upload_failed') || 'Upload failed');
         const result = await db.startCrmPresentationApproval(dealId, requestType);
         if (!result.success) throw result.error || new Error(t('crm_approval_start_failed') || 'Unable to start approval');
         window.setCrmDealStageLocally?.(dealId, 'PITCH');
@@ -15649,7 +15999,8 @@ async function renderApprovals() {
         const approver = userMap.get(step.approver_id);
         const stageLabel = t(dealApprovalStageLabels[step.stage_key]) || String(step.stage_key || 'Approval').replace(/_/g, ' ');
         const canDecide = isAdmin || step.approver_id === currentUser?.id;
-        return `<tr><td><strong>${escapeHTML(deal.title || 'Untitled deal')}</strong></td><td>${escapeHTML(clientName)}</td><td>SAR ${Number(deal.amount || 0).toLocaleString()}</td><td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${deal.created_at ? new Date(deal.created_at).toLocaleDateString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
+        const submittedAt = deal.proposal_sent_at || step.created_at;
+        return `<tr><td><strong>${escapeHTML(deal.title || 'Untitled deal')}</strong></td><td>${escapeHTML(clientName)}</td><td>SAR ${Number(deal.amount || 0).toLocaleString()}</td><td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${submittedAt ? new Date(submittedAt).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-SA') : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
     }).join('');
     const pendingCrmDesignApprovals = (crmDesignApprovalSteps || []).filter(step => isAdmin || step.approver_id === currentUser?.id);
     const designApprovalRows = pendingCrmDesignApprovals.map(step => {

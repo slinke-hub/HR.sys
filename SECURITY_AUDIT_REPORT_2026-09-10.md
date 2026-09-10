@@ -112,6 +112,51 @@ Remediation implemented:
 
 Verification: the production dependency audit reports zero known vulnerabilities. Three moderate advisories remain in Capacitor CLI's mobile build-only dependency chain, with no upstream fix currently available.
 
+## Additional repository hardening completed
+
+### High — generated dependencies and scratch files tracked by Git
+
+Evidence: Git tracked 10,888 files under `node_modules` and 73 files under `scratch`, including a test helper that had contained a plaintext administrator credential. Generated output and temporary render folders were tracked as well.
+
+Remediation implemented:
+
+- Removed `node_modules`, `scratch`, `tmp`, and `outputs` from the Git index while preserving every local file.
+- Expanded `.gitignore` to block dependency folders, scratch/output folders, coverage, logs, Vercel state, Android signing keys, and keystore property files.
+- Replaced local test helpers with environment-only inputs and explicit opt-in safety gates before removing them from tracking.
+
+Residual action: the previously committed credential remains recoverable from Git history. Rotate it immediately. Purging the old object requires a coordinated history rewrite and forced remote update; that destructive operation was intentionally not performed during this hardening pass.
+
+### High — authenticated users could trigger global email or push queues
+
+Evidence: the email dispatcher accepted any valid user session and processed pending email rows for all users. The push dispatcher similarly allowed any authenticated user to start a global delivery run.
+
+Remediation implemented:
+
+- Email dispatch by an ordinary user is now limited to queue records created by that user's own action.
+- Global email dispatch is limited to a trusted server-side dispatch secret or an elevated administrator/executive profile.
+- Global push dispatch is limited to a trusted server-side dispatch secret or administrator profile; reading the public VAPID key remains available to authenticated users.
+- Both functions now reject unsupported methods, return no-store responses, validate secrets without early string comparison, and restrict browser origins to production, Capacitor localhost, and local development origins.
+- The document-expiry function received the same origin and no-store hardening while retaining its existing authorization and cron-secret checks.
+
+Required operational action: configure fresh `TASK_EMAIL_DISPATCH_SECRET` and `PUSH_DISPATCH_SECRET` values in Supabase, then deploy the updated Edge Functions.
+
+### High — shared fallback password in employee imports
+
+Evidence: employees imported without a temporary password received the same hard-coded fallback password.
+
+Remediation implemented: every imported employee now requires an explicit unique temporary password containing at least 12 characters. Invalid rows are skipped and reported to the administrator.
+
+### Medium — mobile backup and release regression controls
+
+Remediation implemented:
+
+- Disabled Android application backups so authenticated app data cannot be copied through Android backup facilities.
+- Kept cleartext traffic and WebView debugging disabled.
+- Added explicit HSTS, origin isolation, mixed-content upgrade, and cross-domain policy headers to the production configuration.
+- Added weekly dependency update checks and a least-privilege GitHub Actions security workflow.
+- Added `npm run security:check` to run security regressions and fail releases on high or critical dependency advisories.
+- Added a repository security policy covering vulnerability reporting, secrets, production controls, and incident response.
+
 ## Port results
 
 Production hostname:
@@ -143,8 +188,9 @@ The unrelated Node and AnyDesk listeners were not stopped because they are outsi
 
 1. Deploy the current repository so Vercel publishes only `www` and applies the security headers.
 2. Rotate the exposed account password and revoke existing sessions.
-3. Apply both new Supabase migrations.
+3. Apply the pending Supabase migrations.
 4. Verify the exposed production paths now return 404 and sensitive storage URLs require signed access.
 5. Review whether the unrelated workstation listeners on ports 3000 and 7070 are needed.
+6. Configure the new dispatch secrets and deploy the hardened email, push, and document-expiry Edge Functions.
 
 No finite audit can guarantee that a system is fully secure. These controls close the verified exposures in this scope and substantially reduce credential, file-disclosure, browser-injection, and development-server risk.

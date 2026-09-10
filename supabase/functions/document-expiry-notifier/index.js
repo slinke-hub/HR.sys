@@ -4,23 +4,29 @@ const DAY_IN_MS = 86_400_000;
 const ACTIVE = "Active";
 const EXPIRES_SOON = "Expires Soon";
 const EXPIRED = "Expired";
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const isAllowedOrigin = (origin) => {
+  if (origin === "https://sys.muqam.net") return true;
+  try {
+    const parsed = new URL(origin);
+    return ["localhost", "127.0.0.1"].includes(parsed.hostname) && ["http:", "https:", "capacitor:"].includes(parsed.protocol);
+  } catch (_) {
+    return false;
+  }
+};
+const corsHeadersFor = (request) => ({
+  "Access-Control-Allow-Origin": isAllowedOrigin(request.headers.get("Origin") || "")
+    ? request.headers.get("Origin")
+    : "https://sys.muqam.net",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+  "Cache-Control": "no-store",
+  "Vary": "Origin",
+});
 
 function requiredEnv(name) {
   const value = Deno.env.get(name);
   if (!value) throw new Error(`Missing required secret: ${name}`);
   return value;
-}
-
-function jsonResponse(body, status = 200) {
-  return Response.json(body, {
-    status,
-    headers: { ...corsHeaders, "Cache-Control": "no-store" },
-  });
 }
 
 function isUuid(value) {
@@ -217,6 +223,8 @@ async function sendExpiryEmail(
 }
 
 Deno.serve(async (request) => {
+  const corsHeaders = corsHeadersFor(request);
+  const jsonResponse = (body, status = 200) => Response.json(body, { status, headers: corsHeaders });
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }

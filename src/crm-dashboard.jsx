@@ -21,7 +21,8 @@ const COPY = {
     activityLabel: 'Client activity', noAnalytics: 'No client analytics yet',
     account: 'account', accounts: 'accounts', today: 'Today', daysAgo: 'days ago', viewDeal: 'View deal', editDeal: 'Edit deal', deleteDeal: 'Delete deal', unassigned: 'Unassigned',
     approvalPending: 'Approval pending', approvalApproved: 'Approved', approvalRejected: 'Needs revision',
-    designInProgress: 'Design in progress', designApprovalPending: 'Design approval pending', designRejected: 'Design changes required'
+    designInProgress: 'In progress', designLate: 'Late', designCompleted: 'Completed',
+    designApprovalPending: 'Design approval pending', designRejected: 'Design changes required'
   },
   ar: {
     dashboard: 'لوحة القيادة', employees: 'الموظفين', payroll: 'الرواتب', time: 'الوقت والحضور', crm: 'إدارة علاقات العملاء',
@@ -37,7 +38,8 @@ const COPY = {
     activityLabel: 'نشاط العميل', noAnalytics: 'لا توجد تحليلات للعملاء بعد',
     account: 'حساب', accounts: 'حسابات', today: 'اليوم', daysAgo: 'أيام مضت', viewDeal: 'عرض الصفقة', editDeal: 'تعديل الصفقة', deleteDeal: 'حذف الصفقة', unassigned: 'غير معيّن',
     approvalPending: 'بانتظار الاعتماد', approvalApproved: 'معتمدة', approvalRejected: 'تحتاج تعديلاً',
-    designInProgress: 'التصميم قيد التنفيذ', designApprovalPending: 'بانتظار اعتماد التصميم', designRejected: 'التصميم يحتاج تعديلاً'
+    designInProgress: 'قيد التنفيذ', designLate: 'متأخر', designCompleted: 'مكتمل',
+    designApprovalPending: 'بانتظار اعتماد التصميم', designRejected: 'التصميم يحتاج تعديلاً'
   }
 };
 
@@ -91,7 +93,17 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals }) {
   const profile = deal.assignee || {};
   const isLost = normalizeStage(deal.stage) === 'LOST';
   const workflowStatus = String(deal.workflow_status || 'NOT_STARTED').toUpperCase();
-  const workflowBadge = workflowStatus === 'PENDING_APPROVAL'
+  const designTaskStatus = String(deal.design_task_status || '').toUpperCase();
+  const designDueDate = deal.design_task_due_date ? new Date(`${deal.design_task_due_date}T23:59:59`) : null;
+  const designIsLate = designTaskStatus !== 'COMPLETED' && (designTaskStatus === 'LATE' || (designDueDate && designDueDate < new Date()));
+  const designBadge = normalizeStage(deal.stage) === 'PRESENTATION' && deal.design_task_id
+    ? designIsLate
+      ? { label: text.designLate, classes: 'tw-bg-rose-50 tw-text-rose-700 tw-ring-1 tw-ring-rose-200' }
+      : designTaskStatus === 'COMPLETED'
+        ? { label: text.designCompleted, classes: 'tw-bg-emerald-50 tw-text-emerald-700 tw-ring-1 tw-ring-emerald-200' }
+        : { label: text.designInProgress, classes: 'tw-bg-blue-50 tw-text-blue-700 tw-ring-1 tw-ring-blue-200' }
+    : null;
+  const workflowBadge = designBadge || (workflowStatus === 'PENDING_APPROVAL'
     ? { label: text.approvalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
     : workflowStatus === 'APPROVED'
       ? { label: text.approvalApproved, classes: 'tw-bg-emerald-50 tw-text-emerald-700' }
@@ -103,7 +115,7 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals }) {
             ? { label: text.designApprovalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
             : workflowStatus === 'DESIGN_REJECTED'
               ? { label: text.designRejected, classes: 'tw-bg-rose-50 tw-text-rose-700' }
-              : null;
+              : null);
   const openDetails = () => {
     if (!canOpenDetails) return;
     if (isLost) window.openLostDealSummaryModal?.(deal);

@@ -42,10 +42,10 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=1788202890005">
     <link rel="stylesheet" href="css/layout.css?v=1788202890007">
-    <link rel="stylesheet" href="css/components.css?v=2026091016">
+    <link rel="stylesheet" href="css/components.css?v=2026091026">
     <link rel="stylesheet" href="css/hr-suite-beta.css?v=2026090901">
     <link rel="stylesheet" href="css/android.css?v=2026090702">
-    <link rel="stylesheet" href="css/crm-tailwind.css?v=2026090903">
+    <link rel="stylesheet" href="css/crm-tailwind.css?v=2026090904">
     <style>
         @media (hover: none) and (pointer: coarse) {
             [draggable="true"] {
@@ -1402,10 +1402,17 @@
             </div>
         </div>
         <div class="side-panel-footer">
-            <form onsubmit="handleTaskCommentSubmit(event)" style="display: flex; gap: 0.5rem;">
+            <form class="task-comment-composer" onsubmit="handleTaskCommentSubmit(event)">
                 <input type="hidden" id="detailsTaskId">
-                <input type="text" id="taskCommentInput" class="form-control" placeholder="Add a comment..." data-i18n-placeholder="ph_add_a_comment" required style="flex-grow: 1;">
-                <button type="submit" class="btn btn-primary" data-i18n="html_send">Send</button>
+                <div id="taskCommentAttachmentPreview" class="task-comment-selection" hidden></div>
+                <div class="task-comment-compose-row">
+                    <input type="text" id="taskCommentInput" class="form-control" placeholder="Add a comment..." data-i18n-placeholder="ph_add_a_comment">
+                    <button type="button" id="taskCommentAttachButton" class="btn btn-secondary task-comment-attach-button" onclick="document.getElementById('taskCommentAttachmentInput').click()" data-i18n-title="html_attach_files_images" title="Attach files or images" aria-label="Attach files or images">
+                        <i data-lucide="paperclip"></i><span data-i18n="html_attach">Attach</span>
+                    </button>
+                    <input id="taskCommentAttachmentInput" class="task-comment-native-file-input" type="file" multiple hidden aria-hidden="true" tabindex="-1" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" onchange="renderTaskCommentAttachmentSelection()">
+                    <button id="taskCommentSubmitButton" type="submit" class="btn btn-primary" data-i18n="html_send">Send</button>
+                </div>
             </form>
         </div>
     </div>
@@ -1628,13 +1635,13 @@
     <script src="js/vendor/supabase.js"></script>
     <script src="js/vendor/chart.umd.min.js"></script>
     <script src="js/vendor/xlsx.full.min.js"></script>
-    <script src="js/db.js?v=2026091012"></script>
+    <script src="js/db.js?v=2026091015"></script>
     <script src="js/data.js?v=2026091013"></script>
     <script src="js/contract.js?v=1788202890003"></script>
     <script src="js/payroll.js"></script>
-    <script src="js/crm-dashboard.bundle.js?v=2026091010"></script>
+    <script src="js/crm-dashboard.bundle.js?v=2026091011"></script>
     <script src="js/hr-suite-beta.js?v=2026090901"></script>
-    <script src="js/app.js?v=2026091019"></script>
+    <script src="js/app.js?v=2026091028"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

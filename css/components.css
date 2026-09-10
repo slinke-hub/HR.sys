@@ -2048,7 +2048,16 @@ button.btn-icon [data-lucide] {
 .deal-workflow-summary .deal-workflow-summary-wide { grid-column: 1 / -1; }
 .deal-presentation-summary { gap: .75rem !important; }
 .deal-presentation-assets { display: grid; gap: 1.1rem; font-weight: 400 !important; }
-.deal-presentation-group { display: grid; gap: .7rem; min-width: 0; }
+.deal-presentation-group {
+  display: grid;
+  gap: .7rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-bg-elevated) 95%, var(--color-primary) 5%);
+}
+.deal-presentation-proposal-section { margin-top: .15rem; }
 .deal-presentation-group h4 {
   display: flex;
   align-items: center;
@@ -2090,7 +2099,16 @@ button.btn-icon [data-lucide] {
   display: grid;
   place-items: center;
   width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
   background: color-mix(in srgb, var(--color-bg-elevated) 76%, #000 24%);
+}
+.deal-presentation-image-link:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: -3px;
 }
 .deal-presentation-image-link img {
   display: block;
@@ -2107,6 +2125,220 @@ button.btn-icon [data-lucide] {
 .deal-presentation-image-card figcaption p { margin: 0; color: var(--color-text); line-height: 1.6; }
 .deal-presentation-image-card figcaption small { color: var(--color-text-secondary); overflow-wrap: anywhere; }
 
+.crm-image-preview-modal {
+  z-index: 100300;
+  padding: 0;
+  background: #111318;
+  backdrop-filter: none;
+}
+.crm-image-preview-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: #111318;
+  box-shadow: none;
+}
+.crm-image-preview-header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 12px clamp(14px, 2vw, 28px);
+  gap: 1rem;
+  border: 0;
+  background: linear-gradient(180deg, rgba(8, 10, 14, .86), rgba(8, 10, 14, 0));
+  cursor: default;
+  pointer-events: none;
+}
+.crm-image-preview-header h3 {
+  min-width: 0;
+  margin: 0;
+  color: rgba(255, 255, 255, .92);
+  font-size: clamp(.85rem, 1.5vw, 1rem);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crm-image-preview-close {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  margin-inline-start: auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, .94);
+  background: rgba(34, 37, 44, .72);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .2);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background-color .16s ease, transform .16s ease;
+}
+.crm-image-preview-close:hover { background: #c42b1c; }
+.crm-image-preview-close:active { transform: scale(.94); }
+.crm-image-preview-close :is(svg, [data-lucide]) { width: 19px; height: 19px; stroke-width: 1.8; }
+.crm-image-preview-actions {
+  position: absolute;
+  inset-inline-start: 50%;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 52px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, .11);
+  border-radius: 14px;
+  background: rgba(37, 39, 45, .88);
+  box-shadow: 0 12px 38px rgba(0, 0, 0, .42), inset 0 1px rgba(255, 255, 255, .06);
+  backdrop-filter: blur(20px) saturate(140%);
+  transform: translateX(-50%);
+}
+.crm-image-preview-tool {
+  display: inline-grid;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, .9);
+  background: transparent;
+  cursor: pointer;
+  transition: color .15s ease, background-color .15s ease, transform .15s ease;
+}
+.crm-image-preview-tool :is(svg, [data-lucide]) {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  color: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.crm-image-preview-tool:hover { color: #fff; background: rgba(255, 255, 255, .1); }
+.crm-image-preview-tool:active { transform: scale(.92); }
+.crm-image-preview-tool:focus-visible,
+.crm-image-preview-close:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.crm-image-preview-actions input[type="range"] {
+  width: clamp(90px, 14vw, 150px);
+  height: 24px;
+  margin: 0 4px;
+  padding: 0;
+  accent-color: #60a5fa;
+  cursor: pointer;
+}
+.crm-image-preview-actions output {
+  display: inline-flex;
+  min-width: 3.25rem;
+  min-height: 38px;
+  padding: 0 .35rem;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, .88);
+  font-size: .76rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+}
+.crm-image-preview-divider { width: 1px; height: 24px; margin: 0 3px; background: rgba(255, 255, 255, .14); }
+.crm-image-preview-figure {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+}
+.crm-image-preview-viewport {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, .035), transparent 42%),
+    #111318;
+  direction: ltr;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, .22) transparent;
+  scrollbar-width: thin;
+  touch-action: none;
+}
+.crm-image-preview-viewport.is-zoomed { cursor: grab; }
+.crm-image-preview-viewport.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+.crm-image-preview-canvas {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  place-items: center;
+}
+.crm-image-preview-figure img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  object-fit: contain;
+  filter: drop-shadow(0 14px 36px rgba(0, 0, 0, .35));
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.crm-image-preview-figure figcaption {
+  position: absolute;
+  inset-inline: clamp(12px, 8vw, 110px);
+  bottom: 84px;
+  z-index: 4;
+  max-height: min(7rem, 22dvh);
+  padding: .65rem .85rem;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, .86);
+  background: rgba(28, 30, 36, .8);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+  backdrop-filter: blur(18px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 520px) {
+  .crm-image-preview-header { min-height: 56px; padding: 8px 10px; }
+  .crm-image-preview-header h3 { font-size: .82rem; }
+  .crm-image-preview-close { width: 38px; height: 38px; }
+  .crm-image-preview-actions {
+    bottom: max(10px, env(safe-area-inset-bottom));
+    width: max-content;
+    max-width: calc(100vw - 16px);
+    min-height: 48px;
+    gap: 2px;
+    padding: 5px 6px;
+  }
+  .crm-image-preview-tool { width: 36px; min-width: 36px; height: 36px; min-height: 36px; }
+  .crm-image-preview-actions input[type="range"] { width: clamp(72px, 26vw, 112px); margin-inline: 1px; }
+  .crm-image-preview-actions output { min-width: 2.85rem; min-height: 36px; font-size: .7rem; }
+  .crm-image-preview-figure img { max-width: calc(100vw - 12px); max-height: calc(100dvh - 12px); }
+  .crm-image-preview-figure figcaption { inset-inline: 8px; bottom: 70px; font-size: .78rem; }
+}
+
 .workflow-approver-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2119,6 +2351,22 @@ button.btn-icon [data-lucide] {
 .deal-approval-steps,
 .deal-attachment-list,
 .deal-activity-list { display: grid; gap: .65rem; }
+.deal-attachment-section {
+  display: grid;
+  gap: .65rem;
+  padding: .85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-bg-elevated) 95%, var(--color-primary) 5%);
+}
+.deal-attachment-section h4 {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin: 0 0 .1rem;
+  font-size: .9rem;
+}
+.deal-attachment-section h4 svg { width: 1rem; height: 1rem; color: var(--color-primary); }
 
 .deal-approval-step {
   display: grid;
@@ -4247,7 +4495,8 @@ input,
   gap: .45rem;
 }
 
-.notification-attachments a {
+.notification-attachments a,
+.notification-attachments button {
   display: inline-flex;
   align-items: center;
   gap: .3rem;
@@ -4257,9 +4506,12 @@ input,
   color: var(--color-text);
   background: var(--color-bg-surface);
   text-decoration: none;
+  font: inherit;
+  cursor: pointer;
 }
 
-.notification-attachments a:hover {
+.notification-attachments a:hover,
+.notification-attachments button:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
@@ -4296,6 +4548,30 @@ input,
 .attendance-filter-clear svg {
   width: 16px;
   height: 16px;
+}
+.notification-attachments .notification-image-link { cursor: zoom-in; }
+.notification-actor {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin-top: .4rem;
+  color: var(--color-text-secondary);
+  font-size: .82rem;
+  font-weight: 500;
+}
+.notification-actor svg {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-primary);
+}
+.notification-actor strong {
+  color: var(--color-text);
+  font-weight: 700;
+}
+.notification-details.compact .notification-actor {
+  margin-top: .3rem;
+  font-size: .75rem;
 }
 
 .attendance-location-link {
@@ -4524,6 +4800,151 @@ input,
 .teamwork-task-detail .side-panel-footer {
   padding: 1rem 2.75rem;
   background: var(--color-bg-surface);
+}
+
+.task-comment-composer {
+  display: grid;
+  gap: .65rem;
+}
+.task-comment-compose-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.task-comment-compose-row #taskCommentInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.task-comment-attach-button { flex: 0 0 auto; }
+.task-comment-native-file-input,
+.task-comment-native-file-input[hidden] {
+  display: none !important;
+}
+.task-comment-selection {
+  display: flex;
+  gap: .45rem;
+  padding: .55rem;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-primary) 4%, var(--color-bg-elevated));
+}
+.task-comment-selection[hidden] { display: none; }
+.task-comment-selection-item {
+  display: grid;
+  grid-template-columns: auto minmax(5rem, 1fr) auto auto;
+  align-items: center;
+  gap: .35rem;
+  flex: 0 0 auto;
+  max-width: 18rem;
+  padding: .4rem .45rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+}
+.task-comment-selection-item > svg { width: 1rem; height: 1rem; color: var(--color-primary); }
+.task-comment-selection-item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-comment-selection-item small { color: var(--color-text-secondary); white-space: nowrap; }
+.task-comment-selection-item button {
+  display: grid;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--color-danger);
+  background: transparent;
+  cursor: pointer;
+}
+.task-comment-selection-item button:hover { background: color-mix(in srgb, var(--color-danger) 14%, transparent); }
+.task-comment-selection-item button svg { width: .9rem; height: .9rem; }
+.task-comment-card {
+  display: grid;
+  gap: .55rem;
+  padding: .8rem;
+  margin-bottom: .55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg-base);
+  box-shadow: var(--shadow-sm);
+}
+.task-comment-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+.task-comment-author {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: .42rem;
+  color: var(--color-text-primary);
+}
+.task-comment-author svg {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-primary);
+}
+.task-comment-author strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-comment-meta time { flex: 0 0 auto; color: var(--color-text-secondary); font-size: .75rem; }
+.task-comment-content { line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-comment-attachments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: .65rem;
+  margin-top: .7rem;
+}
+.task-comment-image {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-bg-elevated);
+}
+.task-comment-image button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--color-bg-elevated) 75%, #000 25%);
+  cursor: zoom-in;
+}
+.task-comment-image img { display: block; width: 100%; height: 130px; object-fit: cover; }
+.task-comment-image figcaption {
+  display: grid;
+  gap: .15rem;
+  padding: .5rem .6rem;
+  overflow-wrap: anywhere;
+  font-size: .78rem;
+}
+.task-comment-image figcaption small,
+.task-comment-file small { color: var(--color-text-secondary); }
+.task-comment-file {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .55rem;
+  min-height: 4rem;
+  padding: .65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  color: var(--color-text);
+  background: var(--color-bg-elevated);
+  text-decoration: none;
+}
+.task-comment-file > svg { width: 1.15rem; height: 1.15rem; color: var(--color-primary); }
+.task-comment-file span { display: grid; gap: .15rem; min-width: 0; }
+.task-comment-file strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 520px) {
+  .task-comment-compose-row { align-items: stretch; flex-wrap: wrap; }
+  .task-comment-compose-row #taskCommentInput { flex-basis: 100%; }
+  .task-comment-attach-button,
+  #taskCommentSubmitButton { flex: 1 1 calc(50% - .25rem); justify-content: center; }
+  .task-comment-meta { align-items: flex-start; flex-direction: column; gap: .25rem; }
 }
 
 .modal.slide-panel.teamwork-edit-task {
@@ -7044,6 +7465,17 @@ html[dir="rtl"] .project-card-top h3 { padding-inline:0; }
   align-items: flex-start;
   gap: .35rem !important;
   width: min(180px, 100%);
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: start;
+  cursor: zoom-in;
+}
+.task-detail-image-attachment:hover img,
+.task-detail-image-attachment:focus-visible img {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
 .task-detail-image-attachment img {
   display: block;

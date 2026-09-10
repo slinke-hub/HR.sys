@@ -572,6 +572,8 @@ const i18n = {
     ph_https: "https://...",
     ph_e_g_5_hours: "e.g. 5 hours",
     ph_add_a_comment: "Add a comment...",
+    html_attach: "Attach",
+    html_attach_files_images: "Attach files or images",
 
     html_user: "User",
     html_role: "Role",
@@ -1939,6 +1941,8 @@ const i18n = {
     ph_https: "https://...",
     ph_e_g_5_hours: "مثال: 5 ساعات",
     ph_add_a_comment: "أضف تعليقاً...",
+    html_attach: "إرفاق",
+    html_attach_files_images: "إرفاق ملفات أو صور",
 
     html_user: "مستخدم",
     html_role: "الدور",

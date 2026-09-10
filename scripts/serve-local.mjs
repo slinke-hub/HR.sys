@@ -49,6 +49,8 @@ function setSecurityHeaders(response) {
   response.setHeader('Permissions-Policy', 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=()');
   response.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  response.setHeader('Origin-Agent-Cluster', '?1');
+  response.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
   response.setHeader('Cache-Control', 'no-store');
 }
 
@@ -60,6 +62,10 @@ function sendText(response, statusCode, message) {
 
 const server = createServer(async (request, response) => {
   setSecurityHeaders(response);
+  if ((request.url || '').length > 4096) {
+    sendText(response, 414, 'URI too long');
+    return;
+  }
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     response.setHeader('Allow', 'GET, HEAD');
     sendText(response, 405, 'Method not allowed');

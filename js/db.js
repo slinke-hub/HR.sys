@@ -13,6 +13,7 @@ const PRIVATE_STORAGE_BUCKETS = new Set([
     'crm-deal-files',
     'hr-documents'
 ]);
+const signedStorageUrlCache = new Map();
 
 function createStorageReference(bucket, path) {
     return `storage://${bucket}/${String(path || '').replace(/^\/+/, '')}`;
@@ -95,6 +96,9 @@ const db = {
         if (!supabaseClient || !value) return value || '';
         const reference = parseStorageReference(value);
         if (!reference || !PRIVATE_STORAGE_BUCKETS.has(reference.bucket)) return value;
+        const cacheKey = `${reference.bucket}/${reference.path}`;
+        const cached = signedStorageUrlCache.get(cacheKey);
+        if (cached?.expiresAt > Date.now() + 60000) return cached.url;
         const { data, error } = await supabaseClient.storage
             .from(reference.bucket)
             .createSignedUrl(reference.path, expiresIn);
@@ -102,6 +106,10 @@ const db = {
             console.warn(`Unable to create a signed URL for ${reference.bucket}.`, error?.message || error || 'Unknown error');
             return '';
         }
+        signedStorageUrlCache.set(cacheKey, {
+            url: data.signedUrl,
+            expiresAt: Date.now() + Math.max(60, expiresIn - 60) * 1000
+        });
         return data.signedUrl;
     },
 
@@ -1799,6 +1807,22 @@ const db = {
             return { success: false, error };
         }
     },
+    async deleteTaskAttachmentObjects(references) {
+        if (!supabaseClient) return { success: false, error: new Error('Not connected') };
+        const paths = (references || [])
+            .map(parseStorageReference)
+            .filter(reference => reference?.bucket === 'task-attachments')
+            .map(reference => reference.path);
+        if (!paths.length) return { success: true };
+        try {
+            const { error } = await supabaseClient.storage.from('task-attachments').remove(paths);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('deleteTaskAttachmentObjects Error:', error);
+            return { success: false, error };
+        }
+    },
     async deleteTask(taskId) {
         if (!supabaseClient) return { success: false, error: { message: "Not connected" } };
         try {
@@ -1814,17 +1838,57 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('task_comments')
-                .select('*, profiles:user_id(id, full_name, role)')
+                .select('*')
                 .eq('task_id', taskId)
                 .order('created_at', { ascending: true });
             if (error) throw error;
-            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
+
+            const comments = Array.isArray(data) ? data : [];
+            const userIds = [...new Set(comments.map(comment => comment.user_id).filter(Boolean))];
+            const cachedProfiles = [
+                ...Object.values(window.companyEmployeeNamesById || {}),
+                ...(window.taskAllUsersCache || []),
+                ...(window.usersCache || [])
+            ];
+            const profileMap = new Map(cachedProfiles.filter(profile => profile?.id).map(profile => [String(profile.id), profile]));
+
+            if (userIds.length) {
+                let profileResult = await supabaseClient
+                    .from('profiles')
+                    .select('id, full_name, display_name, display_name_ar, role, avatar_url')
+                    .in('id', userIds);
+                if (profileResult.error) {
+                    profileResult = await supabaseClient
+                        .from('profiles')
+                        .select('id, full_name, role')
+                        .in('id', userIds);
+                }
+                if (profileResult.error) console.warn('Task comment author names are unavailable:', profileResult.error?.message || profileResult.error);
+                (profileResult.data || []).forEach(profile => {
+                    const cached = profileMap.get(String(profile.id)) || {};
+                    profileMap.set(String(profile.id), { ...cached, ...profile });
+                });
+            }
+
+            return Promise.all(comments.map(async comment => {
+                const attachments = Array.isArray(comment.attachments) ? comment.attachments : [];
+                const resolvedAttachments = await Promise.all(attachments.map(async attachment => ({
+                    ...attachment,
+                    url: await this.resolveStorageReference(attachment?.url)
+                })));
+                const authorProfile = profileMap.get(String(comment.user_id)) || { id: comment.user_id };
+                return {
+                    ...comment,
+                    user: applyI18nGetters({ ...authorProfile }),
+                    attachments: resolvedAttachments.filter(attachment => attachment.url)
+                };
+            }));
         } catch (error) {
             console.error("fetchTaskComments Error:", error);
             return [];
         }
     },
-    async addTaskComment(taskId, userId, content) {
+    async addTaskComment(taskId, userId, content, attachments = []) {
         if (!supabaseClient) return { success: false };
         try {
             const { error } = await supabaseClient
@@ -1832,7 +1896,8 @@ const db = {
                 .insert([{
                     task_id: taskId,
                     user_id: userId,
-                    content: content
+                    content: String(content || '').trim(),
+                    attachments: Array.isArray(attachments) ? attachments : []
                 }]);
             if (error) throw error;
             
@@ -2020,7 +2085,18 @@ const db = {
                 .order('created_at', { ascending: false })
                 .limit(20);
             if (error) throw error;
-            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
+            const notifications = Array.isArray(data) ? data.map(applyI18nGetters) : [];
+            return Promise.all(notifications.map(async notification => {
+                const metadata = notification.metadata && typeof notification.metadata === 'object' ? notification.metadata : {};
+                const attachmentLinks = Array.isArray(metadata.attachment_links) ? metadata.attachment_links : [];
+                const resolvedLinks = attachmentLinks.length
+                    ? await this.resolveStorageReferences(attachmentLinks)
+                    : [];
+                return {
+                    ...notification,
+                    metadata: { ...metadata, attachment_links: resolvedLinks.filter(Boolean) }
+                };
+            }));
         } catch (error) {
             console.error("fetchNotifications Error:", error);
             return [];
@@ -2907,7 +2983,7 @@ const db = {
         try {
             const [{ data: steps, error: stepsError }, { data: deals, error: dealsError }] = await Promise.all([
                 supabaseClient.from('crm_deal_approval_steps').select('*').eq('status', 'PENDING').order('step_order', { ascending: true }),
-                supabaseClient.from('crm_deals').select('*, crm_clients(*)').eq('workflow_status', 'PENDING_APPROVAL').order('created_at', { ascending: false })
+                supabaseClient.from('crm_deals').select('*, crm_clients(*)').eq('workflow_status', 'PENDING_APPROVAL').order('proposal_sent_at', { ascending: false })
             ]);
             if (stepsError) throw stepsError;
             if (dealsError) throw dealsError;
@@ -3052,6 +3128,77 @@ const db = {
             return { success: true, data };
         } catch (error) {
             console.error('uploadDealAttachment Error:', error);
+            return { success: false, error };
+        }
+    },
+    async replaceDealPresentationAttachments(dealId, userId, entries, options = {}) {
+        if (!supabaseClient) return { success: false };
+        const replacementCategories = options.replaceProposal === false
+            ? ['QUOTATION']
+            : ['QUOTATION', 'PROPOSAL'];
+        const uploadedPaths = [];
+        let insertedRows = [];
+        try {
+            const { data: previousRows, error: previousError } = await supabaseClient
+                .from('crm_deal_attachments')
+                .select('id, file_url, category')
+                .eq('deal_id', dealId)
+                .in('category', replacementCategories);
+            if (previousError) throw previousError;
+
+            const rows = [];
+            for (const entry of entries || []) {
+                if (!entry?.file || !replacementCategories.includes(String(entry.category || '').toUpperCase())) continue;
+                const safeName = String(entry.file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+                const path = `${dealId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+                const { error: uploadError } = await supabaseClient.storage
+                    .from('crm-deal-files')
+                    .upload(path, entry.file, { upsert: false });
+                if (uploadError) throw uploadError;
+                uploadedPaths.push(path);
+                rows.push({
+                    deal_id: dealId,
+                    category: String(entry.category || '').toUpperCase(),
+                    file_name: entry.file.name,
+                    file_url: createStorageReference('crm-deal-files', path),
+                    description: entry.description || null,
+                    uploaded_by: userId
+                });
+            }
+            if (!rows.length) throw new Error('No presentation files were selected.');
+
+            const { data: createdRows, error: insertError } = await supabaseClient
+                .from('crm_deal_attachments')
+                .insert(rows)
+                .select();
+            if (insertError) throw insertError;
+            insertedRows = createdRows || [];
+
+            const previousIds = (previousRows || []).map(row => row.id).filter(Boolean);
+            if (previousIds.length) {
+                const { error: deleteError } = await supabaseClient
+                    .from('crm_deal_attachments')
+                    .delete()
+                    .in('id', previousIds);
+                if (deleteError) throw deleteError;
+            }
+
+            const previousPaths = [...new Set((previousRows || []).map(row => {
+                const reference = parseStorageReference(row.file_url);
+                return reference?.bucket === 'crm-deal-files' ? reference.path : '';
+            }).filter(Boolean))];
+            if (previousPaths.length) {
+                const { error: cleanupError } = await supabaseClient.storage.from('crm-deal-files').remove(previousPaths);
+                if (cleanupError) console.warn('Presentation was replaced, but old file cleanup was incomplete:', cleanupError.message || cleanupError);
+                previousPaths.forEach(path => signedStorageUrlCache.delete(`crm-deal-files/${path}`));
+            }
+            return { success: true, data: insertedRows };
+        } catch (error) {
+            if (insertedRows.length) {
+                await supabaseClient.from('crm_deal_attachments').delete().in('id', insertedRows.map(row => row.id));
+            }
+            if (uploadedPaths.length) await supabaseClient.storage.from('crm-deal-files').remove(uploadedPaths);
+            console.error('replaceDealPresentationAttachments Error:', error);
             return { success: false, error };
         }
     },
