@@ -2084,6 +2084,14 @@ button.btn-icon [data-lucide] {
 .deal-presentation-quote > span { display: grid; gap: .15rem; min-width: 0; }
 .deal-presentation-quote strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .deal-presentation-quote small { color: var(--color-text-secondary); }
+.deal-presentation-file-actions,
+.deal-attachment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .45rem;
+  flex-wrap: wrap;
+}
 .deal-presentation-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
@@ -2674,6 +2682,10 @@ button.btn-icon [data-lucide] {
   .deal-readiness-item small { grid-column: 2; }
   .deal-presentation-quote { grid-template-columns: auto minmax(0, 1fr); }
   .deal-presentation-quote .btn { grid-column: 1 / -1; width: 100%; justify-content: center; }
+  .deal-presentation-file-actions,
+  .deal-attachment-actions { grid-column: 1 / -1; width: 100%; justify-content: stretch; }
+  .deal-presentation-file-actions > *,
+  .deal-attachment-actions > * { flex: 1 1 140px; justify-content: center; }
   .deal-presentation-image-link img { height: clamp(240px, 72vw, 420px); }
   .deal-attachment-item.deal-attachment-image { grid-template-columns: 1fr; }
   .deal-attachment-item.deal-attachment-image > :last-child { justify-self: start; }
@@ -4899,10 +4911,10 @@ input,
 .task-crm-asset-group h4 { display: flex; align-items: center; gap: .4rem; font-size: .88rem; }
 .task-crm-asset-group h4 svg { width: 1rem; height: 1rem; color: var(--color-primary); }
 .task-crm-quote-files { display: grid; gap: .5rem; }
-.task-crm-quote-files a,
-.task-crm-identity-image {
+.task-crm-quote-files > a,
+.task-crm-identity-file {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: .65rem;
   padding: .75rem;
@@ -4912,16 +4924,12 @@ input,
   background: var(--color-bg-elevated);
   text-decoration: none;
 }
-.task-crm-identity-image {
-  width: 100%;
-  text-align: start;
-  cursor: zoom-in;
-}
-.task-crm-quote-files a > svg,
-.task-crm-identity-image > svg { color: var(--color-primary); }
+.task-crm-quote-files > a > svg,
+.task-crm-identity-file > svg { color: var(--color-primary); }
 .task-crm-quote-files span { display: grid; gap: .15rem; min-width: 0; }
 .task-crm-quote-files strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-crm-quote-files small { color: var(--color-text-secondary); }
+.task-crm-identity-actions { display: flex; align-items: center; justify-content: flex-end; gap: .45rem; flex-wrap: wrap; }
 .task-crm-proposal-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
@@ -5010,6 +5018,9 @@ input,
 .task-comment-file strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 520px) {
+  .task-crm-identity-file { grid-template-columns: auto minmax(0, 1fr); }
+  .task-crm-identity-actions { grid-column: 1 / -1; width: 100%; justify-content: stretch; }
+  .task-crm-identity-actions > * { flex: 1 1 120px; justify-content: center; }
   .task-comment-compose-row { align-items: stretch; flex-wrap: wrap; }
   .task-comment-compose-row #taskCommentInput { flex-basis: 100%; }
   .task-comment-attach-button,

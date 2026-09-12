@@ -1891,14 +1891,27 @@ const db = {
     async addTaskComment(taskId, userId, content, attachments = []) {
         if (!supabaseClient) return { success: false };
         try {
-            const { error } = await supabaseClient
+            const payload = {
+                task_id: taskId,
+                user_id: userId,
+                content: String(content || '').trim()
+            };
+            if (Array.isArray(attachments) && attachments.length > 0) {
+                payload.attachments = attachments;
+            }
+            let { error } = await supabaseClient
                 .from('task_comments')
-                .insert([{
-                    task_id: taskId,
-                    user_id: userId,
-                    content: String(content || '').trim(),
-                    attachments: Array.isArray(attachments) ? attachments : []
-                }]);
+                .insert([payload]);
+
+            if (error && payload.attachments && (error.code === 'PGRST204' || error.status === 404 || /attachments/i.test(error.message || ''))) {
+                console.warn('task_comments.attachments column not found in database; retrying without attachments column...');
+                delete payload.attachments;
+                const retry = await supabaseClient
+                    .from('task_comments')
+                    .insert([payload]);
+                error = retry.error;
+            }
+
             if (error) throw error;
             
             await this.flushTaskNotificationEmails();

@@ -11735,6 +11735,16 @@ window.openTaskNotification = async function (taskId) {
     }
     document.getElementById('headerNotificationsButton')?.setAttribute('aria-expanded', 'false');
     await renderView('tasks');
+    if (!window.taskCache?.[taskId]) {
+        try {
+            const fetchedTasks = await db.fetchTasksWithProfiles();
+            const found = (fetchedTasks || []).find(item => String(item.id) === String(taskId));
+            if (found) {
+                window.taskCache = window.taskCache || {};
+                window.taskCache[found.id] = found;
+            }
+        } catch (_) {}
+    }
     if (window.taskCache?.[taskId]) {
         openTaskDetailsModal(taskId);
     } else {
@@ -15023,8 +15033,11 @@ async function initApp() {
             'documents', 'profile', 'projects', 'approvals', 'tasks',
             'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta'
         ]);
-        const requestedView = new URLSearchParams(window.location.search).get('view');
-        const savedView = requestedView || localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view');
+        const urlParams = new URLSearchParams(window.location.search);
+        const requestedView = urlParams.get('view');
+        const requestedTaskId = urlParams.get('task');
+        const requestedRequestId = urlParams.get('request');
+        const savedView = requestedView || (requestedTaskId ? 'tasks' : (requestedRequestId ? 'requests' : null)) || localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view');
         // On a browser refresh, restore the page the user was viewing. A
         // fresh sign-in is handled separately and still starts on Dashboard.
         currentView = restorableViews.has(savedView) ? savedView : 'dashboard';
@@ -15036,7 +15049,36 @@ async function initApp() {
         currentView = 'login';
     }
 
-    renderView(currentView);
+    await renderView(currentView);
+
+    if (currentUser && currentView !== 'login') {
+        const startupParams = new URLSearchParams(window.location.search);
+        const startupTaskId = startupParams.get('task');
+        const startupRequestId = startupParams.get('request');
+        if (startupTaskId) {
+            setTimeout(async () => {
+                try {
+                    await window.openTaskNotification(startupTaskId);
+                } catch (e) {
+                    console.warn('Could not open task modal from URL:', e);
+                }
+            }, 350);
+        } else if (startupRequestId) {
+            setTimeout(() => {
+                try {
+                    const row = document.getElementById(`request-row-${startupRequestId}`) || document.querySelector(`[data-request-id="${startupRequestId}"]`);
+                    if (row) {
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        row.style.transition = 'background-color 0.5s ease';
+                        row.style.backgroundColor = 'var(--color-primary-light, rgba(59, 130, 246, 0.15))';
+                        setTimeout(() => { row.style.backgroundColor = ''; }, 3500);
+                    }
+                } catch (e) {
+                    console.warn('Could not highlight request row from URL:', e);
+                }
+            }, 350);
+        }
+    }
 }
 
 const REQUEST_STAGE_LABELS = {
@@ -15118,7 +15160,8 @@ async function renderMyRequestStatuses() {
         const badgeClass = normalizedStatus === 'APPROVED' ? 'success' : (normalizedStatus === 'REJECTED' ? 'danger' : 'warning');
         const stageLabel = normalizedStatus === 'APPROVED' ? 'Completed' : normalizedStatus === 'REJECTED' ? 'Rejected' : (REQUEST_STAGE_LABELS[request.current_stage] || 'Awaiting approval');
         const requestDate = new Date(request.created_at).toISOString().slice(0, 10);
-        return `<tr class="my-request-status-row" data-request-date="${requestDate}">
+        const reqRowId = request.request_id || request.id || '';
+        return `<tr class="my-request-status-row" id="request-row-${reqRowId}" data-request-id="${reqRowId}" data-request-date="${requestDate}">
             <td>${new Date(request.created_at).toLocaleDateString()}</td>
             <td><strong>${escapeHTML(request.request_type || 'Employee Request')}</strong><br><small>${escapeHTML(request.request_details || '')}</small></td>
             <td><span class="status-badge ${badgeClass}">${escapeHTML(normalizedStatus)}</span></td>
@@ -15284,7 +15327,7 @@ async function renderRequests() {
         }
 
         return `
-            <tr class="request-row" data-type="${r.type}" data-status="${r.status}" data-emp="${escapeHTML(employeeName.toLowerCase())}" data-email="${escapeHTML(String(emailMap[r.employee_id] || '').toLowerCase())}" data-request-date="${new Date(r.created_at).toISOString().slice(0, 10)}" data-details="${escapeHTML(r.details.toLowerCase())}">
+            <tr class="request-row" id="request-row-${r.id}" data-request-id="${r.id}" data-type="${r.type}" data-status="${r.status}" data-emp="${escapeHTML(employeeName.toLowerCase())}" data-email="${escapeHTML(String(emailMap[r.employee_id] || '').toLowerCase())}" data-request-date="${new Date(r.created_at).toISOString().slice(0, 10)}" data-details="${escapeHTML(r.details.toLowerCase())}">
                 <td data-label="${escapeHTML(t('date') || 'Date')}">${new Date(r.created_at).toLocaleDateString()}</td>
                 ${showApprovalColumns ? `<td data-label="${escapeHTML(t('leave_employee') || 'Employee')}">${escapeHTML(employeeName)}</td>` : ''}
                 <td data-label="${escapeHTML(t('req_type') || 'Request Type')}"><strong>${escapeHTML(requestTypeLabel)}</strong></td>

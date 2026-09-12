@@ -36,6 +36,9 @@ assert.match(app, /task\.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN'[\s\S]*db\
 assert.match(app, /task-crm-presentation-assets/);
 assert.match(app, /task-crm-proposal-gallery/);
 assert.match(app, /crmClientIdentityFiles/);
+assert.match(app, /window\.downloadCrmAttachment = async function/);
+assert.match(app, /data-download-url="\$\{escapeHTML\(file\.file_url\)\}"/);
+assert.match(app, /task-crm-identity-actions/);
 assert.match(app, /data-image-description="\$\{escapeHTML\(file\.description \|\| ''\)\}"/);
 
 assert.match(source, /designTaskStatus/);
@@ -45,6 +48,8 @@ assert.match(source, /normalizeStage\(deal\.stage\) === 'PRESENTATION' && deal\.
 assert.match(css, /\.deal-attachment-section/);
 assert.match(css, /\.task-crm-presentation-assets/);
 assert.match(css, /\.task-crm-proposal-gallery figcaption/);
+assert.match(css, /\.deal-presentation-file-actions/);
+assert.match(css, /\.task-crm-identity-actions/);
 
 assert.match(migration, /ADD COLUMN IF NOT EXISTS design_task_status text/);
 assert.match(migration, /CREATE OR REPLACE FUNCTION public\.sync_crm_design_task_status/);
