@@ -4025,7 +4025,7 @@ async function prepareTeamworkTaskDetail(task) {
             actions.className = 'task-detail-actions';
             header.appendChild(actions);
         }
-        actions.innerHTML = `${canApproveCompletion ? `<button type="button" class="btn btn-primary" onclick="approveTaskCompletion('${task.id}')"><i data-lucide="check-circle"></i> ${taskDetailText('Approve', 'اعتماد')}</button>` : ''}${canEdit ? `<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById('detailsTaskId').value)"><i data-lucide="pencil"></i> ${taskDetailText('Edit', 'تعديل')}</button>` : ''}<button type="button" class="task-detail-close" aria-label="${taskDetailText('Close task', 'إغلاق المهمة')}" onclick="document.getElementById('taskSidePanel').classList.remove('active');document.getElementById('taskSidePanelOverlay').classList.remove('active')">&times;</button>`;
+        actions.innerHTML = `${canApproveCompletion ? `<button type="button" class="btn btn-primary" onclick="approveTaskCompletion('${task.id}')"><i data-lucide="check-circle"></i> ${taskDetailText('Approve', 'اعتماد')}</button>` : ''}${canEdit ? `<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById('detailsTaskId').value)"><i data-lucide="pencil"></i> ${taskDetailText('Edit', 'تعديل')}</button>` : ''}<button type="button" class="task-detail-close" aria-label="${taskDetailText('Close task', 'إغلاق المهمة')}" onclick="window.closeTaskDetailsModal()">&times;</button>`;
         header.querySelector('.close-modal')?.remove();
     }
     const grid = panel.querySelector('.task-details-grid');
@@ -4106,6 +4106,29 @@ async function prepareTeamworkTaskDetail(task) {
     setTaskActivityTab('comments');
     if (window.lucide) window.lucide.createIcons();
 }
+
+window.closeTaskDetailsModal = function () {
+    const sidePanel = document.getElementById('taskSidePanel');
+    const overlay = document.getElementById('taskSidePanelOverlay');
+    if (sidePanel) {
+        sidePanel.classList.remove('active');
+        sidePanel.hidden = true;
+    }
+    if (overlay) {
+        overlay.classList.remove('active');
+        overlay.hidden = true;
+    }
+    window.activeTaskDetail = null;
+    const detailsTaskId = document.getElementById('detailsTaskId');
+    if (detailsTaskId) detailsTaskId.value = '';
+    const detailsTaskTitle = document.getElementById('detailsTaskTitle');
+    if (detailsTaskTitle) detailsTaskTitle.textContent = '';
+    const commentsList = document.getElementById('taskCommentsList');
+    if (commentsList) commentsList.innerHTML = '';
+    const fileList = document.getElementById('taskDetailFileList');
+    if (fileList) fileList.innerHTML = '';
+    window.clearTaskCommentAttachments?.();
+};
 
 window.applyAttendanceFilters = function () {
     const date = document.getElementById('attendanceFilterDate')?.value || '';
@@ -8503,6 +8526,12 @@ window.closeCreateTaskModal = function () {
         else home.parent.appendChild(modal);
     }
     window.createTaskModalPortalHome = null;
+
+    // Reset file input and file list so previous attachments never linger in the modal
+    const fileInput = document.getElementById('createTaskFileInput');
+    if (fileInput) fileInput.value = '';
+    const fileList = document.getElementById('createTaskFileList');
+    if (fileList) fileList.innerHTML = '';
 };
 
 window.handleTaskDepartmentChange = function (prefix = 'new', value = '', selectedAssigneeId = '') {
@@ -8978,6 +9007,29 @@ window.handleCreateTask = async function (e) {
     const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, taskListId ? 'private' : 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId, repeatType, repeatInterval, notifyViaEmail);
     if (success) {
         if (createdTask) cacheTaskRecord(createdTask);
+
+        // Upload any attachments selected in createTaskFileInput
+        const createFileInput = document.getElementById('createTaskFileInput');
+        if (createFileInput && createFileInput.files && createFileInput.files.length > 0 && createdTask?.id) {
+            const uploadedUrls = [];
+            for (let i = 0; i < createFileInput.files.length; i++) {
+                const uploadRes = await db.uploadTaskAttachment(createdTask.id, currentUser.id, createFileInput.files[i]);
+                if (uploadRes?.success && uploadRes.url) {
+                    uploadedUrls.push(uploadRes.url);
+                }
+            }
+            if (uploadedUrls.length > 0) {
+                const combinedLinks = [...new Set([...(createdTask.submission_links || []), ...uploadedUrls])];
+                await db.updateTask(createdTask.id, { submission_links: combinedLinks, upload_link: combinedLinks[0] || null });
+                createdTask.submission_links = combinedLinks;
+                createdTask.upload_link = combinedLinks[0] || null;
+                cacheTaskRecord(createdTask);
+            }
+        }
+        if (createFileInput) createFileInput.value = '';
+        const createFileList = document.getElementById('createTaskFileList');
+        if (createFileList) createFileList.innerHTML = '';
+
         showToast(t('toast_task_created_successfully'), "success");
         db.triggerWebhooks('task_created', { title, assignee_id: effectiveAssignee, supervisor_id: effectiveSupervisor, due_date: due, priority, project_id: projectId, task_list_id: taskListId }).catch(error => console.warn('Task creation webhook failed:', error));
         if (status === 'Pending Approval') {
@@ -9545,9 +9597,21 @@ window.handleDeleteTask = async function (id) {
             showToast(t('toast_task_deleted_successfully'), "success");
             document.querySelectorAll(`[data-task-id="${id}"]`).forEach(node => node.remove());
             if (window.taskCache) delete window.taskCache[id];
+            if (window.activeTaskDetail?.id === id) window.activeTaskDetail = null;
             window.closeTaskDetailsModal?.();
+
+            // Clear any lingering attachments in create/edit modal inputs
+            const createFileInput = document.getElementById('createTaskFileInput');
+            if (createFileInput) createFileInput.value = '';
+            const createFileList = document.getElementById('createTaskFileList');
+            if (createFileList) createFileList.innerHTML = '';
+            const quickAddFileInput = document.getElementById('quickAddFiles');
+            if (quickAddFileInput) quickAddFileInput.value = '';
+            const editFileInput = document.getElementById('editTaskFiles');
+            if (editFileInput) editFileInput.value = '';
+
             db.triggerWebhooks('task_deleted', { task_id: id }).catch(error => console.warn('Task deletion webhook failed:', error));
-            document.getElementById('editTaskModal').classList.remove('active');
+            document.getElementById('editTaskModal')?.classList.remove('active');
             window.syncTaskStageEmptyStates?.();
             window.scheduleTaskWorkspaceRefresh(150);
         }
@@ -16216,10 +16280,13 @@ window.handleApprovalAction = async function (taskId, newStatus) {
             }
         } else {
             window.showConfirmModal(t('modal_title_task_approval'), t('modal_body_are_you_sure_you_want_to') + 'reject and delete this task?', async () => {
-                const res = await window.supabaseClient.from('tasks').delete().eq('id', taskId);
+                const res = await db.deleteTask(taskId);
                 if (res.error) {
-                    showToast(t('toast_failed_to_update_task'), 'danger');
+                    showToast(t('toast_failed_to_delete_task') || t('toast_failed_to_update_task'), 'danger');
                 } else {
+                    if (window.taskCache) delete window.taskCache[taskId];
+                    if (window.activeTaskDetail?.id === taskId) window.activeTaskDetail = null;
+                    window.closeTaskDetailsModal?.();
                     if (taskData.assignee_id) {
                         await db.createNotification(taskData.assignee_id, `Your task "${taskData.title}" was rejected and deleted.`);
                     }

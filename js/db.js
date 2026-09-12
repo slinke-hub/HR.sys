@@ -1801,7 +1801,23 @@ const db = {
                 .from('task-attachments')
                 .upload(path, file, { upsert: false });
             if (uploadError) throw uploadError;
-            return { success: true, url: createStorageReference('task-attachments', path), name: file.name || safeName };
+            const storageUrl = createStorageReference('task-attachments', path);
+
+            // Also insert record into task_attachments table if available
+            try {
+                await supabaseClient.from('task_attachments').insert([{
+                    task_id: taskId,
+                    user_id: userId,
+                    file_url: storageUrl,
+                    file_name: file.name || safeName,
+                    file_type: file.type || null,
+                    file_size: file.size || null
+                }]);
+            } catch (tblErr) {
+                console.warn('Could not insert task_attachments row:', tblErr);
+            }
+
+            return { success: true, url: storageUrl, name: file.name || safeName };
         } catch (error) {
             console.error('uploadTaskAttachment Error:', error);
             return { success: false, error };
@@ -1809,14 +1825,20 @@ const db = {
     },
     async deleteTaskAttachmentObjects(references) {
         if (!supabaseClient) return { success: false, error: new Error('Not connected') };
-        const paths = (references || [])
-            .map(parseStorageReference)
-            .filter(reference => reference?.bucket === 'task-attachments')
-            .map(reference => reference.path);
-        if (!paths.length) return { success: true };
+        const pathsByBucket = {};
+        (references || []).forEach(ref => {
+            const parsed = parseStorageReference(ref);
+            if (parsed?.bucket && parsed?.path) {
+                pathsByBucket[parsed.bucket] = pathsByBucket[parsed.bucket] || [];
+                pathsByBucket[parsed.bucket].push(parsed.path);
+            }
+        });
+        const buckets = Object.keys(pathsByBucket);
+        if (!buckets.length) return { success: true };
         try {
-            const { error } = await supabaseClient.storage.from('task-attachments').remove(paths);
-            if (error) throw error;
+            await Promise.all(buckets.map(bucket =>
+                supabaseClient.storage.from(bucket).remove(pathsByBucket[bucket])
+            ));
             return { success: true };
         } catch (error) {
             console.error('deleteTaskAttachmentObjects Error:', error);
@@ -1826,8 +1848,143 @@ const db = {
     async deleteTask(taskId) {
         if (!supabaseClient) return { success: false, error: { message: "Not connected" } };
         try {
+            // 1. Retrieve the task record before deletion to locate any storage files
+            let taskRecord = null;
+            try {
+                const { data } = await supabaseClient
+                    .from('tasks')
+                    .select('id, title, file_links, submission_links, content_links, upload_link')
+                    .eq('id', taskId)
+                    .maybeSingle();
+                taskRecord = data;
+            } catch (err) {
+                console.warn('Could not fetch task record prior to deletion:', err);
+            }
+
+            // 2. Retrieve comment attachments
+            let commentAttachments = [];
+            try {
+                const { data: comments } = await supabaseClient
+                    .from('task_comments')
+                    .select('attachments')
+                    .eq('task_id', taskId);
+                if (Array.isArray(comments)) {
+                    comments.forEach(c => {
+                        if (Array.isArray(c.attachments)) {
+                            c.attachments.forEach(a => {
+                                const url = typeof a === 'string' ? a : (a?.url || a?.file_url);
+                                if (url) commentAttachments.push(url);
+                            });
+                        }
+                    });
+                }
+            } catch (err) {
+                console.warn('Could not fetch comment attachments prior to deletion:', err);
+            }
+
+            // 3. Retrieve task_attachments rows
+            let dbAttachmentUrls = [];
+            try {
+                const { data: dbRows } = await supabaseClient
+                    .from('task_attachments')
+                    .select('file_url')
+                    .eq('task_id', taskId);
+                if (Array.isArray(dbRows)) {
+                    dbAttachmentUrls = dbRows.map(r => r.file_url).filter(Boolean);
+                }
+            } catch (err) {
+                console.warn('Could not fetch task_attachments prior to deletion:', err);
+            }
+
+            // 4. Collect all storage references
+            const allReferences = [
+                ...(taskRecord?.file_links || []),
+                ...(taskRecord?.submission_links || []),
+                ...(taskRecord?.content_links || []),
+                taskRecord?.upload_link,
+                ...commentAttachments,
+                ...dbAttachmentUrls
+            ].filter(Boolean);
+
+            const hrDocPaths = [];
+            const taskAttachmentPaths = [];
+
+            for (const ref of allReferences) {
+                const parsed = parseStorageReference(ref);
+                if (parsed?.bucket === 'hr-documents' && parsed.path) {
+                    hrDocPaths.push(parsed.path);
+                } else if (parsed?.bucket === 'task-attachments' && parsed.path) {
+                    taskAttachmentPaths.push(parsed.path);
+                }
+            }
+
+            // 5. Clean up physical objects in hr-documents
+            if (hrDocPaths.length > 0) {
+                try {
+                    await supabaseClient.storage.from('hr-documents').remove([...new Set(hrDocPaths)]);
+                } catch (storageErr) {
+                    console.warn('Could not delete hr-documents storage objects:', storageErr);
+                }
+            }
+
+            // 6. Clean up physical objects in task-attachments bucket
+            if (taskAttachmentPaths.length > 0) {
+                try {
+                    await supabaseClient.storage.from('task-attachments').remove([...new Set(taskAttachmentPaths)]);
+                } catch (storageErr) {
+                    console.warn('Could not delete task-attachments storage objects:', storageErr);
+                }
+            }
+
+            // 7. Purge entire directory for this task in task-attachments bucket (${taskId}/)
+            try {
+                const { data: rootItems } = await supabaseClient.storage
+                    .from('task-attachments')
+                    .list(taskId, { limit: 100 });
+
+                if (Array.isArray(rootItems) && rootItems.length > 0) {
+                    const folderFilePaths = [];
+                    for (const item of rootItems) {
+                        if (item.id) {
+                            folderFilePaths.push(`${taskId}/${item.name}`);
+                        } else {
+                            const { data: subItems } = await supabaseClient.storage
+                                .from('task-attachments')
+                                .list(`${taskId}/${item.name}`, { limit: 100 });
+                            if (Array.isArray(subItems)) {
+                                subItems.forEach(sub => {
+                                    if (sub.name) folderFilePaths.push(`${taskId}/${item.name}/${sub.name}`);
+                                });
+                            }
+                        }
+                    }
+                    if (folderFilePaths.length > 0) {
+                        await supabaseClient.storage.from('task-attachments').remove(folderFilePaths);
+                    }
+                }
+            } catch (folderErr) {
+                console.warn('Could not purge folder in task-attachments storage:', folderErr);
+            }
+
+            // 8. Explicitly delete dependent child records across tables
+            try {
+                await Promise.allSettled([
+                    supabaseClient.from('task_attachments').delete().eq('task_id', taskId),
+                    supabaseClient.from('task_comments').delete().eq('task_id', taskId),
+                    supabaseClient.from('task_email_outbox').delete().eq('task_id', taskId),
+                    supabaseClient.from('notifications').delete().eq('task_id', taskId),
+                    taskRecord?.title
+                        ? supabaseClient.from('notifications').delete().filter('metadata->>task_title', 'eq', taskRecord.title)
+                        : Promise.resolve()
+                ]);
+            } catch (dbErr) {
+                console.warn('Explicit child record deletion error:', dbErr);
+            }
+
+            // 9. Delete the task row
             const { error } = await supabaseClient.from('tasks').delete().eq('id', taskId);
-            return { error };
+            if (error) throw error;
+            return { success: true };
         } catch (error) {
             console.error("deleteTask Error:", error);
             return { success: false, error };
