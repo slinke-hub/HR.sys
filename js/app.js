@@ -5550,18 +5550,28 @@ async function renderAdminPageAccess() {
 
         tableRows += `<tr>
             <td><strong>${escapeHTML(view.label)}</strong></td>
-            ${roles.map(r => `
-                <td style="text-align: center;">
-                    <label class="switch" style="margin:0;">
-                        <input type="checkbox" onchange="window.toggleRolePermission('${r}', '${view.id}', this.checked)" ${getPerm(r, view.id) ? 'checked' : ''}>
-                        <span class="slider round"></span>
-                    </label>
-                </td>
-            `).join('')}
-            <td style="width: 250px;">
-                ${extraUsersHTML}
-                ${rowSelectHTML}
-            </td>
+            ${roles.map(r => {
+                if (r === 'EMPLOYEE') {
+                    return `<td style="min-width: 200px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <label class="switch" style="margin:0;">
+                                <input type="checkbox" onchange="window.toggleRolePermission('${r}', '${view.id}', this.checked)" ${getPerm(r, view.id) ? 'checked' : ''}>
+                                <span class="slider round"></span>
+                            </label>
+                            <span style="font-size: 0.75rem; color: var(--color-text-secondary);">All Employees</span>
+                        </div>
+                        ${extraUsersHTML}
+                        ${rowSelectHTML}
+                    </td>`;
+                } else {
+                    return `<td style="text-align: center;">
+                        <label class="switch" style="margin:0;">
+                            <input type="checkbox" onchange="window.toggleRolePermission('${r}', '${view.id}', this.checked)" ${getPerm(r, view.id) ? 'checked' : ''}>
+                            <span class="slider round"></span>
+                        </label>
+                    </td>`;
+                }
+            }).join('')}
         </tr>`;
     }
 
@@ -5582,8 +5592,7 @@ async function renderAdminPageAccess() {
                     <thead>
                         <tr>
                             <th>Page / Feature</th>
-                            ${roles.map(r => `<th style="text-align: center;">${escapeHTML(r)}</th>`).join('')}
-                            <th>Specific Employees (Overrides Role)</th>
+                            ${roles.map(r => `<th style="${r === 'EMPLOYEE' ? 'text-align: left;' : 'text-align: center;'}">${escapeHTML(r)}</th>`).join('')}
                         </tr>
                     </thead>
                     <tbody>
