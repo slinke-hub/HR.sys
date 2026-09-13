@@ -4117,9 +4117,17 @@ async function prepareTeamworkTaskDetail(task) {
             ${crmClientIdentityFiles.length ? `<section class="task-crm-asset-group"><h4><i data-lucide="badge-check"></i>${taskDetailText('Client identity', 'هوية العميل')}</h4><div class="task-crm-quote-files">${crmClientIdentityFiles.map(file => {
                 const url = safeExternalUrl(file.file_url);
                 const name = file.file_name || taskDetailText('Client identity file', 'ملف هوية العميل');
-                return imageExtensions.test(String(name))
-                    ? `<button type="button" class="task-crm-identity-image" data-image-url="${escapeHTML(url)}" data-image-name="${escapeHTML(name)}" onclick="openDealImagePreview(this)"><i data-lucide="image"></i><span><strong>${escapeHTML(name)}</strong><small>${taskDetailText('Open image', 'فتح الصورة')}</small></span></button>`
-                    : `<a href="${escapeHTML(url)}" target="_blank" rel="noopener"><i data-lucide="file-down"></i><span><strong>${escapeHTML(name)}</strong><small>PDF</small></span></a>`;
+                const isImage = imageExtensions.test(String(name)) || imageExtensions.test(String(url));
+                return `<article class="task-crm-identity-file">
+                    <i data-lucide="${isImage ? 'image' : 'file-text'}"></i>
+                    <span><strong>${escapeHTML(name)}</strong><small>${isImage ? taskDetailText('Image', 'صورة') : 'PDF'}</small></span>
+                    <div class="task-crm-identity-actions">
+                        ${isImage
+                            ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(url)}" data-image-name="${escapeHTML(name)}" onclick="openDealImagePreview(this)"><i data-lucide="expand"></i>${taskDetailText('Open', 'فتح')}</button>`
+                            : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${taskDetailText('Open', 'فتح')}</a>`}
+                        <button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(file.file_url)}" data-file-name="${escapeHTML(name)}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${taskDetailText('Download', 'تنزيل')}</button>
+                    </div>
+                </article>`;
             }).join('')}</div></section>` : ''}
             ${crmProposalImages.length ? `<section class="task-crm-asset-group"><h4><i data-lucide="images"></i>${taskDetailText('Proposal images', 'صور المقترح')}</h4><div class="task-crm-proposal-gallery">${crmProposalImages.map(file => `<figure><button type="button" data-image-url="${escapeHTML(safeExternalUrl(file.file_url))}" data-image-name="${escapeHTML(file.file_name || '')}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)" aria-label="${escapeHTML(taskDetailText('Open proposal image', 'فتح صورة المقترح'))}"><img src="${escapeHTML(safeExternalUrl(file.file_url))}" alt="${escapeHTML(file.description || file.file_name || taskDetailText('Proposal image', 'صورة المقترح'))}" loading="lazy"></button><figcaption><p>${escapeHTML(file.description || taskDetailText('No description provided.', 'لم تتم إضافة وصف.'))}</p><small>${escapeHTML(file.file_name || '')}</small></figcaption></figure>`).join('')}</div></section>` : ''}
         </section>` : '';
@@ -5495,140 +5503,163 @@ async function renderAdmin() {
 
 async function renderAdminPageAccess() {
     if (currentUserRole !== 'ADMIN') return `<div class="page-header"><h1 class="page-title">${t('analy_unauth') || 'Unauthorized'}</h1></div>`;
-    
+
     const [perms, allUserPerms, allProfiles, depts] = await Promise.all([
         db.fetchAllRolePermissions(),
         db.fetchAllUserPermissions(),
         db.fetchAllProfiles(),
         db.fetchDepartments(false)
     ]);
-    
+
+    const localize = (english, arabic) => currentLang === 'ar' ? arabic : english;
     const availableViews = [
-        { id: 'dashboard', label: 'Dashboard' },
-        { id: 'requests', label: 'My Requests' },
-        { id: 'time', label: 'Time & Attendance' },
-        { id: 'tasks', label: 'Task Manager' },
-        { id: 'documents', label: 'Documents' },
-        { id: 'profile', label: 'My Profile' },
-        { id: 'employees', label: 'Employee Directory' },
-        { id: 'approvals', label: 'Approvals' },
-        { id: 'payroll', label: 'Payroll' },
-        { id: 'expenses', label: 'Expenses' },
-        { id: 'crm', label: 'CRM / Pipeline' },
-        { id: 'projects', label: 'Projects' },
-        { id: 'clients', label: 'Clients' },
-        { id: 'leave', label: 'Leave' },
-        { id: 'leave_calculator', label: 'Leave Calculator' },
-        { id: 'custody_handover', label: 'Custody & Handover' },
-        { id: 'archived', label: 'Archived Records' }
+        { id: 'dashboard', label: localize('Dashboard', 'لوحة التحكم'), icon: 'layout-dashboard', group: 'core' },
+        { id: 'requests', label: localize('My Requests', 'طلباتي'), icon: 'inbox', group: 'core' },
+        { id: 'profile', label: localize('My Profile', 'ملفي الشخصي'), icon: 'circle-user-round', group: 'core' },
+        { id: 'time', label: localize('Time & Attendance', 'الوقت والحضور'), icon: 'clock-3', group: 'workforce' },
+        { id: 'tasks', label: localize('Task Manager', 'إدارة المهام'), icon: 'list-checks', group: 'workforce' },
+        { id: 'employees', label: localize('Employee Directory', 'دليل الموظفين'), icon: 'users', group: 'workforce' },
+        { id: 'approvals', label: localize('Approvals', 'الموافقات'), icon: 'badge-check', group: 'workforce' },
+        { id: 'leave', label: localize('Leave', 'الإجازات'), icon: 'calendar-days', group: 'workforce' },
+        { id: 'leave_calculator', label: localize('Leave Calculator', 'حاسبة الإجازات'), icon: 'calculator', group: 'workforce' },
+        { id: 'crm', label: localize('CRM / Pipeline', 'إدارة العملاء / مسار الصفقات'), icon: 'handshake', group: 'business' },
+        { id: 'projects', label: localize('Projects', 'المشاريع'), icon: 'briefcase-business', group: 'business' },
+        { id: 'clients', label: localize('Clients', 'العملاء'), icon: 'contact-round', group: 'business' },
+        { id: 'payroll', label: localize('Payroll', 'الرواتب'), icon: 'wallet-cards', group: 'finance' },
+        { id: 'expenses', label: localize('Expenses', 'المصروفات'), icon: 'receipt', group: 'finance' },
+        { id: 'documents', label: localize('Documents', 'المستندات'), icon: 'files', group: 'records' },
+        { id: 'custody_handover', label: localize('Custody & Handover', 'العهد والتسليم'), icon: 'package-check', group: 'records' },
+        { id: 'archived', label: localize('Archived Records', 'السجلات المؤرشفة'), icon: 'archive', group: 'records' }
     ];
-
     const roles = ['EMPLOYEE', 'SUPERVISOR', 'MANAGER', 'HR_MANAGER', 'ADMIN'];
-
-    const formatRole = r => {
-        const mapping = { 'EMPLOYEE': 'All Employees', 'SUPERVISOR': 'Supervisors', 'MANAGER': 'Managers', 'HR_MANAGER': 'HR Managers', 'ADMIN': 'Administrators' };
-        return mapping[r] || r;
-    };
-
+    const roleLabels = currentLang === 'ar'
+        ? { EMPLOYEE: 'جميع الموظفين', SUPERVISOR: 'المشرفون', MANAGER: 'المديرون', HR_MANAGER: 'مديرو الموارد البشرية', ADMIN: 'مسؤولو النظام' }
+        : { EMPLOYEE: 'All employees', SUPERVISOR: 'Supervisors', MANAGER: 'Managers', HR_MANAGER: 'HR managers', ADMIN: 'Administrators' };
+    const formatRole = role => roleLabels[role] || role;
+    const departmentName = department => currentLang === 'ar' ? (department.name_ar || department.name) : department.name;
+    const employeeName = profile => window.formatEmployeeName(profile) || profile.email || localize('Unnamed employee', 'موظف بدون اسم');
     const hasRolePerm = (r, v) => {
         const p = perms.find(x => x.role === r);
         if (!p || !p.allowed_pages) return false;
         return p.allowed_pages.includes(v);
     };
-
     const hasUserPerm = (userId, v) => {
         const up = allUserPerms.find(x => x.user_id === userId);
         if (!up || !up.allowed_pages) return false;
         return up.allowed_pages.includes(v);
     };
-
-    let tableRows = '';
-    for (const view of availableViews) {
-        let badgesHTML = '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">';
-        
-        // Render Role Badges
-        roles.forEach(r => {
-            if (hasRolePerm(r, view.id)) {
-                badgesHTML += `<span class="badge" style="background:var(--color-primary); color:white; padding:4px 8px; border-radius:12px; font-size:0.75rem; display:inline-flex; align-items:center; gap:6px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-                    <i data-lucide="shield" style="width:12px; height:12px;"></i> ${formatRole(r)}
-                    <i data-lucide="x" style="width:12px; height:12px; cursor:pointer;" onclick="window.handleRevokeAccess('ROLE', '${r}', '${view.id}')"></i>
-                </span>`;
-            }
-        });
-
-        // Render Department Badges
-        depts.forEach(d => {
-            if (hasRolePerm(`DEPT_${d.id}`, view.id)) {
-                badgesHTML += `<span class="badge" style="background:var(--color-warning-light); color:var(--color-warning-dark); border: 1px solid var(--color-warning); padding:3px 8px; border-radius:12px; font-size:0.75rem; display:inline-flex; align-items:center; gap:6px;">
-                    <i data-lucide="building-2" style="width:12px; height:12px;"></i> ${escapeHTML(d.name)}
-                    <i data-lucide="x" style="width:12px; height:12px; cursor:pointer;" onclick="window.handleRevokeAccess('ROLE', 'DEPT_${d.id}', '${view.id}')"></i>
-                </span>`;
-            }
-        });
-
-        // Render Specific User Badges
-        allProfiles.forEach(p => {
-            if (hasUserPerm(p.id, view.id)) {
-                badgesHTML += `<span class="badge" style="background:var(--color-secondary); color:var(--color-text); padding:4px 8px; border-radius:12px; font-size:0.75rem; display:inline-flex; align-items:center; gap:6px; border: 1px solid var(--color-border);">
-                    <i data-lucide="user" style="width:12px; height:12px;"></i> ${escapeHTML(p.full_name || p.email)}
-                    <i data-lucide="x" style="width:12px; height:12px; cursor:pointer;" onclick="window.handleRevokeAccess('USER', '${p.id}', '${view.id}')"></i>
-                </span>`;
-            }
-        });
-
-        // The Add Access Dropdown
-        const selectHTML = `<select class="form-control" style="font-size:0.75rem; padding: 4px; height: 28px; min-width: 180px;" onchange="window.handleGrantAccess(this, '${view.id}')">
-            <option value="">+ Add Access...</option>
-            <optgroup label="Roles">
-                ${roles.filter(r => !hasRolePerm(r, view.id)).map(r => `<option value="ROLE:${r}">${formatRole(r)}</option>`).join('')}
-            </optgroup>
-            <optgroup label="Departments">
-                ${depts.filter(d => !hasRolePerm(`DEPT_${d.id}`, view.id)).map(d => `<option value="ROLE:DEPT_${d.id}">${escapeHTML(d.name)}</option>`).join('')}
-            </optgroup>
-            <optgroup label="Specific Employees">
-                ${allProfiles.filter(p => !hasUserPerm(p.id, view.id)).map(p => `<option value="USER:${p.id}">${escapeHTML(p.full_name || p.email)}</option>`).join('')}
-            </optgroup>
-        </select>`;
-
-        badgesHTML += selectHTML + '</div>';
-
-        tableRows += `<tr>
-            <td style="width: 25%; font-weight: 500;">${escapeHTML(view.label)}</td>
-            <td>${badgesHTML}</td>
-        </tr>`;
-    }
-
+    const roleGrantCount = roles.reduce((total, role) => total + availableViews.filter(view => hasRolePerm(role, view.id)).length, 0);
+    const departmentGrantCount = depts.reduce((total, department) => total + availableViews.filter(view => hasRolePerm(`DEPT_${department.id}`, view.id)).length, 0);
+    const userGrantCount = allProfiles.reduce((total, profile) => total + availableViews.filter(view => hasUserPerm(profile.id, view.id)).length, 0);
+    const configuredPageCount = availableViews.filter(view => roles.some(role => hasRolePerm(role, view.id))
+        || depts.some(department => hasRolePerm(`DEPT_${department.id}`, view.id))
+        || allProfiles.some(profile => hasUserPerm(profile.id, view.id))).length;
+    const principalOptions = `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${roles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>
+        <optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${depts.map(department => `<option value="ROLE:DEPT_${department.id}">${escapeHTML(departmentName(department))}</option>`).join('')}</optgroup>
+        <optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${allProfiles.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>`;
+    const groupLabels = {
+        core: localize('Essentials', 'الأساسيات'), workforce: localize('Workforce', 'القوى العاملة'),
+        business: localize('Business', 'الأعمال'), finance: localize('Finance', 'المالية'), records: localize('Records & assets', 'السجلات والعهد')
+    };
+    const renderChip = (type, id, viewId, label, kind, icon) => `<span class="page-access-chip ${kind}"><i data-lucide="${icon}"></i><span>${escapeHTML(label)}</span><button type="button" onclick="handleRevokeAccess('${type}','${id}','${viewId}')" aria-label="${escapeHTML(localize('Remove access for', 'إزالة صلاحية'))} ${escapeHTML(label)}"><i data-lucide="x"></i></button></span>`;
+    const renderViewCard = view => {
+        const roleChips = roles.filter(role => hasRolePerm(role, view.id)).map(role => renderChip('ROLE', role, view.id, formatRole(role), 'role', 'shield')).join('');
+        const departmentChips = depts.filter(department => hasRolePerm(`DEPT_${department.id}`, view.id)).map(department => renderChip('ROLE', `DEPT_${department.id}`, view.id, departmentName(department), 'department', 'building-2')).join('');
+        const userChips = allProfiles.filter(profile => hasUserPerm(profile.id, view.id)).map(profile => renderChip('USER', profile.id, view.id, employeeName(profile), 'employee', 'user-round')).join('');
+        const grantCount = [roleChips, departmentChips, userChips].filter(Boolean).length;
+        const remainingRoles = roles.filter(role => !hasRolePerm(role, view.id));
+        const remainingDepartments = depts.filter(department => !hasRolePerm(`DEPT_${department.id}`, view.id));
+        const remainingUsers = allProfiles.filter(profile => !hasUserPerm(profile.id, view.id));
+        return `<article class="page-access-card" data-page-access-card data-page-label="${escapeHTML(`${view.label} ${view.id}`.toLowerCase())}" data-page-configured="${grantCount ? 'true' : 'false'}">
+            <header class="page-access-card-header"><span class="page-access-card-icon"><i data-lucide="${view.icon}"></i></span><div><h3>${escapeHTML(view.label)}</h3><code>${escapeHTML(view.id)}</code></div><span class="page-access-grant-count">${roles.filter(role => hasRolePerm(role, view.id)).length + depts.filter(department => hasRolePerm(`DEPT_${department.id}`, view.id)).length + allProfiles.filter(profile => hasUserPerm(profile.id, view.id)).length}</span></header>
+            <div class="page-access-chip-list">${roleChips}${departmentChips}${userChips || ''}${!roleChips && !departmentChips && !userChips ? `<p class="page-access-empty">${escapeHTML(localize('No explicit access assigned', 'لم يتم تعيين صلاحية مباشرة'))}</p>` : ''}</div>
+            <label class="page-access-add"><span>${escapeHTML(localize('Grant access', 'منح صلاحية'))}</span><select class="form-control" onchange="handleGrantAccess(this, '${view.id}')"><option value="">${escapeHTML(localize('Choose a role, department, or employee…', 'اختر دوراً أو قسماً أو موظفاً…'))}</option>
+                ${remainingRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${remainingRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}
+                ${remainingDepartments.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${remainingDepartments.map(department => `<option value="ROLE:DEPT_${department.id}">${escapeHTML(departmentName(department))}</option>`).join('')}</optgroup>` : ''}
+                ${remainingUsers.length ? `<optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${remainingUsers.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>` : ''}
+            </select></label>
+        </article>`;
+    };
+    const groupsHTML = Object.keys(groupLabels).map(group => `<section class="page-access-group" data-page-access-group><div class="page-access-group-heading"><h2>${escapeHTML(groupLabels[group])}</h2><span>${availableViews.filter(view => view.group === group).length}</span></div><div class="page-access-grid">${availableViews.filter(view => view.group === group).map(renderViewCard).join('')}</div></section>`).join('');
+    const savedFilters = window.adminPageAccessFilterState || { query: '', status: 'all' };
     window.allUserPermsData = allUserPerms;
-
+    window.adminPageAccessRoleData = perms;
+    window.adminPageAccessViewIds = availableViews.map(view => view.id);
     return `
-        <div class="page-header fade-in-up">
-            <button class="btn btn-secondary btn-sm" style="margin-bottom: 0.5rem;" onclick="renderView('admin')">
-                <i data-lucide="arrow-left"></i> Back to Admin
-            </button>
-            <h1 class="page-title"><i data-lucide="shield-check" style="width:28px;height:28px;margin-inline-end:8px;color:var(--color-primary);vertical-align:middle;"></i>Page Access Controls</h1>
-            <p class="page-subtitle">Configure which pages and features are accessible by each role, department, or individual employee.</p>
-        </div>
-        
-        <div class="card fade-in-up">
-            <div class="table-responsive" style="overflow: visible;">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Page / Feature</th>
-                            <th>Access Granted To</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRows}
-                    </tbody>
-                </table>
-            </div>
-            <div style="padding: 1rem 0 0 0; text-align: right;">
-                <button class="btn-primary" onclick="renderView('admin_page_access')">Refresh Cache</button>
-            </div>
+        <div class="page-access-workspace fade-in-up">
+            <header class="page-access-hero">
+                <button class="btn btn-secondary btn-sm page-access-back" onclick="renderView('admin')"><i data-lucide="arrow-left"></i>${escapeHTML(localize('Back to Admin', 'العودة إلى الإدارة'))}</button>
+                <div class="page-access-title"><span><i data-lucide="shield-check"></i></span><div><p>${escapeHTML(localize('Administration', 'الإدارة'))}</p><h1>${escapeHTML(localize('Page Access Controls', 'التحكم في صلاحيات الصفحات'))}</h1><small>${escapeHTML(localize('Grant access by role, department, or individual employee.', 'امنح صلاحيات الوصول حسب الدور أو القسم أو الموظف.'))}</small></div></div>
+                <button class="btn btn-secondary page-access-refresh" onclick="renderView('admin_page_access')"><i data-lucide="refresh-cw"></i>${escapeHTML(localize('Refresh data', 'تحديث البيانات'))}</button>
+            </header>
+            <section class="page-access-metrics" aria-label="${escapeHTML(localize('Permission summary', 'ملخص الصلاحيات'))}">
+                <article><i data-lucide="panels-top-left"></i><div><strong>${availableViews.length}</strong><span>${escapeHTML(localize('Available pages', 'الصفحات المتاحة'))}</span></div></article>
+                <article><i data-lucide="circle-check-big"></i><div><strong>${configuredPageCount}</strong><span>${escapeHTML(localize('Configured pages', 'الصفحات المهيأة'))}</span></div></article>
+                <article><i data-lucide="shield"></i><div><strong>${roleGrantCount + departmentGrantCount}</strong><span>${escapeHTML(localize('Group grants', 'صلاحيات المجموعات'))}</span></div></article>
+                <article><i data-lucide="user-round-check"></i><div><strong>${userGrantCount}</strong><span>${escapeHTML(localize('Employee grants', 'صلاحيات الموظفين'))}</span></div></article>
+            </section>
+            <section class="page-access-bulk card">
+                <div><span class="page-access-section-icon"><i data-lucide="wand-sparkles"></i></span><div><h2>${escapeHTML(localize('Bulk access', 'الصلاحيات الجماعية'))}</h2><p>${escapeHTML(localize('Apply all listed pages to one role, department, or employee.', 'طبّق جميع الصفحات المعروضة على دور أو قسم أو موظف واحد.'))}</p></div></div>
+                <label><span>${escapeHTML(localize('Who should be updated?', 'من الذي تريد تحديثه؟'))}</span><select id="pageAccessBulkPrincipal" class="form-control"><option value="">${escapeHTML(localize('Select access group…', 'اختر مجموعة الوصول…'))}</option>${principalOptions}</select></label>
+                <div class="page-access-bulk-actions"><button type="button" class="btn btn-primary" onclick="handleBulkPageAccess('GRANT')"><i data-lucide="check-check"></i>${escapeHTML(localize('Grant all pages', 'منح كل الصفحات'))}</button><button type="button" class="btn btn-secondary" onclick="handleBulkPageAccess('REVOKE')"><i data-lucide="shield-minus"></i>${escapeHTML(localize('Remove listed pages', 'إزالة الصفحات المعروضة'))}</button></div>
+            </section>
+            <section class="page-access-toolbar card">
+                <label class="page-access-search"><span>${escapeHTML(localize('Find a page', 'البحث عن صفحة'))}</span><div><i data-lucide="search"></i><input id="pageAccessSearch" class="form-control" type="search" value="${escapeHTML(savedFilters.query || '')}" placeholder="${escapeHTML(localize('Search by page name…', 'ابحث باسم الصفحة…'))}" oninput="filterAdminPageAccess()"></div></label>
+                <label><span>${escapeHTML(localize('Show', 'عرض'))}</span><select id="pageAccessStatusFilter" class="form-control" onchange="filterAdminPageAccess()"><option value="all" ${savedFilters.status === 'all' ? 'selected' : ''}>${escapeHTML(localize('All pages', 'كل الصفحات'))}</option><option value="configured" ${savedFilters.status === 'configured' ? 'selected' : ''}>${escapeHTML(localize('Configured only', 'المهيأة فقط'))}</option><option value="unconfigured" ${savedFilters.status === 'unconfigured' ? 'selected' : ''}>${escapeHTML(localize('Without explicit access', 'بدون صلاحية مباشرة'))}</option></select></label>
+                <div class="page-access-results"><strong id="pageAccessVisibleCount">${availableViews.length}</strong><span>${escapeHTML(localize('pages shown', 'صفحة ظاهرة'))}</span></div>
+            </section>
+            <div id="pageAccessGroups">${groupsHTML}</div>
+            <div id="pageAccessNoResults" class="card page-access-no-results" hidden><i data-lucide="search-x"></i><h3>${escapeHTML(localize('No pages found', 'لم يتم العثور على صفحات'))}</h3><p>${escapeHTML(localize('Try another search or filter.', 'جرّب بحثاً أو تصفية مختلفة.'))}</p></div>
         </div>
     `;
 }
+
+window.filterAdminPageAccess = function () {
+    const queryValue = String(document.getElementById('pageAccessSearch')?.value || '').trim();
+    const query = queryValue.toLocaleLowerCase(currentLang === 'ar' ? 'ar' : 'en');
+    const status = document.getElementById('pageAccessStatusFilter')?.value || 'all';
+    window.adminPageAccessFilterState = { query: queryValue, status };
+    let visibleCount = 0;
+    document.querySelectorAll('[data-page-access-card]').forEach(card => {
+        const matchesQuery = !query || String(card.dataset.pageLabel || '').includes(query);
+        const configured = card.dataset.pageConfigured === 'true';
+        const matchesStatus = status === 'all' || (status === 'configured' ? configured : !configured);
+        card.hidden = !(matchesQuery && matchesStatus);
+        if (!card.hidden) visibleCount += 1;
+    });
+    document.querySelectorAll('[data-page-access-group]').forEach(group => {
+        group.hidden = !group.querySelector('[data-page-access-card]:not([hidden])');
+    });
+    const count = document.getElementById('pageAccessVisibleCount');
+    if (count) count.textContent = String(visibleCount);
+    const empty = document.getElementById('pageAccessNoResults');
+    if (empty) empty.hidden = visibleCount !== 0;
+};
+
+window.handleBulkPageAccess = async function (action) {
+    const principal = document.getElementById('pageAccessBulkPrincipal')?.value || '';
+    if (!principal) return showToast(currentLang === 'ar' ? 'اختر دوراً أو قسماً أو موظفاً أولاً.' : 'Choose a role, department, or employee first.', 'warning');
+    const [type, id] = principal.split(':');
+    const managedPages = window.adminPageAccessViewIds || [];
+    const isGrant = action === 'GRANT';
+    if (!isGrant && !window.confirm(currentLang === 'ar' ? 'هل تريد إزالة صلاحية كل الصفحات المعروضة من هذا الاختيار؟' : 'Remove access to every listed page from this selection?')) return;
+    let currentPages = [];
+    let result;
+    if (type === 'USER') {
+        currentPages = [...(window.allUserPermsData?.find(item => item.user_id === id)?.allowed_pages || [])];
+        const nextPages = isGrant ? [...new Set([...currentPages, ...managedPages])] : currentPages.filter(page => !managedPages.includes(page));
+        result = await db.updateUserPermissions(id, nextPages);
+        if (result?.success && currentUser.id === id) await window.loadUserPermissions(currentUser.id);
+    } else {
+        currentPages = [...(window.adminPageAccessRoleData?.find(item => item.role === id)?.allowed_pages || [])];
+        const nextPages = isGrant ? [...new Set([...currentPages, ...managedPages])] : currentPages.filter(page => !managedPages.includes(page));
+        result = await db.updateRolePermissions(id, nextPages);
+        if (result?.success) await window.loadRolePermissions();
+    }
+    if (!result?.success) return showToast(currentLang === 'ar' ? 'تعذر تحديث الصلاحيات.' : 'Permission update failed.', 'danger');
+    showToast(currentLang === 'ar' ? 'تم تحديث الصلاحيات بنجاح.' : 'Permissions updated successfully.', 'success');
+    renderView('admin_page_access');
+};
 
 window.handleGrantAccess = async function(selectElement, viewId) {
     const value = selectElement.value;
@@ -5676,7 +5707,7 @@ window.toggleUserPermission = async function(userId, viewId, isGranted) {
 };
 
 window.toggleRolePermission = async function(role, viewId, isAllowed) {
-    let perm = window.appRolePermissionsCache.find(p => p.role === role);
+    let perm = (window.adminPageAccessRoleData || window.appRolePermissionsCache || []).find(p => p.role === role);
     let allowedPages = perm && perm.allowed_pages ? [...perm.allowed_pages] : [];
     if (isAllowed) {
         if (!allowedPages.includes(viewId)) allowedPages.push(viewId);
@@ -11594,6 +11625,7 @@ window.renderView = async function (viewId, isBack = false) {
         viewContainer.innerHTML = window.viewHTMLCache[viewId];
         lucide.createIcons();
         if (viewId === 'analytics') setTimeout(initCharts, 100);
+        if (viewId === 'admin_page_access') setTimeout(() => window.filterAdminPageAccess?.(), 0);
     } else if (viewId !== 'login') {
         viewContainer.innerHTML = `<div style="display:flex; justify-content:center; padding: 4rem;"><div class="spinner"></div></div>`;
         lucide.createIcons();
@@ -11681,6 +11713,7 @@ window.renderView = async function (viewId, isBack = false) {
             console.error("lucide error:", e);
         }
         if (viewId === 'analytics') setTimeout(initCharts, 100);
+        if (viewId === 'admin_page_access') setTimeout(() => window.filterAdminPageAccess?.(), 0);
         if (viewId === 'dashboard' || viewId === 'admin') startRecentLoginsRealtime();
         else stopRecentLoginsRealtime();
         if (viewId === 'dashboard') startDashboardKpiRealtime();
@@ -13331,6 +13364,42 @@ window.closeDealImagePreview = function () {
     }
 };
 
+window.downloadCrmAttachment = async function (trigger) {
+    const safeUrl = safeExternalUrl(trigger?.dataset?.downloadUrl);
+    const fileName = String(trigger?.dataset?.fileName || 'client-identity').replace(/[\\/:*?"<>|]/g, '_');
+    if (!safeUrl) return showToast(t('crm_file_unavailable') || 'This file is unavailable.', 'warning');
+
+    const button = trigger?.tagName === 'BUTTON' ? trigger : null;
+    if (button) button.disabled = true;
+    try {
+        const response = await fetch(safeUrl, { credentials: 'omit' });
+        if (!response.ok) throw new Error(`Download failed (${response.status})`);
+        const objectUrl = URL.createObjectURL(await response.blob());
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = fileName;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    } catch (error) {
+        console.warn('Direct CRM attachment download failed; using storage download response.', error);
+        const downloadUrl = new URL(safeUrl, window.location.origin);
+        downloadUrl.searchParams.set('download', fileName);
+        const anchor = document.createElement('a');
+        anchor.href = downloadUrl.href;
+        anchor.download = fileName;
+        anchor.rel = 'noopener';
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+    } finally {
+        if (button) button.disabled = false;
+    }
+};
+
 window.setDealImagePreviewZoom = function (requestedZoom, anchorClientX, anchorClientY) {
     const modal = document.getElementById('dealImagePreviewModal');
     const image = modal?.querySelector('[data-deal-image-preview]');
@@ -13525,9 +13594,12 @@ function renderDealPresentationAssets(attachments) {
             return `<article class="deal-presentation-quote">
                 <i data-lucide="${isImage ? 'image' : 'file-text'}"></i>
                 <span><strong>${escapeHTML(file.file_name || (t('crm_client_identity') || 'Client identity'))}</strong><small>${escapeHTML(isImage ? (t('crm_image') || 'Image') : 'PDF')}</small></span>
-                ${isImage
-                    ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" onclick="openDealImagePreview(this)"><i data-lucide="expand"></i>${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
-                    : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
+                <div class="deal-presentation-file-actions">
+                    ${isImage
+                        ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" onclick="openDealImagePreview(this)"><i data-lucide="expand"></i>${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
+                        : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
+                    <button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(file.file_url)}" data-file-name="${escapeHTML(file.file_name || (t('crm_client_identity') || 'Client identity'))}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${escapeHTML(taskDetailText('Download', 'تنزيل'))}</button>
+                </div>
             </article>`;
         }).join('')}</div>
     </section>` : '';
@@ -13602,12 +13674,16 @@ function renderDealWorkflowContents(workflow) {
 
     const renderAttachmentItems = files => files.map(file => {
         const isImage = /\.(png|jpe?g|webp|gif|bmp|svg)(?:\?|$)/i.test(String(file.file_url || '')) || ['PROPOSAL', 'PHOTO'].includes(String(file.category || '').toUpperCase());
+        const isClientIdentity = String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY';
         return `<article class="deal-attachment-item ${isImage ? 'deal-attachment-image' : ''}">
             ${isImage ? `<img src="${escapeHTML(file.file_url)}" alt="${escapeHTML(file.description || file.file_name)}" loading="lazy">` : '<i data-lucide="paperclip"></i>'}
             <span><strong>${escapeHTML(file.file_name)}</strong><small>${escapeHTML(file.description || file.category.replace(/_/g, ' '))}</small></span>
-            ${isImage
-                ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)">${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
-                : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener">${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
+            <div class="deal-attachment-actions">
+                ${isImage
+                    ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)">${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
+                    : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener">${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
+                ${isClientIdentity ? `<button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(file.file_url)}" data-file-name="${escapeHTML(file.file_name || 'client-identity')}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${escapeHTML(taskDetailText('Download', 'تنزيل'))}</button>` : ''}
+            </div>
         </article>`;
     }).join('');
     const quoteAttachments = workflow.attachments.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION');
