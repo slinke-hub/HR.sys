@@ -2238,6 +2238,8 @@ async function getCurrentDepartmentName() {
 }
 
 window.appRolePermissionsCache = [];
+window.appUserPermissions = [];
+
 window.loadRolePermissions = async function() {
     try {
         const perms = await db.fetchAllRolePermissions();
@@ -2245,6 +2247,17 @@ window.loadRolePermissions = async function() {
     } catch (e) {
         console.error("Failed to load role permissions", e);
         window.appRolePermissionsCache = [];
+    }
+};
+
+window.loadUserPermissions = async function(userId) {
+    if (!userId) return;
+    try {
+        const userPerms = await db.fetchUserPermissions(userId);
+        window.appUserPermissions = userPerms || [];
+    } catch (e) {
+        console.error("Failed to load user permissions", e);
+        window.appUserPermissions = [];
     }
 };
 
@@ -2263,9 +2276,13 @@ async function canCurrentUserAccessView(viewId) {
         if (normalizedRole === 'EMPLOYEE' && (dept === 'marketing & sales' || dept === 'sales' || dept === 'marketing')) return true;
     }
 
+    if (window.appUserPermissions && window.appUserPermissions.includes(viewId)) {
+        return true;
+    }
+
     if (window.appRolePermissionsCache && window.appRolePermissionsCache.length > 0) {
-        const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole && p.view_id === viewId);
-        if (perm) return perm.is_allowed;
+        const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole);
+        if (perm && perm.allowed_pages && perm.allowed_pages.includes(viewId)) return true;
     }
 
     if (viewId === 'leave_calculator') return normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
@@ -2303,9 +2320,11 @@ window.updateSidebarVisibility = async function () {
         const viewId = item.dataset.view;
         if (isAdmin) {
             item.style.display = 'flex';
+        } else if (window.appUserPermissions && window.appUserPermissions.includes(viewId)) {
+            item.style.display = 'flex';
         } else if (window.appRolePermissionsCache && window.appRolePermissionsCache.length > 0) {
-            const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole && p.view_id === viewId);
-            item.style.display = perm && perm.is_allowed ? 'flex' : 'none';
+            const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole);
+            item.style.display = perm && perm.allowed_pages && perm.allowed_pages.includes(viewId) ? 'flex' : 'none';
         } else {
             const employeeAllowedViews = new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'employees']);
             if (normalizedRole === 'EMPLOYEE') {
@@ -5469,7 +5488,12 @@ async function renderAdmin() {
 async function renderAdminPageAccess() {
     if (currentUserRole !== 'ADMIN') return `<div class="page-header"><h1 class="page-title">${t('analy_unauth') || 'Unauthorized'}</h1></div>`;
     
-    const perms = await db.fetchAllRolePermissions();
+    const [perms, allUserPerms, allProfiles] = await Promise.all([
+        db.fetchAllRolePermissions(),
+        db.fetchAllUserPermissions(),
+        db.fetchAllProfiles()
+    ]);
+    
     const availableViews = [
         { id: 'dashboard', label: 'Dashboard' },
         { id: 'requests', label: 'My Requests' },
@@ -5493,13 +5517,12 @@ async function renderAdminPageAccess() {
     const roles = ['EMPLOYEE', 'SUPERVISOR', 'MANAGER', 'HR_MANAGER'];
 
     const getPerm = (r, v) => {
-        const p = perms.find(x => x.role === r && x.view_id === v);
-        // Default based on previous logic if not seeded
-        if (!p) {
+        const p = perms.find(x => x.role === r);
+        if (!p || !p.allowed_pages) {
             if (r === 'EMPLOYEE') return ['dashboard', 'requests', 'time', 'tasks', 'documents', 'profile'].includes(v);
             return true;
         }
-        return p.is_allowed;
+        return p.allowed_pages.includes(v);
     };
 
     let tableRows = '';
@@ -5517,16 +5540,24 @@ async function renderAdminPageAccess() {
         </tr>`;
     }
 
+    let userOptions = `<option value="">-- Select an Employee --</option>`;
+    for (const p of allProfiles) {
+        userOptions += `<option value="${p.id}">${escapeHTML(p.full_name || p.email)} (${escapeHTML(p.role || 'EMPLOYEE')})</option>`;
+    }
+    window.allUserPermsData = allUserPerms;
+
     return `
         <div class="page-header fade-in-up">
             <button class="btn btn-secondary btn-sm" style="margin-bottom: 0.5rem;" onclick="renderView('admin')">
                 <i data-lucide="arrow-left"></i> Back to Admin
             </button>
             <h1 class="page-title"><i data-lucide="shield-check" style="width:28px;height:28px;margin-inline-end:8px;color:var(--color-primary);vertical-align:middle;"></i>Page Access Controls</h1>
-            <p class="page-subtitle">Configure which pages and features are accessible by each role.</p>
+            <p class="page-subtitle">Configure which pages and features are accessible by each role or individual employee.</p>
         </div>
         
-        <div class="card fade-in-up">
+        <div class="card fade-in-up" style="margin-bottom: 1.5rem;">
+            <h3>Role-Based Access</h3>
+            <p style="font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 1rem;">Set the base permissions for each role type across the company.</p>
             <div class="table-responsive">
                 <table class="data-table">
                     <thead>
@@ -5544,22 +5575,127 @@ async function renderAdminPageAccess() {
                 <button class="btn-primary" onclick="renderView('admin_page_access')">Refresh Cache</button>
             </div>
         </div>
+
+        <div class="card fade-in-up">
+            <h3>Specific Employee Access</h3>
+            <p style="font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 1rem;">Grant additional page access to specific employees beyond their base role.</p>
+            <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
+                <label>Select Employee:</label>
+                <select class="form-control" onchange="window.renderSpecificUserPermissions(this.value)">
+                    ${userOptions}
+                </select>
+            </div>
+            <div id="specificUserPermissionsContainer" style="display:none;">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Page / Feature</th>
+                                <th style="text-align: center;">Grant Extra Access</th>
+                            </tr>
+                        </thead>
+                        <tbody id="specificUserPermissionsTbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     `;
 }
 
-window.toggleRolePermission = async function(role, viewId, isAllowed) {
-    const res = await db.updateRolePermissions(role, [{ view_id: viewId, is_allowed: isAllowed }]);
+window.renderSpecificUserPermissions = function(userId) {
+    const container = document.getElementById('specificUserPermissionsContainer');
+    const tbody = document.getElementById('specificUserPermissionsTbody');
+    if (!userId) {
+        container.style.display = 'none';
+        return;
+    }
+
+    const availableViews = [
+        { id: 'dashboard', label: 'Dashboard' },
+        { id: 'requests', label: 'My Requests' },
+        { id: 'time', label: 'Time & Attendance' },
+        { id: 'tasks', label: 'Task Manager' },
+        { id: 'documents', label: 'Documents' },
+        { id: 'profile', label: 'My Profile' },
+        { id: 'employees', label: 'Employee Directory' },
+        { id: 'approvals', label: 'Approvals' },
+        { id: 'payroll', label: 'Payroll' },
+        { id: 'expenses', label: 'Expenses' },
+        { id: 'crm', label: 'CRM / Pipeline' },
+        { id: 'projects', label: 'Projects' },
+        { id: 'clients', label: 'Clients' },
+        { id: 'leave', label: 'Leave' },
+        { id: 'leave_calculator', label: 'Leave Calculator' },
+        { id: 'custody_handover', label: 'Custody & Handover' },
+        { id: 'archived', label: 'Archived Records' }
+    ];
+
+    const up = window.allUserPermsData.find(x => x.user_id === userId);
+    const userAllowed = up && up.allowed_pages ? up.allowed_pages : [];
+
+    let rows = '';
+    for (const view of availableViews) {
+        const isChecked = userAllowed.includes(view.id);
+        rows += `<tr>
+            <td><strong>${escapeHTML(view.label)}</strong></td>
+            <td style="text-align: center;">
+                <label class="switch" style="margin:0;">
+                    <input type="checkbox" onchange="window.toggleUserPermission('${userId}', '${view.id}', this.checked)" ${isChecked ? 'checked' : ''}>
+                    <span class="slider round"></span>
+                </label>
+            </td>
+        </tr>`;
+    }
+    tbody.innerHTML = rows;
+    container.style.display = 'block';
+};
+
+window.toggleUserPermission = async function(userId, viewId, isGranted) {
+    let up = window.allUserPermsData.find(x => x.user_id === userId);
+    let allowedPages = [];
+    if (up && up.allowed_pages) allowedPages = [...up.allowed_pages];
+
+    if (isGranted) {
+        if (!allowedPages.includes(viewId)) allowedPages.push(viewId);
+    } else {
+        allowedPages = allowedPages.filter(v => v !== viewId);
+    }
+
+    const res = await db.updateUserPermissions(userId, allowedPages);
     if (res && res.success) {
-        showToast('Permission updated successfully', 'success');
+        showToast('User permission updated successfully', 'success');
+        if (up) up.allowed_pages = allowedPages;
+        else window.allUserPermsData.push({ user_id: userId, allowed_pages: allowedPages });
+        
+        if (currentUser.id === userId) {
+            await window.loadUserPermissions(currentUser.id);
+        }
+    } else {
+        showToast('Failed to update user permission', 'error');
+    }
+};
+
+window.toggleRolePermission = async function(role, viewId, isAllowed) {
+    let perm = window.appRolePermissionsCache.find(p => p.role === role);
+    let allowedPages = perm && perm.allowed_pages ? [...perm.allowed_pages] : [];
+    if (isAllowed) {
+        if (!allowedPages.includes(viewId)) allowedPages.push(viewId);
+    } else {
+        allowedPages = allowedPages.filter(v => v !== viewId);
+    }
+
+    const res = await db.updateRolePermissions(role, allowedPages);
+    if (res && res.success) {
+        showToast('Role permission updated successfully', 'success');
         await window.loadRolePermissions();
         if (currentUserRole !== 'ADMIN') {
             await window.updateSidebarVisibility();
         }
     } else {
-        showToast('Failed to update permission', 'error');
+        showToast('Failed to update role permission', 'error');
     }
 };
-
 // Render User Management (Admin Only)
 window.handleCreateUser = async function (e) {
     e.preventDefault();
@@ -15218,6 +15354,7 @@ async function initApp() {
         if (approvalsNav) approvalsNav.style.display = canUseApprovals ? 'flex' : 'none';
         
         await window.loadRolePermissions();
+        await window.loadUserPermissions(currentUser.id);
         await window.updateSidebarVisibility();
 
         const restorableViews = new Set([

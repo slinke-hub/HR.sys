@@ -4130,6 +4130,49 @@ const db = {
             console.error("updateRolePermissions Error:", error);
             return { success: false, error };
         }
+    },
+    async fetchUserPermissions(userId) {
+        if (!supabaseClient || !userId) return null;
+        try {
+            const { data, error } = await supabaseClient
+                .from('user_permissions')
+                .select('*')
+                .eq('user_id', userId)
+                .single();
+            if (error && error.code !== 'PGRST116') throw error;
+            return data ? data.allowed_pages : null;
+        } catch (error) {
+            console.error("fetchUserPermissions Error:", error);
+            return null;
+        }
+    },
+    async fetchAllUserPermissions() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('user_permissions')
+                .select(`
+                    *,
+                    profiles:user_id(full_name, email, role)
+                `);
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchAllUserPermissions Error:", error);
+            return [];
+        }
+    },
+    async updateUserPermissions(userId, allowedPages) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('user_permissions')
+                .upsert({ user_id: userId, allowed_pages: allowedPages, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateUserPermissions Error:", error);
+            return { success: false, error };
+        }
     }
 };
-
