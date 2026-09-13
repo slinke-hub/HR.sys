@@ -4088,6 +4088,48 @@ const db = {
             console.error("updateDepartmentTranslation Error:", error);
             return { success: false, error };
         }
+    },
+    async fetchRolePermissions(role) {
+        if (!supabaseClient) return null;
+        try {
+            const { data, error } = await supabaseClient
+                .from('role_permissions')
+                .select('allowed_pages')
+                .eq('role', role)
+                .single();
+            if (error && error.code !== 'PGRST116') throw error; // PGRST116 is no rows
+            return data ? data.allowed_pages : null;
+        } catch (error) {
+            console.error("fetchRolePermissions Error:", error);
+            return null;
+        }
+    },
+    async fetchAllRolePermissions() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('role_permissions')
+                .select('*')
+                .order('role', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error("fetchAllRolePermissions Error:", error);
+            return [];
+        }
+    },
+    async updateRolePermissions(role, allowedPages) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { error } = await supabaseClient
+                .from('role_permissions')
+                .upsert({ role, allowed_pages: allowedPages, updated_at: new Date().toISOString() }, { onConflict: 'role' });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error("updateRolePermissions Error:", error);
+            return { success: false, error };
+        }
     }
 };
 

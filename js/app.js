@@ -2237,24 +2237,42 @@ async function getCurrentDepartmentName() {
     return window.sidebarDepartmentsCache.find(department => department.id === profile.department_id)?.name || '';
 }
 
+window.appRolePermissionsCache = [];
+window.loadRolePermissions = async function() {
+    try {
+        const perms = await db.fetchAllRolePermissions();
+        window.appRolePermissionsCache = perms || [];
+    } catch (e) {
+        console.error("Failed to load role permissions", e);
+        window.appRolePermissionsCache = [];
+    }
+};
+
 async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const isAdmin = isAdminRole(normalizedRole);
+    if (isAdmin) return true;
+
     if (viewId === 'users') return canCurrentUserManageUsers();
     if (viewId === 'hr_suite_beta') return window.canCurrentUserUseHrSuiteBeta?.() === true;
-    if (isAdmin) return true;
     if (viewId === 'crm') return canCurrentUserUseCRM();
+    if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
+
+    if (viewId === 'projects' || viewId === 'crm' || viewId === 'clients') {
+        const dept = (await getCurrentDepartmentName()).trim().toLowerCase();
+        if (normalizedRole === 'EMPLOYEE' && (dept === 'marketing & sales' || dept === 'sales' || dept === 'marketing')) return true;
+    }
+
+    if (window.appRolePermissionsCache && window.appRolePermissionsCache.length > 0) {
+        const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole && p.view_id === viewId);
+        if (perm) return perm.is_allowed;
+    }
+
     if (viewId === 'leave_calculator') return normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
     if (normalizedRole === 'EMPLOYEE') {
         return new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'profile']).has(viewId);
     }
     if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
-    if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
-
-    if (viewId === 'projects' || viewId === 'crm' || viewId === 'clients') {
-        const dept = (await getCurrentDepartmentName()).trim().toLowerCase();
-        return normalizedRole === 'EMPLOYEE' && (dept === 'marketing & sales' || dept === 'sales' || dept === 'marketing');
-    }
 
     return true;
 }
@@ -2280,16 +2298,26 @@ window.updateSidebarVisibility = async function () {
     const isAdmin = isAdminRole(normalizedRole);
     const canManageUsers = canCurrentUserManageUsers();
     const isHrManager = normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
-    const employeeAllowedViews = new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'employees']);
+    
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
-        if (normalizedRole === 'EMPLOYEE') {
-            item.style.display = employeeAllowedViews.has(item.dataset.view) ? 'flex' : 'none';
+        const viewId = item.dataset.view;
+        if (isAdmin) {
+            item.style.display = 'flex';
+        } else if (window.appRolePermissionsCache && window.appRolePermissionsCache.length > 0) {
+            const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole && p.view_id === viewId);
+            item.style.display = perm && perm.is_allowed ? 'flex' : 'none';
         } else {
-            if (item.style.display === 'none' && !['admin', 'users', 'departments', 'translations', 'templates', 'analytics'].includes(item.dataset.view)) {
-                item.style.display = 'flex';
+            const employeeAllowedViews = new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'employees']);
+            if (normalizedRole === 'EMPLOYEE') {
+                item.style.display = employeeAllowedViews.has(viewId) ? 'flex' : 'none';
+            } else {
+                if (item.style.display === 'none' && !['admin', 'users', 'departments', 'translations', 'templates', 'analytics'].includes(viewId)) {
+                    item.style.display = 'flex';
+                }
             }
         }
     });
+
     if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
     if (headerNavAdmin) headerNavAdmin.style.display = isAdmin ? 'inline-flex' : 'none';
     if (usersNav) usersNav.style.display = canManageUsers ? 'flex' : 'none';
@@ -5375,6 +5403,11 @@ async function renderAdmin() {
                 </div>
             </div>
 
+            <div class="card" style="margin-bottom:1.5rem; cursor:pointer;" onclick="renderView('admin_page_access')">
+                <div class="card-title"><i data-lucide="shield-check" style="width:18px;height:18px;margin-inline-end:6px;color:var(--color-primary);"></i>Page Access Controls</div>
+                <p style="font-size: 0.85rem; color: var(--color-text-secondary); margin: 0;">Configure which pages and features are accessible by each role (Employee, Manager, etc.).</p>
+            </div>
+
             <div class="card" style="margin-bottom:1.5rem;">
                 <div class="card-title"><i data-lucide="lock" style="width:18px;height:18px;margin-inline-end:6px;color:var(--color-danger);"></i>Locked User Accounts (${lockedUsers.length})</div>
                 <div class="table-responsive">
@@ -5432,6 +5465,100 @@ async function renderAdmin() {
         </section>
     `;
 }
+
+async function renderAdminPageAccess() {
+    if (currentUserRole !== 'ADMIN') return `<div class="page-header"><h1 class="page-title">${t('analy_unauth') || 'Unauthorized'}</h1></div>`;
+    
+    const perms = await db.fetchAllRolePermissions();
+    const availableViews = [
+        { id: 'dashboard', label: 'Dashboard' },
+        { id: 'requests', label: 'My Requests' },
+        { id: 'time', label: 'Time & Attendance' },
+        { id: 'tasks', label: 'Task Manager' },
+        { id: 'documents', label: 'Documents' },
+        { id: 'profile', label: 'My Profile' },
+        { id: 'employees', label: 'Employee Directory' },
+        { id: 'approvals', label: 'Approvals' },
+        { id: 'payroll', label: 'Payroll' },
+        { id: 'expenses', label: 'Expenses' },
+        { id: 'crm', label: 'CRM / Pipeline' },
+        { id: 'projects', label: 'Projects' },
+        { id: 'clients', label: 'Clients' },
+        { id: 'leave', label: 'Leave' },
+        { id: 'leave_calculator', label: 'Leave Calculator' },
+        { id: 'custody_handover', label: 'Custody & Handover' },
+        { id: 'archived', label: 'Archived Records' }
+    ];
+
+    const roles = ['EMPLOYEE', 'SUPERVISOR', 'MANAGER', 'HR_MANAGER'];
+
+    const getPerm = (r, v) => {
+        const p = perms.find(x => x.role === r && x.view_id === v);
+        // Default based on previous logic if not seeded
+        if (!p) {
+            if (r === 'EMPLOYEE') return ['dashboard', 'requests', 'time', 'tasks', 'documents', 'profile'].includes(v);
+            return true;
+        }
+        return p.is_allowed;
+    };
+
+    let tableRows = '';
+    for (const view of availableViews) {
+        tableRows += `<tr>
+            <td><strong>${escapeHTML(view.label)}</strong></td>
+            ${roles.map(r => `
+                <td style="text-align: center;">
+                    <label class="switch" style="margin:0;">
+                        <input type="checkbox" onchange="window.toggleRolePermission('${r}', '${view.id}', this.checked)" ${getPerm(r, view.id) ? 'checked' : ''}>
+                        <span class="slider round"></span>
+                    </label>
+                </td>
+            `).join('')}
+        </tr>`;
+    }
+
+    return `
+        <div class="page-header fade-in-up">
+            <button class="btn btn-secondary btn-sm" style="margin-bottom: 0.5rem;" onclick="renderView('admin')">
+                <i data-lucide="arrow-left"></i> Back to Admin
+            </button>
+            <h1 class="page-title"><i data-lucide="shield-check" style="width:28px;height:28px;margin-inline-end:8px;color:var(--color-primary);vertical-align:middle;"></i>Page Access Controls</h1>
+            <p class="page-subtitle">Configure which pages and features are accessible by each role.</p>
+        </div>
+        
+        <div class="card fade-in-up">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Page / Feature</th>
+                            ${roles.map(r => `<th style="text-align: center;">${escapeHTML(r)}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+            <div style="padding: 1rem 0 0 0; text-align: right;">
+                <button class="btn-primary" onclick="renderView('admin_page_access')">Refresh Cache</button>
+            </div>
+        </div>
+    `;
+}
+
+window.toggleRolePermission = async function(role, viewId, isAllowed) {
+    const res = await db.updateRolePermissions(role, [{ view_id: viewId, is_allowed: isAllowed }]);
+    if (res && res.success) {
+        showToast('Permission updated successfully', 'success');
+        await window.loadRolePermissions();
+        if (currentUserRole !== 'ADMIN') {
+            await window.updateSidebarVisibility();
+        }
+    } else {
+        showToast('Failed to update permission', 'error');
+    }
+};
 
 // Render User Management (Admin Only)
 window.handleCreateUser = async function (e) {
@@ -11352,6 +11479,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'expenses': content = await renderExpenses(); break;
             case 'analytics': content = await renderAnalytics(); break;
             case 'admin': content = await renderAdmin(); break;
+            case 'admin_page_access': content = await renderAdminPageAccess(); break;
             case 'users': content = await renderUsers(); break;
             case 'contract_form': content = await window.renderContractForm(); break;
             case 'contract_preview': content = await window.renderContractPrintPreview(); break;
@@ -15088,6 +15216,8 @@ async function initApp() {
 
         const canUseApprovals = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile?.job_title || '');
         if (approvalsNav) approvalsNav.style.display = canUseApprovals ? 'flex' : 'none';
+        
+        await window.loadRolePermissions();
         await window.updateSidebarVisibility();
 
         const restorableViews = new Set([
