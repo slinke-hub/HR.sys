@@ -5,7 +5,11 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
+const db = fs.readFileSync(path.join(root, 'js/db.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'css/components.css'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const vercel = fs.readFileSync(path.join(root, 'vercel.json'), 'utf8');
+const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 const pageAccessSource = app.slice(
   app.indexOf('async function renderAdminPageAccess()'),
   app.indexOf('// Render User Management (Admin Only)')
@@ -29,5 +33,9 @@ assert.match(css, /\.page-access-chip\.role/);
 assert.match(css, /\.page-access-chip\.department/);
 assert.match(css, /\.page-access-chip\.employee/);
 assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.page-access-toolbar \{ grid-template-columns: 1fr; \}/);
+assert.match(db, /from\('user_permissions'\)[\s\S]*\.eq\('user_id', userId\)[\s\S]*\.maybeSingle\(\)/);
+assert.match(html, /frame-src 'self' blob: https:\/\/vercel\.live/);
+assert.match(vercel, /frame-src 'self' blob: https:\/\/vercel\.live/);
+assert.match(serviceWorker, /muqam-hr-mobile-v225/);
 
 console.log('Admin page access layout and interaction checks passed.');

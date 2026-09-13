@@ -9831,3 +9831,39 @@ body > .task-watcher-dropdown.multi-select-modal-layer {
   .page-access-grid { grid-template-columns: 1fr; }
   .page-access-card { min-height: 220px; }
 }
+
+/* On-device document metadata recognition */
+.document-recognition-status {
+  display: flex;
+  align-items: center;
+  min-height: 2.35rem;
+  margin: .75rem 0 0;
+  padding: .6rem .75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-bg-base) 78%, transparent);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+.document-recognition-status[data-state="working"] {
+  border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+.document-recognition-status[data-state="success"] {
+  border-color: color-mix(in srgb, var(--color-success) 40%, var(--color-border));
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+}
+.document-recognition-status[data-state="manual"] {
+  border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-border));
+  color: color-mix(in srgb, var(--color-warning) 78%, var(--color-text));
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+}
+.optional-field-label {
+  margin-inline-start: .25rem;
+  color: var(--color-text-secondary);
+  font-size: .68rem;
+  font-weight: 500;
+}

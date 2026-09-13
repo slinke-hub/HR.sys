@@ -2923,11 +2923,23 @@ async function renderDashboard() {
         const results = await Promise.all(fetchPromises);
         const docs = results[0].data || [];
 
-        const expiringDocs = docs.filter(d => d.expiration_date && (new Date(d.expiration_date) - new Date()) / (1000 * 60 * 60 * 24) < 30);
-        if (expiringDocs.length > 0) {
+        const documentExpiryStates = docs.map(documentRecord => ({
+            documentRecord,
+            expiryInfo: getDocumentExpiryInfo(documentRecord.expiration_date)
+        }));
+        const expiredDocs = documentExpiryStates.filter(({ expiryInfo }) => expiryInfo.daysLeft !== null && expiryInfo.daysLeft <= 0);
+        const expiringDocs = documentExpiryStates.filter(({ expiryInfo }) => expiryInfo.daysLeft > 0 && expiryInfo.daysLeft <= 30);
+        if (expiredDocs.length > 0) {
             expirationAlerts += `
                 <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--color-danger); padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
-                    <strong style="color: var(--color-danger);">${t('docs_expiring')}:</strong> ${expiringDocs.length}
+                    <strong style="color: var(--color-danger);">${t('docs_expired')}:</strong> ${expiredDocs.length}
+                </div>
+            `;
+        }
+        if (expiringDocs.length > 0) {
+            expirationAlerts += `
+                <div style="background: rgba(245, 158, 11, 0.1); border-left: 4px solid var(--color-warning); padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
+                    <strong style="color: var(--color-warning);">${t('docs_expiring')}:</strong> ${expiringDocs.length}
                 </div>
             `;
         }
@@ -6204,6 +6216,10 @@ const EMPLOYEE_DOCUMENT_ALLOWED_FILE_TYPES = new Set([
     'image/jpeg',
     'image/png'
 ]);
+const EMPLOYEE_DOCUMENT_DEFAULT_RESPONSIBLE = Object.freeze({
+    name: 'Montasir',
+    email: 'montasir.hr@muqam.net'
+});
 
 function getEmployeeDocumentFileValidationError(file) {
     if (!file) return 'toast_document_file_required';
@@ -6232,11 +6248,72 @@ function readEmployeeDocumentFile(file) {
     });
 }
 
+function setEmployeeDocumentRecognitionStatus(messageKey, state = 'idle', progress = null) {
+    const status = document.getElementById('empDocumentRecognitionStatus');
+    if (!status) return;
+    const percentage = Number.isFinite(progress) ? ` ${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%` : '';
+    status.dataset.state = state;
+    status.textContent = `${t(messageKey)}${percentage}`;
+}
+
+function applyRecognizedDocumentValue(input, value) {
+    if (!input || !value) return false;
+    const previousRecognizedValue = input.dataset.recognizedValue || '';
+    const mayReplace = !input.value.trim() || input.value === previousRecognizedValue;
+    if (!mayReplace) return false;
+    input.value = value;
+    input.dataset.recognizedValue = value;
+    return true;
+}
+
+window.autoPopulateEmployeeDocumentMetadata = async function (file) {
+    const extractor = window.EmployeeDocumentRecognition;
+    if (!file || !extractor?.extract) {
+        setEmployeeDocumentRecognitionStatus('doc_recognition_manual', 'manual');
+        return;
+    }
+
+    const ownerNameInput = document.getElementById('empOwnerName');
+    const expirationDateInput = document.getElementById('empExpiryDate');
+    const saveButton = document.getElementById('empDocSaveButton');
+    if (saveButton) saveButton.disabled = true;
+    setEmployeeDocumentRecognitionStatus('doc_recognition_reading', 'working', 0);
+
+    try {
+        const result = await extractor.extract(file, {
+            onProgress: progress => setEmployeeDocumentRecognitionStatus(
+                progress.phase === 'pdf' ? 'doc_recognition_reading' : 'doc_recognition_scanning',
+                'working',
+                progress.progress
+            )
+        });
+        const ownerApplied = applyRecognizedDocumentValue(ownerNameInput, result.ownerName);
+        const expiryApplied = applyRecognizedDocumentValue(expirationDateInput, result.expirationDate);
+        if (expiryApplied) window.updateDocumentExpiryPreview();
+
+        if (result.ownerName && result.expirationDate) {
+            setEmployeeDocumentRecognitionStatus('doc_recognition_complete', 'success');
+        } else if (result.ownerName || result.expirationDate) {
+            setEmployeeDocumentRecognitionStatus('doc_recognition_partial', 'manual');
+        } else {
+            setEmployeeDocumentRecognitionStatus('doc_recognition_manual', 'manual');
+        }
+        if ((result.ownerName && !ownerApplied) || (result.expirationDate && !expiryApplied)) {
+            setEmployeeDocumentRecognitionStatus('doc_recognition_preserved_manual', 'manual');
+        }
+    } catch (error) {
+        console.warn('Employee document recognition was unavailable:', error);
+        setEmployeeDocumentRecognitionStatus('doc_recognition_failed', 'manual');
+    } finally {
+        if (saveButton?.isConnected) saveButton.disabled = false;
+    }
+};
+
 window.openEmployeeDocumentFilePicker = function () {
     document.getElementById('empDocFile')?.click();
 };
 
-window.updateEmployeeDocumentFileName = function (event) {
+window.updateEmployeeDocumentFileName = async function (event) {
     const fileInput = event.target;
     const fileNameElement = document.getElementById('empDocFileName');
     const files = Array.from(fileInput.files || []);
@@ -6261,6 +6338,7 @@ window.updateEmployeeDocumentFileName = function (event) {
             fileNameElement.textContent = `${files.length} files selected`;
         }
     }
+    if (files.length > 0) await window.autoPopulateEmployeeDocumentMetadata(files[0]);
 };
 
 window.handleEmployeeDocSave = async function (e) {
@@ -6301,8 +6379,8 @@ window.handleEmployeeDocSave = async function (e) {
                 documentName,
                 ownerName: document.getElementById('empOwnerName').value.trim(),
                 ownerEmail: document.getElementById('empOwnerEmail').value.trim(),
-                responsibleName: document.getElementById('empResponsibleName').value.trim(),
-                responsibleEmail: document.getElementById('empResponsibleEmail').value.trim(),
+                responsibleName: document.getElementById('empResponsibleName').value.trim() || EMPLOYEE_DOCUMENT_DEFAULT_RESPONSIBLE.name,
+                responsibleEmail: document.getElementById('empResponsibleEmail').value.trim() || EMPLOYEE_DOCUMENT_DEFAULT_RESPONSIBLE.email,
                 expirationDate: document.getElementById('empExpiryDate').value,
                 ownerPhone: document.getElementById('empOwnerPhone').value.trim(),
                 fileType,
@@ -6345,11 +6423,20 @@ window.handleEmployeeDocUpload = window.handleEmployeeDocSave;
 function getDocumentExpiryInfo(expirationDate) {
     if (!expirationDate) return { daysLeft: null, status: '', statusClass: 'info' };
 
-    const [year, month, day] = expirationDate.split('-').map(Number);
+    const dateMatch = String(expirationDate).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!dateMatch) return { daysLeft: null, status: '', statusClass: 'info' };
+    const [, yearValue, monthValue, dayValue] = dateMatch;
+    const year = Number(yearValue);
+    const month = Number(monthValue);
+    const day = Number(dayValue);
     const now = new Date();
     const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
     const expiryUtc = Date.UTC(year, month - 1, day);
-    const daysLeft = Math.ceil((expiryUtc - todayUtc) / 86400000);
+    const isValidDate = new Date(expiryUtc).getUTCFullYear() === year
+        && new Date(expiryUtc).getUTCMonth() === month - 1
+        && new Date(expiryUtc).getUTCDate() === day;
+    if (!isValidDate) return { daysLeft: null, status: '', statusClass: 'info' };
+    const daysLeft = Math.round((expiryUtc - todayUtc) / 86400000);
 
     if (daysLeft <= 0) {
         return { daysLeft, status: t('doc_status_expired'), statusClass: 'danger' };
@@ -6416,8 +6503,8 @@ function openEmployeeDocumentModal(documentId, editMode) {
     document.getElementById('employeeDocumentName').value = documentRecord.doc_name || '';
     document.getElementById('employeeDocumentOwnerName').value = documentRecord.owner_name || '';
     document.getElementById('employeeDocumentOwnerEmail').value = documentRecord.owner_email || '';
-    document.getElementById('employeeDocumentResponsibleName').value = documentRecord.responsible_name || '';
-    document.getElementById('employeeDocumentResponsibleEmail').value = documentRecord.responsible_email || '';
+    document.getElementById('employeeDocumentResponsibleName').value = documentRecord.responsible_name || EMPLOYEE_DOCUMENT_DEFAULT_RESPONSIBLE.name;
+    document.getElementById('employeeDocumentResponsibleEmail').value = documentRecord.responsible_email || EMPLOYEE_DOCUMENT_DEFAULT_RESPONSIBLE.email;
     document.getElementById('employeeDocumentExpiryDate').value = documentRecord.expiration_date || '';
     document.getElementById('employeeDocumentNotified').value = t('doc_yes');
     document.getElementById('employeeDocumentOwnerPhone').value = documentRecord.owner_phone || '';
@@ -6651,16 +6738,16 @@ async function renderDocuments() {
                             <input type="text" id="empOwnerName" class="form-control" required>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">${t('doc_owner_email')}</label>
-                            <input type="email" id="empOwnerEmail" class="form-control" required>
+                            <label class="form-label">${t('doc_owner_email')} <small class="optional-field-label">${t('ph_optional')}</small></label>
+                            <input type="email" id="empOwnerEmail" class="form-control">
                         </div>
                         <div class="form-group">
                             <label class="form-label">${t('doc_responsible_name')}</label>
-                            <input type="text" id="empResponsibleName" class="form-control" required>
+                            <input type="text" id="empResponsibleName" class="form-control" value="${escapeHTML(EMPLOYEE_DOCUMENT_DEFAULT_RESPONSIBLE.name)}" required>
                         </div>
                         <div class="form-group">
                             <label class="form-label">${t('doc_responsible_email')}</label>
-                            <input type="email" id="empResponsibleEmail" class="form-control" required>
+                            <input type="email" id="empResponsibleEmail" class="form-control" value="${escapeHTML(EMPLOYEE_DOCUMENT_DEFAULT_RESPONSIBLE.email)}" required>
                         </div>
                         <div class="form-group">
                             <label class="form-label">${t('doc_expiry_date')}</label>
@@ -6679,8 +6766,8 @@ async function renderDocuments() {
                             <input type="text" class="form-control" value="${t('doc_yes')}" readonly>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">${t('doc_owner_phone')}</label>
-                            <input type="tel" id="empOwnerPhone" class="form-control" required>
+                            <label class="form-label">${t('doc_owner_phone')} <small class="optional-field-label">${t('ph_optional')}</small></label>
+                            <input type="tel" id="empOwnerPhone" class="form-control">
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
                             <label class="form-label">${t('doc_file')}</label>
@@ -6691,6 +6778,7 @@ async function renderDocuments() {
                                 </button>
                                 <span id="empDocFileName" aria-live="polite" style="color: var(--color-text-secondary);">${t('doc_no_file_selected')}</span>
                             </div>
+                            <p id="empDocumentRecognitionStatus" class="document-recognition-status" data-state="idle" aria-live="polite">${t('doc_recognition_ready')}</p>
                             <small style="display: block; margin-top: 0.5rem; color: var(--color-text-secondary);">${t('doc_file_help')}</small>
                         </div>
                     </div>

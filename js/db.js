@@ -2123,12 +2123,12 @@ const db = {
                     employee_id: employeeId,
                     doc_name: documentRecord.documentName,
                     owner_name: documentRecord.ownerName,
-                    owner_email: documentRecord.ownerEmail,
+                    owner_email: documentRecord.ownerEmail || null,
                     responsible_name: documentRecord.responsibleName,
                     responsible_email: documentRecord.responsibleEmail,
                     expiration_date: documentRecord.expirationDate,
                     notified_30_days: true,
-                    owner_phone: documentRecord.ownerPhone,
+                    owner_phone: documentRecord.ownerPhone || null,
                     doc_type: documentRecord.fileType,
                     doc_base64: documentRecord.fileBase64
                 }])
@@ -2162,11 +2162,11 @@ const db = {
                 .update({
                     doc_name: documentRecord.documentName,
                     owner_name: documentRecord.ownerName,
-                    owner_email: documentRecord.ownerEmail,
+                    owner_email: documentRecord.ownerEmail || null,
                     responsible_name: documentRecord.responsibleName,
                     responsible_email: documentRecord.responsibleEmail,
                     expiration_date: documentRecord.expirationDate,
-                    owner_phone: documentRecord.ownerPhone
+                    owner_phone: documentRecord.ownerPhone || null
                 })
                 .eq('id', documentId)
                 .select('id')
@@ -4138,8 +4138,8 @@ const db = {
                 .from('user_permissions')
                 .select('*')
                 .eq('user_id', userId)
-                .single();
-            if (error && error.code !== 'PGRST116') throw error;
+                .maybeSingle();
+            if (error) throw error;
             return data ? data.allowed_pages : null;
         } catch (error) {
             console.error("fetchUserPermissions Error:", error);

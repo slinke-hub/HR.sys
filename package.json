@@ -29,12 +29,16 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/core": "^8.5.0",
     "@supabase/supabase-js": "^2.112.4",
+    "@tesseract.js-data/ara": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "chart.js": "^4.5.0",
     "lucide": "^0.468.0",
     "lucide-react": "^0.468.0",
+    "pdfjs-dist": "^6.3.289",
     "puppeteer": "^25.9.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tesseract.js": "^7.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }
