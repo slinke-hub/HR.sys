@@ -2912,9 +2912,14 @@ async function renderDashboard() {
 
     // Fetch docs and contracts in parallel
     try {
-        const fetchPromises = [
-            window.supabaseClient.from('employee_documents').select('*').eq('employee_id', currentUser.id)
-        ];
+        let dashboardDocumentsQuery = window.supabaseClient
+            .from('employee_documents')
+            .select('id, employee_id, doc_name, expiration_date');
+        if (currentUserRole !== 'ADMIN') {
+            dashboardDocumentsQuery = dashboardDocumentsQuery.eq('employee_id', currentUser.id);
+        }
+
+        const fetchPromises = [dashboardDocumentsQuery];
 
         if (currentUserRole === 'ADMIN') {
             fetchPromises.push(window.supabaseClient.from('contracts').select('*'));
@@ -2929,18 +2934,40 @@ async function renderDashboard() {
         }));
         const expiredDocs = documentExpiryStates.filter(({ expiryInfo }) => expiryInfo.daysLeft !== null && expiryInfo.daysLeft <= 0);
         const expiringDocs = documentExpiryStates.filter(({ expiryInfo }) => expiryInfo.daysLeft > 0 && expiryInfo.daysLeft <= 30);
-        if (expiredDocs.length > 0) {
+        if (expiredDocs.length > 0 || expiringDocs.length > 0) {
+            const expiryRows = Array.from({ length: Math.max(expiredDocs.length, expiringDocs.length) }, (_, index) => {
+                const expiredDocument = expiredDocs[index]?.documentRecord;
+                const expiringDocument = expiringDocs[index]?.documentRecord;
+                return `
+                    <tr>
+                        <td>${expiredDocument ? `<a href="?view=documents&documentStatus=expired" onclick="event.preventDefault(); openDocumentsByExpiryStatus('expired')">${escapeHTML(expiredDocument.doc_name || '-')}</a>` : '<span aria-hidden="true">—</span>'}</td>
+                        <td>${expiringDocument ? `<a href="?view=documents&documentStatus=expiring" onclick="event.preventDefault(); openDocumentsByExpiryStatus('expiring')">${escapeHTML(expiringDocument.doc_name || '-')}</a>` : '<span aria-hidden="true">—</span>'}</td>
+                    </tr>
+                `;
+            }).join('');
+
             expirationAlerts += `
-                <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--color-danger); padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
-                    <strong style="color: var(--color-danger);">${t('docs_expired')}:</strong> ${expiredDocs.length}
-                </div>
-            `;
-        }
-        if (expiringDocs.length > 0) {
-            expirationAlerts += `
-                <div style="background: rgba(245, 158, 11, 0.1); border-left: 4px solid var(--color-warning); padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
-                    <strong style="color: var(--color-warning);">${t('docs_expiring')}:</strong> ${expiringDocs.length}
-                </div>
+                <section class="document-expiry-dashboard" aria-labelledby="documentExpiryDashboardTitle">
+                    <h3 id="documentExpiryDashboardTitle" class="sr-only">${t('doc_expiry_overview')}</h3>
+                    <div class="document-expiry-summary-grid">
+                        <a class="document-expiry-summary document-expiry-summary--expired" href="?view=documents&documentStatus=expired" onclick="event.preventDefault(); openDocumentsByExpiryStatus('expired')">
+                            <span>${t('docs_expired')}</span>
+                            <strong>${expiredDocs.length}</strong>
+                            <i data-lucide="arrow-up-right" aria-hidden="true"></i>
+                        </a>
+                        <a class="document-expiry-summary document-expiry-summary--expiring" href="?view=documents&documentStatus=expiring" onclick="event.preventDefault(); openDocumentsByExpiryStatus('expiring')">
+                            <span>${t('docs_expiring')}</span>
+                            <strong>${expiringDocs.length}</strong>
+                            <i data-lucide="arrow-up-right" aria-hidden="true"></i>
+                        </a>
+                    </div>
+                    <div class="table-responsive document-expiry-name-table-wrap">
+                        <table class="data-table document-expiry-name-table">
+                            <thead><tr><th>${t('docs_expired')}</th><th>${t('docs_expiring')}</th></tr></thead>
+                            <tbody>${expiryRows}</tbody>
+                        </table>
+                    </div>
+                </section>
             `;
         }
 
@@ -6447,6 +6474,36 @@ function getDocumentExpiryInfo(expirationDate) {
     return { daysLeft, status: t('doc_status_active'), statusClass: 'success' };
 }
 
+function normalizeDocumentStatusFilter(status) {
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+    return ['expired', 'expiring'].includes(normalizedStatus) ? normalizedStatus : '';
+}
+
+window.openDocumentsByExpiryStatus = function (status) {
+    const normalizedStatus = normalizeDocumentStatusFilter(status);
+    if (!normalizedStatus) return;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'documents');
+    url.searchParams.set('documentStatus', normalizedStatus);
+    const nextState = { ...(window.history.state || {}), [APP_HISTORY_VIEW_KEY]: 'documents' };
+    window.history.pushState(nextState, '', `${url.pathname}${url.search}${url.hash}`);
+    appHistoryInitialized = true;
+    if (viewHistory[viewHistory.length - 1] !== 'documents') viewHistory.push('documents');
+    delete window.viewHTMLCache?.documents;
+    void renderView('documents', true);
+};
+
+window.setEmployeeDocumentStatusFilter = function (status) {
+    const normalizedStatus = normalizeDocumentStatusFilter(status);
+    const url = new URL(window.location.href);
+    if (normalizedStatus) url.searchParams.set('documentStatus', normalizedStatus);
+    else url.searchParams.delete('documentStatus');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    delete window.viewHTMLCache?.documents;
+    void renderView('documents', true);
+};
+
 window.updateDocumentExpiryPreview = function () {
     const expiryInput = document.getElementById('empExpiryDate');
     const daysLeftInput = document.getElementById('empDaysLeft');
@@ -6706,6 +6763,13 @@ async function renderDocuments() {
     }
 
     window.currentEmployeeDocuments = uploadedDocs;
+    const documentStatusFilter = normalizeDocumentStatusFilter(new URLSearchParams(window.location.search).get('documentStatus'));
+    const visibleUploadedDocs = uploadedDocs.filter(documentRecord => {
+        if (!documentStatusFilter) return true;
+        const daysLeft = getDocumentExpiryInfo(documentRecord.expiration_date).daysLeft;
+        if (documentStatusFilter === 'expired') return daysLeft !== null && daysLeft <= 0;
+        return daysLeft !== null && daysLeft > 0 && daysLeft <= 30;
+    });
 
     return `
         <div class="page-header fade-in-up">
@@ -6791,12 +6855,22 @@ async function renderDocuments() {
             
 
             <div class="card col-span-12">
-                <div class="card-title">${currentUserRole === 'ADMIN' ? t('doc_all_uploaded') : t('doc_my_uploaded')}</div>
+                <div class="employee-document-table-heading">
+                    <div>
+                        <div class="card-title">${currentUserRole === 'ADMIN' ? t('doc_all_uploaded') : t('doc_my_uploaded')}</div>
+                        ${documentStatusFilter ? `<p class="employee-document-filter-summary">${t('doc_showing_filter')}: <strong>${documentStatusFilter === 'expired' ? t('docs_expired') : t('docs_expiring')}</strong> (${visibleUploadedDocs.length})</p>` : ''}
+                    </div>
+                    <div class="employee-document-status-filters" role="group" aria-label="${t('doc_filter_by_status')}">
+                        <button type="button" class="btn-secondary ${!documentStatusFilter ? 'active' : ''}" onclick="setEmployeeDocumentStatusFilter('')">${t('doc_filter_all')}</button>
+                        <button type="button" class="btn-secondary ${documentStatusFilter === 'expired' ? 'active' : ''}" onclick="setEmployeeDocumentStatusFilter('expired')">${t('docs_expired')}</button>
+                        <button type="button" class="btn-secondary ${documentStatusFilter === 'expiring' ? 'active' : ''}" onclick="setEmployeeDocumentStatusFilter('expiring')">${t('docs_expiring')}</button>
+                    </div>
+                </div>
                 <div class="table-responsive employee-documents-table-wrap">
                     <table class="data-table employee-documents-table">
                         <thead><tr><th>${t('doc_document_id')}</th><th>${t('doc_document_name')}</th><th>${t('doc_owner_name')}</th><th>${t('doc_owner_email')}</th><th>${t('doc_responsible_name')}</th><th>${t('doc_responsible_email')}</th><th>${t('doc_expiry_date')}</th><th>${t('doc_days_left')}</th><th>${t('status')}</th><th>${t('doc_owner_phone')}</th><th>${t('ui_actions')}</th></tr></thead>
                         <tbody>
-                            ${uploadedDocs.length === 0 ? `<tr class="employee-documents-empty"><td colspan="11" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${t('doc_no_uploaded')}</td></tr>` : uploadedDocs.map(renderEmployeeDocumentRow).join('')}
+                            ${visibleUploadedDocs.length === 0 ? `<tr class="employee-documents-empty"><td colspan="11" style="text-align: center; color: var(--color-text-secondary); padding: 1rem;">${documentStatusFilter ? t('doc_no_matching_status') : t('doc_no_uploaded')}</td></tr>` : visibleUploadedDocs.map(renderEmployeeDocumentRow).join('')}
                         </tbody>
                     </table>
                 </div>
