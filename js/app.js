@@ -12760,6 +12760,7 @@ window.showDepartmentCatalogModal = departmentName => {
 // ==========================================
 async function renderClients() {
     const clients = await db.fetchClients();
+    const isMq25 = currentUser && currentUser.emp_index == 25;
 
     let tableRows = clients.length ? clients.map(c => `
         <tr id="client-row-${c.id}">
@@ -12768,8 +12769,10 @@ async function renderClients() {
             <td>${c.email || '-'}</td>
             <td>${c.phone || '-'}</td>
             <td>
+                ${!isMq25 ? `
                 <button class="btn btn-icon" onclick="editClient('${c.id}')"><i data-lucide="edit-2"></i></button>
                 <button class="btn btn-icon" style="color:var(--color-danger);" onclick="deleteClient('${c.id}')"><i data-lucide="trash-2"></i></button>
+                ` : `<span style="font-size:0.75rem; color:var(--color-text-secondary);"><i data-lucide="shield" style="width:14px; height:14px; vertical-align:middle; margin-right:4px;"></i>Add-only access</span>`}
             </td>
         </tr>
     `).join('') : `<tr><td colspan="5" style="text-align:center;">${t('ui_no_clients') || 'No clients found'}</td></tr>`;
