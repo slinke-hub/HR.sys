@@ -2281,8 +2281,16 @@ async function canCurrentUserAccessView(viewId) {
     }
 
     if (window.appRolePermissionsCache && window.appRolePermissionsCache.length > 0) {
-        const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole);
+        // Check exact role
+        let perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole);
         if (perm && perm.allowed_pages && perm.allowed_pages.includes(viewId)) return true;
+        
+        // Check department role prefix (e.g. DEPT_uuid)
+        const currentUserDept = currentUserProfile?.department_id || currentUser?.department_id;
+        if (currentUserDept) {
+            let deptPerm = window.appRolePermissionsCache.find(p => p.role === `DEPT_${currentUserDept}`);
+            if (deptPerm && deptPerm.allowed_pages && deptPerm.allowed_pages.includes(viewId)) return true;
+        }
     }
 
     if (viewId === 'leave_calculator') return normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
@@ -5488,10 +5496,11 @@ async function renderAdmin() {
 async function renderAdminPageAccess() {
     if (currentUserRole !== 'ADMIN') return `<div class="page-header"><h1 class="page-title">${t('analy_unauth') || 'Unauthorized'}</h1></div>`;
     
-    const [perms, allUserPerms, allProfiles] = await Promise.all([
+    const [perms, allUserPerms, allProfiles, depts] = await Promise.all([
         db.fetchAllRolePermissions(),
         db.fetchAllUserPermissions(),
-        db.fetchAllProfiles()
+        db.fetchAllProfiles(),
+        db.fetchDepartments(false)
     ]);
     
     const availableViews = [
@@ -5514,64 +5523,78 @@ async function renderAdminPageAccess() {
         { id: 'archived', label: 'Archived Records' }
     ];
 
-    const roles = ['EMPLOYEE', 'SUPERVISOR', 'MANAGER', 'HR_MANAGER'];
+    const roles = ['EMPLOYEE', 'SUPERVISOR', 'MANAGER', 'HR_MANAGER', 'ADMIN'];
 
-    const getPerm = (r, v) => {
+    const formatRole = r => {
+        const mapping = { 'EMPLOYEE': 'All Employees', 'SUPERVISOR': 'Supervisors', 'MANAGER': 'Managers', 'HR_MANAGER': 'HR Managers', 'ADMIN': 'Administrators' };
+        return mapping[r] || r;
+    };
+
+    const hasRolePerm = (r, v) => {
         const p = perms.find(x => x.role === r);
-        if (!p || !p.allowed_pages) {
-            if (r === 'EMPLOYEE') return ['dashboard', 'requests', 'time', 'tasks', 'documents', 'profile'].includes(v);
-            return true;
-        }
+        if (!p || !p.allowed_pages) return false;
         return p.allowed_pages.includes(v);
+    };
+
+    const hasUserPerm = (userId, v) => {
+        const up = allUserPerms.find(x => x.user_id === userId);
+        if (!up || !up.allowed_pages) return false;
+        return up.allowed_pages.includes(v);
     };
 
     let tableRows = '';
     for (const view of availableViews) {
-        let extraUsersHTML = '<div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px; min-height: 20px;">';
-        for (const p of allProfiles) {
-            const up = allUserPerms.find(x => x.user_id === p.id);
-            if (up && up.allowed_pages && up.allowed_pages.includes(view.id)) {
-                extraUsersHTML += `<span class="badge" style="background:var(--color-primary-light); color:var(--color-primary); padding:2px 6px; border-radius:12px; font-size:0.75rem; display:inline-flex; align-items:center; gap:4px;">
-                    ${escapeHTML(p.full_name || p.email)}
-                    <i data-lucide="x" style="width:12px; height:12px; cursor:pointer;" onclick="window.toggleUserPermission('${p.id}', '${view.id}', false)"></i>
+        let badgesHTML = '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">';
+        
+        // Render Role Badges
+        roles.forEach(r => {
+            if (hasRolePerm(r, view.id)) {
+                badgesHTML += `<span class="badge" style="background:var(--color-primary); color:white; padding:4px 8px; border-radius:12px; font-size:0.75rem; display:inline-flex; align-items:center; gap:6px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                    <i data-lucide="shield" style="width:12px; height:12px;"></i> ${formatRole(r)}
+                    <i data-lucide="x" style="width:12px; height:12px; cursor:pointer;" onclick="window.handleRevokeAccess('ROLE', '${r}', '${view.id}')"></i>
                 </span>`;
             }
-        }
-        extraUsersHTML += '</div>';
+        });
 
-        let rowSelectHTML = `<select class="form-control" style="font-size:0.75rem; padding: 2px 4px; height: 24px; min-width: 150px; width: 100%;" onchange="if(this.value) { window.toggleUserPermission(this.value, '${view.id}', true); this.value=''; }">
-            <option value="">+ Add Employee...</option>
-            ${allProfiles.map(p => {
-                const up = allUserPerms.find(x => x.user_id === p.id);
-                const hasPerm = up && up.allowed_pages && up.allowed_pages.includes(view.id);
-                return hasPerm ? '' : `<option value="${p.id}">${escapeHTML(p.full_name || p.email)}</option>`;
-            }).join('')}
+        // Render Department Badges
+        depts.forEach(d => {
+            if (hasRolePerm(`DEPT_${d.id}`, view.id)) {
+                badgesHTML += `<span class="badge" style="background:var(--color-warning-light); color:var(--color-warning-dark); border: 1px solid var(--color-warning); padding:3px 8px; border-radius:12px; font-size:0.75rem; display:inline-flex; align-items:center; gap:6px;">
+                    <i data-lucide="building-2" style="width:12px; height:12px;"></i> ${escapeHTML(d.name)}
+                    <i data-lucide="x" style="width:12px; height:12px; cursor:pointer;" onclick="window.handleRevokeAccess('ROLE', 'DEPT_${d.id}', '${view.id}')"></i>
+                </span>`;
+            }
+        });
+
+        // Render Specific User Badges
+        allProfiles.forEach(p => {
+            if (hasUserPerm(p.id, view.id)) {
+                badgesHTML += `<span class="badge" style="background:var(--color-secondary); color:var(--color-text); padding:4px 8px; border-radius:12px; font-size:0.75rem; display:inline-flex; align-items:center; gap:6px; border: 1px solid var(--color-border);">
+                    <i data-lucide="user" style="width:12px; height:12px;"></i> ${escapeHTML(p.full_name || p.email)}
+                    <i data-lucide="x" style="width:12px; height:12px; cursor:pointer;" onclick="window.handleRevokeAccess('USER', '${p.id}', '${view.id}')"></i>
+                </span>`;
+            }
+        });
+
+        // The Add Access Dropdown
+        const selectHTML = `<select class="form-control" style="font-size:0.75rem; padding: 4px; height: 28px; min-width: 180px;" onchange="window.handleGrantAccess(this, '${view.id}')">
+            <option value="">+ Add Access...</option>
+            <optgroup label="Roles">
+                ${roles.filter(r => !hasRolePerm(r, view.id)).map(r => `<option value="ROLE:${r}">${formatRole(r)}</option>`).join('')}
+            </optgroup>
+            <optgroup label="Departments">
+                ${depts.filter(d => !hasRolePerm(`DEPT_${d.id}`, view.id)).map(d => `<option value="ROLE:DEPT_${d.id}">${escapeHTML(d.name)}</option>`).join('')}
+            </optgroup>
+            <optgroup label="Specific Employees">
+                ${allProfiles.filter(p => !hasUserPerm(p.id, view.id)).map(p => `<option value="USER:${p.id}">${escapeHTML(p.full_name || p.email)}</option>`).join('')}
+            </optgroup>
         </select>`;
 
+        badgesHTML += selectHTML + '</div>';
+
         tableRows += `<tr>
-            <td><strong>${escapeHTML(view.label)}</strong></td>
-            ${roles.map(r => {
-                if (r === 'EMPLOYEE') {
-                    return `<td style="min-width: 200px;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                            <label class="switch" style="margin:0;">
-                                <input type="checkbox" onchange="window.toggleRolePermission('${r}', '${view.id}', this.checked)" ${getPerm(r, view.id) ? 'checked' : ''}>
-                                <span class="slider round"></span>
-                            </label>
-                            <span style="font-size: 0.75rem; color: var(--color-text-secondary);">All Employees</span>
-                        </div>
-                        ${extraUsersHTML}
-                        ${rowSelectHTML}
-                    </td>`;
-                } else {
-                    return `<td style="text-align: center;">
-                        <label class="switch" style="margin:0;">
-                            <input type="checkbox" onchange="window.toggleRolePermission('${r}', '${view.id}', this.checked)" ${getPerm(r, view.id) ? 'checked' : ''}>
-                            <span class="slider round"></span>
-                        </label>
-                    </td>`;
-                }
-            }).join('')}
+            <td style="width: 25%; font-weight: 500;">${escapeHTML(view.label)}</td>
+            <td>${badgesHTML}</td>
         </tr>`;
     }
 
@@ -5583,7 +5606,7 @@ async function renderAdminPageAccess() {
                 <i data-lucide="arrow-left"></i> Back to Admin
             </button>
             <h1 class="page-title"><i data-lucide="shield-check" style="width:28px;height:28px;margin-inline-end:8px;color:var(--color-primary);vertical-align:middle;"></i>Page Access Controls</h1>
-            <p class="page-subtitle">Configure which pages and features are accessible by each role or individual employee.</p>
+            <p class="page-subtitle">Configure which pages and features are accessible by each role, department, or individual employee.</p>
         </div>
         
         <div class="card fade-in-up">
@@ -5592,7 +5615,7 @@ async function renderAdminPageAccess() {
                     <thead>
                         <tr>
                             <th>Page / Feature</th>
-                            ${roles.map(r => `<th style="${r === 'EMPLOYEE' ? 'text-align: left;' : 'text-align: center;'}">${escapeHTML(r)}</th>`).join('')}
+                            <th>Access Granted To</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -5606,6 +5629,28 @@ async function renderAdminPageAccess() {
         </div>
     `;
 }
+
+window.handleGrantAccess = async function(selectElement, viewId) {
+    const value = selectElement.value;
+    selectElement.value = ''; // reset dropdown
+    if (!value) return;
+
+    if (value.startsWith('USER:')) {
+        const userId = value.replace('USER:', '');
+        await window.toggleUserPermission(userId, viewId, true);
+    } else if (value.startsWith('ROLE:')) {
+        const role = value.replace('ROLE:', '');
+        await window.toggleRolePermission(role, viewId, true);
+    }
+};
+
+window.handleRevokeAccess = async function(type, id, viewId) {
+    if (type === 'USER') {
+        await window.toggleUserPermission(id, viewId, false);
+    } else {
+        await window.toggleRolePermission(id, viewId, false);
+    }
+};
 
 window.toggleUserPermission = async function(userId, viewId, isGranted) {
     let up = window.allUserPermsData.find(x => x.user_id === userId);
@@ -5646,6 +5691,7 @@ window.toggleRolePermission = async function(role, viewId, isAllowed) {
         if (currentUserRole !== 'ADMIN') {
             await window.updateSidebarVisibility();
         }
+        renderView('admin_page_access'); // refresh the admin UI
     } else {
         showToast('Failed to update role permission', 'error');
     }
