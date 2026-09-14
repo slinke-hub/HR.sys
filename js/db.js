@@ -3195,26 +3195,55 @@ const db = {
         }
     },
     async fetchDealWorkflow(dealId) {
-        if (!supabaseClient) return { approvals: [], designApprovals: [], attachments: [], activity: [], project: null };
+        if (!supabaseClient) return { approvals: [], designApprovals: [], attachments: [], designFiles: [], activity: [], project: null };
         try {
-            const [approvals, designApprovals, attachments, activity, project] = await Promise.all([
+            const [approvals, designApprovals, attachments, activity, project, designTask] = await Promise.all([
                 supabaseClient.from('crm_deal_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
                 supabaseClient.from('crm_design_task_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
                 supabaseClient.from('crm_deal_attachments').select('*').eq('deal_id', dealId).order('created_at', { ascending: false }),
                 supabaseClient.from('crm_deal_activity').select('*, profiles:actor_id(full_name, display_name_ar)').eq('deal_id', dealId).order('created_at', { ascending: false }),
-                supabaseClient.from('projects').select('id, deal_id, project_name, project_status, project_amount, paid_amount, event_location, start_date, end_date').eq('deal_id', dealId).maybeSingle()
+                supabaseClient.from('projects').select('id, deal_id, project_name, project_status, project_amount, paid_amount, event_location, start_date, end_date').eq('deal_id', dealId).maybeSingle(),
+                supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at').eq('crm_deal_id', dealId).eq('crm_workflow_kind', 'QUOTE_PROPOSAL_DESIGN').order('created_at', { ascending: false }).limit(1).maybeSingle()
             ]);
-            const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || project.error;
+            const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || project.error || designTask.error;
             if (firstError) throw firstError;
             const resolvedAttachments = await Promise.all((attachments.data || []).map(async attachment => ({
                 ...attachment,
                 storage_reference: attachment.file_url,
                 file_url: await this.resolveStorageReference(attachment.file_url)
             })));
-            return { approvals: approvals.data || [], designApprovals: designApprovals.data || [], attachments: resolvedAttachments, activity: activity.data || [], project: project.data || null };
+            const submissionReferences = Array.isArray(designTask.data?.submission_links) ? designTask.data.submission_links.filter(Boolean) : [];
+            let designAttachmentRows = [];
+            if (designTask.data?.id && submissionReferences.length) {
+                const attachmentRows = await supabaseClient
+                    .from('task_attachments')
+                    .select('file_url, file_name, file_type, file_size, created_at')
+                    .eq('task_id', designTask.data.id)
+                    .in('file_url', submissionReferences);
+                if (!attachmentRows.error) designAttachmentRows = attachmentRows.data || [];
+            }
+            const attachmentByReference = new Map(designAttachmentRows.map(file => [file.file_url, file]));
+            const designFiles = await Promise.all(submissionReferences.map(async reference => {
+                const metadata = attachmentByReference.get(reference) || {};
+                return {
+                    ...metadata,
+                    storage_reference: reference,
+                    file_url: await this.resolveStorageReference(reference),
+                    file_name: metadata.file_name || decodeURIComponent(String(reference).split('/').pop() || 'Design file')
+                };
+            }));
+            return {
+                approvals: approvals.data || [],
+                designApprovals: designApprovals.data || [],
+                attachments: resolvedAttachments,
+                designTask: designTask.data || null,
+                designFiles,
+                activity: activity.data || [],
+                project: project.data || null
+            };
         } catch (error) {
             console.error('fetchDealWorkflow Error:', error);
-            return { approvals: [], designApprovals: [], attachments: [], activity: [], project: null, error };
+            return { approvals: [], designApprovals: [], attachments: [], designTask: null, designFiles: [], activity: [], project: null, error };
         }
     },
     async fetchDealPresentationAttachments(dealId) {

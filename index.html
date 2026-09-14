@@ -42,7 +42,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=1788202890005">
     <link rel="stylesheet" href="css/layout.css?v=1788202890007">
-    <link rel="stylesheet" href="css/components.css?v=2026091401">
+    <link rel="stylesheet" href="css/components.css?v=2026091402">
     <link rel="stylesheet" href="css/hr-suite-beta.css?v=2026090901">
     <link rel="stylesheet" href="css/android.css?v=2026090702">
     <link rel="stylesheet" href="css/crm-tailwind.css?v=2026090904">
@@ -1642,13 +1642,13 @@
     <script src="js/vendor/xlsx.full.min.js"></script>
     <script src="js/vendor/tesseract/tesseract.min.js?v=7.0.0"></script>
     <script src="js/document-ocr.js?v=2026091301"></script>
-    <script src="js/db.js?v=2026091401"></script>
+    <script src="js/db.js?v=2026091402"></script>
     <script src="js/data.js?v=2026091303"></script>
     <script src="js/contract.js?v=1788202890003"></script>
     <script src="js/payroll.js"></script>
     <script src="js/crm-dashboard.bundle.js?v=2026091011"></script>
     <script src="js/hr-suite-beta.js?v=2026090901"></script>
-    <script src="js/app.js?v=2026091402"></script>
+    <script src="js/app.js?v=2026091403"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">
@@ -1750,6 +1750,38 @@
         </div>
     </div>
 
+
+    <!-- CRM Design Completion Submission Modal -->
+    <div class="modal crm-design-completion-modal" id="crmDesignCompletionModal" role="dialog" aria-modal="true" aria-labelledby="crmDesignCompletionTitle">
+        <div class="modal-content crm-design-completion-content">
+            <div class="modal-header">
+                <div>
+                    <span class="crm-design-completion-kicker">DESIGN APPROVAL</span>
+                    <h2 id="crmDesignCompletionTitle">Submit completed design</h2>
+                    <p>Upload the final PDF files or images for the approval team.</p>
+                </div>
+                <button type="button" class="task-detail-close" aria-label="Close" onclick="closeCrmDesignCompletionModal(false)"><i data-lucide="x"></i></button>
+            </div>
+            <form id="crmDesignCompletionForm" onsubmit="handleCrmDesignCompletionSubmit(event)">
+                <input type="hidden" id="crmDesignCompletionTaskId">
+                <label class="crm-design-completion-dropzone" for="crmDesignCompletionFiles">
+                    <input id="crmDesignCompletionFiles" type="file" accept="application/pdf,image/*" multiple required onchange="renderCrmDesignCompletionSelection(this.files)">
+                    <i data-lucide="upload-cloud"></i>
+                    <strong>Choose completed design files</strong>
+                    <span>PDF, PNG, JPG or WEBP · maximum 15 MB per file</span>
+                </label>
+                <div id="crmDesignCompletionSelection" class="crm-design-completion-selection" hidden></div>
+                <div class="crm-design-completion-reviewers">
+                    <i data-lucide="shield-check"></i>
+                    <span>Submitting sends approval to CEO, GM, MQ-04, MQ-05 and Marketing Manager.</span>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCrmDesignCompletionModal(false)">Cancel</button>
+                    <button id="crmDesignCompletionSubmit" type="submit" class="btn btn-primary"><i data-lucide="send"></i> Send for approval</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- Task Context Menu -->
     <div id="task-context-menu" class="custom-context-menu" style="display: none;">

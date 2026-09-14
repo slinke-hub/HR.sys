@@ -9977,3 +9977,131 @@ body > .task-watcher-dropdown.multi-select-modal-layer {
   .employee-document-status-filters { width: 100%; }
   .employee-document-status-filters .btn-secondary { flex: 1 1 100%; }
 }
+
+/* CRM Design completion and second-stage approval */
+.crm-design-completion-modal { z-index: 2147483250 !important; }
+.crm-design-completion-content {
+  width: min(680px, calc(100vw - 2rem));
+  max-width: 680px;
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+}
+.crm-design-completion-content .modal-header { align-items: flex-start; }
+.crm-design-completion-content .modal-header h2 { margin: .15rem 0 .25rem; }
+.crm-design-completion-content .modal-header p { margin: 0; color: var(--color-text-secondary); }
+.crm-design-completion-kicker {
+  color: var(--color-primary);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.crm-design-completion-dropzone {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: .55rem;
+  min-height: 190px;
+  margin-top: 1rem;
+  padding: 1.5rem;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 65%, var(--color-border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
+  color: var(--color-text);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+.crm-design-completion-dropzone:hover,
+.crm-design-completion-dropzone:focus-within {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+  transform: translateY(-1px);
+}
+.crm-design-completion-dropzone > svg { width: 34px; height: 34px; color: var(--color-primary); }
+.crm-design-completion-dropzone > span { color: var(--color-text-secondary); font-size: .82rem; }
+.crm-design-completion-dropzone input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.crm-design-completion-selection {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+  margin-top: 1rem;
+}
+.crm-design-completion-file {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  min-width: 0;
+  padding: .7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+.crm-design-completion-file img {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  border-radius: 9px;
+  object-fit: cover;
+}
+.crm-design-completion-file > svg { width: 28px; height: 28px; flex: 0 0 28px; color: var(--color-primary); }
+.crm-design-completion-file span { min-width: 0; display: grid; gap: .2rem; }
+.crm-design-completion-file strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-design-completion-file small { color: var(--color-text-secondary); }
+.crm-design-completion-reviewers {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  margin-top: 1rem;
+  padding: .8rem 1rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface));
+  color: var(--color-text-secondary);
+  font-size: .86rem;
+}
+.crm-design-completion-reviewers svg { width: 20px; height: 20px; flex: 0 0 20px; color: var(--color-primary); }
+
+.crm-design-review-files {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+}
+.crm-design-review-files > header { display: flex; align-items: flex-start; gap: .75rem; margin-bottom: 1rem; }
+.crm-design-review-files > header > svg { width: 24px; height: 24px; flex: 0 0 24px; color: var(--color-primary); }
+.crm-design-review-files h4 { margin: 0 0 .2rem; }
+.crm-design-review-files header p { margin: 0; color: var(--color-text-secondary); font-size: .86rem; }
+.crm-design-review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
+.crm-design-review-image,
+.crm-design-review-document { margin: 0; min-width: 0; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); overflow: hidden; }
+.crm-design-review-image button { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+.crm-design-review-image img { display: block; width: 100%; height: clamp(220px, 30vw, 380px); object-fit: contain; background: rgba(2, 8, 23, .88); }
+.crm-design-review-image figcaption { padding: .7rem .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.crm-design-review-document {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  min-height: 90px;
+  padding: 1rem;
+  color: var(--color-text);
+  text-decoration: none;
+}
+.crm-design-review-document:hover { border-color: var(--color-primary); }
+.crm-design-review-document > svg { width: 24px; height: 24px; flex: 0 0 24px; color: var(--color-primary); }
+.crm-design-review-document span { min-width: 0; flex: 1; display: grid; gap: .25rem; }
+.crm-design-review-document strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-design-review-document small { color: var(--color-text-secondary); }
+
+@media (max-width: 640px) {
+  .crm-design-completion-content { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
+  .crm-design-completion-selection,
+  .crm-design-review-grid { grid-template-columns: 1fr; }
+  .crm-design-completion-content .modal-actions { display: grid; grid-template-columns: 1fr; }
+  .crm-design-completion-content .modal-actions .btn { width: 100%; }
+}
