@@ -1837,6 +1837,7 @@ function localizeNotificationMessage(value) {
         [/^You have been assigned a new task:\s*(.+)$/i, match => `تم تعيين مهمة جديدة لك: ${match[1]}`],
         [/^A new task requires your approval:\s*(.+)$/i, match => `توجد مهمة جديدة تتطلب موافقتك: ${match[1]}`],
         [/^Project created:\s*(.+)$/i, match => `تم إنشاء المشروع: ${match[1]}`],
+        [/^(.+) assigned you the project To-Do "(.+)" in "(.+)"\.$/i, match => `قام ${match[1]} بإسناد مهمة المشروع «${match[2]}» إليك ضمن «${match[3]}».`],
         [/^Task "(.+)" was returned to In Progress by the department manager\.$/i, match => `أعاد مدير القسم المهمة «${match[1]}» إلى قيد التنفيذ.`],
         [/^Your Designing task "(.+)" was rejected by the manager\. Reason:\s*(.+)$/i, match => `رفض المدير مهمة التصميم «${match[1]}». السبب: ${match[2]}`],
         [/^Your task "(.+)" was rejected and deleted\.$/i, match => `تم رفض مهمتك «${match[1]}» وحذفها.`],
@@ -2270,6 +2271,22 @@ async function canCurrentUserAccessView(viewId) {
     if (viewId === 'hr_suite_beta') return window.canCurrentUserUseHrSuiteBeta?.() === true;
     if (viewId === 'crm') return canCurrentUserUseCRM();
     if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
+
+    if (viewId === 'projects' && !canViewFullProjectCommandCenter()) {
+        const params = new URLSearchParams(window.location.search);
+        const projectId = params.get('project');
+        const todoId = params.get('todo');
+        if (projectId && todoId) {
+            const cached = window.assignedProjectTodoContext;
+            if (cached?.projectId === projectId && cached?.todoId === todoId && cached?.items?.length) return true;
+            const result = await db.fetchAssignedProjectTodoContext(projectId, todoId);
+            if (result.success) {
+                window.assignedProjectTodoContext = { projectId, todoId, items: result.data };
+                if (window.viewHTMLCache) delete window.viewHTMLCache.projects;
+                return true;
+            }
+        }
+    }
 
     if (viewId === 'projects' || viewId === 'crm' || viewId === 'clients') {
         const dept = (await getCurrentDepartmentName()).trim().toLowerCase();
@@ -11932,6 +11949,7 @@ async function renderNotifications() {
     if (!currentUser) return `<div class="page-header"><h1 class="page-title">${t('notif_title')}</h1></div><div class="card">${t('notif_login')}</div>`;
 
     const notifs = await db.fetchNotifications(currentUser.id);
+    notificationNavigationCache = new Map((notifs || []).map(notification => [String(notification.id), notification]));
 
     // Mark as read when viewing the page
     await db.markNotificationsRead(currentUser.id);
@@ -12083,7 +12101,6 @@ async function pollNotifications(options = {}) {
     if (!currentUser) return;
     const notifs = await db.fetchNotifications(currentUser.id);
     notificationNavigationCache = new Map(notifs.map(notification => [String(notification.id), notification]));
-    notificationNavigationCache = new Map(notifs.map(notification => [String(notification.id), notification]));
     const unread = notifs.filter(n => !n.is_read);
     const newUnread = notificationsInitialized
         ? unread.filter(notification => notification.id && !knownNotificationIds.has(notification.id))
@@ -12221,16 +12238,25 @@ window.openNotificationDestination = async function (notificationId) {
 
     let actionView = '';
     let actionTaskId = notification.task_id || '';
+    let actionProjectId = notification.metadata?.project_id || '';
+    let actionProjectTodoId = notification.metadata?.project_todo_id || '';
     try {
         const action = new URL(notification.action_url || '', window.location.origin);
         actionView = action.searchParams.get('view') || '';
         actionTaskId ||= action.searchParams.get('task') || '';
+        actionProjectId ||= action.searchParams.get('project') || '';
+        actionProjectTodoId ||= action.searchParams.get('todo') || '';
         if (!actionView && /tasks-v2|tasks/.test(action.pathname)) actionView = 'tasks';
         if (!actionView && /requests/.test(action.pathname)) actionView = 'requests';
     } catch (_) { }
 
     if (actionTaskId) {
         await window.openTaskNotification(actionTaskId);
+        return;
+    }
+
+    if (actionProjectId && actionProjectTodoId) {
+        await window.openProjectTodoNotification(String(actionProjectId), String(actionProjectTodoId));
         return;
     }
 
@@ -15627,7 +15653,17 @@ async function initApp() {
         const startupParams = new URLSearchParams(window.location.search);
         const startupTaskId = startupParams.get('task');
         const startupRequestId = startupParams.get('request');
-        if (startupTaskId) {
+        const startupProjectId = startupParams.get('project');
+        const startupProjectTodoId = startupParams.get('todo');
+        if (startupProjectId && startupProjectTodoId) {
+            setTimeout(async () => {
+                try {
+                    await window.openProjectTodoNotification(startupProjectId, startupProjectTodoId, { navigate: false });
+                } catch (e) {
+                    console.warn('Could not open project To-Do from URL:', e);
+                }
+            }, 350);
+        } else if (startupTaskId) {
             setTimeout(async () => {
                 try {
                     await window.openTaskNotification(startupTaskId);
@@ -16184,6 +16220,7 @@ function startProjectPortfolioRealtime() {
     const refreshTodos = payload => {
         const changedProjectId = payload?.new?.project_id || payload?.old?.project_id;
         if (window.activeProjectDetailId && changedProjectId === window.activeProjectDetailId && document.getElementById('projectDetailModal')?.classList.contains('active')) {
+            if (!canViewFullProjectCommandCenter()) window.assignedProjectTodoContext = null;
             clearTimeout(projectPortfolioRefreshTimer);
             projectPortfolioRefreshTimer = setTimeout(() => void openProjectDetail(window.activeProjectDetailId), 250);
             return;
@@ -16212,6 +16249,7 @@ function projectText(key) {
         addMilestone: ['Add milestone', 'إضافة مرحلة'], addRisk: ['Add risk', 'إضافة خطر'], postUpdate: ['Post update', 'نشر تحديث'], milestoneHint: ['Milestone title', 'عنوان المرحلة'], riskHint: ['Describe the risk or issue', 'صف الخطر أو المشكلة'], updateHint: ['Share progress, a decision, or a blocker', 'شارك التقدم أو القرار أو العائق'],
         due: ['Due', 'الاستحقاق'], resolved: ['Resolved', 'تم الحل'], resolve: ['Resolve', 'حل'], done: ['Done', 'مكتمل'], markDone: ['Mark done', 'تحديد كمكتمل'], createdFromDeal: ['Created from CRM deal', 'تم إنشاؤه من صفقة CRM'], invalidDates: ['Target date cannot be before the start date.', 'لا يمكن أن يكون التاريخ المستهدف قبل تاريخ البدء.'],
         todoList: ['Project To Do list', 'قائمة مهام المشروع'], todoTitle: ['To Do item', 'مهمة المشروع'], todoTitleHint: ['What needs to be done?', 'ما المطلوب إنجازه؟'], assignee: ['Assign to', 'إسناد إلى'], assigneeHelp: ['Select one or more employees', 'اختر موظفاً واحداً أو أكثر'], dueDateTime: ['Due date and time', 'تاريخ ووقت الاستحقاق'], addTodo: ['Add To Do', 'إضافة مهمة'], noTodos: ['No project To Do items yet.', 'لا توجد مهام للمشروع بعد.'], complete: ['Complete', 'إكمال'], reopen: ['Reopen', 'إعادة فتح'], remove: ['Delete', 'حذف'], todoReadOnly: ['The Operations Manager assigns project To Do items here.', 'يقوم مدير العمليات بإسناد مهام المشروع هنا.'], todoRequired: ['Enter a title, select at least one eligible employee, and choose a due date and time.', 'أدخل عنواناً واختر موظفاً مؤهلاً واحداً على الأقل وحدد تاريخ ووقت الاستحقاق.'], todoAdded: ['Project To Do item assigned.', 'تم إسناد مهمة المشروع.'], todoAddFailed: ['Unable to add the project To Do item.', 'تعذر إضافة مهمة المشروع.'], todoUpdated: ['Project To Do item updated.', 'تم تحديث مهمة المشروع.'], todoUpdateFailed: ['Unable to update the project To Do item.', 'تعذر تحديث مهمة المشروع.'], todoDeleteTitle: ['Delete project To Do item', 'حذف مهمة المشروع'], todoDeleteConfirm: ['Delete this project To Do item?', 'هل تريد حذف مهمة المشروع هذه؟'], todoDeleted: ['Project To Do item deleted.', 'تم حذف مهمة المشروع.'], todoDeleteFailed: ['Unable to delete the project To Do item.', 'تعذر حذف مهمة المشروع.'],
+        assignedTodoPage: ['Assigned project To-Do', 'مهمة مشروع مسندة'], assignedTodoPrivacy: ['Only your assigned project To-Do items are shown. Project details are restricted to managers and executives.', 'تظهر فقط مهام المشروع المسندة إليك. تفاصيل المشروع متاحة للمديرين والإدارة التنفيذية فقط.'], todoUnavailable: ['This project To-Do is no longer available or is not assigned to you.', 'مهمة المشروع هذه لم تعد متاحة أو غير مسندة إليك.'],
         low: ['Low', 'منخفضة'], medium: ['Medium', 'متوسطة'], high: ['High', 'عالية'], critical: ['Critical', 'حرجة']
     };
     return (copy[key] || [key, key])[ar ? 1 : 0];
@@ -16276,6 +16314,15 @@ function projectDateTime(value) {
 function isOperationsManagerProjectProfile(profile = currentUserProfile) {
     const values = [profile?.role, profile?.job_title, profile?.job_title_ar].map(normalizeAccessValue).filter(Boolean);
     return values.some(value => value === 'OPERATIONS MANAGER' || value.includes('OPERATIONS MANAGER') || value === 'مدير العمليات');
+}
+
+function canViewFullProjectCommandCenter(profile = currentUserProfile) {
+    const accessValues = [profile?.role || currentUserRole, profile?.job_title, profile?.job_title_ar]
+        .map(normalizeAccessValue)
+        .filter(Boolean);
+    return isTaskAdmin()
+        || isExecutiveAdminProfile(profile)
+        || accessValues.some(value => ['MANAGER', 'SUPERVISOR'].includes(value) || /(^| )(MANAGER|SUPERVISOR)( |$)/.test(value) || /(مدير|مشرف)/.test(value));
 }
 
 function canManageProjectTodos(project) {
@@ -16343,6 +16390,21 @@ function renderProjectCard(project) {
 
 async function renderProjects() {
     if (!currentUser) return `<div class="page-header"><h1 class="page-title">${t('ui_projects')}</h1></div><div class="card">Please login to view projects.</div>`;
+    const directParams = new URLSearchParams(window.location.search);
+    const directProjectId = directParams.get('project');
+    const directTodoId = directParams.get('todo');
+    if (!canViewFullProjectCommandCenter() && directProjectId && directTodoId) {
+        let context = window.assignedProjectTodoContext;
+        if (context?.projectId !== directProjectId || context?.todoId !== directTodoId || !context?.items?.length) {
+            const result = await db.fetchAssignedProjectTodoContext(directProjectId, directTodoId);
+            context = result.success ? { projectId: directProjectId, todoId: directTodoId, items: result.data } : null;
+            window.assignedProjectTodoContext = context;
+        }
+        if (!context?.items?.length) {
+            return `<section class="project-manager-page project-assignee-page"><div class="card project-assignee-unavailable"><i data-lucide="shield-alert"></i><p>${projectText('todoUnavailable')}</p></div></section>`;
+        }
+        return `<section class="project-manager-page project-assignee-page"><header class="project-manager-header"><div><span class="project-page-eyebrow"><i data-lucide="list-checks"></i>${projectText('assignedTodoPage')}</span><h1>${escapeHTML(context.items[0].project_name || 'Project')}</h1><p>${projectText('assignedTodoPrivacy')}</p></div></header></section>`;
+    }
     const [projects, profiles, departments] = await Promise.all([db.fetchProjects(), db.fetchAllProfiles(), db.fetchDepartments()]);
     window.projectCache = Object.fromEntries((projects || []).map(project => [project.id, project]));
     window.projectManagerProfiles = profiles || [];
@@ -16523,7 +16585,69 @@ function projectTodoList(todos, project, canManage) {
     }).join('');
 }
 
+async function fetchAssignedProjectTodoContext(projectId, todoId = null) {
+    const cached = window.assignedProjectTodoContext;
+    if (cached?.projectId === projectId && (!todoId || cached?.todoId === todoId) && cached?.items?.length) return cached;
+    const result = await db.fetchAssignedProjectTodoContext(projectId, todoId);
+    const context = result.success ? { projectId, todoId, items: result.data } : null;
+    window.assignedProjectTodoContext = context;
+    return context;
+}
+
+async function openAssignedProjectTodoDetail(projectId, todoId = null) {
+    const context = await fetchAssignedProjectTodoContext(projectId, todoId);
+    if (!context?.items?.length) {
+        showToast(projectText('todoUnavailable'), 'warning');
+        return false;
+    }
+
+    const profileDirectory = new Map((window.projectManagerProfiles || []).map(profile => [profile.id, profile]));
+    if (currentUserProfile?.id) profileDirectory.set(currentUserProfile.id, currentUserProfile);
+    window.projectManagerProfiles = [...profileDirectory.values()];
+    const project = { id: projectId, project_name: context.items[0].project_name };
+    const todos = context.items.map(item => ({
+        id: item.todo_id,
+        project_id: item.project_id,
+        title: item.todo_title,
+        due_at: item.due_at,
+        status: item.status,
+        assignee_ids: [currentUser.id]
+    }));
+
+    window.activeProjectDetailId = projectId;
+    document.getElementById('projectDetailTitle').textContent = project.project_name || 'Project';
+    document.getElementById('projectDetailBody').innerHTML = `<div class="project-assignee-privacy-note"><i data-lucide="shield-check"></i><span>${projectText('assignedTodoPrivacy')}</span></div>
+        <div class="project-detail-layout project-detail-layout--todo-only"><section class="project-todo-section project-detail-span-2"><div class="project-todo-heading"><h3><i data-lucide="list-checks"></i>${projectText('todoList')}</h3><span>${todos.filter(todo => todo.status !== 'DONE').length}</span></div><div class="project-todo-list">${projectTodoList(todos, project, false)}</div></section></div>`;
+    document.getElementById('projectDetailModal').classList.add('active');
+    if (window.lucide) window.lucide.createIcons();
+    return true;
+}
+
+window.openProjectTodoNotification = async function (projectId, todoId, options = {}) {
+    if (!projectId || !todoId) return false;
+    const hasFullAccess = canViewFullProjectCommandCenter();
+    if (!hasFullAccess && !(await fetchAssignedProjectTodoContext(projectId, todoId))) {
+        showToast(projectText('todoUnavailable'), 'warning');
+        return false;
+    }
+
+    if (options.navigate !== false) {
+        const targetUrl = new URL(window.location.href);
+        targetUrl.searchParams.set('view', 'projects');
+        targetUrl.searchParams.set('project', projectId);
+        targetUrl.searchParams.set('todo', todoId);
+        window.history.pushState({ ...(window.history.state || {}), [APP_HISTORY_VIEW_KEY]: 'projects' }, '', `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`);
+        appHistoryInitialized = true;
+        if (viewHistory[viewHistory.length - 1] !== 'projects') viewHistory.push('projects');
+        if (window.viewHTMLCache) delete window.viewHTMLCache.projects;
+        await renderView('projects', true);
+    }
+
+    return hasFullAccess ? window.openProjectDetail(projectId) : openAssignedProjectTodoDetail(projectId, todoId);
+};
+
 window.openProjectDetail = async function (id) {
+    if (!canViewFullProjectCommandCenter()) return openAssignedProjectTodoDetail(id);
     const project = window.projectCache[id];
     if (!project) return;
     window.activeProjectDetailId = id;
@@ -16573,6 +16697,7 @@ window.toggleProjectTodo = async function (projectId, todoId, completed) {
     const result = await db.setProjectTodoCompleted(todoId, completed);
     if (!result.success) return showToast(result.error?.message || projectText('todoUpdateFailed'), 'error');
     showToast(projectText('todoUpdated'), 'success');
+    if (!canViewFullProjectCommandCenter()) window.assignedProjectTodoContext = null;
     await openProjectDetail(projectId);
 };
 window.deleteProjectTodo = function (projectId, todoId) {

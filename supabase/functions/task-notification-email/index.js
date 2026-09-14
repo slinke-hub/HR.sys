@@ -376,6 +376,12 @@ Deno.serve(async (request) => {
         } else if (reqId && !rawAction.includes("request=")) {
           rawAction = `${rawAction}${rawAction.includes("?") ? "&" : "?"}request=${reqId}`;
         }
+      } else if (item.context_type === "PROJECT_TODO" && !rawAction) {
+        const projectId = notification?.metadata?.project_id;
+        const todoId = notification?.metadata?.project_todo_id;
+        rawAction = projectId
+          ? `/?view=projects&project=${encodeURIComponent(projectId)}${todoId ? `&todo=${encodeURIComponent(todoId)}` : ""}`
+          : "/?view=projects";
       }
       const actionUrl = rawAction && appUrl
         ? `${appUrl}${rawAction.startsWith("/") ? "" : "/"}${rawAction}`
@@ -448,7 +454,10 @@ Deno.serve(async (request) => {
       let primaryEmployeeName = "Employee";
       let employeeRoleLabel = "Initiated by";
 
-      if (item.context_type === "EMPLOYEE_REQUEST") {
+      if (item.context_type === "PROJECT_TODO") {
+        primaryEmployeeName = actorName || item.details?.["Assigned by"] || "Project Manager";
+        employeeRoleLabel = "Assigned by";
+      } else if (item.context_type === "EMPLOYEE_REQUEST") {
         primaryEmployeeName = requestEmployeeName || actorName || "Employee";
         employeeRoleLabel = "Request Sent by";
       } else if (notification?.event_type === "task_comment") {
@@ -481,7 +490,9 @@ Deno.serve(async (request) => {
       const mergedDetails = { ...taskFallbackDetails, ...(item.details || {}) };
       const detailsText = textDetails(mergedDetails);
       const detailsHtml = htmlDetails(mergedDetails);
-      const actionLabel = item.context_type === "EMPLOYEE_REQUEST" ? "Open employee request" : "Open task";
+      const actionLabel = item.context_type === "EMPLOYEE_REQUEST"
+        ? "Open employee request"
+        : (item.context_type === "PROJECT_TODO" ? "Open project To-Do" : "Open task");
 
       const htmlComment = commentText ? `<div style="margin:18px 0;padding:14px;border-left:4px solid #2563eb;background:#f4f7ff"><strong>Comment</strong><p style="white-space:pre-wrap;margin:7px 0 0">${escapeHtml(commentText)}</p></div>` : "";
 

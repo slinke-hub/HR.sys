@@ -1368,10 +1368,25 @@ const db = {
                 p_due_at: dueAt
             });
             if (error) throw error;
+            await this.flushTaskNotificationEmails();
             return { success: true, data };
         } catch (error) {
             console.error('addProjectTodo Error:', error);
             return { success: false, error };
+        }
+    },
+    async fetchAssignedProjectTodoContext(projectId, todoId = null) {
+        if (!supabaseClient || !projectId) return { success: false, data: [], error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('fetch_assigned_project_todo_context', {
+                p_project_id: projectId,
+                p_todo_id: todoId || null
+            });
+            if (error) throw error;
+            return { success: Array.isArray(data) && data.length > 0, data: data || [] };
+        } catch (error) {
+            console.error('fetchAssignedProjectTodoContext Error:', error);
+            return { success: false, data: [], error };
         }
     },
     async setProjectTodoCompleted(todoId, completed) {
