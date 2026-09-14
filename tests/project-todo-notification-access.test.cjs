@@ -9,6 +9,7 @@ const css = fs.readFileSync(path.join(root, 'css', 'components.css'), 'utf8');
 const email = fs.readFileSync(path.join(root, 'supabase', 'functions', 'task-notification-email', 'index.js'), 'utf8');
 const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260914100000_project_todo_assignment_notifications.sql'), 'utf8');
 const arabicManagerMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260914101000_project_portfolio_arabic_manager_access.sql'), 'utf8');
+const lookupFixMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260914102000_fix_assigned_project_todo_lookup.sql'), 'utf8');
 
 assert.match(migration, /CREATE OR REPLACE FUNCTION public\.notify_project_todo_assignees/);
 assert.match(migration, /CREATE TRIGGER project_todo_notify_assignees[\s\S]*?AFTER INSERT ON public\.project_todos/);
@@ -21,6 +22,10 @@ assert.match(migration, /auth\.uid\(\) = ANY\(COALESCE\(assigned_todo\.assignee_
 assert.match(migration, /REVOKE ALL ON FUNCTION public\.fetch_assigned_project_todo_context\(UUID, UUID\) FROM PUBLIC/);
 assert.match(migration, /CREATE POLICY project_portfolio_select[\s\S]*?project_manager_id = auth\.uid\(\)[\s\S]*?is_project_portfolio_admin/);
 assert.match(arabicManagerMigration, /job_title_ar[\s\S]*?\(مدير\|مشرف\)/);
+assert.match(lookupFixMigration, /LANGUAGE SQL[\s\S]*?SECURITY DEFINER/);
+assert.match(lookupFixMigration, /project\.project_name::TEXT/);
+assert.match(lookupFixMigration, /assigned_todo\.title::TEXT/);
+assert.match(lookupFixMigration, /requested_todo\.id = p_todo_id[\s\S]*?auth\.uid\(\) = ANY/);
 
 assert.match(db, /async fetchAssignedProjectTodoContext\(/);
 assert.match(db, /rpc\('fetch_assigned_project_todo_context'/);

@@ -7096,6 +7096,13 @@ async function renderProfile() {
     const ownContract = (ownContracts || []).find(contract => contract.status === 'Active') || ownContracts?.[0] || null;
     const latestPrintRequest = ownContract ? ownPrintRequests.find(request => request.contract_id === ownContract.id) : null;
     const displayName = getProfileDisplayName(profile);
+    const storedEmployeeNumber = String(profile.employee_id || '').trim();
+    const employeeNumberSource = /^(?:MQ[-\s]*)?\d+$/i.test(storedEmployeeNumber)
+        ? storedEmployeeNumber
+        : profile.emp_index;
+    const companyEmployeeId = employeeNumberSource !== null && employeeNumberSource !== undefined && String(employeeNumberSource).trim()
+        ? formatEmployeeId(employeeNumberSource)
+        : t('emp_na');
     const userAvatar = profile.avatar_url || localStorage.getItem('user_avatar_' + currentUser.id);
     const avatar = userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=007AFF&color=fff`;
     return `
@@ -7139,6 +7146,10 @@ async function renderProfile() {
                             <div class="form-group col-span-6">
                                 <label class="form-label">${t('prof_email')}</label>
                                 <input type="email" class="form-control" value="${currentUser.email}" disabled style="background-color: var(--color-surface); opacity: 0.7; cursor: not-allowed;">
+                            </div>
+                            <div class="form-group col-span-6">
+                                <label class="form-label">${t('ui_employee_id')}</label>
+                                <input type="text" id="profileCompanyEmployeeId" class="form-control" value="${escapeHTML(companyEmployeeId)}" readonly aria-readonly="true" data-no-translate>
                             </div>
                             <div class="form-group col-span-6">
                                 <label class="form-label">${t('prof_iqama')}</label>

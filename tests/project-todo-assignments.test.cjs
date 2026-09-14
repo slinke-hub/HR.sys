@@ -55,6 +55,6 @@ assert.match(css, /\.project-todo-item\.is-overdue/);
 assert.match(css, /@container \(max-width:560px\)[^}]*[\s\S]*?\.project-todo-form \{ grid-template-columns:1fr; \}/);
 assert.match(html, /css\/components\.css\?v=2026091401/);
 assert.match(html, /js\/db\.js\?v=2026091401/);
-assert.match(html, /js\/app\.js\?v=2026091401/);
+assert.match(html, /js\/app\.js\?v=2026091402/);
 
 console.log('Project To Do assignments are scoped, bilingual, deadline-aware, responsive, and independent from Tasks Manager.');
