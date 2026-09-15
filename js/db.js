@@ -3302,7 +3302,6 @@ const db = {
                 .select('id, deal_id, category, file_name, file_url, description, visible_to_project_assignee, created_at')
                 .eq('deal_id', dealId)
                 .eq('is_archived', false)
-                .in('category', ['QUOTATION', 'CLIENT_IDENTITY', 'PROPOSAL'])
                 .order('created_at', { ascending: true });
             if (error) throw error;
             return Promise.all((data || []).map(async attachment => ({

@@ -4229,7 +4229,7 @@ async function prepareTeamworkTaskDetail(task) {
         const [resolvedTaskLinks, taskAttachmentRows, crmPresentationAttachments] = await Promise.all([
             db.resolveStorageReferences(storedLinks),
             db.fetchTaskAttachments(task.id),
-            task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN' && task.crm_deal_id
+            task.crm_deal_id
                 ? db.fetchDealPresentationAttachments(task.crm_deal_id)
                 : Promise.resolve([])
         ]);
@@ -4257,10 +4257,25 @@ async function prepareTeamworkTaskDetail(task) {
                 ? `<button type="button" class="task-detail-image-attachment" data-image-url="${safeLink}" data-image-name="${label}" onclick="openDealImagePreview(this)" title="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}" aria-label="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}: ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></button>`
                 : `<a href="${safeLink}" target="_blank" rel="noopener"><i data-lucide="download"></i>${label}</a>`;
         }).join('');
-        const attachmentHTML = managedAttachmentHTML + looseAttachmentHTML;
-        const crmQuoteFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION' && safeExternalUrl(file.file_url));
-        const crmClientIdentityFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY' && safeExternalUrl(file.file_url));
-        const crmProposalImages = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'PROPOSAL' && safeExternalUrl(file.file_url));
+        const isDesignTask = task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN';
+        const crmQuoteFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION' && safeExternalUrl(file.file_url) && (isDesignTask || file.visible_to_project_assignee));
+        const crmClientIdentityFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY' && safeExternalUrl(file.file_url) && (isDesignTask || file.visible_to_project_assignee));
+        const crmProposalImages = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'PROPOSAL' && safeExternalUrl(file.file_url) && (isDesignTask || file.visible_to_project_assignee));
+
+        const shownInAssets = new Set([...crmQuoteFiles, ...crmClientIdentityFiles, ...crmProposalImages].map(f => f.id));
+        const sharedDealFilesHTML = crmPresentationAttachments
+            .filter(file => file.visible_to_project_assignee && !shownInAssets.has(file.id) && safeExternalUrl(file.file_url))
+            .map(file => {
+                const safeLink = escapeHTML(safeExternalUrl(file.file_url));
+                const label = escapeHTML(file.file_name || fileNameFromUrl(file.file_url));
+                const isImage = String(file.file_type || '').startsWith('image/') || imageExtensions.test(String(file.file_name || file.file_url));
+                return `<article class="task-detail-managed-attachment">${isImage
+                    ? `<button type="button" class="task-detail-image-attachment" data-image-url="${safeLink}" data-image-name="${label}" onclick="openDealImagePreview(this)" title="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}" aria-label="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}: ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></button>`
+                    : `<a href="${safeLink}" target="_blank" rel="noopener"><i data-lucide="download"></i>${label}</a>`}
+                    </article>`;
+            }).join('');
+
+        const attachmentHTML = managedAttachmentHTML + looseAttachmentHTML + sharedDealFilesHTML;
         const showCrmDesignDealStatus = canMq08ChangeCrmDesignDealStatus(task);
         const crmDesignDealStatus = crmDesignDealStatusFromTask(task);
         const crmDesignStatusLocked = ['completed', 'approved', 'pending approval'].includes(String(task.status || '').trim().toLowerCase());
