@@ -1188,7 +1188,7 @@
                     <div class="form-group"><label class="form-label" data-i18n="pm_tags">Tags</label><input type="text" id="editProjectTags" class="form-control" placeholder="Comma-separated tags"></div>
                     <div class="form-group project-form-span-2"><label class="form-label" data-i18n="pm_description">Project brief</label><textarea id="editProjectDesc" class="form-control" rows="3"></textarea></div>
                 </div>
-                <div class="form-actions"><button type="button" class="btn btn-secondary" onclick="closeProjectEditor('editProjectModal')" data-i18n="html_cancel">Cancel</button><button type="submit" class="btn btn-primary" data-i18n="html_save_changes">Save Changes</button></div>
+                <div class="form-actions"><button type="button" class="btn btn-secondary" id="editProjectDeleteBtn" style="display:none; color:var(--color-danger); border-color:var(--color-danger); margin-inline-end:auto;" onclick="handleDeleteProject(document.getElementById('editProjectId').value); closeProjectEditor('editProjectModal')"><i data-lucide="trash-2"></i> <span data-i18n="html_delete">Delete</span></button><button type="button" class="btn btn-secondary" onclick="closeProjectEditor('editProjectModal')" data-i18n="html_cancel">Cancel</button><button type="submit" class="btn btn-primary" data-i18n="html_save_changes">Save Changes</button></div>
             </form>
         </div>
     </div>

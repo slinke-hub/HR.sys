@@ -17065,7 +17065,7 @@ function validateProjectPayload(payload) {
     return true;
 }
 
-function renderProjectCard(project) {
+function renderProjectCard(project, canDeleteProject = false) {
     const status = normalizeProjectStatus(project);
     const health = effectiveProjectHealth(project);
     const progress = Math.max(0, Math.min(100, Number(project.progress_percent || (status === 'COMPLETED' ? 100 : 0))));
@@ -17076,8 +17076,11 @@ function renderProjectCard(project) {
     const editAction = canManageProjectTodos(project)
         ? `<button class="btn btn-icon" onclick="event.stopPropagation(); openEditProjectModal('${project.id}')" title="${projectText('edit')}"><i data-lucide="pencil"></i></button>`
         : '';
+    const deleteAction = canDeleteProject
+        ? `<button class="btn btn-icon" style="color:var(--color-danger);" onclick="event.stopPropagation(); handleDeleteProject('${project.id}')" title="${projectText('delete') || 'Delete'}"><i data-lucide="trash-2"></i></button>`
+        : '';
     return `<article class="project-portfolio-card" data-project-id="${project.id}" data-status="${status}" data-health="${health}" data-owner="${ownerId || ''}" onclick="openProjectDetail('${project.id}')">
-        <div class="project-card-top"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><h3>${escapeHTML(project.project_name || '')}</h3><p>${escapeHTML(client || project.project_type || '')}</p></div>${editAction}</div>
+        <div class="project-card-top"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><h3>${escapeHTML(project.project_name || '')}</h3><p>${escapeHTML(client || project.project_type || '')}</p></div><div class="project-card-actions" style="display:flex;flex-direction:column;gap:0.5rem;align-items:center;">${editAction}${deleteAction}</div></div>
         <div class="project-card-meta"><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span><span class="project-priority priority-${String(project.priority || 'MEDIUM').toLowerCase()}">${projectPriorityLabel(project.priority)}</span></div>
         <div class="project-progress-head"><span>${projectText('progress')}</span><strong>${progress}%</strong></div><div class="project-progress-track"><i style="width:${progress}%"></i></div>
         <div class="project-card-facts"><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div></div>
@@ -17108,13 +17111,14 @@ async function renderProjects() {
         return `<section class="project-manager-page project-assignee-page"><header class="project-manager-header"><div><span class="project-page-eyebrow"><i data-lucide="list-checks"></i>${projectText('assignedTodoPage')}</span><h1>${escapeHTML(context.items[0].project_name || 'Project')}</h1><p>${projectText('assignedTodoPrivacy')}</p></div></header></section>`;
     }
     const canCreateProject = canViewFullProjectCommandCenter();
+    const canDeleteProject = await canCurrentUserUseCRM();
     const total = projects.length;
     const active = projects.filter(project => normalizeProjectStatus(project) === 'ACTIVE').length;
     const atRisk = projects.filter(project => ['AT_RISK', 'OFF_TRACK'].includes(effectiveProjectHealth(project))).length;
     const completed = projects.filter(project => normalizeProjectStatus(project) === 'COMPLETED').length;
     const portfolioBudget = projects.reduce((sum, project) => sum + Number(project.budget_amount || project.project_amount || 0), 0);
     const ownerOptions = (profiles || []).map(profile => `<option value="${profile.id}">${escapeHTML(window.formatEmployeeName(profile) || profile.id)}</option>`).join('');
-    const cards = projects.length ? projects.map(renderProjectCard).join('') : `<div class="project-empty-state"><i data-lucide="folder-kanban"></i><p>${projectText('noProjects')}</p></div>`;
+    const cards = projects.length ? projects.map(p => renderProjectCard(p, canDeleteProject)).join('') : `<div class="project-empty-state"><i data-lucide="folder-kanban"></i><p>${projectText('noProjects')}</p></div>`;
     return `<section class="project-manager-page">
         <header class="project-manager-header"><div><span class="project-page-eyebrow"><i data-lucide="briefcase-business"></i>${projectText('portfolio')}</span><h1>${t('ui_projects')}</h1><p>${projectText('subtitle')}</p></div>${canCreateProject ? `<button class="btn btn-primary" onclick="openProjectModal()"><i data-lucide="plus"></i>${t('ui_new_project_btn') || 'New Project'}</button>` : ''}</header>
         <div class="project-kpi-grid">
@@ -17243,6 +17247,10 @@ window.openEditProjectModal = async function (id) {
     await populateProjectPeople('edit', project);
     applyBusinessFinancialVisibility(document.getElementById('editProjectModal'));
     syncProjectProgressLabel('edit');
+
+    const canDelete = await canCurrentUserUseCRM();
+    const deleteBtn = document.getElementById('editProjectDeleteBtn');
+    if (deleteBtn) deleteBtn.style.display = canDelete ? 'inline-flex' : 'none';
 
     document.getElementById('editProjectModal').classList.add('active');
     if (window.lucide) window.lucide.createIcons();
@@ -17380,10 +17388,11 @@ window.openProjectDetail = async function (id) {
     if (!project) return openAssignedProjectTodoDetail(id);
     if (!canViewFullProjectCommandCenter(currentUserProfile, project)) return openAssignedProjectTodoDetail(id);
     window.activeProjectDetailId = id;
-    const [updates, todos, attachments] = await Promise.all([
+    const [updates, todos, attachments, canDeleteProject] = await Promise.all([
         db.fetchProjectUpdates(id),
         db.fetchProjectTodos(id),
-        db.fetchProjectSharedAttachments(id)
+        db.fetchProjectSharedAttachments(id),
+        canCurrentUserUseCRM()
     ]);
     const status = normalizeProjectStatus(project);
     const health = effectiveProjectHealth(project);
@@ -17398,7 +17407,7 @@ window.openProjectDetail = async function (id) {
     const todoAssigneeOptions = projectTodoAssigneeOptions(project);
     const todoForm = canManageTodos ? `<form class="project-todo-form" onsubmit="addProjectTodo(event,'${id}')"><label><span>${projectText('todoTitle')}</span><input id="projectTodoTitle" class="form-control" placeholder="${projectText('todoTitleHint')}" maxlength="500" required></label><label><span>${projectText('assignee')}</span><select id="projectTodoAssignees" class="form-control" multiple required aria-label="${projectText('assigneeHelp')}" ${todoAssigneeOptions ? '' : 'disabled'}>${todoAssigneeOptions}</select><small>${projectText('assigneeHelp')}</small></label><label><span>${projectText('dueDateTime')}</span><input id="projectTodoDueAt" type="datetime-local" class="form-control" required></label><button class="btn btn-primary" type="submit" ${todoAssigneeOptions ? '' : 'disabled'}><i data-lucide="plus"></i>${projectText('addTodo')}</button></form>` : `<p class="project-todo-readonly"><i data-lucide="info"></i>${projectText('todoReadOnly')}</p>`;
     document.getElementById('projectDetailTitle').textContent = project.project_name || 'Project';
-    document.getElementById('projectDetailBody').innerHTML = `<div class="project-command-summary"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span>${project.source === 'WON_DEAL' ? `<span class="project-source-badge"><i data-lucide="handshake"></i>${projectText('createdFromDeal')}</span>` : ''}</div>${canEditProject ? `<button class="btn btn-secondary" onclick="closeProjectDetail();openEditProjectModal('${id}')"><i data-lucide="pencil"></i>${projectText('edit')}</button>` : ''}</div>
+    document.getElementById('projectDetailBody').innerHTML = `<div class="project-command-summary"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span>${project.source === 'WON_DEAL' ? `<span class="project-source-badge"><i data-lucide="handshake"></i>${projectText('createdFromDeal')}</span>` : ''}</div><div class="project-command-actions" style="display:flex;gap:0.5rem;align-items:center;">${canEditProject ? `<button class="btn btn-secondary" onclick="closeProjectDetail();openEditProjectModal('${id}')"><i data-lucide="pencil"></i>${projectText('edit')}</button>` : ''}${canDeleteProject ? `<button class="btn btn-secondary" style="color:var(--color-danger);border-color:var(--color-danger);" onclick="closeProjectDetail();handleDeleteProject('${id}')"><i data-lucide="trash-2"></i>${projectText('delete') || 'Delete'}</button>` : ''}</div></div>
         <div class="project-detail-kpis"><div><span>${projectText('progress')}</span><strong>${Number(project.progress_percent || 0)}%</strong></div><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div>${canViewFinancials ? `<div><span>${projectText('budget')}</span><strong>${projectMoney(budget)}</strong></div><div><span>${projectText('cost')}</span><strong>${projectMoney(cost)}</strong></div><div><span>${projectText('variance')}</span><strong class="${budget - cost < 0 ? 'is-negative' : ''}">${projectMoney(budget - cost)}</strong></div>` : ''}</div>
         <div class="project-detail-layout"><section><h3><i data-lucide="file-text"></i>${projectText('overview')}</h3><dl class="project-overview-list"><div><dt>${projectText('description')}</dt><dd>${escapeHTML(project.description || '—')}</dd></div><div><dt>${projectText('client')}</dt><dd>${escapeHTML(project.client_name || project.crm_clients?.company || project.crm_clients?.name || '—')}</dd></div><div><dt>${projectText('team')}</dt><dd>${(project.assigned_people || []).map(id => escapeHTML(projectProfileName(id))).join(', ') || '—'}</dd></div></dl></section>
         <section><h3><i data-lucide="milestone"></i>${projectText('milestones')}</h3><div class="project-detail-list">${projectDetailList(milestones, 'milestone', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectMilestone(event,'${id}')"><input id="projectMilestoneTitle" class="form-control" placeholder="${projectText('milestoneHint')}" required><input id="projectMilestoneDate" type="date" class="form-control"><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addMilestone')}</button></form>` : ''}</section>
