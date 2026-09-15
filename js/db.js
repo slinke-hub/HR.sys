@@ -3307,7 +3307,13 @@ const db = {
             if (error) throw error;
             return { success: true };
         } catch (error) {
-            console.error('startCrmPresentationApproval Error:', error);
+            console.error('startCrmPresentationApproval Error:', {
+                code: error?.code,
+                message: error?.message,
+                details: error?.details,
+                hint: error?.hint,
+                status: error?.status
+            });
             return { success: false, error };
         }
     },
