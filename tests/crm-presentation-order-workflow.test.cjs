@@ -13,11 +13,12 @@ const css = read('css/components.css');
 const migration = read('supabase/migrations/20260909110000_crm_presentation_order_workflow.sql');
 const autoDiscussionMigration = read('supabase/migrations/20260910110000_crm_approved_deals_auto_discussion.sql');
 const wonProjectScheduleMigration = read('supabase/migrations/20260915140000_won_project_client_and_schedule.sql');
+const eventEndScheduleMigration = read('supabase/migrations/20260915180000_won_project_event_end_schedule_defaults.sql');
 
 for (const id of [
   'crmPresentationChoiceModal', 'crmPresentationRequestModal', 'presentationQuoteFile',
   'presentationClientIdentityFiles', 'presentationProposalDescriptions', 'crmOrderModal',
-  'orderEmployeeName', 'orderEventDate', 'orderEventStartTime', 'orderInstallationTime',
+  'orderEmployeeName', 'orderEventDate', 'orderEventEndDate', 'orderEventStartTime', 'orderInstallationTime',
   'orderUninstallationTime', 'orderClientName', 'orderClientCompany', 'orderClientEmail',
   'orderClientPhone', 'orderLocationUrl', 'orderLocationText', 'orderProjectAssignees',
   'orderEquipmentList'
@@ -34,6 +35,10 @@ assert.match(html, /name="orderInstallationType" value="OUTDOOR"/);
 assert.match(html, /name="orderInstallationType" value="INDOOR_OUTDOOR"/);
 assert.match(html, /type="datetime-local" id="orderInstallationTime"/);
 assert.match(html, /type="datetime-local" id="orderUninstallationTime"/);
+assert.match(html, /id="orderEventDate"[^>]*onchange="syncCrmOrderScheduleDefaults\(\)"/);
+assert.match(html, /id="orderEventEndDate"[^>]*required[^>]*dataset\.manual='true'/);
+assert.match(html, /id="orderInstallationTime"[^>]*dataset\.manual='true'/);
+assert.match(html, /id="orderUninstallationTime"[^>]*dataset\.manual='true'/);
 assert.match(html, /class="crm-datetime-control"/);
 assert.match(html, /class="crm-optional-badge" data-i18n="crm_optional_section"/);
 assert.match(html, /data-i18n="crm_financial_optional_help"/);
@@ -81,7 +86,14 @@ assert.doesNotMatch(app, /allApproved\s*&&[^\n]*approval_type\s*!==\s*'QUOTE_PRO
 assert.doesNotMatch(app, /crm_approval_note_prompt/, 'Approving CRM requests must not open an optional note prompt');
 assert.match(app, /decision === 'REJECTED'[\s\S]*showPromptModal[\s\S]*crm_rejection_note_prompt/);
 assert.match(app, /db\.createProjectFromWonDealV2\(orderData, dealId\)/);
-assert.match(app, /orderEmployeeName'\)\.value = window\.formatEmployeeName\(currentUser\)/);
+assert.match(app, /function shiftCrmOrderDateTime\(dateValue, timeValue, dayOffset\)/);
+assert.match(app, /window\.syncCrmOrderScheduleDefaults = function/);
+assert.match(app, /shiftCrmOrderDateTime\(eventDate, eventTime, -2\)/);
+assert.match(app, /shiftCrmOrderDateTime\(eventEndDate, eventTime, 2\)/);
+assert.match(app, /event_end_date: eventEndDate \|\| null/);
+assert.match(app, /eventEndDate < eventDate/);
+assert.match(app, /wonByEmployee = users\.find\(user => String\(user\.id\) === String\(currentUser\?\.id\)\) \|\| currentUserProfile/);
+assert.match(app, /orderEmployeeName'\)\.value = wonByName && wonByName !== 'Unknown'/);
 assert.match(app, /assigneeSelect\.innerHTML = users\.map\(user =>/);
 assert.doesNotMatch(app, /const operationDepartmentIds/);
 assert.doesNotMatch(app, /const operationsUsers/);
@@ -103,7 +115,7 @@ assert.match(db, /async startCrmPresentationApproval\(dealId, requestType\)/);
 assert.match(db, /async fetchPendingCrmDesignTaskApprovals\(\)/);
 assert.match(db, /async decideCrmDesignTaskApproval\(stepId, decision, note\)/);
 assert.match(db, /async createProjectFromWonDealV2\(orderData, dealId\)/);
-assert.match(db, /select\('\*, crm_clients\(\*\)'\)/);
+assert.match(db, /rpc\('list_crm_deals_secure'\)/);
 assert.match(db, /update\(\{ status \}\).*select\('id,status'\)\.single\(\)/s);
 
 assert.match(migration, /CREATE OR REPLACE FUNCTION public\.start_crm_presentation_approval/);
@@ -133,5 +145,12 @@ assert.match(wonProjectScheduleMigration, /installation_time = NULLIF\(p_order->
 assert.match(wonProjectScheduleMigration, /client_snapshot = p_order->'client'/);
 assert.match(wonProjectScheduleMigration, /Projects can only be assigned to active employees/);
 assert.doesNotMatch(wonProjectScheduleMigration, /Projects can only be assigned to Operations employees/);
+
+assert.match(eventEndScheduleMigration, /v_event_end_date := COALESCE\(NULLIF\(p_order->>'event_end_date', ''\)::date, v_event_date\)/);
+assert.match(eventEndScheduleMigration, /v_event_end_date < v_event_date/);
+assert.match(eventEndScheduleMigration, /\(v_event_date \+ v_event_start_time\) - INTERVAL '2 days'/);
+assert.match(eventEndScheduleMigration, /\(v_event_end_date \+ v_event_start_time\) \+ INTERVAL '2 days'/);
+assert.match(eventEndScheduleMigration, /event_date, start_date, end_date/);
+assert.match(eventEndScheduleMigration, /event_date = v_event_date, start_date = v_event_date, end_date = v_event_end_date/);
 
 console.log('CRM presentation approvals, Design review, and Won order workflow tests passed.');

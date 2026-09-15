@@ -819,6 +819,28 @@ const db = {
             return [];
         }
     },
+    async fetchProjectAssignmentEmployees() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('list_active_project_assignment_employees');
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.warn('Project assignment directory unavailable; using the visible employee directory.', error?.message || error);
+            return this.fetchUsers();
+        }
+    },
+    async fetchAccessibleProjectProfiles() {
+        if (!supabaseClient) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('list_accessible_project_profiles');
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
+        } catch (error) {
+            console.warn('Accessible project profile directory unavailable; using the visible employee directory.', error?.message || error);
+            return this.fetchAllProfiles();
+        }
+    },
     async createUser(email, password, role, jobTitle = '', fullName = '', iqama = '', phone = '', departmentId = '', nationality = 'Saudi', fullNameAr = '', employeeId = '') {
         if (!supabaseClient) {
             console.warn("Mock createUser");
@@ -1233,16 +1255,23 @@ const db = {
     async fetchProjects(userId = null) {
         if (!supabaseClient) return [];
         try {
-            let query = supabaseClient.from('projects').select('*, crm_clients(name, company)').order('created_at', { ascending: false });
-            const { data, error } = await query;
-            if (!error) return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
-            console.warn('fetchProjects: client relation unavailable, retrying without the optional client join.', error.message);
-            const { data: plainProjects, error: plainError } = await supabaseClient.from('projects').select('*').order('created_at', { ascending: false });
-            if (plainError) throw plainError;
-            return (plainProjects || []).map(applyI18nGetters);
+            const { data, error } = await supabaseClient.rpc('list_accessible_projects_secure');
+            if (error) throw error;
+            return (data || []).map(applyI18nGetters);
         } catch (error) {
             console.error("fetchProjects Error:", error);
             return [];
+        }
+    },
+    async canViewBusinessFinancials() {
+        if (!supabaseClient) return false;
+        try {
+            const { data, error } = await supabaseClient.rpc('can_view_business_financials');
+            if (error) throw error;
+            return data === true;
+        } catch (error) {
+            console.warn('Business financial access check failed; financial details will stay hidden.', error?.message || error);
+            return false;
         }
     },
     async createProject(projectData) {
@@ -1251,7 +1280,7 @@ const db = {
             const { data, error } = await supabaseClient
                 .from('projects')
                 .insert([{ ...projectData, created_by: projectData.created_by || (await supabaseClient.auth.getUser()).data.user?.id }])
-                .select();
+                .select('id');
             if (error) throw error;
             return { success: true, data };
         } catch (error) {
@@ -1266,7 +1295,7 @@ const db = {
                 .from('projects')
                 .delete()
                 .eq('id', projectId)
-                .select();
+                .select('id');
             
             if (error) throw error;
             if (!data || data.length === 0) {
@@ -1285,7 +1314,7 @@ const db = {
                 .from('projects')
                 .update(projectData)
                 .eq('id', projectId)
-                .select();
+                .select('id');
             if (error) throw error;
             if (!data?.length) throw new Error('Permission denied or project not found.');
             return { success: true, data: data[0] };
@@ -3079,10 +3108,7 @@ const db = {
     async fetchDeals() {
         if (!supabaseClient) return [];
         try {
-            // Join with clients
-            const { data, error } = await supabaseClient.from('crm_deals')
-                .select('*, crm_clients(*)')
-                .order('created_at', { ascending: false });
+            const { data, error } = await supabaseClient.rpc('list_crm_deals_secure');
             if (error) throw error;
             return (data || []).map(applyI18nGetters);
         } catch (error) {
@@ -3168,11 +3194,11 @@ const db = {
         try {
             const [{ data: steps, error: stepsError }, { data: deals, error: dealsError }] = await Promise.all([
                 supabaseClient.from('crm_deal_approval_steps').select('*').eq('status', 'PENDING').order('step_order', { ascending: true }),
-                supabaseClient.from('crm_deals').select('*, crm_clients(*)').eq('workflow_status', 'PENDING_APPROVAL').order('proposal_sent_at', { ascending: false })
+                supabaseClient.rpc('list_crm_deals_secure')
             ]);
             if (stepsError) throw stepsError;
             if (dealsError) throw dealsError;
-            const dealMap = new Map((deals || []).map(deal => [deal.id, deal]));
+            const dealMap = new Map((deals || []).filter(deal => deal.workflow_status === 'PENDING_APPROVAL').map(deal => [deal.id, deal]));
             return (steps || []).filter(step => dealMap.has(step.deal_id)).map(step => ({ ...step, deal: dealMap.get(step.deal_id) }));
         } catch (error) {
             console.error('fetchPendingCrmApprovals Error:', error);
@@ -3184,7 +3210,7 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('crm_design_task_approval_steps')
-                .select('*, task:tasks(*), deal:crm_deals(*, crm_clients(*)), profiles:approver_id(full_name, display_name_ar, job_title, emp_index)')
+                .select('*, task:tasks(*), deal:crm_deals(id, title, stage, workflow_status, proposal_sent_at, client_id, crm_clients(*)), profiles:approver_id(full_name, display_name_ar, job_title, emp_index)')
                 .eq('status', 'PENDING')
                 .order('created_at', { ascending: false });
             if (error) throw error;
@@ -3197,15 +3223,15 @@ const db = {
     async fetchDealWorkflow(dealId) {
         if (!supabaseClient) return { approvals: [], designApprovals: [], attachments: [], designFiles: [], activity: [], project: null };
         try {
-            const [approvals, designApprovals, attachments, activity, project, designTask] = await Promise.all([
+            const [approvals, designApprovals, attachments, activity, projects, designTask] = await Promise.all([
                 supabaseClient.from('crm_deal_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
                 supabaseClient.from('crm_design_task_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
                 supabaseClient.from('crm_deal_attachments').select('*').eq('deal_id', dealId).order('created_at', { ascending: false }),
                 supabaseClient.from('crm_deal_activity').select('*, profiles:actor_id(full_name, display_name_ar)').eq('deal_id', dealId).order('created_at', { ascending: false }),
-                supabaseClient.from('projects').select('id, deal_id, project_name, project_status, project_amount, paid_amount, event_location, start_date, end_date').eq('deal_id', dealId).maybeSingle(),
+                this.fetchProjects(),
                 supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids').eq('crm_deal_id', dealId).eq('crm_workflow_kind', 'QUOTE_PROPOSAL_DESIGN').order('created_at', { ascending: false }).limit(1).maybeSingle()
             ]);
-            const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || project.error || designTask.error;
+            const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || designTask.error;
             if (firstError) throw firstError;
             const resolvedAttachments = await Promise.all((attachments.data || []).map(async attachment => ({
                 ...attachment,
@@ -3239,7 +3265,7 @@ const db = {
                 designTask: designTask.data || null,
                 designFiles,
                 activity: activity.data || [],
-                project: project.data || null
+                project: (projects || []).find(project => String(project.deal_id) === String(dealId)) || null
             };
         } catch (error) {
             console.error('fetchDealWorkflow Error:', error);

@@ -16,7 +16,7 @@ assert.match(inputTag('crmDealFirstContactDate'), /\brequired\b/);
 assert.match(inputTag('crmDealContactMethod'), /\brequired\b/);
 assert.match(inputTag('crmDealAssignee'), /\brequired\b/);
 
-assert.match(app, /amount:\s*amountValue === '' \? null : Number\(amountValue\)/);
+assert.match(app, /if \(canCurrentUserViewBusinessFinancials\(\)\) data\.amount = amountValue === '' \? null : Number\(amountValue\)/);
 assert.match(app, /!firstContactDateEl\?\.value \|\| !contactMethodEl\?\.value \|\| !assigneeVal/);
 assert.match(app, /assigned_to:\s*assigneeVal/);
 assert.doesNotMatch(app, /assigned_to:\s*assigneeVal \? assigneeVal : currentUser\.id/);

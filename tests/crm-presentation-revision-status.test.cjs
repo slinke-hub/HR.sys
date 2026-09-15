@@ -27,7 +27,7 @@ assert.match(db, /async replaceDealPresentationAttachments\(dealId, userId, entr
 assert.match(db, /\.in\('category', replacementCategories\)/);
 assert.match(db, /\.delete\(\)[\s\S]*\.in\('id', previousIds\)/);
 assert.match(db, /storage\.from\('crm-deal-files'\)\.remove\(previousPaths\)/);
-assert.match(db, /\.order\('proposal_sent_at', \{ ascending: false \}\)/);
+assert.match(db, /async fetchPendingCrmApprovals\(\)[\s\S]*rpc\('list_crm_deals_secure'\)/);
 assert.match(db, /async fetchDealPresentationAttachments\(dealId\)/);
 assert.match(db, /\.in\('category', \['QUOTATION', 'CLIENT_IDENTITY', 'PROPOSAL'\]\)/);
 assert.match(db, /replaceClientIdentity === true/);

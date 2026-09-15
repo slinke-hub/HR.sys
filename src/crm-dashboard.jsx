@@ -86,7 +86,7 @@ function Metric({ icon: Icon, label, value, tone }) {
   </div>;
 }
 
-function DealCard({ deal, lang, canOpenDetails, canDeleteDeals }) {
+function DealCard({ deal, lang, canOpenDetails, canDeleteDeals, canViewFinancials }) {
   const text = COPY[lang];
   const clientName = deal.clientName || deal.crm_clients?.name || deal.title || (lang === 'ar' ? 'عميل' : 'Client');
   const details = deal.details || deal.technical_description || deal.event_type || deal.title;
@@ -144,7 +144,7 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals }) {
           <span className="tw-flex tw-items-center tw-gap-1.5 tw-text-[11px] tw-font-semibold tw-text-slate-500"><CalendarDays size={13} />{dateLabel(deal.closing_date || deal.created_at, lang)}</span>
           <span className="tw-flex tw-min-w-0 tw-flex-1 tw-justify-end"><EmployeeName profile={profile} lang={lang} /></span>
         </div>
-        {Number(deal.amount || 0) > 0 && <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-text-[11px] tw-font-bold tw-text-emerald-700"><CircleDollarSign size={13} />SAR {money(deal.amount)}</div>}
+        {canViewFinancials && Number(deal.amount || 0) > 0 && <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-text-[11px] tw-font-bold tw-text-emerald-700"><CircleDollarSign size={13} />SAR {money(deal.amount)}</div>}
       </div>
       <div className="tw-flex tw-flex-col tw-gap-1 tw-opacity-0 tw-transition group-hover:tw-opacity-100 focus-within:tw-opacity-100">
         <button aria-label={text.viewDeal} title={text.viewDeal} onClick={event => { event.stopPropagation(); openDetails(); }} className="tw-grid tw-h-7 tw-w-7 tw-place-items-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-500 hover:tw-bg-blue-50 hover:tw-text-blue-700"><Search size={13} /></button>
@@ -155,7 +155,7 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals }) {
   </article>;
 }
 
-function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails, canDeleteDeals }) {
+function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails, canDeleteDeals, canViewFinancials }) {
   const text = COPY[lang];
   const handleDrop = async (event, stage) => {
     event.preventDefault();
@@ -182,7 +182,7 @@ function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails, canDele
         const stageDeals = deals.filter(deal => normalizeStage(deal.stage) === stage.key);
         return <section key={stage.key} id={`crm-col-${stage.dbStage}`} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, stage)} className={`kanban-col tw-min-h-[390px] tw-w-[286px] tw-flex-none tw-snap-start tw-rounded-2xl tw-border tw-p-3 ${stage.soft} ${stage.border}`}>
           <header className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-px-1"><h3 id={`crm-header-${stage.dbStage}`} className="tw-m-0 tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-black tw-uppercase tw-tracking-[.08em] tw-text-slate-700"><i className={`tw-h-2.5 tw-w-2.5 tw-rounded-full ${stage.tone}`} />{text[stage.label]}</h3><span className="tw-grid tw-h-6 tw-min-w-6 tw-place-items-center tw-rounded-full tw-bg-white tw-px-1.5 tw-text-[10px] tw-font-black tw-text-slate-600 tw-shadow-sm">{stageDeals.length}</span></header>
-          <div data-crm-stage-cards className="tw-min-h-[320px]">{stageDeals.map(deal => <DealCard key={deal.id} deal={deal} lang={lang} canOpenDetails={canOpenDetails} canDeleteDeals={canDeleteDeals} />)}{stageDeals.length === 0 && <div data-crm-stage-empty className="tw-grid tw-min-h-32 tw-place-items-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-white/50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-400">{text.noDeals}</div>}</div>
+          <div data-crm-stage-cards className="tw-min-h-[320px]">{stageDeals.map(deal => <DealCard key={deal.id} deal={deal} lang={lang} canOpenDetails={canOpenDetails} canDeleteDeals={canDeleteDeals} canViewFinancials={canViewFinancials} />)}{stageDeals.length === 0 && <div data-crm-stage-empty className="tw-grid tw-min-h-32 tw-place-items-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-white/50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-400">{text.noDeals}</div>}</div>
         </section>;
       })}
     </div>
@@ -224,7 +224,7 @@ function AssignmentsWidget({ lang, deals, users }) {
   return <WidgetShell icon={Users} title={text.assignments} accent="tw-bg-cyan-50 tw-text-cyan-700"><div className="tw-grid tw-grid-cols-2 tw-gap-2.5">{byUser.length ? byUser.map((item, index) => <div key={item.profile.id || index} className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/70 tw-p-3 tw-text-center"><span className="tw-flex tw-justify-center"><EmployeeName profile={item.profile} lang={lang} /></span><small className="tw-mt-1 tw-block tw-text-[9px] tw-font-semibold tw-text-cyan-700">{item.deals.length} {item.deals.length === 1 ? text.account : text.accounts}</small></div>) : <p className="tw-col-span-2 tw-m-0 tw-py-8 tw-text-center tw-text-xs tw-text-slate-400">{text.noAssignments}</p>}</div></WidgetShell>;
 }
 
-function AnalyticsWidget({ lang, deals, clients }) {
+function AnalyticsWidget({ lang, deals, clients, canViewFinancials }) {
   const text = COPY[lang];
   const months = Array.from({ length: 6 }, (_, index) => {
     const date = new Date();
@@ -257,7 +257,7 @@ function AnalyticsWidget({ lang, deals, clients }) {
     return `${colors[index]} ${start}% ${cursor}%`;
   });
   const doughnutBackground = segments.length ? `conic-gradient(${segments.join(', ')})` : 'var(--color-bg-base)';
-  return <WidgetShell icon={BarChart3} title={text.analytics} accent="tw-bg-amber-50 tw-text-amber-700"><div className="tw-grid tw-grid-cols-2 tw-gap-4"><div className="tw-min-w-0"><p className="tw-m-0 tw-text-[10px] tw-font-bold tw-text-slate-500">{text.acquisition}</p><div className="tw-mt-4 tw-flex tw-h-24 tw-items-end tw-gap-1.5">{months.map(month => <span key={month.key} title={`${month.label}: ${month.count}`} className="tw-flex-1 tw-rounded-t-md tw-bg-gradient-to-t tw-from-blue-600 tw-to-cyan-400" style={{ height: maxMonthCount ? `${Math.max(8, (month.count / maxMonthCount) * 100)}%` : '0%' }} />)}</div><div className="tw-mt-2 tw-flex tw-justify-between tw-text-[8px] tw-text-slate-400"><span>{months[0].label}</span><span>{months[5].label}</span></div></div><div className="tw-min-w-0"><p className="tw-m-0 tw-text-[10px] tw-font-bold tw-text-slate-500">{text.revenue}</p>{industries.length ? <><div className="tw-mx-auto tw-mt-3 tw-h-20 tw-w-20 tw-rounded-full" style={{ background: doughnutBackground }}><div className="tw-relative tw-left-1/2 tw-top-1/2 tw-h-11 tw-w-11 -tw-translate-x-1/2 -tw-translate-y-1/2 tw-rounded-full tw-bg-white" /></div><div className="tw-mt-3 tw-grid tw-gap-1">{industries.map(([label, amount], index) => <span key={label} className="tw-flex tw-items-center tw-gap-1.5 tw-text-[8px] tw-text-slate-500"><i className={`tw-h-2 tw-w-2 tw-rounded-full ${['tw-bg-blue-600', 'tw-bg-emerald-500', 'tw-bg-amber-500'][index]}`} />{label} · SAR {money(amount)}</span>)}</div></> : <p className="tw-m-0 tw-py-10 tw-text-center tw-text-[10px] tw-text-slate-400">{text.noAnalytics}</p>}</div></div></WidgetShell>;
+  return <WidgetShell icon={BarChart3} title={text.analytics} accent="tw-bg-amber-50 tw-text-amber-700"><div className={`tw-grid tw-gap-4 ${canViewFinancials ? 'tw-grid-cols-2' : 'tw-grid-cols-1'}`}><div className="tw-min-w-0"><p className="tw-m-0 tw-text-[10px] tw-font-bold tw-text-slate-500">{text.acquisition}</p><div className="tw-mt-4 tw-flex tw-h-24 tw-items-end tw-gap-1.5">{months.map(month => <span key={month.key} title={`${month.label}: ${month.count}`} className="tw-flex-1 tw-rounded-t-md tw-bg-gradient-to-t tw-from-blue-600 tw-to-cyan-400" style={{ height: maxMonthCount ? `${Math.max(8, (month.count / maxMonthCount) * 100)}%` : '0%' }} />)}</div><div className="tw-mt-2 tw-flex tw-justify-between tw-text-[8px] tw-text-slate-400"><span>{months[0].label}</span><span>{months[5].label}</span></div></div>{canViewFinancials && <div className="tw-min-w-0"><p className="tw-m-0 tw-text-[10px] tw-font-bold tw-text-slate-500">{text.revenue}</p>{industries.length ? <><div className="tw-mx-auto tw-mt-3 tw-h-20 tw-w-20 tw-rounded-full" style={{ background: doughnutBackground }}><div className="tw-relative tw-left-1/2 tw-top-1/2 tw-h-11 tw-w-11 -tw-translate-x-1/2 -tw-translate-y-1/2 tw-rounded-full tw-bg-white" /></div><div className="tw-mt-3 tw-grid tw-gap-1">{industries.map(([label, amount], index) => <span key={label} className="tw-flex tw-items-center tw-gap-1.5 tw-text-[8px] tw-text-slate-500"><i className={`tw-h-2 tw-w-2 tw-rounded-full ${['tw-bg-blue-600', 'tw-bg-emerald-500', 'tw-bg-amber-500'][index]}`} />{label} · SAR {money(amount)}</span>)}</div></> : <p className="tw-m-0 tw-py-10 tw-text-center tw-text-[10px] tw-text-slate-400">{text.noAnalytics}</p>}</div>}</div></WidgetShell>;
 }
 
 function CrmDashboard({ payload = {} }) {
@@ -271,6 +271,7 @@ function CrmDashboard({ payload = {} }) {
       || /\b(MANAGER|SALES|MARKETING)\b/.test(value)
   );
   const canDeleteDeals = window.canCurrentUserDeleteCrmDeals?.() === true;
+  const canViewFinancials = payload.canViewFinancials === true;
   const sourceDeals = useMemo(() => (payload.deals || []).map(deal => ({
     ...deal,
     clientName: deal.crm_clients?.name,
@@ -303,9 +304,9 @@ function CrmDashboard({ payload = {} }) {
   return <div dir={lang === 'ar' ? 'rtl' : 'ltr'} lang={lang} className="mogam-crm-react tw-min-w-0 tw-w-full tw-bg-transparent tw-font-sans tw-text-ink">
         <div className="tw-mx-auto tw-w-full tw-max-w-[1800px]">
           <section className="page-header tw-flex-wrap tw-gap-4"><div className="tw-max-w-3xl"><span className="tw-mb-2 tw-inline-flex tw-items-center tw-gap-1.5 tw-rounded-full tw-bg-blue-50 tw-px-3 tw-py-1 tw-text-[10px] tw-font-black tw-uppercase tw-tracking-[.12em] tw-text-blue-700"><BriefcaseBusiness size={13} />Mogam CRM</span><h1 className="page-title tw-m-0">{text.title}</h1><p className="page-subtitle tw-mb-0 tw-mt-2">{text.subtitle}</p></div><div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-end tw-gap-3 sm:tw-w-auto"><label className="search-container crm-dashboard-search tw-m-0 tw-min-w-0 tw-flex-1 sm:tw-w-72 sm:tw-flex-none"><Search size={18} className="search-icon tw-m-0 tw-flex-none" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={text.search} className="search-input" /></label><button type="button" data-crm-new-deal onClick={() => window.showCRMDealModal?.()} className="btn btn-primary tw-inline-flex tw-min-h-10 tw-items-center tw-justify-center tw-gap-2"><Plus size={17} />{text.newDeal}</button><button type="button" onClick={() => window.showCRMClientModal?.()} className="btn btn-secondary tw-inline-flex tw-min-h-10 tw-items-center tw-justify-center tw-gap-2"><Building2 size={17} />{text.addClient}</button></div></section>
-          <section className="tw-mb-5 tw-grid tw-grid-cols-1 tw-gap-3 sm:tw-grid-cols-2 xl:tw-grid-cols-4"><Metric icon={CircleDollarSign} label={text.totalPipeline} value={`SAR ${money(pipelineValue)}`} tone="tw-bg-blue-50 tw-text-blue-700" /><Metric icon={Building2} label={text.activeClients} value={payload.clients?.length || new Set(deals.map(deal => deal.clientName)).size} tone="tw-bg-cyan-50 tw-text-cyan-700" /><Metric icon={Target} label={text.openDeals} value={openDeals.length} tone="tw-bg-amber-50 tw-text-amber-700" /><Metric icon={CheckCircle2} label={text.wonDeals} value={wonDeals.length} tone="tw-bg-emerald-50 tw-text-emerald-700" /></section>
-          <PipelineBoard lang={lang} deals={filteredDeals} onDealStageChange={handleDealStageChange} canOpenDetails={canOpenDetails} canDeleteDeals={canDeleteDeals} />
-          <section className="tw-mt-5 tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 2xl:tw-grid-cols-4"><TasksWidget lang={lang} tasks={payload.tasks || []} deals={deals} /><ActivityWidget lang={lang} activity={payload.activity || []} /><AssignmentsWidget lang={lang} deals={deals} users={payload.users || []} /><AnalyticsWidget lang={lang} deals={deals} clients={payload.clients || []} /></section>
+          <section className="tw-mb-5 tw-grid tw-grid-cols-1 tw-gap-3 sm:tw-grid-cols-2 xl:tw-grid-cols-4">{canViewFinancials && <Metric icon={CircleDollarSign} label={text.totalPipeline} value={`SAR ${money(pipelineValue)}`} tone="tw-bg-blue-50 tw-text-blue-700" />}<Metric icon={Building2} label={text.activeClients} value={payload.clients?.length || new Set(deals.map(deal => deal.clientName)).size} tone="tw-bg-cyan-50 tw-text-cyan-700" /><Metric icon={Target} label={text.openDeals} value={openDeals.length} tone="tw-bg-amber-50 tw-text-amber-700" /><Metric icon={CheckCircle2} label={text.wonDeals} value={wonDeals.length} tone="tw-bg-emerald-50 tw-text-emerald-700" /></section>
+          <PipelineBoard lang={lang} deals={filteredDeals} onDealStageChange={handleDealStageChange} canOpenDetails={canOpenDetails} canDeleteDeals={canDeleteDeals} canViewFinancials={canViewFinancials} />
+          <section className="tw-mt-5 tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 2xl:tw-grid-cols-4"><TasksWidget lang={lang} tasks={payload.tasks || []} deals={deals} /><ActivityWidget lang={lang} activity={payload.activity || []} /><AssignmentsWidget lang={lang} deals={deals} users={payload.users || []} /><AnalyticsWidget lang={lang} deals={deals} clients={payload.clients || []} canViewFinancials={canViewFinancials} /></section>
         </div>
   </div>;
 }

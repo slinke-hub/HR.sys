@@ -2682,6 +2682,17 @@ button.btn-icon [data-lucide] {
   cursor: pointer;
 }
 [data-theme="dark"] .crm-datetime-control input::-webkit-calendar-picker-indicator { filter: invert(1); }
+.crm-schedule-auto-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: .7rem .85rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  color: var(--color-text-secondary);
+  font-size: .78rem;
+  line-height: 1.45;
+}
 .crm-radio-group {
   display: flex;
   flex-wrap: wrap;
@@ -10255,4 +10266,128 @@ body > .task-watcher-dropdown.multi-select-modal-layer {
   .crm-design-review-grid { grid-template-columns: 1fr; }
   .crm-design-completion-content .modal-actions { display: grid; grid-template-columns: 1fr; }
   .crm-design-completion-content .modal-actions .btn { width: 100%; }
+}
+
+/* Business-card assisted client creation */
+.crm-client-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .65rem;
+  flex-wrap: wrap;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.crm-business-card-import {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  border-radius: .9rem;
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface));
+}
+
+.crm-business-card-import[hidden],
+.crm-business-card-preview[hidden] {
+  display: none !important;
+}
+
+.crm-business-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.crm-business-card-heading h3,
+.crm-business-card-heading p,
+.crm-business-card-status {
+  margin: 0;
+}
+
+.crm-business-card-heading h3 {
+  margin-bottom: .3rem;
+  font-size: 1rem;
+}
+
+.crm-business-card-heading p {
+  max-width: 40rem;
+  color: var(--color-text-secondary);
+  font-size: .82rem;
+  line-height: 1.45;
+}
+
+.crm-business-card-heading .btn {
+  flex: 0 0 auto;
+}
+
+.crm-business-card-preview {
+  display: grid;
+  grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.crm-business-card-preview img {
+  width: 100%;
+  aspect-ratio: 1.6 / 1;
+  object-fit: contain;
+  border: 1px solid var(--color-border);
+  border-radius: .65rem;
+  background: var(--color-surface);
+}
+
+.crm-business-card-preview-details {
+  display: grid;
+  justify-items: start;
+  gap: .75rem;
+}
+
+.crm-business-card-status {
+  color: var(--color-text-secondary);
+  font-size: .85rem;
+  line-height: 1.45;
+}
+
+.crm-business-card-status[data-state="working"] { color: var(--color-primary); }
+.crm-business-card-status[data-state="success"] { color: var(--color-success); }
+
+.crm-business-card-preview-details .btn {
+  min-height: 2.25rem;
+  padding: .45rem .7rem;
+}
+
+@media (max-width: 640px) {
+  .crm-client-modal-content {
+    width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .crm-client-header-actions,
+  .crm-client-header-actions .btn,
+  .crm-business-card-heading,
+  .crm-business-card-heading .btn {
+    width: 100%;
+  }
+
+  .crm-business-card-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .crm-business-card-preview { grid-template-columns: minmax(0, 1fr); }
+  .crm-business-card-preview img { max-height: 14rem; }
 }

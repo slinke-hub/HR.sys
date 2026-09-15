@@ -19,7 +19,7 @@ assert.match(migration, /ADD COLUMN IF NOT EXISTS completion_approved_by uuid/);
 assert.match(migration, /ADD COLUMN IF NOT EXISTS completion_approved_at timestamptz/);
 assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.start_crm_presentation_approval\(uuid, text\) TO authenticated/);
 assert.match(db, /startCrmPresentationApproval Error:[\s\S]*message: error\?\.message/);
-assert.match(html, /js\/db\.js\?v=2026091505/);
-assert.match(worker, /muqam-hr-mobile-v235/);
+assert.match(html, /js\/db\.js\?v=2026091508/);
+assert.match(worker, /muqam-hr-mobile-v244/);
 
 console.log('CRM presentation submitter access repair tests passed.');

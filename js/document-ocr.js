@@ -106,6 +106,127 @@
         };
     }
 
+    function cleanBusinessCardValue(value) {
+        return String(value || '')
+            .replace(/^[\s:|\-–—]+|[\s:|\-–—]+$/g, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+    }
+
+    function findLabelledBusinessCardValue(lines, patterns) {
+        for (let index = 0; index < lines.length; index += 1) {
+            for (const pattern of patterns) {
+                const match = lines[index].match(pattern);
+                if (!match) continue;
+                const sameLine = cleanBusinessCardValue(match[1]);
+                if (sameLine) return sameLine;
+                const nextLine = cleanBusinessCardValue(lines[index + 1]);
+                if (nextLine) return nextLine;
+            }
+        }
+        return '';
+    }
+
+    function parseBusinessCard(text, visualLines = []) {
+        const normalizedText = normalizeDigits(text);
+        const lines = normalizedText
+            .split(/\r?\n/)
+            .map(line => cleanBusinessCardValue(line))
+            .filter(Boolean);
+        const normalizedContactText = normalizedText
+            .replace(/[\u200E\u200F\u202A-\u202E]/g, '')
+            .replace(/\s*@\s*/g, '@')
+            .replace(/\s*\.\s*/g, '.');
+        const email = (normalizedContactText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '').toLowerCase();
+        const phoneCandidates = [];
+
+        lines.forEach((line, lineIndex) => {
+            const scrubbed = line.replace(/[A-Z0-9._%+-]+\s*@\s*[A-Z0-9.-]+(?:\s*\.\s*[A-Z]{2,})+/ig, ' ')
+                .replace(/(?:https?:\/\/|www\.)\S+/ig, ' ');
+            for (const match of scrubbed.matchAll(/(?:\+?\d[\d\s().-]{5,}\d)/g)) {
+                const raw = match[0].trim();
+                const digits = raw.replace(/\D/g, '');
+                if (digits.length < 7 || digits.length > 15) continue;
+                const phone = `${raw.startsWith('+') ? '+' : ''}${digits}`;
+                let score = 0;
+                if (/(?:mobile|phone|tel(?:ephone)?|cell|جوال|هاتف|تلفون)/i.test(line)) score += 5;
+                if (/^(?:\+966|00966|966|05)/.test(phone)) score += 3;
+                if (digits.length >= 9 && digits.length <= 12) score += 2;
+                phoneCandidates.push({ phone, score, lineIndex });
+            }
+        });
+        phoneCandidates.sort((left, right) => right.score - left.score || left.lineIndex - right.lineIndex);
+
+        const labelledName = findLabelledBusinessCardValue(lines, [
+            /^(?:full\s+name|name|contact(?:\s+person)?)\s*[:|\-–—]?\s*(.*)$/i,
+            /^(?:الاسم\s+الكامل|الاسم|اسم\s+جهة\s+الاتصال)\s*[:|\-–—]?\s*(.*)$/i
+        ]);
+        const labelledCompany = findLabelledBusinessCardValue(lines, [
+            /^(?:company\s+name|company|organization|organisation|business)\s*[:|\-–—]?\s*(.*)$/i,
+            /^(?:اسم\s+الشركة|اسم\s+المؤسسة|الشركة|المؤسسة)\s*[:|\-–—]?\s*(.*)$/i
+        ]);
+        const contactPattern = /(?:@|https?:\/\/|www\.|mobile|phone|tel(?:ephone)?|email|e-mail|website|address|جوال|هاتف|تلفون|بريد|موقع|عنوان)/i;
+        const jobPattern = /(?:manager|director|specialist|engineer|consultant|sales|marketing|founder|owner|chief|ceo|cfo|coo|مدير|مهندس|أخصائي|استشاري|مبيعات|تسويق|رئيس|مؤسس)/i;
+        const companyPattern = /(?:company|co\.?|llc|ltd\.?|limited|inc\.?|corporation|corp\.?|group|establishment|trading|services|solutions|شركة|مؤسسة|مجموعة|للتجارة|للخدمات|للمقاولات)/i;
+        const addressPattern = /(?:street|road|avenue|building|floor|district|riyadh|jeddah|dammam|saudi\s+arabia|شارع|طريق|مبنى|الدور|حي|الرياض|جدة|الدمام|السعودية)/i;
+        const textualLines = lines.filter(line => {
+            if (contactPattern.test(line) || /\d{4,}/.test(line)) return false;
+            const letters = line.match(/[A-Za-z\u0600-\u06FF]/g) || [];
+            return letters.length >= 3 && line.length <= 120;
+        });
+
+        const measuredVisualLines = visualLines
+            .map((line, index) => ({
+                text: cleanBusinessCardValue(line?.text),
+                height: Math.max(0, Number(line?.height || 0)),
+                width: Math.max(0, Number(line?.width || 0)),
+                confidence: Number(line?.confidence || 0),
+                index
+            }));
+        const visualName = measuredVisualLines
+            .filter(line => {
+                if (!line.text || contactPattern.test(line.text) || companyPattern.test(line.text) || jobPattern.test(line.text) || addressPattern.test(line.text)) return false;
+                const letters = line.text.match(/[A-Za-z\u0600-\u06FF]/g) || [];
+                const words = line.text.split(/\s+/).filter(Boolean);
+                return letters.length >= 2 && words.length <= 6 && line.text.length <= 80;
+            })
+            .sort((left, right) => right.height - left.height
+                || (right.height * right.width) - (left.height * left.width)
+                || right.confidence - left.confidence
+                || left.index - right.index)[0]?.text || '';
+
+        const visualCompany = measuredVisualLines
+            .filter(line => {
+                if (!line.text || line.text === visualName || contactPattern.test(line.text) || jobPattern.test(line.text) || addressPattern.test(line.text)) return false;
+                const letters = line.text.match(/[A-Za-z\u0600-\u06FF]/g) || [];
+                const words = line.text.split(/\s+/).filter(Boolean);
+                return letters.length >= 2 && words.length <= 8 && line.text.length <= 100;
+            })
+            .sort((left, right) => Number(companyPattern.test(right.text)) - Number(companyPattern.test(left.text))
+                || right.height - left.height
+                || (right.height * right.width) - (left.height * left.width)
+                || right.confidence - left.confidence
+                || left.index - right.index)[0]?.text || '';
+        const company = cleanBusinessCardValue(labelledCompany)
+            || cleanBusinessCardValue(textualLines.find(line => companyPattern.test(line)))
+            || cleanBusinessCardValue(visualCompany);
+        const nameCandidate = textualLines.find(line => {
+            if (line === company || companyPattern.test(line) || jobPattern.test(line)) return false;
+            const words = line.split(/\s+/).filter(Boolean);
+            return words.length >= 2 && words.length <= 6 && line.length <= 80;
+        });
+        const name = cleanBusinessCardValue(visualName)
+            || cleanBusinessCardValue(labelledName)
+            || cleanBusinessCardValue(nameCandidate);
+
+        return {
+            name,
+            company,
+            email,
+            phone: phoneCandidates[0]?.phone || ''
+        };
+    }
+
     async function loadPdfJs() {
         if (!pdfJsPromise) {
             pdfJsPromise = import(assetUrl('js/vendor/pdfjs/pdf.min.mjs')).then(pdfjs => {
@@ -193,5 +314,36 @@
         return { ...parseMetadata(text), text };
     }
 
-    globalScope.EmployeeDocumentRecognition = Object.freeze({ extract, parseMetadata });
+    async function extractBusinessCard(file, options = {}) {
+        if (!file) return { name: '', company: '', email: '', phone: '', text: '' };
+        let worker;
+        try {
+            worker = await createOcrWorker(options.onProgress);
+            await worker.setParameters({
+                tessedit_pageseg_mode: globalScope.Tesseract?.PSM?.SPARSE_TEXT || '11',
+                preserve_interword_spaces: '1'
+            });
+            const result = await worker.recognize(file, {}, { text: true, blocks: true });
+            const blocks = result?.data?.blocks || result?.data?.layoutBlocks || [];
+            const visualLines = blocks.flatMap(block => (block.paragraphs || []).flatMap(paragraph =>
+                (paragraph.lines || []).map(line => ({
+                    text: line.text || '',
+                    height: Math.max(0, Number(line.bbox?.y1 || 0) - Number(line.bbox?.y0 || 0)),
+                    width: Math.max(0, Number(line.bbox?.x1 || 0) - Number(line.bbox?.x0 || 0)),
+                    confidence: Number(line.confidence || 0)
+                }))
+            ));
+            const text = [result?.data?.text || '', ...visualLines.map(line => line.text)].filter(Boolean).join('\n');
+            return { ...parseBusinessCard(text, visualLines), text };
+        } finally {
+            if (worker) await worker.terminate();
+        }
+    }
+
+    globalScope.EmployeeDocumentRecognition = Object.freeze({
+        extract,
+        parseMetadata,
+        extractBusinessCard,
+        parseBusinessCard
+    });
 })();

@@ -40,9 +40,11 @@ assert.match(app, /newStage === 'LOST'/);
 assert.match(app, /newStage === 'WON'/);
 assert.match(app, /closeWonDealProjectFromWorkflow/);
 assert.match(app, /categories\.has\('PHOTO'\)/);
-assert.match(app, /Number\(project\.paid_amount \|\| 0\) >= Number\(project\.project_amount \|\| 0\)/);
+assert.match(app, /typeof workflow\.project\.payment_ready === 'boolean'/);
+assert.match(app, /paidAmount >= projectAmount/);
 
-assert.match(db, /from\('projects'\).*eq\('deal_id', dealId\)\.maybeSingle\(\)/s);
+assert.match(db, /this\.fetchProjects\(\)/);
+assert.match(db, /project: \(projects \|\| \[\]\)\.find\(project => String\(project\.deal_id\) === String\(dealId\)\)/);
 assert.match(db, /async closeWonDealProject\(projectId\)/);
 assert.match(db, /update\(\{ project_status: 'Completed' \}\)/);
 

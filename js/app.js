@@ -14,11 +14,40 @@ if (typeof i18n !== 'undefined') {
     i18n.ar.nav_more = 'المزيد';
 }
 
+// Preserve Unicode user content in every UI language and repair legacy text
+// that was decoded as Windows-1252/Latin-1 instead of UTF-8.
+const MOJIBAKE_REPLACEMENTS = Object.freeze({
+    'â€”': '—',
+    'â€“': '–',
+    'â€¢': '•',
+    'â€¦': '…',
+    'â€œ': '“',
+    'â€': '”',
+    'â€™': '’',
+    'Â·': '·'
+});
+function repairTextEncoding(value) {
+    let text = String(value ?? '');
+    Object.entries(MOJIBAKE_REPLACEMENTS).forEach(([broken, corrected]) => {
+        text = text.split(broken).join(corrected);
+    });
+    if (!/[\u0600-\u06FF]/.test(text) && /(?:Ø|Ù|Ã|Â)/.test(text)) {
+        try {
+            const decoded = decodeURIComponent(escape(text));
+            if (/[\u0600-\u06FF]/.test(decoded) || !/(?:Ø|Ù|Ã|Â)/.test(decoded)) text = decoded;
+        } catch (_) {
+            // Keep the original value when it is not a complete UTF-8 byte sequence.
+        }
+    }
+    return text;
+}
+window.repairTextEncoding = repairTextEncoding;
+
 // XSS Protection Utility
 function escapeHTML(str) {
     if (!str) return '';
     if (typeof str !== 'string') return str;
-    return str
+    return repairTextEncoding(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -84,7 +113,8 @@ const taskDetailValue = (value, type = '') => {
 };
 const getLocalizedTaskTitle = task => {
     const localized = task?.title_i18n?.[currentLang] || task?.title_i18n?.en || task?.title || '';
-    return currentLang === 'ar' && /(?:Ø|Ù|Ã|Â)/.test(localized) ? (task?.title || localized) : localized;
+    const preferred = currentLang === 'ar' && /(?:Ø|Ù|Ã|Â)/.test(localized) ? (task?.title || localized) : localized;
+    return repairTextEncoding(preferred);
 };
 
 function getProfileDisplayName(profile) {
@@ -206,6 +236,24 @@ const isAdminRole = role => ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMI
 const canCurrentUserManageUsers = () => isAdminRole(currentUserRole) && !isExecutiveAdminProfile();
 window.isExecutiveAdminProfile = isExecutiveAdminProfile;
 window.canCurrentUserManageUsers = canCurrentUserManageUsers;
+window.businessFinancialAccess = window.businessFinancialAccess || { userId: null, allowed: false };
+async function ensureBusinessFinancialAccess(force = false) {
+    const userId = currentUser?.id || null;
+    if (!userId) return false;
+    if (!force && window.businessFinancialAccess.userId === userId) return window.businessFinancialAccess.allowed === true;
+    const allowed = await db.canViewBusinessFinancials();
+    window.businessFinancialAccess = { userId, allowed: allowed === true };
+    return allowed === true;
+}
+function canCurrentUserViewBusinessFinancials() {
+    return window.businessFinancialAccess?.userId === currentUser?.id && window.businessFinancialAccess.allowed === true;
+}
+function applyBusinessFinancialVisibility(container = document) {
+    const allowed = canCurrentUserViewBusinessFinancials();
+    container?.querySelectorAll?.('[data-business-financials]').forEach(element => { element.hidden = !allowed; });
+    return allowed;
+}
+window.canCurrentUserViewBusinessFinancials = canCurrentUserViewBusinessFinancials;
 const isTaskAdmin = () => isAdminRole(currentUserRole);
 const canAssignTasksCompanyWide = () => isTaskAdmin() || isExecutiveAdminProfile();
 const getTaskAssignmentDirectory = () => {
@@ -1037,6 +1085,11 @@ function updateTranslations() {
         }
     });
 
+    document.querySelectorAll('[data-i18n-alt]').forEach(el => {
+        const key = el.getAttribute('data-i18n-alt');
+        if (i18n[currentLang]?.[key]) el.setAttribute('alt', i18n[currentLang][key]);
+    });
+
     translateArabicInterface(document);
 }
 
@@ -1079,6 +1132,15 @@ const arabicRuntimeUiText = Object.freeze({
     'Edit': 'تعديل',
     'View': 'عرض',
     'Send': 'إرسال',
+    'Send for approval': 'إرسال للاعتماد',
+    'DESIGN APPROVAL': 'اعتماد التصميم',
+    'Submit completed design': 'إرسال التصميم المكتمل',
+    'Upload the final PDF files or images. They will also be shared in the task comments.': 'ارفع ملفات PDF النهائية أو الصور. وستتم مشاركتها أيضاً في تعليقات المهمة.',
+    'Choose completed design files': 'اختر ملفات التصميم المكتمل',
+    'Submitting sends approval to CEO, GM, MQ-04, MQ-05 and Marketing Manager.': 'سيتم إرسال الطلب إلى الرئيس التنفيذي والمدير العام وMQ-04 وMQ-05 ومدير التسويق.',
+    'Page Access Controls': 'التحكم في صلاحيات الصفحات',
+    'Configure which pages and features are accessible by each role (Employee, Manager, etc.).': 'حدد الصفحات والميزات المتاحة لكل دور مثل الموظف والمدير.',
+    'Add-only access': 'صلاحية الإضافة فقط',
     'OK': 'حسنًا',
     'Notice': 'تنبيه',
     'Input required': 'الإدخال مطلوب',
@@ -2200,6 +2262,7 @@ window.handleLogout = async function () {
     currentUser = null;
     currentUserRole = null;
     currentUserProfile = null;
+    window.businessFinancialAccess = { userId: null, allowed: false };
     currentView = 'login';
     viewHistory = [];
     appHistoryInitialized = false;
@@ -3169,7 +3232,7 @@ async function renderDashboard() {
                     <img id="orderClockOutCameraPreview" alt="Captured order location photo" hidden>
                     <canvas id="orderClockOutCameraCanvas" hidden></canvas>
                 </div>
-                <p id="orderClockOutCameraStatus" class="text-muted" aria-live="polite">Requesting camera accessâ€¦</p>
+                <p id="orderClockOutCameraStatus" class="text-muted" aria-live="polite">Requesting camera access…</p>
                 <input id="orderClockOutCameraInput" type="file" accept="image/*" capture="environment" hidden onchange="useOrderClockOutPhotoFile(this.files?.[0])">
                 <div class="order-clockout-camera-actions">
                     <button id="orderClockOutCaptureButton" type="button" class="btn-primary" onclick="captureOrderClockOutPhoto()">Take photo</button>
@@ -3441,7 +3504,7 @@ async function startOrderClockOutCamera() {
     const status = document.getElementById('orderClockOutCameraStatus');
     const capture = document.getElementById('orderClockOutCaptureButton');
     if (!navigator.mediaDevices?.getUserMedia) {
-        if (status) status.textContent = 'Live camera preview is unavailable. Tap â€œUse device cameraâ€ instead.';
+        if (status) status.textContent = 'Live camera preview is unavailable. Tap “Use device camera” instead.';
         if (capture) capture.hidden = true;
         return;
     }
@@ -3463,7 +3526,7 @@ async function startOrderClockOutCamera() {
         if (status) status.textContent = 'Position the order location in the frame, then take the photo.';
     } catch (error) {
         console.warn('Camera access failed:', error);
-        if (status) status.textContent = 'Camera permission was not granted. Enable it in browser settings or tap â€œUse device cameraâ€.';
+        if (status) status.textContent = 'Camera permission was not granted. Enable it in browser settings or tap “Use device camera”.';
         if (capture) capture.hidden = true;
     }
 }
@@ -6201,7 +6264,7 @@ window.generatePerformanceReport = async function () {
         return;
     }
 
-    // Compute score: (done / total * 100) - (overdue * 5 penalty), clamped 0â€“100
+    // Compute score: (done / total * 100) - (overdue * 5 penalty), clamped 0–100
     employees.forEach(e => {
         const completionRate = e.total > 0 ? (e.done / e.total) * 100 : 0;
         const penalty = e.overdue * 5;
@@ -10721,7 +10784,7 @@ async function renderContractPage() {
                     <h3 style="margin-top:0; margin-bottom:1.5rem; border-bottom:1px solid var(--color-border); padding-bottom:.75rem;">Additional / Optional Clauses</h3>
                     <input type="hidden" id="existingContractPolicyUrl" value="${escapeHTML(confidentialityPolicyReference)}">
                     <div class="form-group">
-                        <label class="form-label" for="contractPolicyDocument">Confidentiality Clause â€” Company Policy and Regulations</label>
+                        <label class="form-label" for="contractPolicyDocument">Confidentiality Clause — Company Policy and Regulations</label>
                         <input type="file" id="contractPolicyDocument" class="form-control" accept=".pdf,.doc,.docx,image/*" multiple>
                         ${confidentialityPolicyUrl ? `<small>Current document: <a href="${escapeHTML(confidentialityPolicyUrl)}" target="_blank" rel="noopener noreferrer">View uploaded policy</a></small>` : '<small>Optional. Accepted formats: PDF, Word, or image.</small>'}
                     </div>
@@ -12425,10 +12488,10 @@ async function renderArchivedContracts() {
             <tbody>${contracts.length ? contracts.map(contract => `
                 <tr>
                     <td><strong>${escapeHTML(contract.former_employee_name || 'Former employee')}</strong><br><small>${escapeHTML(contract.former_employee_email || '')}</small></td>
-                    <td>${escapeHTML(contract.former_employee_number ? `MQ-${contract.former_employee_number}` : 'â€”')}</td>
-                    <td>${escapeHTML(contract.start_date || 'â€”')} â€“ ${escapeHTML(contract.end_date || 'Open-ended')}</td>
+                    <td>${escapeHTML(contract.former_employee_number ? `MQ-${contract.former_employee_number}` : '—')}</td>
+                    <td>${escapeHTML(contract.start_date || '—')} – ${escapeHTML(contract.end_date || 'Open-ended')}</td>
                     <td><span class="status-badge info">${escapeHTML(contract.status || 'Archived')}</span></td>
-                    <td>${contract.archived_at ? new Date(contract.archived_at).toLocaleString() : 'â€”'}</td>
+                    <td>${contract.archived_at ? new Date(contract.archived_at).toLocaleString() : '—'}</td>
                     <td>${isAdmin ? `<button class="btn-secondary" style="color:var(--color-danger)" onclick="handleDeleteArchivedContract('${contract.id}')"><i data-lucide="trash-2"></i> Delete permanently</button>` : '<span class="status-badge info">View only</span>'}</td>
                 </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;padding:2rem;">No archived contracts.</td></tr>'}</tbody>
         </table></div></div>`;
@@ -13292,7 +13355,10 @@ async function renderClients() {
                 <h1 class="page-title">${t('ui_clients_management')}</h1>
                 <p class="page-subtitle"></p>
             </div>
-            <button class="btn btn-primary" onclick="showCRMClientModal()"><i data-lucide="plus"></i> ${t('ui_new_client') || 'New Client'}</button>
+            <div class="crm-client-header-actions">
+                <button class="btn btn-secondary" onclick="showCRMClientModal(null, true)"><i data-lucide="scan-line"></i> ${t('crm_import_business_card') || 'Import business card'}</button>
+                <button class="btn btn-primary" onclick="showCRMClientModal()"><i data-lucide="plus"></i> ${t('ui_new_client') || 'New Client'}</button>
+            </div>
         </div>
         
         <div class="card">
@@ -13385,12 +13451,13 @@ async function renderOrders() {
 }
 
 async function fetchCrmDashboardPayload() {
-    const [clients, deals, users, tasks, activity] = await Promise.all([
+    const [clients, deals, users, tasks, activity, canViewFinancials] = await Promise.all([
         db.fetchClients(),
         db.fetchDeals(),
         db.fetchUsers(),
         db.fetchTasks(),
-        db.fetchRecentCrmActivity(8)
+        db.fetchRecentCrmActivity(8),
+        ensureBusinessFinancialAccess()
     ]);
 
     return {
@@ -13405,7 +13472,8 @@ async function fetchCrmDashboardPayload() {
         activity: activity || [],
         profile: currentUserProfile || currentUser || {},
         role: currentUserRole || currentUserProfile?.role || '',
-        canInteractCrm: await canCurrentUserUseCRM()
+        canInteractCrm: await canCurrentUserUseCRM(),
+        canViewFinancials
     };
 }
 
@@ -13731,7 +13799,7 @@ window.deleteCrmDeal = function (dealId = null) {
 };
 
 window.openDealWorkflowModal = async function (dealId) {
-    const [deals, users, workflow] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDealWorkflow(dealId)]);
+    const [deals, users, workflow, canViewFinancials] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDealWorkflow(dealId), ensureBusinessFinancialAccess()]);
     const deal = deals.find(item => item.id === dealId);
     if (!deal) return showToast(t('crm_deal_not_found') || 'Deal not found.', 'danger');
     await ensureApprovedDealIsInDiscussion(deal, workflow);
@@ -13743,7 +13811,7 @@ window.openDealWorkflowModal = async function (dealId) {
     const summaryFields = [
         [t('crm_client') || 'Client', clientName],
         [t('status') || 'Stage', dealStage],
-        [t('crm_amount_sar') || 'Amount (SAR)', Number(deal.amount || 0) > 0 ? `SAR ${Number(deal.amount).toLocaleString()}` : '—'],
+        ...(canViewFinancials ? [[t('crm_amount_sar') || 'Amount (SAR)', Number(deal.amount || 0) > 0 ? `SAR ${Number(deal.amount).toLocaleString()}` : '—']] : []),
         [t('crm_closing_date') || 'Closing Date', deal.closing_date || '—'],
         [t('crm_assigned_to') || 'Assigned To', dealEmployeeName(assignee) || (t('crm_unassigned') || 'Unassigned')],
         [t('crm_event_type') || 'Event Type', deal.event_type || '—'],
@@ -13757,7 +13825,7 @@ window.openDealWorkflowModal = async function (dealId) {
             + `<div class="deal-workflow-summary-wide deal-presentation-summary"><dt>${escapeHTML(t('crm_technical_description') || 'Technical Presentation / Project Description')}</dt><dd id="dealPresentationAssetsSummary" class="deal-presentation-assets"></dd></div>`;
     }
     const options = `<option value="">${t('crm_select_employee') || 'Select employee'}</option>` + users.map(user =>
-        `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}${user.job_title ? ` â€” ${escapeHTML(user.job_title)}` : ''}</option>`
+        `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}${user.job_title ? ` — ${escapeHTML(user.job_title)}` : ''}</option>`
     ).join('');
     ['workflowMarketingManager', 'workflowGeneralManager', 'workflowOperationsManager'].forEach(id => {
         document.getElementById(id).innerHTML = options;
@@ -14091,6 +14159,7 @@ function renderDealWorkflowDesignTaskStatus(workflow, isMq08Viewer) {
 function renderDealWorkflowContents(workflow) {
     if (activeDealWorkflowContext) activeDealWorkflowContext.workflow = workflow;
     const isMq08Viewer = isMq08Profile();
+    const canViewFinancials = canCurrentUserViewBusinessFinancials();
     const lifecycleSection = document.getElementById('dealLifecycleSection');
     const activitySection = document.getElementById('dealActivitySection');
     const attachmentForm = document.getElementById('dealAttachmentForm');
@@ -14216,11 +14285,13 @@ function renderDealWorkflowContents(workflow) {
     if (workflow.project && projectStatus && closeButton) {
         const projectAmount = Number(workflow.project.project_amount || 0);
         const paidAmount = Number(workflow.project.paid_amount || 0);
-        const paymentReady = projectAmount <= 0 || paidAmount >= projectAmount;
+        const paymentReady = typeof workflow.project.payment_ready === 'boolean'
+            ? workflow.project.payment_ready
+            : projectAmount <= 0 || paidAmount >= projectAmount;
         const photosReady = attachmentCategories.has('PHOTO');
         const completed = String(workflow.project.project_status || '').toLowerCase() === 'completed';
         projectStatus.innerHTML = `<div class="deal-project-heading"><strong>${escapeHTML(workflow.project.project_name || activeDealWorkflowContext?.deal?.title || '')}</strong><span class="status-badge ${completed ? 'success' : 'warning'}">${escapeHTML(workflow.project.project_status || '')}</span></div>
-            <div class="deal-readiness-item ${paymentReady ? 'ready' : ''}"><i data-lucide="${paymentReady ? 'check-circle-2' : 'circle'}"></i><span>${escapeHTML(paymentReady ? (t('crm_payment_settled') || 'Outstanding client payment confirmed') : (t('crm_payment_pending') || 'Outstanding client payment is not settled'))}</span><small>SAR ${paidAmount.toLocaleString()} / ${projectAmount.toLocaleString()}</small></div>
+            ${canViewFinancials ? `<div class="deal-readiness-item ${paymentReady ? 'ready' : ''}"><i data-lucide="${paymentReady ? 'check-circle-2' : 'circle'}"></i><span>${escapeHTML(paymentReady ? (t('crm_payment_settled') || 'Outstanding client payment confirmed') : (t('crm_payment_pending') || 'Outstanding client payment is not settled'))}</span><small>SAR ${paidAmount.toLocaleString()} / ${projectAmount.toLocaleString()}</small></div>` : ''}
             <div class="deal-readiness-item ${photosReady ? 'ready' : ''}"><i data-lucide="${photosReady ? 'check-circle-2' : 'circle'}"></i><span>${escapeHTML(photosReady ? (t('crm_project_photos_ready') || 'Project photos uploaded') : (t('crm_project_photos_missing') || 'Upload project photos before closing'))}</span></div>`;
         closeButton.disabled = completed || !paymentReady || !photosReady;
         closeButton.hidden = completed;
@@ -14777,23 +14848,67 @@ window.addOrderEquipmentRow = function (item = {}) {
     if (window.lucide) window.lucide.createIcons();
 };
 
+function shiftCrmOrderDateTime(dateValue, timeValue, dayOffset) {
+    const dateMatch = String(dateValue || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const timeMatch = String(timeValue || '00:00').match(/^(\d{2}):(\d{2})/);
+    if (!dateMatch || !timeMatch) return '';
+    const shifted = new Date(
+        Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]),
+        Number(timeMatch[1]), Number(timeMatch[2]), 0, 0
+    );
+    shifted.setDate(shifted.getDate() + Number(dayOffset || 0));
+    const pad = value => String(value).padStart(2, '0');
+    return `${shifted.getFullYear()}-${pad(shifted.getMonth() + 1)}-${pad(shifted.getDate())}T${pad(shifted.getHours())}:${pad(shifted.getMinutes())}`;
+}
+
+window.syncCrmOrderScheduleDefaults = function () {
+    const eventDateInput = document.getElementById('orderEventDate');
+    const eventEndInput = document.getElementById('orderEventEndDate');
+    const eventStartTimeInput = document.getElementById('orderEventStartTime');
+    const installationInput = document.getElementById('orderInstallationTime');
+    const uninstallationInput = document.getElementById('orderUninstallationTime');
+    const eventDate = eventDateInput?.value || '';
+    if (eventEndInput) {
+        eventEndInput.min = eventDate;
+        if (eventDate && eventEndInput.dataset.manual !== 'true') eventEndInput.value = eventDate;
+    }
+    const eventEndDate = eventEndInput?.value || eventDate;
+    const eventTime = eventStartTimeInput?.value || '00:00';
+    if (installationInput && installationInput.dataset.manual !== 'true') {
+        installationInput.value = shiftCrmOrderDateTime(eventDate, eventTime, -2);
+    }
+    if (uninstallationInput && uninstallationInput.dataset.manual !== 'true') {
+        uninstallationInput.value = shiftCrmOrderDateTime(eventEndDate, eventTime, 2);
+    }
+};
+
 window.prepareCrmOrderModal = async function (dealId, oldStage) {
-    const [deals, users] = await Promise.all([db.fetchDeals(), db.fetchUsers()]);
+    const [deals, users, canViewFinancials] = await Promise.all([db.fetchDeals(), db.fetchProjectAssignmentEmployees(), ensureBusinessFinancialAccess()]);
     const deal = deals.find(item => item.id === dealId);
     if (!deal) return showToast(t('crm_deal_not_found') || 'Deal not found.', 'danger');
     if (canonicalDealLifecycleStage(deal.stage) === 'LOST') return window.openLostDealSummaryModal(deal);
     const modal = document.getElementById('crmOrderModal');
     const form = modal.querySelector('form');
     form.reset();
+    ['orderEventEndDate', 'orderInstallationTime', 'orderUninstallationTime'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) delete input.dataset.manual;
+    });
     modal.dataset.oldStage = oldStage || deal.stage || '';
     document.getElementById('orderDealId').value = dealId;
-    document.getElementById('orderEmployeeName').value = window.formatEmployeeName(currentUser) || '';
+    const wonByEmployee = users.find(user => String(user.id) === String(currentUser?.id)) || currentUserProfile;
+    const wonByName = window.formatEmployeeName(wonByEmployee);
+    document.getElementById('orderEmployeeName').value = wonByName && wonByName !== 'Unknown'
+        ? wonByName
+        : (currentUser?.email?.split('@')[0] || '');
     const client = deal.crm_clients || {};
     document.getElementById('orderClientName').value = client.name || '';
     document.getElementById('orderClientCompany').value = client.company || '';
     document.getElementById('orderClientEmail').value = client.email || '';
     document.getElementById('orderClientPhone').value = client.phone || '';
-    document.getElementById('orderProjectAmount').value = deal.amount ?? '';
+    document.getElementById('orderProjectAmount').value = canViewFinancials ? (deal.amount ?? '') : '';
+    document.getElementById('orderPaidAmount').value = '';
+    applyBusinessFinancialVisibility(modal);
     const assigneeSelect = document.getElementById('orderProjectAssignees');
     assigneeSelect.innerHTML = users.map(user => `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}</option>`).join('');
     document.getElementById('orderEquipmentList').innerHTML = '';
@@ -14810,9 +14925,15 @@ window.closeCRMOrderModal = () => {
 
 window.handleOrderSubmit = async (event) => {
     event.preventDefault();
+    window.syncCrmOrderScheduleDefaults();
     const submitButton = event.currentTarget.querySelector('button[type="submit"]');
     const dealId = document.getElementById('orderDealId').value;
     const oldStage = document.getElementById('crmOrderModal').dataset.oldStage || '';
+    const eventDate = document.getElementById('orderEventDate').value || '';
+    const eventEndDate = document.getElementById('orderEventEndDate').value || '';
+    if (eventDate && eventEndDate && eventEndDate < eventDate) {
+        return showToast(t('crm_event_end_before_start') || 'Event End Date cannot be before the Event Date.', 'warning');
+    }
     const assignedPeople = Array.from(document.getElementById('orderProjectAssignees').selectedOptions).map(option => option.value);
     if (!assignedPeople.length) return showToast(t('crm_select_project_team') || 'Select at least one employee.', 'warning');
     const equipmentRows = Array.from(document.querySelectorAll('#orderEquipmentList [data-equipment-row]'));
@@ -14835,7 +14956,8 @@ window.handleOrderSubmit = async (event) => {
             equipment.push({ item, quantity, image_url: imageUrl });
         }
         const orderData = {
-            event_date: document.getElementById('orderEventDate').value || null,
+            event_date: eventDate || null,
+            event_end_date: eventEndDate || null,
             event_start_time: document.getElementById('orderEventStartTime').value || null,
             installation_time: document.getElementById('orderInstallationTime').value || null,
             uninstallation_time: document.getElementById('orderUninstallationTime').value || null,
@@ -14850,10 +14972,12 @@ window.handleOrderSubmit = async (event) => {
             installation_type: event.currentTarget.querySelector('[name="orderInstallationType"]:checked')?.value || null,
             assigned_people: assignedPeople,
             equipment,
-            project_amount: document.getElementById('orderProjectAmount').value || null,
-            paid_amount: document.getElementById('orderPaidAmount').value || null,
             notes: document.getElementById('orderNotes').value.trim() || null
         };
+        if (canCurrentUserViewBusinessFinancials()) {
+            orderData.project_amount = document.getElementById('orderProjectAmount').value || null;
+            orderData.paid_amount = document.getElementById('orderPaidAmount').value || null;
+        }
         const result = await db.createProjectFromWonDealV2(orderData, dealId);
         if (!result.success) throw result.error || new Error(t('crm_project_create_failed') || 'Failed to create the project');
         window.closeCRMOrderModal();
@@ -15301,7 +15425,7 @@ window.filterDepartmentHeadOptions = function (selectedHeadId = '') {
         ? (window.departmentProfilesCache || []).filter(profile => profile.department_id === department.id)
         : [];
     headSelect.innerHTML = '<option value="">Select a department employee...</option>' + employees.map(profile =>
-        `<option value="${profile.id}">${escapeHTML(window.formatEmployeeName(profile) || 'Employee')} â€” ${escapeHTML(profile.job_title || 'No job title')}</option>`
+        `<option value="${profile.id}">${escapeHTML(window.formatEmployeeName(profile) || 'Employee')} — ${escapeHTML(profile.job_title || 'No job title')}</option>`
     ).join('');
     headSelect.disabled = !department || employees.length === 0;
     if (selectedHeadId && employees.some(profile => profile.id === selectedHeadId)) headSelect.value = selectedHeadId;
@@ -15514,8 +15638,113 @@ window.handleCreateDepartment = async (e) => {
 };
 
 // CRM Modals
-window.showCRMClientModal = (client = null) => {
+let crmClientBusinessCardPreviewUrl = '';
+let crmClientBusinessCardScanVersion = 0;
+
+function resetClientBusinessCardImport(clearRecognizedValues = true) {
+    crmClientBusinessCardScanVersion += 1;
+    if (crmClientBusinessCardPreviewUrl) URL.revokeObjectURL(crmClientBusinessCardPreviewUrl);
+    crmClientBusinessCardPreviewUrl = '';
+    const fileInput = document.getElementById('crmClientBusinessCardFile');
+    const preview = document.getElementById('crmClientBusinessCardPreview');
+    const image = document.getElementById('crmClientBusinessCardImage');
+    const status = document.getElementById('crmClientBusinessCardStatus');
+    if (fileInput) fileInput.value = '';
+    if (preview) preview.hidden = true;
+    if (image) image.removeAttribute('src');
+    if (status) {
+        status.textContent = '';
+        delete status.dataset.state;
+    }
+    ['crmClientName', 'crmClientCompany', 'crmClientEmail', 'crmClientPhone'].forEach(id => {
+        const input = document.getElementById(id);
+        if (!input?.dataset.recognizedValue) return;
+        if (clearRecognizedValues && input.value === input.dataset.recognizedValue) input.value = '';
+        delete input.dataset.recognizedValue;
+    });
+}
+
+function setClientBusinessCardStatus(messageKey, state = 'working', progress = null) {
+    const status = document.getElementById('crmClientBusinessCardStatus');
+    if (!status) return;
+    const percentage = Number.isFinite(progress)
+        ? ` ${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`
+        : '';
+    status.dataset.state = state;
+    status.textContent = `${t(messageKey)}${percentage}`;
+}
+
+window.clearClientBusinessCardImport = function () {
+    resetClientBusinessCardImport(true);
+};
+
+window.handleClientBusinessCardUpload = async function (file) {
+    if (!file) return;
+    const allowedType = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type);
+    const allowedExtension = /\.(?:jpe?g|png|webp)$/i.test(file.name || '');
+    if ((!allowedType && !allowedExtension) || file.size > 10 * 1024 * 1024) {
+        resetClientBusinessCardImport(false);
+        showToast(t(file.size > 10 * 1024 * 1024 ? 'crm_business_card_too_large' : 'crm_business_card_invalid_type'), 'warning');
+        return;
+    }
+
+    resetClientBusinessCardImport(true);
+    const scanVersion = crmClientBusinessCardScanVersion;
+    const preview = document.getElementById('crmClientBusinessCardPreview');
+    const image = document.getElementById('crmClientBusinessCardImage');
+    const submitButton = document.getElementById('crmClientSubmitBtn');
+    crmClientBusinessCardPreviewUrl = URL.createObjectURL(file);
+    if (image) image.src = crmClientBusinessCardPreviewUrl;
+    if (preview) preview.hidden = false;
+    if (submitButton) submitButton.disabled = true;
+    setClientBusinessCardStatus('crm_business_card_scanning', 'working', 0);
+
+    try {
+        const extractor = window.EmployeeDocumentRecognition;
+        if (!extractor?.extractBusinessCard) throw new Error('Business-card recognition is unavailable');
+        const result = await extractor.extractBusinessCard(file, {
+            onProgress: update => {
+                if (scanVersion !== crmClientBusinessCardScanVersion) return;
+                setClientBusinessCardStatus('crm_business_card_scanning', 'working', update.progress);
+            }
+        });
+        if (scanVersion !== crmClientBusinessCardScanVersion) return;
+
+        const fields = [
+            ['crmClientName', result.name],
+            ['crmClientCompany', result.company],
+            ['crmClientEmail', result.email],
+            ['crmClientPhone', result.phone]
+        ];
+        let recognizedCount = 0;
+        fields.forEach(([id, value]) => {
+            const input = document.getElementById(id);
+            if (!input || !value) return;
+            input.value = value;
+            input.dataset.recognizedValue = value;
+            recognizedCount += 1;
+        });
+        if (recognizedCount === fields.length) {
+            setClientBusinessCardStatus('crm_business_card_complete', 'success');
+        } else if (recognizedCount > 0) {
+            setClientBusinessCardStatus('crm_business_card_partial', 'manual');
+        } else {
+            setClientBusinessCardStatus('crm_business_card_manual', 'manual');
+        }
+    } catch (error) {
+        if (scanVersion !== crmClientBusinessCardScanVersion) return;
+        console.warn('Business-card recognition was unavailable:', error);
+        setClientBusinessCardStatus('crm_business_card_failed', 'manual');
+    } finally {
+        if (scanVersion === crmClientBusinessCardScanVersion && submitButton) submitButton.disabled = false;
+        if (window.lucide) window.lucide.createIcons();
+    }
+};
+
+window.showCRMClientModal = (client = null, openCardPicker = false) => {
     const newDealBtn = document.getElementById('crmClientNewDealBtn');
+    const cardSection = document.getElementById('crmClientBusinessCardSection');
+    resetClientBusinessCardImport(true);
     if (client) {
         document.getElementById('crmClientId').value = client.id;
         document.getElementById('crmClientName').value = client.name || '';
@@ -15525,6 +15754,7 @@ window.showCRMClientModal = (client = null) => {
         document.getElementById('crmClientModalTitle').innerText = t('ui_edit_client') || 'Edit Client';
         document.getElementById('crmClientSubmitBtn').innerHTML = `<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> ${t('html_save_changes')}`;
         if (newDealBtn) newDealBtn.style.display = 'inline-flex';
+        if (cardSection) cardSection.hidden = true;
     } else {
         document.getElementById('crmClientId').value = '';
         document.getElementById('crmClientName').value = '';
@@ -15534,12 +15764,15 @@ window.showCRMClientModal = (client = null) => {
         document.getElementById('crmClientModalTitle').innerText = t('ui_new_client') || 'New Client';
         document.getElementById('crmClientSubmitBtn').innerHTML = `<i data-lucide="save" style="margin-right: 6px; width: 18px; height: 18px; vertical-align: middle;"></i> ${t('btn_create_client')}`;
         if (newDealBtn) newDealBtn.style.display = 'none';
+        if (cardSection) cardSection.hidden = false;
     }
     document.getElementById('crmClientModal').classList.add('show');
     if (window.lucide) window.lucide.createIcons();
+    if (!client && openCardPicker) document.getElementById('crmClientBusinessCardFile')?.click();
 };
 window.closeCRMClientModal = () => {
     document.getElementById('crmClientModal').classList.remove('show');
+    resetClientBusinessCardImport(true);
 };
 
 window.openCRMDealForClient = async () => {
@@ -15604,6 +15837,7 @@ window.handleCreateClient = async (e) => {
 };
 
 window.showCRMDealModal = async (id = null, isViewOnly = false) => {
+    await ensureBusinessFinancialAccess();
     if (id) {
         const selectedDeal = (await db.fetchDeals()).find(deal => String(deal.id) === String(id));
         if (selectedDeal && canonicalDealLifecycleStage(selectedDeal.stage) === 'LOST') {
@@ -15623,6 +15857,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     }
 
     document.getElementById('crmDealId').value = id || '';
+    applyBusinessFinancialVisibility(document.getElementById('crmDealModal'));
 
     const titleEl = document.getElementById('crmDealModalTitle');
     const submitBtn = document.getElementById('crmDealSubmitBtn');
@@ -15652,7 +15887,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
         if (deal) {
             document.getElementById('crmDealTitle').value = deal.title || '';
             document.getElementById('crmDealClient').value = deal.client_id || '';
-            document.getElementById('crmDealAmount').value = deal.amount ?? '';
+            document.getElementById('crmDealAmount').value = canCurrentUserViewBusinessFinancials() ? (deal.amount ?? '') : '';
             document.getElementById('crmDealClosingDate').value = deal.closing_date || '';
 
             if (document.getElementById('crmDealEventType')) document.getElementById('crmDealEventType').value = deal.event_type || '';
@@ -15701,7 +15936,7 @@ window.handleCreateDeal = async (e) => {
     const firstContactDateEl = document.getElementById('crmDealFirstContactDate');
     const contactMethodEl = document.getElementById('crmDealContactMethod');
     const leadSourceEl = document.getElementById('crmDealLeadSource');
-    const amountValue = document.getElementById('crmDealAmount').value.trim();
+    const amountValue = canCurrentUserViewBusinessFinancials() ? document.getElementById('crmDealAmount').value.trim() : '';
 
     if (!firstContactDateEl?.value || !contactMethodEl?.value || !assigneeVal) {
         return showToast(window.t('msg_toast_26') || 'Please fill in all required fields.', 'danger');
@@ -15709,7 +15944,6 @@ window.handleCreateDeal = async (e) => {
 
     const data = {
         title: document.getElementById('crmDealTitle').value,
-        amount: amountValue === '' ? null : Number(amountValue),
         client_id: document.getElementById('crmDealClient').value,
         closing_date: (closingDateEl && closingDateEl.value) ? closingDateEl.value : null,
         event_type: (eventTypeEl && eventTypeEl.value) ? eventTypeEl.value : null,
@@ -15719,6 +15953,7 @@ window.handleCreateDeal = async (e) => {
         technical_description: document.getElementById('crmDealTechnicalDescription').value || null,
         assigned_to: assigneeVal
     };
+    if (canCurrentUserViewBusinessFinancials()) data.amount = amountValue === '' ? null : Number(amountValue);
     if (!id) {
         data.stage = 'LEAD';
         data.created_by = currentUser?.id || null;
@@ -15807,9 +16042,9 @@ async function renderIntegrations() {
                 </p>
                 <p style="color: var(--color-text-secondary); margin-bottom: 1rem; line-height: 1.5;">
                     <strong>Available Events:</strong><br/>
-                    â€¢ <code>deal_won</code>: Fires when a CRM deal is dragged to the WON stage.<br/>
-                    â€¢ <code>new_client</code>: Fires when a new CRM client is added.<br/>
-                    â€¢ <code>all</code>: Fires on all supported events.
+                    • <code>deal_won</code>: Fires when a CRM deal is dragged to the WON stage.<br/>
+                    • <code>new_client</code>: Fires when a new CRM client is added.<br/>
+                    • <code>all</code>: Fires on all supported events.
                 </p>
             </div>
         </div>
@@ -16085,12 +16320,14 @@ async function renderMyRequestStatuses() {
         const stageLabel = normalizedStatus === 'APPROVED' ? 'Completed' : normalizedStatus === 'REJECTED' ? 'Rejected' : (REQUEST_STAGE_LABELS[request.current_stage] || 'Awaiting approval');
         const requestDate = new Date(request.created_at).toISOString().slice(0, 10);
         const reqRowId = request.request_id || request.id || '';
+        const canWithdraw = normalizedStatus === 'PENDING' && Boolean(request.source_table && reqRowId);
         return `<tr class="my-request-status-row" id="request-row-${reqRowId}" data-request-id="${reqRowId}" data-request-date="${requestDate}">
             <td>${new Date(request.created_at).toLocaleDateString()}</td>
             <td><strong>${escapeHTML(request.request_type || 'Employee Request')}</strong><br><small>${escapeHTML(request.request_details || '')}</small></td>
             <td><span class="status-badge ${badgeClass}">${escapeHTML(normalizedStatus)}</span></td>
             <td><div class="my-request-current-stage"><strong>${escapeHTML(stageLabel)}</strong>${normalizedStatus === 'PENDING' ? `<small>${escapeHTML(request.current_approver_name || 'Management')}</small>` : ''}</div></td>
-            <td>${request.rejection_reason ? escapeHTML(request.rejection_reason) : 'â€”'}</td>
+            <td>${request.rejection_reason ? escapeHTML(request.rejection_reason) : '—'}</td>
+            <td>${canWithdraw ? `<button class="btn btn-icon request-delete-button" type="button" title="${escapeHTML(t('req_withdraw') || 'Withdraw request')}" aria-label="${escapeHTML(t('req_withdraw') || 'Withdraw request')}" onclick="handleDeleteEmployeeRequest('${escapeHTML(request.source_table)}', '${escapeHTML(reqRowId)}', '', true)"><i data-lucide="trash-2"></i></button>` : '—'}</td>
         </tr>`;
     }).join('');
 
@@ -16103,8 +16340,8 @@ async function renderMyRequestStatuses() {
         <input type="date" id="myRequestStatusDate" class="form-control" onchange="filterMyRequestStatuses()">
     </div></div>
     <div class="card fade-in-up"><div class="table-responsive"><table class="data-table">
-        <thead><tr><th>${t('date')}</th><th>${t('ui_request')}</th><th>${t('status')}</th><th>${t('ui_approval_stage')}</th><th>${t('ui_rejection_reason')}</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--color-text-secondary)">${t('ui_no_submitted_requests')}</td></tr>`}</tbody>
+        <thead><tr><th>${t('date')}</th><th>${t('ui_request')}</th><th>${t('status')}</th><th>${t('ui_approval_stage')}</th><th>${t('ui_rejection_reason')}</th><th>${t('ui_actions')}</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--color-text-secondary)">${t('ui_no_submitted_requests')}</td></tr>`}</tbody>
     </table></div></div>`;
 }
 
@@ -16164,7 +16401,7 @@ async function renderRequests() {
             leaveType: r.leave_type || '',
             employee_id: r.employee_id,
             details: r.leave_type === 'Short Leave'
-                ? `Short Leave: ${r.short_leave_reason || r.reason || 'No reason'} â€” ${r.short_leave_duration_minutes || 0} minutes`
+                ? `Short Leave: ${r.short_leave_reason || r.reason || 'No reason'} — ${r.short_leave_duration_minutes || 0} minutes`
                 : `${r.leave_type}: ${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}`,
             status: r.status,
             created_at: r.created_at,
@@ -16233,10 +16470,15 @@ async function renderRequests() {
         const requestTypeLabel = isLeaveRequest ? (t('req_type_leave') || 'Leave Request') : r.type;
         const currentStep = r.workflow?.steps?.find(step => step.step_order === r.workflow.current_step);
         const canApprove = r.workflow?.status === 'PENDING' && (isAdmin || currentStep?.approver_id === currentUser?.id);
+        const ownerCanWithdraw = r.employee_id === currentUser?.id && String(r.status || '').toUpperCase().startsWith('PENDING');
 
         let actionsCell = '';
         if (showApprovalColumns) {
-            const deleteButton = isAdmin ? `<button class="btn btn-icon request-delete-button" type="button" title="${escapeHTML(t('req_delete') || 'Delete request')}" aria-label="${escapeHTML(t('req_delete') || 'Delete request')}" onclick="handleDeleteEmployeeRequest('${r.source_table}', '${r.id}')"><i data-lucide="trash-2"></i></button>` : '';
+            const deleteButton = isAdmin
+                ? `<button class="btn btn-icon request-delete-button" type="button" title="${escapeHTML(t('req_delete') || 'Delete request')}" aria-label="${escapeHTML(t('req_delete') || 'Delete request')}" onclick="handleDeleteEmployeeRequest('${r.source_table}', '${r.id}')"><i data-lucide="trash-2"></i></button>`
+                : ownerCanWithdraw
+                    ? `<button class="btn btn-icon request-delete-button" type="button" title="${escapeHTML(t('req_withdraw') || 'Withdraw request')}" aria-label="${escapeHTML(t('req_withdraw') || 'Withdraw request')}" onclick="handleDeleteEmployeeRequest('${r.source_table}', '${r.id}', '', true)"><i data-lucide="trash-2"></i></button>`
+                    : '';
             if (canApprove) {
                 actionsCell = `
                     <td><div class="request-row-actions">
@@ -16246,7 +16488,7 @@ async function renderRequests() {
                     </div></td>
                 `;
             } else {
-                actionsCell = `<td><div class="request-row-actions"><span class="request-awaiting-label">${r.status === 'PENDING' ? escapeHTML(getRequestWorkflowStage(r.workflow)) : 'â€”'}</span>${deleteButton}</div></td>`;
+                actionsCell = `<td><div class="request-row-actions"><span class="request-awaiting-label">${r.status === 'PENDING' ? escapeHTML(getRequestWorkflowStage(r.workflow)) : '—'}</span>${deleteButton}</div></td>`;
             }
         }
 
@@ -16359,20 +16601,24 @@ async function renderRequests() {
     `;
 }
 
-window.handleDeleteEmployeeRequest = function (sourceTable, requestId, requestType) {
-    if (!isTaskAdmin() && !isExecutiveAdminProfile()) {
+window.handleDeleteEmployeeRequest = function (sourceTable, requestId, requestType, withdrawal = false) {
+    const isAdministrator = isTaskAdmin() || isExecutiveAdminProfile();
+    if (!isAdministrator && !withdrawal) {
         showToast(t('req_delete_admin_only') || 'Only administrators can delete employee requests.', 'warning');
         return;
     }
-    const title = t('req_delete_title') || 'Delete employee request';
-    const message = (t('req_delete_confirm') || 'Delete this {type}? This removes its approval history and cannot be undone.').replace('{type}', requestType || (t('ui_employee_request') || 'employee request'));
+    const title = withdrawal ? (t('req_withdraw_title') || 'Withdraw request') : (t('req_delete_title') || 'Delete employee request');
+    const messageTemplate = withdrawal
+        ? (t('req_withdraw_confirm') || 'Withdraw this request before final approval? This cannot be undone.')
+        : (t('req_delete_confirm') || 'Delete this {type}? This removes its approval history and cannot be undone.');
+    const message = messageTemplate.replace('{type}', requestType || (t('ui_employee_request') || 'employee request'));
     window.showConfirmModal(title, message, async () => {
         const result = await db.deleteEmployeeRequest(sourceTable, requestId);
         if (result.success) {
-            showToast(t('req_deleted_success') || 'Employee request deleted.', 'success');
+            showToast(withdrawal ? (t('req_withdrawn_success') || 'Request withdrawn.') : (t('req_deleted_success') || 'Employee request deleted.'), 'success');
             if (currentView === 'requests') renderView('requests');
         } else {
-            showToast(result.error?.message || t('req_delete_failed') || 'Unable to delete the employee request.', 'danger');
+            showToast(result.error?.message || (withdrawal ? (t('req_withdraw_failed') || 'The request can no longer be withdrawn.') : (t('req_delete_failed') || 'Unable to delete the employee request.')), 'danger');
         }
     });
 };
@@ -16662,12 +16908,15 @@ window.handleDealWorkflowDesignTaskStatusChange = async function (select) {
     if (window.lucide) window.lucide.createIcons();
 };
 
-function canViewFullProjectCommandCenter(profile = currentUserProfile) {
+function canViewFullProjectCommandCenter(profile = currentUserProfile, project = null) {
     const accessValues = [profile?.role || currentUserRole, profile?.job_title, profile?.job_title_ar]
         .map(normalizeAccessValue)
         .filter(Boolean);
     return isTaskAdmin()
         || isExecutiveAdminProfile(profile)
+        || !!project?.assigned_people?.includes(currentUser?.id)
+        || project?.created_by === currentUser?.id
+        || project?.project_manager_id === currentUser?.id
         || accessValues.some(value => ['MANAGER', 'SUPERVISOR'].includes(value) || /(^| )(MANAGER|SUPERVISOR)( |$)/.test(value) || /(مدير|مشرف)/.test(value));
 }
 
@@ -16701,10 +16950,13 @@ function projectFormPayload(prefix) {
         lifecycle_status: get('Status').value, health_status: get('Health').value,
         priority: get('Priority').value, progress_percent: Number(get('Progress').value || 0),
         start_date: get('StartDate').value || null, end_date: get('EndDate').value || null,
-        budget_amount: Number(get('Budget').value || 0), actual_cost: Number(get('ActualCost').value || 0),
         client_name: get('Client').value.trim() || null,
         project_tags: get('Tags').value.split(',').map(item => item.trim()).filter(Boolean)
     };
+    if (canCurrentUserViewBusinessFinancials()) {
+        payload.budget_amount = Number(get('Budget').value || 0);
+        payload.actual_cost = Number(get('ActualCost').value || 0);
+    }
     if (payload.lifecycle_status === 'COMPLETED') payload.progress_percent = 100;
     return payload;
 }
@@ -16725,8 +16977,11 @@ function renderProjectCard(project) {
     const team = (project.assigned_people || []).slice(0, 4);
     const tags = (project.project_tags || []).slice(0, 3).map(tag => `<span>${escapeHTML(tag)}</span>`).join('');
     const client = project.client_name || project.crm_clients?.company || project.crm_clients?.name;
+    const editAction = canManageProjectTodos(project)
+        ? `<button class="btn btn-icon" onclick="event.stopPropagation(); openEditProjectModal('${project.id}')" title="${projectText('edit')}"><i data-lucide="pencil"></i></button>`
+        : '';
     return `<article class="project-portfolio-card" data-project-id="${project.id}" data-status="${status}" data-health="${health}" data-owner="${ownerId || ''}" onclick="openProjectDetail('${project.id}')">
-        <div class="project-card-top"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><h3>${escapeHTML(project.project_name || '')}</h3><p>${escapeHTML(client || project.project_type || '')}</p></div><button class="btn btn-icon" onclick="event.stopPropagation(); openEditProjectModal('${project.id}')" title="${projectText('edit')}"><i data-lucide="pencil"></i></button></div>
+        <div class="project-card-top"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><h3>${escapeHTML(project.project_name || '')}</h3><p>${escapeHTML(client || project.project_type || '')}</p></div>${editAction}</div>
         <div class="project-card-meta"><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span><span class="project-priority priority-${String(project.priority || 'MEDIUM').toLowerCase()}">${projectPriorityLabel(project.priority)}</span></div>
         <div class="project-progress-head"><span>${projectText('progress')}</span><strong>${progress}%</strong></div><div class="project-progress-track"><i style="width:${progress}%"></i></div>
         <div class="project-card-facts"><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div></div>
@@ -16739,7 +16994,12 @@ async function renderProjects() {
     const directParams = new URLSearchParams(window.location.search);
     const directProjectId = directParams.get('project');
     const directTodoId = directParams.get('todo');
-    if (!canViewFullProjectCommandCenter() && directProjectId && directTodoId) {
+    const [projects, profiles, departments, canViewFinancials] = await Promise.all([db.fetchProjects(), db.fetchAccessibleProjectProfiles(), db.fetchDepartments(), ensureBusinessFinancialAccess()]);
+    window.projectCache = Object.fromEntries((projects || []).map(project => [project.id, project]));
+    window.projectManagerProfiles = profiles || [];
+    window.projectPortfolioDepartments = departments || [];
+    const directProject = directProjectId ? window.projectCache[directProjectId] : null;
+    if (!canViewFullProjectCommandCenter(currentUserProfile, directProject) && directProjectId && directTodoId) {
         let context = window.assignedProjectTodoContext;
         if (context?.projectId !== directProjectId || context?.todoId !== directTodoId || !context?.items?.length) {
             const result = await db.fetchAssignedProjectTodoContext(directProjectId, directTodoId);
@@ -16751,10 +17011,7 @@ async function renderProjects() {
         }
         return `<section class="project-manager-page project-assignee-page"><header class="project-manager-header"><div><span class="project-page-eyebrow"><i data-lucide="list-checks"></i>${projectText('assignedTodoPage')}</span><h1>${escapeHTML(context.items[0].project_name || 'Project')}</h1><p>${projectText('assignedTodoPrivacy')}</p></div></header></section>`;
     }
-    const [projects, profiles, departments] = await Promise.all([db.fetchProjects(), db.fetchAllProfiles(), db.fetchDepartments()]);
-    window.projectCache = Object.fromEntries((projects || []).map(project => [project.id, project]));
-    window.projectManagerProfiles = profiles || [];
-    window.projectPortfolioDepartments = departments || [];
+    const canCreateProject = canViewFullProjectCommandCenter();
     const total = projects.length;
     const active = projects.filter(project => normalizeProjectStatus(project) === 'ACTIVE').length;
     const atRisk = projects.filter(project => ['AT_RISK', 'OFF_TRACK'].includes(effectiveProjectHealth(project))).length;
@@ -16763,13 +17020,13 @@ async function renderProjects() {
     const ownerOptions = (profiles || []).map(profile => `<option value="${profile.id}">${escapeHTML(window.formatEmployeeName(profile) || profile.id)}</option>`).join('');
     const cards = projects.length ? projects.map(renderProjectCard).join('') : `<div class="project-empty-state"><i data-lucide="folder-kanban"></i><p>${projectText('noProjects')}</p></div>`;
     return `<section class="project-manager-page">
-        <header class="project-manager-header"><div><span class="project-page-eyebrow"><i data-lucide="briefcase-business"></i>${projectText('portfolio')}</span><h1>${t('ui_projects')}</h1><p>${projectText('subtitle')}</p></div><button class="btn btn-primary" onclick="openProjectModal()"><i data-lucide="plus"></i>${t('ui_new_project_btn') || 'New Project'}</button></header>
+        <header class="project-manager-header"><div><span class="project-page-eyebrow"><i data-lucide="briefcase-business"></i>${projectText('portfolio')}</span><h1>${t('ui_projects')}</h1><p>${projectText('subtitle')}</p></div>${canCreateProject ? `<button class="btn btn-primary" onclick="openProjectModal()"><i data-lucide="plus"></i>${t('ui_new_project_btn') || 'New Project'}</button>` : ''}</header>
         <div class="project-kpi-grid">
             <button onclick="setProjectPortfolioStatus('ALL')"><i data-lucide="folders"></i><span>${projectText('allProjects')}</span><strong>${total}</strong></button>
             <button onclick="setProjectPortfolioStatus('ACTIVE')"><i data-lucide="activity"></i><span>${projectText('active')}</span><strong>${active}</strong></button>
             <button onclick="setProjectPortfolioHealth('AT_RISK')"><i data-lucide="triangle-alert"></i><span>${projectText('atRisk')}</span><strong>${atRisk}</strong></button>
             <button onclick="setProjectPortfolioStatus('COMPLETED')"><i data-lucide="circle-check-big"></i><span>${projectText('completed')}</span><strong>${completed}</strong></button>
-            <div><i data-lucide="wallet-cards"></i><span>${projectText('budget')}</span><strong>${projectMoney(portfolioBudget)}</strong></div>
+            ${canViewFinancials ? `<div><i data-lucide="wallet-cards"></i><span>${projectText('budget')}</span><strong>${projectMoney(portfolioBudget)}</strong></div>` : ''}
         </div>
         <div class="project-filter-bar"><label><i data-lucide="search"></i><input id="projectSearchFilter" type="search" placeholder="${projectText('search')}" oninput="applyProjectPortfolioFilters()"></label><select id="projectStatusFilter" onchange="applyProjectPortfolioFilters()"><option value="ALL">${projectText('allStatus')}</option>${PROJECT_STATUS_KEYS.map(value => `<option value="${value}">${projectStatusLabel(value)}</option>`).join('')}</select><select id="projectHealthFilter" onchange="applyProjectPortfolioFilters()"><option value="ALL">${projectText('allHealth')}</option>${PROJECT_HEALTH_KEYS.map(value => `<option value="${value}">${projectHealthLabel(value)}</option>`).join('')}</select><select id="projectOwnerFilter" onchange="applyProjectPortfolioFilters()"><option value="ALL">${projectText('allOwners')}</option>${ownerOptions}</select></div>
         <div class="project-portfolio-grid" id="projectPortfolioGrid">${cards}</div><div id="projectFilterEmpty" class="project-empty-state" hidden><i data-lucide="search-x"></i><p>${projectText('noProjects')}</p></div>
@@ -16821,6 +17078,8 @@ window.openProjectModal = async function () {
     form?.reset();
     document.getElementById('newProjectProgress').value = '0';
     await populateProjectPeople('new');
+    await ensureBusinessFinancialAccess();
+    applyBusinessFinancialVisibility(document.getElementById('projectModal'));
     syncProjectProgressLabel('new');
     document.getElementById('projectModal').classList.add('active');
     if (window.lucide) window.lucide.createIcons();
@@ -16880,11 +17139,13 @@ window.openEditProjectModal = async function (id) {
     document.getElementById('editProjectProgress').value = project.progress_percent || 0;
     document.getElementById('editProjectStartDate').value = project.start_date || '';
     document.getElementById('editProjectEndDate').value = project.end_date || '';
-    document.getElementById('editProjectBudget').value = project.budget_amount ?? project.project_amount ?? '';
-    document.getElementById('editProjectActualCost').value = project.actual_cost ?? project.paid_amount ?? '';
+    await ensureBusinessFinancialAccess();
+    document.getElementById('editProjectBudget').value = canCurrentUserViewBusinessFinancials() ? (project.budget_amount ?? project.project_amount ?? '') : '';
+    document.getElementById('editProjectActualCost').value = canCurrentUserViewBusinessFinancials() ? (project.actual_cost ?? project.paid_amount ?? '') : '';
     document.getElementById('editProjectClient').value = project.client_name || project.crm_clients?.company || project.crm_clients?.name || '';
     document.getElementById('editProjectTags').value = (project.project_tags || []).join(', ');
     await populateProjectPeople('edit', project);
+    applyBusinessFinancialVisibility(document.getElementById('editProjectModal'));
     syncProjectProgressLabel('edit');
 
     document.getElementById('editProjectModal').classList.add('active');
@@ -16908,9 +17169,9 @@ window.handleUpdateProject = async function (event) {
     }
 }
 
-function projectDetailList(items, type, projectId) {
+function projectDetailList(items, type, projectId, canManage = false) {
     if (!items.length) return `<p class="project-detail-empty">${type === 'milestone' ? projectText('noMilestones') : projectText('noRisks')}</p>`;
-    return items.map((item, index) => `<div class="project-list-item ${item.completed || item.resolved ? 'is-complete' : ''}"><div class="project-list-icon"><i data-lucide="${type === 'milestone' ? 'milestone' : 'shield-alert'}"></i></div><div><strong>${escapeHTML(item.title || '')}</strong>${item.due_date ? `<span>${projectText('due')}: ${projectDate(item.due_date)}</span>` : ''}${type === 'risk' && item.severity ? `<span class="project-risk-severity severity-${String(item.severity).toLowerCase()}">${projectPriorityLabel(item.severity)}</span>` : ''}</div>${item.completed || item.resolved ? `<span class="project-list-done">${type === 'milestone' ? projectText('done') : projectText('resolved')}</span>` : `<button class="btn btn-secondary btn-sm" onclick="toggleProjectListItem('${projectId}','${type}',${index})">${type === 'milestone' ? projectText('markDone') : projectText('resolve')}</button>`}</div>`).join('');
+    return items.map((item, index) => `<div class="project-list-item ${item.completed || item.resolved ? 'is-complete' : ''}"><div class="project-list-icon"><i data-lucide="${type === 'milestone' ? 'milestone' : 'shield-alert'}"></i></div><div><strong>${escapeHTML(item.title || '')}</strong>${item.due_date ? `<span>${projectText('due')}: ${projectDate(item.due_date)}</span>` : ''}${type === 'risk' && item.severity ? `<span class="project-risk-severity severity-${String(item.severity).toLowerCase()}">${projectPriorityLabel(item.severity)}</span>` : ''}</div>${item.completed || item.resolved ? `<span class="project-list-done">${type === 'milestone' ? projectText('done') : projectText('resolved')}</span>` : (canManage ? `<button class="btn btn-secondary btn-sm" onclick="toggleProjectListItem('${projectId}','${type}',${index})">${type === 'milestone' ? projectText('markDone') : projectText('resolve')}</button>` : '')}</div>`).join('');
 }
 
 function projectTodoList(todos, project, canManage) {
@@ -16971,7 +17232,13 @@ async function openAssignedProjectTodoDetail(projectId, todoId = null) {
 
 window.openProjectTodoNotification = async function (projectId, todoId, options = {}) {
     if (!projectId || !todoId) return false;
-    const hasFullAccess = canViewFullProjectCommandCenter();
+    let project = window.projectCache?.[projectId];
+    if (!project) {
+        const projects = await db.fetchProjects();
+        project = projects.find(item => String(item.id) === String(projectId));
+        if (project) window.projectCache = { ...(window.projectCache || {}), [project.id]: project };
+    }
+    const hasFullAccess = canViewFullProjectCommandCenter(currentUserProfile, project);
     if (!hasFullAccess && !(await fetchAssignedProjectTodoContext(projectId, todoId))) {
         showToast(projectText('todoUnavailable'), 'warning');
         return false;
@@ -16993,9 +17260,9 @@ window.openProjectTodoNotification = async function (projectId, todoId, options 
 };
 
 window.openProjectDetail = async function (id) {
-    if (!canViewFullProjectCommandCenter()) return openAssignedProjectTodoDetail(id);
     const project = window.projectCache[id];
-    if (!project) return;
+    if (!project) return openAssignedProjectTodoDetail(id);
+    if (!canViewFullProjectCommandCenter(currentUserProfile, project)) return openAssignedProjectTodoDetail(id);
     window.activeProjectDetailId = id;
     const [updates, todos] = await Promise.all([db.fetchProjectUpdates(id), db.fetchProjectTodos(id)]);
     const status = normalizeProjectStatus(project);
@@ -17006,14 +17273,16 @@ window.openProjectDetail = async function (id) {
     const risks = Array.isArray(project.risks) ? project.risks : [];
     const ownerId = project.project_manager_id || (project.assigned_people || [])[0];
     const canManageTodos = canManageProjectTodos(project);
+    const canEditProject = canManageTodos;
+    const canViewFinancials = canCurrentUserViewBusinessFinancials();
     const todoAssigneeOptions = projectTodoAssigneeOptions(project);
     const todoForm = canManageTodos ? `<form class="project-todo-form" onsubmit="addProjectTodo(event,'${id}')"><label><span>${projectText('todoTitle')}</span><input id="projectTodoTitle" class="form-control" placeholder="${projectText('todoTitleHint')}" maxlength="500" required></label><label><span>${projectText('assignee')}</span><select id="projectTodoAssignees" class="form-control" multiple required aria-label="${projectText('assigneeHelp')}" ${todoAssigneeOptions ? '' : 'disabled'}>${todoAssigneeOptions}</select><small>${projectText('assigneeHelp')}</small></label><label><span>${projectText('dueDateTime')}</span><input id="projectTodoDueAt" type="datetime-local" class="form-control" required></label><button class="btn btn-primary" type="submit" ${todoAssigneeOptions ? '' : 'disabled'}><i data-lucide="plus"></i>${projectText('addTodo')}</button></form>` : `<p class="project-todo-readonly"><i data-lucide="info"></i>${projectText('todoReadOnly')}</p>`;
     document.getElementById('projectDetailTitle').textContent = project.project_name || 'Project';
-    document.getElementById('projectDetailBody').innerHTML = `<div class="project-command-summary"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span>${project.source === 'WON_DEAL' ? `<span class="project-source-badge"><i data-lucide="handshake"></i>${projectText('createdFromDeal')}</span>` : ''}</div><button class="btn btn-secondary" onclick="closeProjectDetail();openEditProjectModal('${id}')"><i data-lucide="pencil"></i>${projectText('edit')}</button></div>
-        <div class="project-detail-kpis"><div><span>${projectText('progress')}</span><strong>${Number(project.progress_percent || 0)}%</strong></div><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div><div><span>${projectText('budget')}</span><strong>${projectMoney(budget)}</strong></div><div><span>${projectText('cost')}</span><strong>${projectMoney(cost)}</strong></div><div><span>${projectText('variance')}</span><strong class="${budget - cost < 0 ? 'is-negative' : ''}">${projectMoney(budget - cost)}</strong></div></div>
+    document.getElementById('projectDetailBody').innerHTML = `<div class="project-command-summary"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span>${project.source === 'WON_DEAL' ? `<span class="project-source-badge"><i data-lucide="handshake"></i>${projectText('createdFromDeal')}</span>` : ''}</div>${canEditProject ? `<button class="btn btn-secondary" onclick="closeProjectDetail();openEditProjectModal('${id}')"><i data-lucide="pencil"></i>${projectText('edit')}</button>` : ''}</div>
+        <div class="project-detail-kpis"><div><span>${projectText('progress')}</span><strong>${Number(project.progress_percent || 0)}%</strong></div><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div>${canViewFinancials ? `<div><span>${projectText('budget')}</span><strong>${projectMoney(budget)}</strong></div><div><span>${projectText('cost')}</span><strong>${projectMoney(cost)}</strong></div><div><span>${projectText('variance')}</span><strong class="${budget - cost < 0 ? 'is-negative' : ''}">${projectMoney(budget - cost)}</strong></div>` : ''}</div>
         <div class="project-detail-layout"><section><h3><i data-lucide="file-text"></i>${projectText('overview')}</h3><dl class="project-overview-list"><div><dt>${projectText('description')}</dt><dd>${escapeHTML(project.description || '—')}</dd></div><div><dt>${projectText('client')}</dt><dd>${escapeHTML(project.client_name || project.crm_clients?.company || project.crm_clients?.name || '—')}</dd></div><div><dt>${projectText('team')}</dt><dd>${(project.assigned_people || []).map(id => escapeHTML(projectProfileName(id))).join(', ') || '—'}</dd></div></dl></section>
-        <section><h3><i data-lucide="milestone"></i>${projectText('milestones')}</h3><div class="project-detail-list">${projectDetailList(milestones, 'milestone', id)}</div><form class="project-inline-form" onsubmit="addProjectMilestone(event,'${id}')"><input id="projectMilestoneTitle" class="form-control" placeholder="${projectText('milestoneHint')}" required><input id="projectMilestoneDate" type="date" class="form-control"><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addMilestone')}</button></form></section>
-        <section><h3><i data-lucide="shield-alert"></i>${projectText('risks')}</h3><div class="project-detail-list">${projectDetailList(risks, 'risk', id)}</div><form class="project-inline-form" onsubmit="addProjectRisk(event,'${id}')"><input id="projectRiskTitle" class="form-control" placeholder="${projectText('riskHint')}" required><select id="projectRiskSeverity" class="form-control"><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option><option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option></select><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addRisk')}</button></form></section>
+        <section><h3><i data-lucide="milestone"></i>${projectText('milestones')}</h3><div class="project-detail-list">${projectDetailList(milestones, 'milestone', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectMilestone(event,'${id}')"><input id="projectMilestoneTitle" class="form-control" placeholder="${projectText('milestoneHint')}" required><input id="projectMilestoneDate" type="date" class="form-control"><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addMilestone')}</button></form>` : ''}</section>
+        <section><h3><i data-lucide="shield-alert"></i>${projectText('risks')}</h3><div class="project-detail-list">${projectDetailList(risks, 'risk', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectRisk(event,'${id}')"><input id="projectRiskTitle" class="form-control" placeholder="${projectText('riskHint')}" required><select id="projectRiskSeverity" class="form-control"><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option><option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option></select><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addRisk')}</button></form>` : ''}</section>
         <section><h3><i data-lucide="message-square-text"></i>${projectText('updates')}</h3><div class="project-update-feed">${updates.length ? updates.map(update => `<article><i></i><div><strong>${escapeHTML(projectProfileName(update.author_id))}</strong><p>${escapeHTML(update.summary || '')}</p><time>${new Date(update.created_at).toLocaleString()}</time></div></article>`).join('') : `<p class="project-detail-empty">${projectText('noUpdates')}</p>`}</div><form class="project-update-form" onsubmit="addProjectUpdate(event,'${id}')"><textarea id="projectUpdateSummary" class="form-control" rows="2" placeholder="${projectText('updateHint')}" required></textarea><button class="btn btn-primary" type="submit"><i data-lucide="send"></i>${projectText('postUpdate')}</button></form></section>
         <section class="project-todo-section project-detail-span-2"><div class="project-todo-heading"><h3><i data-lucide="list-checks"></i>${projectText('todoList')}</h3><span>${todos.filter(todo => todo.status !== 'DONE').length}</span></div><div class="project-todo-list">${projectTodoList(todos, project, canManageTodos)}</div>${todoForm}</section></div>`;
     document.getElementById('projectDetailModal').classList.add('active');
@@ -17067,10 +17336,10 @@ async function renderApprovals() {
                     <p data-i18n="unauthorized_access">You are not authorized to view this page.</p>
                 </div>`;
     }
-    const [allTasks, allUsers, allProjects, departments, workflows, leaves, documents, expenses, genericRequests, crmApprovalSteps, crmDesignApprovalSteps] = await Promise.all([
+    const [allTasks, allUsers, allProjects, departments, workflows, leaves, documents, expenses, genericRequests, crmApprovalSteps, crmDesignApprovalSteps, canViewFinancials] = await Promise.all([
         db.fetchTasks(), db.fetchUsers(), db.fetchProjects(), db.fetchDepartments(),
         db.fetchRequestApprovalWorkflows(), db.fetchLeaveRequests(), db.fetchDocuments(),
-        db.fetchExpenses(), db.fetchGenericRequests(), db.fetchPendingCrmApprovals(), db.fetchPendingCrmDesignTaskApprovals()
+        db.fetchExpenses(), db.fetchGenericRequests(), db.fetchPendingCrmApprovals(), db.fetchPendingCrmDesignTaskApprovals(), ensureBusinessFinancialAccess()
     ]);
     const profile = (allUsers || []).find(user => user.id === currentUser?.id) || currentUserProfile || {};
     const isAdmin = isTaskAdmin();
@@ -17081,10 +17350,10 @@ async function renderApprovals() {
     const userMap = new Map((allUsers || []).map(user => [user.id, user]));
     const projectMap = new Map((allProjects || []).map(project => [project.id, project]));
     const sourceMap = new Map();
-    (leaves || []).forEach(item => sourceMap.set(`leave_requests:${item.id}`, { details: `${item.leave_type || 'Leave'}${item.start_date ? ` Â· ${item.start_date} â€“ ${item.end_date || ''}` : ''}` }));
-    (documents || []).forEach(item => sourceMap.set(`document_requests:${item.id}`, { details: `${item.doc_type || 'Document'} Â· ${item.purpose || 'No purpose provided'}` }));
-    (expenses || []).forEach(item => sourceMap.set(`expenses:${item.id}`, { details: `SAR ${Number(item.amount || 0).toLocaleString()} Â· ${item.description || 'Expense'}` }));
-    (genericRequests || []).forEach(item => sourceMap.set(`requests:${item.id}`, { details: /^loan/i.test(item.request_type || '') ? `Loan Â· SAR ${Number(item.loan_amount || 0).toLocaleString()}` : `${item.request_type || 'Employee Request'}${item.leave_type ? ` Â· ${item.leave_type}` : ''}` }));
+    (leaves || []).forEach(item => sourceMap.set(`leave_requests:${item.id}`, { details: `${item.leave_type || 'Leave'}${item.start_date ? ` · ${item.start_date} – ${item.end_date || ''}` : ''}` }));
+    (documents || []).forEach(item => sourceMap.set(`document_requests:${item.id}`, { details: `${item.doc_type || 'Document'} · ${item.purpose || 'No purpose provided'}` }));
+    (expenses || []).forEach(item => sourceMap.set(`expenses:${item.id}`, { details: `SAR ${Number(item.amount || 0).toLocaleString()} · ${item.description || 'Expense'}` }));
+    (genericRequests || []).forEach(item => sourceMap.set(`requests:${item.id}`, { details: /^loan/i.test(item.request_type || '') ? `Loan · SAR ${Number(item.loan_amount || 0).toLocaleString()}` : `${item.request_type || 'Employee Request'}${item.leave_type ? ` · ${item.leave_type}` : ''}` }));
 
     const pendingRequests = (workflows || []).filter(workflow => {
         if (workflow.status !== 'PENDING') return false;
@@ -17099,10 +17368,10 @@ async function renderApprovals() {
 
         let detailsString = (source ?? { details: 'Unknown Request' }).details;
         if (workflow.type === 'MANUAL' && /^loan/i.test(workflow.manual_type || '')) {
-            detailsString = `Loan â€” SAR ${Number(workflow.manual_amount || 0).toLocaleString()}`;
+            detailsString = `Loan — SAR ${Number(workflow.manual_amount || 0).toLocaleString()}`;
         }
 
-        return `<tr><td><strong>${escapeHTML(window.formatEmployeeName(employee) || 'Employee')}</strong></td><td>${escapeHTML(workflow.request_type || 'Employee Request')}</td><td>${escapeHTML(detailsString)}</td><td><span class="status-badge warning">${escapeHTML(REQUEST_STAGE_LABELS[step?.stage_key] || 'Pending approval')}</span></td><td>${workflow.created_at ? new Date(workflow.created_at).toLocaleDateString() : 'â€”'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
+        return `<tr><td><strong>${escapeHTML(window.formatEmployeeName(employee) || 'Employee')}</strong></td><td>${escapeHTML(workflow.request_type || 'Employee Request')}</td><td>${escapeHTML(detailsString)}</td><td><span class="status-badge warning">${escapeHTML(REQUEST_STAGE_LABELS[step?.stage_key] || 'Pending approval')}</span></td><td>${workflow.created_at ? new Date(workflow.created_at).toLocaleDateString() : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem"><button class="btn-primary" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','APPROVED')">Approve</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleApprovalRequestDecision('${workflow.source_table}','${workflow.source_id}','REJECTED')">Reject</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
     }).join('');
 
     const departmentNames = new Set(managedDepartments.map(department => department.name));
@@ -17125,7 +17394,7 @@ async function renderApprovals() {
             canApprove ? `<button class="btn-primary" onclick="handleTaskApprovalDecision('${task.id}','APPROVED')">Approve</button>` : '',
             canReject ? `<button class="btn-secondary" style="color:var(--color-danger)" onclick="handleTaskApprovalDecision('${task.id}','REJECTED')">Reject</button>` : ''
         ].filter(Boolean).join('');
-        return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(window.formatEmployeeName(assignee) || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : 'â€”'}</td><td>${taskActions ? `<div style="display:flex;gap:.5rem">${taskActions}</div>` : '<span class="status-badge info">Watcher access Â· View only</span>'}</td></tr>`;
+        return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(window.formatEmployeeName(assignee) || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : '—'}</td><td>${taskActions ? `<div style="display:flex;gap:.5rem">${taskActions}</div>` : '<span class="status-badge info">Watcher access · View only</span>'}</td></tr>`;
     }).join('');
 
     const pendingCrmApprovals = (crmApprovalSteps || []).filter(step => isAdmin || step.approver_id === currentUser?.id);
@@ -17136,7 +17405,7 @@ async function renderApprovals() {
         const stageLabel = t(dealApprovalStageLabels[step.stage_key]) || String(step.stage_key || 'Approval').replace(/_/g, ' ');
         const canDecide = isAdmin || step.approver_id === currentUser?.id;
         const submittedAt = deal.proposal_sent_at || step.created_at;
-        return `<tr><td><strong>${escapeHTML(deal.title || 'Untitled deal')}</strong></td><td>${escapeHTML(clientName)}</td><td>SAR ${Number(deal.amount || 0).toLocaleString()}</td><td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${submittedAt ? new Date(submittedAt).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-SA') : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
+        return `<tr><td><strong>${escapeHTML(deal.title || 'Untitled deal')}</strong></td><td>${escapeHTML(clientName)}</td>${canViewFinancials ? `<td>SAR ${Number(deal.amount || 0).toLocaleString()}</td>` : ''}<td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${submittedAt ? new Date(submittedAt).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-SA') : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
     }).join('');
     const pendingCrmDesignApprovals = (crmDesignApprovalSteps || []).filter(step => isAdmin || step.approver_id === currentUser?.id);
     const renderedAdminDesignTasks = new Set();
@@ -17147,7 +17416,7 @@ async function renderApprovals() {
         const approver = step.profiles || userMap.get(step.approver_id);
         const showApproveAll = isAdmin && task.id && !renderedAdminDesignTasks.has(task.id);
         if (showApproveAll) renderedAdminDesignTasks.add(task.id);
-        return `<tr><td><strong>${escapeHTML(task.title || deal.title || 'Design task')}</strong><br><span class="status-badge info">${escapeHTML(t('crm_design_approval') || 'Design approval')}</span></td><td>${escapeHTML(clientName)}</td><td>—</td><td><span class="status-badge warning">${escapeHTML(t(dealApprovalStageLabels[step.stage_key]) || step.stage_key)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${step.created_at ? new Date(step.created_at).toLocaleDateString() : '—'}</td><td><div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button>${showApproveAll ? `<button class="btn-primary crm-admin-approve-all" onclick="handleCrmDesignAdminApproveAll('${deal.id}','${task.id}')"><i data-lucide="badge-check"></i>${taskDetailText('Approve all remaining', 'اعتماد جميع الموافقات المتبقية')}</button>` : ''}</div></td></tr>`;
+        return `<tr><td><strong>${escapeHTML(task.title || deal.title || 'Design task')}</strong><br><span class="status-badge info">${escapeHTML(t('crm_design_approval') || 'Design approval')}</span></td><td>${escapeHTML(clientName)}</td>${canViewFinancials ? '<td>—</td>' : ''}<td><span class="status-badge warning">${escapeHTML(t(dealApprovalStageLabels[step.stage_key]) || step.stage_key)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${step.created_at ? new Date(step.created_at).toLocaleDateString() : '—'}</td><td><div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button>${showApproveAll ? `<button class="btn-primary crm-admin-approve-all" onclick="handleCrmDesignAdminApproveAll('${deal.id}','${task.id}')"><i data-lucide="badge-check"></i>${taskDetailText('Approve all remaining', 'اعتماد جميع الموافقات المتبقية')}</button>` : ''}</div></td></tr>`;
     }).join('');
     const crmRows = dealApprovalRows + designApprovalRows;
 
@@ -17159,7 +17428,7 @@ async function renderApprovals() {
         </div>
         <section data-approval-panel="requests" class="card"><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('leave_employee')}</th><th>${t('ui_request')}</th><th>${t('req_details')}</th><th>${t('approvals_current_stage')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${requestRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_employee_requests')}</td></tr>`}</tbody></table></div></section>
         <section data-approval-panel="tasks" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('nav_tasks')}</th><th>${t('custody_department')}</th><th>${t('ui_project')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${taskRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_tasks')}</td></tr>`}</tbody></table></div></section>
-        <section data-approval-panel="crm" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('ui_deal') || 'Deal'}</th><th>${t('ui_client') || 'Client'}</th><th>${t('ui_amount') || 'Amount'}</th><th>${t('approvals_current_stage')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${crmRows || `<tr><td colspan="7" style="text-align:center;padding:2rem">${t('crm_no_pending_approvals') || 'No pending CRM approvals.'}</td></tr>`}</tbody></table></div></section>`;
+        <section data-approval-panel="crm" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('ui_deal') || 'Deal'}</th><th>${t('ui_client') || 'Client'}</th>${canViewFinancials ? `<th>${t('ui_amount') || 'Amount'}</th>` : ''}<th>${t('approvals_current_stage')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${crmRows || `<tr><td colspan="${canViewFinancials ? 7 : 6}" style="text-align:center;padding:2rem">${t('crm_no_pending_approvals') || 'No pending CRM approvals.'}</td></tr>`}</tbody></table></div></section>`;
 };
 
 window.setApprovalsTab = function (tab) {

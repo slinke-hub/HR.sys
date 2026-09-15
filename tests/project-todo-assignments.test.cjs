@@ -53,8 +53,8 @@ assert.match(app, /Promise\.all\(\[db\.fetchProjectUpdates\(id\), db\.fetchProje
 assert.match(css, /\.project-todo-form/);
 assert.match(css, /\.project-todo-item\.is-overdue/);
 assert.match(css, /@container \(max-width:560px\)[^}]*[\s\S]*?\.project-todo-form \{ grid-template-columns:1fr; \}/);
-assert.match(html, /css\/components\.css\?v=2026091401/);
-assert.match(html, /js\/db\.js\?v=2026091401/);
-assert.match(html, /js\/app\.js\?v=2026091402/);
+assert.match(html, /css\/components\.css\?v=2026091507/);
+assert.match(html, /js\/db\.js\?v=2026091508/);
+assert.match(html, /js\/app\.js\?v=2026091512/);
 
 console.log('Project To Do assignments are scoped, bilingual, deadline-aware, responsive, and independent from Tasks Manager.');
