@@ -9548,6 +9548,7 @@ function bypassesTaskCompletionApproval(task) {
 
 let crmDesignCompletionResolver = null;
 let crmDesignCompletionPreviewUrls = [];
+let crmDesignCompletionSelectedFiles = [];
 
 function clearCrmDesignCompletionPreviewUrls() {
     crmDesignCompletionPreviewUrls.forEach(url => URL.revokeObjectURL(url));
@@ -9555,21 +9556,34 @@ function clearCrmDesignCompletionPreviewUrls() {
 }
 
 window.renderCrmDesignCompletionSelection = function (fileList) {
-    const files = Array.from(fileList || []);
+    if (fileList) {
+        const combined = [...crmDesignCompletionSelectedFiles, ...Array.from(fileList || [])];
+        crmDesignCompletionSelectedFiles = [...new Map(combined.map(file => [
+            `${file.name}:${file.size}:${file.lastModified}`,
+            file
+        ])).values()];
+    }
+    const files = crmDesignCompletionSelectedFiles;
     const container = document.getElementById('crmDesignCompletionSelection');
     if (!container) return;
     clearCrmDesignCompletionPreviewUrls();
     container.hidden = files.length === 0;
-    container.innerHTML = files.map(file => {
+    container.innerHTML = files.map((file, index) => {
         const isImage = String(file.type || '').startsWith('image/');
         const previewUrl = isImage ? URL.createObjectURL(file) : '';
         if (previewUrl) crmDesignCompletionPreviewUrls.push(previewUrl);
         return `<article class="crm-design-completion-file">
             ${isImage ? `<img src="${escapeHTML(previewUrl)}" alt="${escapeHTML(file.name)}">` : '<i data-lucide="file-text"></i>'}
             <span><strong>${escapeHTML(file.name)}</strong><small>${escapeHTML(formatTaskCommentAttachmentSize(file.size) || taskDetailText('File', 'ملف'))}</small></span>
+            <button type="button" class="crm-design-completion-remove" onclick="removeCrmDesignCompletionFile(${index})" aria-label="${escapeHTML(taskDetailText('Remove attachment', 'إزالة المرفق'))}" title="${escapeHTML(taskDetailText('Remove attachment', 'إزالة المرفق'))}"><i data-lucide="x"></i></button>
         </article>`;
     }).join('');
     if (window.lucide) window.lucide.createIcons({ elements: [container] });
+};
+
+window.removeCrmDesignCompletionFile = function (index) {
+    crmDesignCompletionSelectedFiles.splice(Number(index), 1);
+    window.renderCrmDesignCompletionSelection();
 };
 
 window.openCrmDesignCompletionModal = function (task) {
@@ -9578,6 +9592,7 @@ window.openCrmDesignCompletionModal = function (task) {
     if (!modal || !form || !task?.id) return Promise.resolve(false);
     if (crmDesignCompletionResolver) crmDesignCompletionResolver(false);
     form.reset();
+    crmDesignCompletionSelectedFiles = [];
     clearCrmDesignCompletionPreviewUrls();
     document.getElementById('crmDesignCompletionTaskId').value = task.id;
     const selection = document.getElementById('crmDesignCompletionSelection');
@@ -9587,7 +9602,7 @@ window.openCrmDesignCompletionModal = function (task) {
     }
     modal.querySelector('.crm-design-completion-kicker').textContent = taskDetailText('DESIGN APPROVAL', 'اعتماد التصميم');
     modal.querySelector('#crmDesignCompletionTitle').textContent = taskDetailText('Submit completed design', 'إرسال التصميم المكتمل');
-    modal.querySelector('.modal-header p').textContent = taskDetailText('Upload the final PDF files or images for the approval team.', 'ارفع ملفات PDF النهائية أو الصور لفريق الاعتماد.');
+    modal.querySelector('.modal-header p').textContent = taskDetailText('Upload the final PDF files or images. They will also be shared in the task comments.', 'ارفع ملفات PDF النهائية أو الصور. وستتم مشاركتها أيضاً في تعليقات المهمة.');
     modal.querySelector('.crm-design-completion-dropzone strong').textContent = taskDetailText('Choose completed design files', 'اختر ملفات التصميم المكتمل');
     modal.querySelector('.crm-design-completion-dropzone > span').textContent = taskDetailText('PDF, PNG, JPG or WEBP · maximum 15 MB per file', 'PDF أو PNG أو JPG أو WEBP · بحد أقصى 15 ميجابايت لكل ملف');
     modal.querySelector('.crm-design-completion-reviewers span').textContent = taskDetailText('Submitting sends approval to CEO, GM, MQ-04, MQ-05 and Marketing Manager.', 'سيتم إرسال الطلب إلى الرئيس التنفيذي والمدير العام وMQ-04 وMQ-05 ومدير التسويق.');
@@ -9605,6 +9620,7 @@ window.openCrmDesignCompletionModal = function (task) {
 window.closeCrmDesignCompletionModal = function (submitted = false) {
     document.getElementById('crmDesignCompletionModal')?.classList.remove('show');
     clearCrmDesignCompletionPreviewUrls();
+    crmDesignCompletionSelectedFiles = [];
     const resolver = crmDesignCompletionResolver;
     crmDesignCompletionResolver = null;
     if (resolver) resolver(Boolean(submitted));
@@ -9614,7 +9630,7 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
     event.preventDefault();
     const taskId = document.getElementById('crmDesignCompletionTaskId')?.value;
     const task = window.taskCache?.[taskId];
-    const files = Array.from(document.getElementById('crmDesignCompletionFiles')?.files || []);
+    const files = [...crmDesignCompletionSelectedFiles];
     const submitButton = document.getElementById('crmDesignCompletionSubmit');
     if (!task || task.crm_workflow_kind !== 'QUOTE_PROPOSAL_DESIGN') {
         return showToast(taskDetailText('The CRM Design task is unavailable.', 'مهمة تصميم إدارة علاقات العملاء غير متاحة.'), 'danger');
@@ -9628,6 +9644,8 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
     if (files.some(file => file.size > maximumBytes)) return showToast(t('crm_file_too_large') || 'Each file must be 15 MB or smaller.', 'warning');
 
     const uploadedReferences = [];
+    const previousReferences = Array.isArray(task.submission_links) ? [...task.submission_links] : [];
+    let taskLinksUpdated = false;
     if (submitButton) submitButton.disabled = true;
     try {
         for (const file of files) {
@@ -9640,10 +9658,30 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
             upload_link: uploadedReferences[0] || null
         });
         if (!update.success) throw update.error || new Error(taskDetailText('The uploaded files could not be linked to the task.', 'تعذر ربط الملفات المرفوعة بالمهمة.'));
+        taskLinksUpdated = true;
+        const commentAttachments = uploadedReferences.map((url, index) => ({
+            url,
+            name: files[index]?.name || taskDetailText('Design file', 'ملف التصميم'),
+            type: files[index]?.type || '',
+            size: files[index]?.size || 0
+        }));
+        const comment = await db.addTaskComment(
+            task.id,
+            currentUser.id,
+            taskDetailText('Completed Design files submitted for CRM approval.', 'تم إرسال ملفات التصميم المكتمل لاعتماد إدارة علاقات العملاء.'),
+            commentAttachments
+        );
+        if (!comment.success) throw comment.error || new Error(taskDetailText('The Design files could not be shared in the task comments.', 'تعذرت مشاركة ملفات التصميم في تعليقات المهمة.'));
         task.submission_links = uploadedReferences;
         task.upload_link = uploadedReferences[0] || null;
         window.closeCrmDesignCompletionModal(true);
     } catch (error) {
+        if (taskLinksUpdated) {
+            await db.updateTask(task.id, {
+                submission_links: previousReferences,
+                upload_link: previousReferences[0] || null
+            });
+        }
         if (uploadedReferences.length) await db.deleteTaskAttachmentObjects(uploadedReferences);
         showToast(error?.message || taskDetailText('Unable to upload the completed Design files.', 'تعذر رفع ملفات التصميم المكتمل.'), 'danger');
     } finally {
@@ -16948,12 +16986,15 @@ async function renderApprovals() {
         return `<tr><td><strong>${escapeHTML(deal.title || 'Untitled deal')}</strong></td><td>${escapeHTML(clientName)}</td><td>SAR ${Number(deal.amount || 0).toLocaleString()}</td><td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${submittedAt ? new Date(submittedAt).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-SA') : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
     }).join('');
     const pendingCrmDesignApprovals = (crmDesignApprovalSteps || []).filter(step => isAdmin || step.approver_id === currentUser?.id);
+    const renderedAdminDesignTasks = new Set();
     const designApprovalRows = pendingCrmDesignApprovals.map(step => {
         const deal = step.deal || {};
         const task = step.task || {};
         const clientName = deal.crm_clients?.name || 'No client';
         const approver = step.profiles || userMap.get(step.approver_id);
-        return `<tr><td><strong>${escapeHTML(task.title || deal.title || 'Design task')}</strong><br><span class="status-badge info">${escapeHTML(t('crm_design_approval') || 'Design approval')}</span></td><td>${escapeHTML(clientName)}</td><td>—</td><td><span class="status-badge warning">${escapeHTML(t(dealApprovalStageLabels[step.stage_key]) || step.stage_key)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${step.created_at ? new Date(step.created_at).toLocaleDateString() : '—'}</td><td><div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div></td></tr>`;
+        const showApproveAll = isAdmin && task.id && !renderedAdminDesignTasks.has(task.id);
+        if (showApproveAll) renderedAdminDesignTasks.add(task.id);
+        return `<tr><td><strong>${escapeHTML(task.title || deal.title || 'Design task')}</strong><br><span class="status-badge info">${escapeHTML(t('crm_design_approval') || 'Design approval')}</span></td><td>${escapeHTML(clientName)}</td><td>—</td><td><span class="status-badge warning">${escapeHTML(t(dealApprovalStageLabels[step.stage_key]) || step.stage_key)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${step.created_at ? new Date(step.created_at).toLocaleDateString() : '—'}</td><td><div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button>${showApproveAll ? `<button class="btn-primary crm-admin-approve-all" onclick="handleCrmDesignAdminApproveAll('${deal.id}','${task.id}')"><i data-lucide="badge-check"></i>${taskDetailText('Approve all remaining', 'اعتماد جميع الموافقات المتبقية')}</button>` : ''}</div></td></tr>`;
     }).join('');
     const crmRows = dealApprovalRows + designApprovalRows;
 
@@ -17020,6 +17061,30 @@ window.handleCrmDesignApprovalDecision = async function (dealId, stepId, decisio
     showToast(decision === 'APPROVED' ? (t('crm_approval_saved') || 'Approval saved.') : (t('crm_rejection_saved') || 'Rejection saved and MQ-08 notified.'), 'success');
     if (currentView === 'approvals') renderView('approvals');
     else void window.refreshCrmDashboardInBackground?.();
+};
+
+window.handleCrmDesignAdminApproveAll = async function (dealId, taskId) {
+    if (!isTaskAdmin()) {
+        return showToast(taskDetailText('Only an administrator can approve every remaining step.', 'يمكن لمسؤول النظام فقط اعتماد جميع الخطوات المتبقية.'), 'danger');
+    }
+    window.showConfirmModal(
+        taskDetailText('Approve all Design steps', 'اعتماد جميع خطوات التصميم'),
+        taskDetailText('Approve every remaining Design approval for this task?', 'هل تريد اعتماد جميع موافقات التصميم المتبقية لهذه المهمة؟'),
+        async () => {
+            const pending = (await db.fetchPendingCrmDesignTaskApprovals())
+                .filter(step => String(step.task_id || step.task?.id) === String(taskId));
+            if (!pending.length) {
+                showToast(taskDetailText('There are no remaining Design approvals.', 'لا توجد موافقات تصميم متبقية.'), 'info');
+                return renderView('approvals');
+            }
+            const result = await db.decideCrmDesignTaskApprovals(pending.map(step => step.id), 'APPROVED', '');
+            if (!result.success) return showToast(result.error?.message || taskDetailText('Could not approve every Design step.', 'تعذر اعتماد جميع خطوات التصميم.'), 'danger');
+            showToast(taskDetailText('All remaining Design approvals were completed.', 'تم اعتماد جميع موافقات التصميم المتبقية.'), 'success');
+            await renderView('approvals');
+            window.setApprovalsTab?.('crm');
+            void window.refreshCrmDashboardInBackground?.();
+        }
+    );
 };
 
 window.handleTaskApprovalDecision = async function (taskId, decision) {

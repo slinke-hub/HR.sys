@@ -42,7 +42,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=1788202890005">
     <link rel="stylesheet" href="css/layout.css?v=1788202890007">
-    <link rel="stylesheet" href="css/components.css?v=2026091402">
+    <link rel="stylesheet" href="css/components.css?v=2026091501">
     <link rel="stylesheet" href="css/hr-suite-beta.css?v=2026090901">
     <link rel="stylesheet" href="css/android.css?v=2026090702">
     <link rel="stylesheet" href="css/crm-tailwind.css?v=2026090904">
@@ -1642,13 +1642,13 @@
     <script src="js/vendor/xlsx.full.min.js"></script>
     <script src="js/vendor/tesseract/tesseract.min.js?v=7.0.0"></script>
     <script src="js/document-ocr.js?v=2026091301"></script>
-    <script src="js/db.js?v=2026091402"></script>
+    <script src="js/db.js?v=2026091501"></script>
     <script src="js/data.js?v=2026091303"></script>
     <script src="js/contract.js?v=1788202890003"></script>
     <script src="js/payroll.js"></script>
     <script src="js/crm-dashboard.bundle.js?v=2026091011"></script>
     <script src="js/hr-suite-beta.js?v=2026090901"></script>
-    <script src="js/app.js?v=2026091403"></script>
+    <script src="js/app.js?v=2026091501"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">
@@ -1758,14 +1758,14 @@
                 <div>
                     <span class="crm-design-completion-kicker">DESIGN APPROVAL</span>
                     <h2 id="crmDesignCompletionTitle">Submit completed design</h2>
-                    <p>Upload the final PDF files or images for the approval team.</p>
+                    <p>Upload the final PDF files or images. They will also be shared in the task comments.</p>
                 </div>
                 <button type="button" class="task-detail-close" aria-label="Close" onclick="closeCrmDesignCompletionModal(false)"><i data-lucide="x"></i></button>
             </div>
             <form id="crmDesignCompletionForm" onsubmit="handleCrmDesignCompletionSubmit(event)">
                 <input type="hidden" id="crmDesignCompletionTaskId">
                 <label class="crm-design-completion-dropzone" for="crmDesignCompletionFiles">
-                    <input id="crmDesignCompletionFiles" type="file" accept="application/pdf,image/*" multiple required onchange="renderCrmDesignCompletionSelection(this.files)">
+                    <input id="crmDesignCompletionFiles" type="file" accept="application/pdf,image/*" multiple onchange="renderCrmDesignCompletionSelection(this.files); this.value = ''">
                     <i data-lucide="upload-cloud"></i>
                     <strong>Choose completed design files</strong>
                     <span>PDF, PNG, JPG or WEBP · maximum 15 MB per file</span>

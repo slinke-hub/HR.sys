@@ -3343,6 +3343,26 @@ const db = {
             return { success: false, error };
         }
     },
+    async decideCrmDesignTaskApprovals(stepIds, decision, note = '') {
+        if (!supabaseClient) return { success: false };
+        try {
+            const uniqueStepIds = [...new Set((stepIds || []).filter(Boolean))];
+            if (!uniqueStepIds.length) return { success: true, count: 0 };
+            for (const stepId of uniqueStepIds) {
+                const { error } = await supabaseClient.rpc('decide_crm_design_task_approval', {
+                    p_step_id: stepId,
+                    p_decision: decision,
+                    p_note: note || null
+                });
+                if (error) throw error;
+            }
+            await this.flushTaskNotificationEmails();
+            return { success: true, count: uniqueStepIds.length };
+        } catch (error) {
+            console.error('decideCrmDesignTaskApprovals Error:', error);
+            return { success: false, error };
+        }
+    },
     async uploadDealAttachment(dealId, userId, file, category, description) {
         if (!supabaseClient) return { success: false };
         try {
