@@ -227,6 +227,8 @@ async function canCurrentUserUseCRM() {
     return isSalesMarketingDepartmentName(await getCurrentDepartmentName());
 }
 const isMq07Profile = (profile = currentUserProfile) => Number(profile?.emp_index) === 7;
+const isMq08Profile = (profile = currentUserProfile) => Number(profile?.emp_index) === 8
+    || String(profile?.employee_id || '').trim().toUpperCase() === 'MQ-08';
 const isMq20Profile = (profile = currentUserProfile) => String(profile?.employee_id || '').trim().toUpperCase() === 'MQ-20';
 const isDesignTaskList = list => /design|تصميم/i.test(String(list?.name || '').trim());
 const isMarketingManagedTaskList = list => /design|marketing|sales|تصميم|تسويق|مبيعات/i.test(String(list?.name || '').trim());
@@ -274,6 +276,19 @@ const canViewEmployeesRadar = () => {
     return isTaskAdmin() || isITManagerProfile() || accessValues.some(value => permittedValues.includes(value));
 };
 const canInteractWithTask = task => !!task && !isMq20Profile() && (canEditTaskRecord(task) || [task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
+
+function crmDesignDealStatusFromTask(task) {
+    const status = String(task?.status || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+    if (['completed', 'approved', 'pending approval'].includes(status)) return 'COMPLETED';
+    if (status === 'late') return 'LATE';
+    return 'IN_PROGRESS';
+}
+
+function canMq08ChangeCrmDesignDealStatus(task) {
+    if (!task || task.crm_workflow_kind !== 'QUOTE_PROPOSAL_DESIGN' || !task.crm_deal_id || !isMq08Profile()) return false;
+    const assigneeIds = Array.isArray(task.assignee_ids) ? task.assignee_ids : [];
+    return task.assignee_id === currentUser?.id || assigneeIds.includes(currentUser?.id);
+}
 
 // Allow open dialogs to be repositioned by dragging their headers. This is
 // delegated so dynamically-rendered modals receive the same behavior.
@@ -4167,6 +4182,17 @@ async function prepareTeamworkTaskDetail(task) {
         const crmQuoteFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION' && safeExternalUrl(file.file_url));
         const crmClientIdentityFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY' && safeExternalUrl(file.file_url));
         const crmProposalImages = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'PROPOSAL' && safeExternalUrl(file.file_url));
+        const showCrmDesignDealStatus = canMq08ChangeCrmDesignDealStatus(task);
+        const crmDesignDealStatus = crmDesignDealStatusFromTask(task);
+        const crmDesignStatusLocked = ['completed', 'approved', 'pending approval'].includes(String(task.status || '').trim().toLowerCase());
+        const crmDesignDealStatusHTML = showCrmDesignDealStatus ? `<section class="task-crm-design-status-control" aria-labelledby="crmDesignDealStatusLabel">
+            <div class="task-crm-design-status-copy"><span class="task-crm-design-status-icon"><i data-lucide="gauge"></i></span><div><label id="crmDesignDealStatusLabel" for="crmDesignDealStatusSelect">${taskDetailText('Deal status', 'حالة الصفقة')}</label><small>${crmDesignStatusLocked ? taskDetailText('The completed Design is awaiting or has received approval.', 'التصميم المكتمل بانتظار الاعتماد أو تم اعتماده.') : taskDetailText('This status also updates the linked deal in CRM.', 'تُحدّث هذه الحالة الصفقة المرتبطة في إدارة علاقات العملاء أيضاً.')}</small></div></div>
+            <select id="crmDesignDealStatusSelect" class="form-control task-crm-design-status-select" data-task-id="${escapeHTML(task.id)}" onchange="handleCrmDesignDealStatusChange(this)" ${crmDesignStatusLocked ? 'disabled' : ''}>
+                <option value="IN_PROGRESS" ${crmDesignDealStatus === 'IN_PROGRESS' ? 'selected' : ''}>${taskDetailText('In progress', 'قيد التنفيذ')}</option>
+                <option value="LATE" ${crmDesignDealStatus === 'LATE' ? 'selected' : ''}>${taskDetailText('Late', 'متأخرة')}</option>
+                <option value="COMPLETED" ${crmDesignDealStatus === 'COMPLETED' ? 'selected' : ''}>${taskDetailText('Completed', 'مكتملة')}</option>
+            </select>
+        </section>` : '';
         const crmPresentationAssetsHTML = crmQuoteFiles.length || crmClientIdentityFiles.length || crmProposalImages.length ? `<section class="task-crm-presentation-assets">
             <header><i data-lucide="briefcase-business"></i><div><h3>${taskDetailText('CRM quote and proposal', 'عرض السعر والمقترح في CRM')}</h3><p>${taskDetailText('Files attached automatically from the linked deal.', 'ملفات مرفقة تلقائياً من الصفقة المرتبطة.')}</p></div></header>
             ${crmQuoteFiles.length ? `<section class="task-crm-asset-group"><h4><i data-lucide="file-text"></i>${taskDetailText('Quote', 'عرض السعر')}</h4><div class="task-crm-quote-files">${crmQuoteFiles.map(file => `<a href="${escapeHTML(safeExternalUrl(file.file_url))}" target="_blank" rel="noopener"><i data-lucide="file-down"></i><span><strong>${escapeHTML(file.file_name || taskDetailText('Quote document', 'مستند عرض السعر'))}</strong>${file.description ? `<small>${escapeHTML(file.description)}</small>` : ''}</span></a>`).join('')}</div></section>` : ''}
@@ -4189,6 +4215,7 @@ async function prepareTeamworkTaskDetail(task) {
         </section>` : '';
         const canUploadFiles = canInteractWithTask(task);
         content.innerHTML = `
+            ${crmDesignDealStatusHTML}
             <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : `<span>${taskDetailText('Add a description', 'أضف وصفاً')}</span>`}</p></section>
             <nav class="task-detail-tabs" aria-label="${taskDetailText('Task information', 'معلومات المهمة')}"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">${taskDetailText('Details', 'التفاصيل')}</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">${taskDetailText('Proofs', 'الإثباتات')}</button></nav>
             <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
@@ -4225,6 +4252,46 @@ async function prepareTeamworkTaskDetail(task) {
     setTaskActivityTab('comments');
     if (window.lucide) window.lucide.createIcons();
 }
+
+window.handleCrmDesignDealStatusChange = async function (select) {
+    const taskId = String(select?.dataset?.taskId || '').trim();
+    const task = window.taskCache?.[taskId];
+    if (!task || !canMq08ChangeCrmDesignDealStatus(task)) {
+        if (select && task) select.value = crmDesignDealStatusFromTask(task);
+        showToast(taskDetailText('Only the assigned employee MQ-08 can change this deal status.', 'يمكن فقط للموظفة المعيّنة MQ-08 تغيير حالة الصفقة.'), 'warning');
+        return;
+    }
+
+    const previousDealStatus = crmDesignDealStatusFromTask(task);
+    const requestedDealStatus = String(select.value || '').toUpperCase();
+    const taskStatusByDealStatus = {
+        IN_PROGRESS: 'in_progress',
+        LATE: 'late',
+        COMPLETED: 'completed'
+    };
+    const requestedTaskStatus = taskStatusByDealStatus[requestedDealStatus];
+    if (!requestedTaskStatus) {
+        select.value = previousDealStatus;
+        return;
+    }
+
+    select.disabled = true;
+    const result = await window.taskV2ChangeStage(taskId, requestedTaskStatus);
+    if (result?.error) {
+        select.value = previousDealStatus;
+        select.disabled = ['completed', 'approved', 'pending approval'].includes(String(task.status || '').trim().toLowerCase());
+        return;
+    }
+
+    const savedTaskStatus = result?.status || requestedTaskStatus;
+    task.status = savedTaskStatus;
+    select.value = crmDesignDealStatusFromTask(task);
+    select.disabled = ['completed', 'approved', 'pending approval'].includes(String(savedTaskStatus).trim().toLowerCase());
+    const detailStatus = document.getElementById('detailsTaskStatus');
+    if (detailStatus) detailStatus.textContent = taskDetailValue(savedTaskStatus, 'status');
+    window.setTaskDetailInfoTab?.('details');
+    void window.refreshCrmDashboardInBackground?.();
+};
 
 window.closeTaskDetailsModal = function () {
     const sidePanel = document.getElementById('taskSidePanel');
@@ -13981,15 +14048,74 @@ function renderDealPresentationAssets(attachments) {
     container.innerHTML = quoteSection + identitySection + proposalSection;
 }
 
+function renderDealWorkflowDesignTaskStatus(workflow, isMq08Viewer) {
+    const container = document.getElementById('dealWorkflowDesignTaskStatus');
+    if (!container) return;
+    const workflowTask = workflow?.designTask;
+    const task = workflowTask?.id ? cacheTaskRecord(workflowTask) : null;
+    const canManageStatus = Boolean(isMq08Viewer && task && canMq08ChangeCrmDesignDealStatus(task));
+    container.hidden = !canManageStatus;
+    if (!canManageStatus) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const status = crmDesignDealStatusFromTask(task);
+    const awaitingApproval = String(task.status || '').trim().toLowerCase() === 'pending approval';
+    const locked = awaitingApproval || ['completed', 'approved'].includes(String(task.status || '').trim().toLowerCase());
+    const badgeClass = awaitingApproval || status === 'COMPLETED' ? 'success' : (status === 'LATE' ? 'danger' : 'warning');
+    const badgeLabel = awaitingApproval
+        ? taskDetailText('Complete · Waiting for approval', 'مكتملة · بانتظار الاعتماد')
+        : status === 'COMPLETED'
+            ? taskDetailText('Complete', 'مكتملة')
+            : status === 'LATE'
+                ? taskDetailText('Late', 'متأخرة')
+                : taskDetailText('In Progress', 'قيد التنفيذ');
+
+    container.innerHTML = `<div class="task-crm-design-status-copy">
+            <span class="task-crm-design-status-icon"><i data-lucide="gauge"></i></span>
+            <div><label for="dealWorkflowDesignTaskStatusSelect">${taskDetailText("Deal's task status", 'حالة مهمة الصفقة')}</label><small>${awaitingApproval
+                ? taskDetailText('The completed Design is waiting for the approval team.', 'التصميم المكتمل بانتظار اعتماد فريق الموافقات.')
+                : taskDetailText('Completing the task starts the Design approval cycle.', 'إكمال المهمة يبدأ دورة اعتماد التصميم.')}</small></div>
+        </div>
+        <div class="deal-workflow-design-status-actions">
+            <span class="status-badge ${badgeClass}">${escapeHTML(badgeLabel)}</span>
+            <select id="dealWorkflowDesignTaskStatusSelect" class="form-control task-crm-design-status-select" onchange="handleDealWorkflowDesignTaskStatusChange(this)" ${locked ? 'disabled' : ''}>
+                <option value="IN_PROGRESS" ${status === 'IN_PROGRESS' ? 'selected' : ''}>${taskDetailText('In Progress', 'قيد التنفيذ')}</option>
+                <option value="LATE" ${status === 'LATE' ? 'selected' : ''}>${taskDetailText('Late', 'متأخرة')}</option>
+                <option value="COMPLETED" ${status === 'COMPLETED' ? 'selected' : ''}>${taskDetailText('Complete', 'مكتملة')}</option>
+            </select>
+        </div>`;
+}
+
 function renderDealWorkflowContents(workflow) {
     if (activeDealWorkflowContext) activeDealWorkflowContext.workflow = workflow;
+    const isMq08Viewer = isMq08Profile();
+    const lifecycleSection = document.getElementById('dealLifecycleSection');
+    const activitySection = document.getElementById('dealActivitySection');
+    const attachmentForm = document.getElementById('dealAttachmentForm');
+    const documentsTitle = document.getElementById('dealDocumentsTitle');
+    if (lifecycleSection) lifecycleSection.hidden = isMq08Viewer;
+    if (activitySection) activitySection.hidden = isMq08Viewer;
+    if (attachmentForm) attachmentForm.hidden = isMq08Viewer;
+    if (documentsTitle) {
+        documentsTitle.dataset.i18n = isMq08Viewer ? 'crm_attached_documents' : 'crm_documents_photos';
+        documentsTitle.textContent = isMq08Viewer
+            ? (t('crm_attached_documents') || 'Attached Documents')
+            : (t('crm_documents_photos') || 'Documents & Photos');
+    }
+    renderDealWorkflowDesignTaskStatus(workflow, isMq08Viewer);
     const documentsSection = document.getElementById('dealDocumentsSection');
     if (documentsSection) {
         documentsSection.hidden = canonicalDealLifecycleStage(activeDealWorkflowContext?.deal?.stage) === 'LEAD';
+        if (isMq08Viewer) documentsSection.hidden = false;
     }
     const setupSection = document.getElementById('workflowSetupSection');
     const canRestartApproval = !workflow.approvals.length || workflow.approvals.some(step => step.status === 'REJECTED');
-    if (setupSection) setupSection.style.display = canRestartApproval ? 'block' : 'none';
+    if (setupSection) {
+        setupSection.hidden = isMq08Viewer;
+        setupSection.style.display = !isMq08Viewer && canRestartApproval ? 'block' : 'none';
+    }
     const approverGrid = setupSection?.querySelector('.workflow-approver-grid');
     const setupHelp = setupSection?.querySelector('.page-subtitle');
     const setupButton = setupSection?.querySelector('button.btn-primary');
@@ -14015,7 +14141,7 @@ function renderDealWorkflowContents(workflow) {
 
     const approvalsEl = document.getElementById('dealApprovalSteps');
     approvalsEl.innerHTML = workflow.approvals.length ? workflow.approvals.map(step => {
-        const canDecide = step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
+        const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
         const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
         return `<article class="deal-approval-step ${step.status.toLowerCase()}">
             <div class="deal-approval-index">${step.status === 'APPROVED' ? '✓' : (step.status === 'REJECTED' ? '×' : step.step_order)}</div>
@@ -14043,7 +14169,7 @@ function renderDealWorkflowContents(workflow) {
     }
     if (workflow.designApprovals?.length) {
         approvalsEl.innerHTML += `<h4 class="deal-design-approval-title">${escapeHTML(t('crm_design_approval') || 'Design task approval')}</h4>` + workflow.designApprovals.map(step => {
-            const canDecide = step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
+            const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
             const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
             return `<article class="deal-approval-step ${step.status.toLowerCase()}">
                 <div class="deal-approval-index">${step.status === 'APPROVED' ? '✓' : (step.status === 'REJECTED' ? '×' : step.step_order)}</div>
@@ -14086,7 +14212,7 @@ function renderDealWorkflowContents(workflow) {
     const projectSection = document.getElementById('dealProjectSection');
     const projectStatus = document.getElementById('dealProjectStatus');
     const closeButton = document.getElementById('closeDealProjectBtn');
-    if (projectSection) projectSection.hidden = !workflow.project;
+    if (projectSection) projectSection.hidden = isMq08Viewer || !workflow.project;
     if (workflow.project && projectStatus && closeButton) {
         const projectAmount = Number(workflow.project.project_amount || 0);
         const paidAmount = Number(workflow.project.paid_amount || 0);
@@ -14652,7 +14778,7 @@ window.addOrderEquipmentRow = function (item = {}) {
 };
 
 window.prepareCrmOrderModal = async function (dealId, oldStage) {
-    const [deals, users, departments] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDepartments()]);
+    const [deals, users] = await Promise.all([db.fetchDeals(), db.fetchUsers()]);
     const deal = deals.find(item => item.id === dealId);
     if (!deal) return showToast(t('crm_deal_not_found') || 'Deal not found.', 'danger');
     if (canonicalDealLifecycleStage(deal.stage) === 'LOST') return window.openLostDealSummaryModal(deal);
@@ -14661,18 +14787,15 @@ window.prepareCrmOrderModal = async function (dealId, oldStage) {
     form.reset();
     modal.dataset.oldStage = oldStage || deal.stage || '';
     document.getElementById('orderDealId').value = dealId;
-    const creator = users.find(user => user.id === (deal.created_by || deal.assigned_to));
-    document.getElementById('orderEmployeeName').value = window.formatEmployeeName(creator) || '';
+    document.getElementById('orderEmployeeName').value = window.formatEmployeeName(currentUser) || '';
     const client = deal.crm_clients || {};
     document.getElementById('orderClientName').value = client.name || '';
     document.getElementById('orderClientCompany').value = client.company || '';
     document.getElementById('orderClientEmail').value = client.email || '';
     document.getElementById('orderClientPhone').value = client.phone || '';
     document.getElementById('orderProjectAmount').value = deal.amount ?? '';
-    const operationDepartmentIds = new Set((departments || []).filter(department => /operation|operations|العمليات/i.test(String(department.name || ''))).map(department => department.id));
-    const operationsUsers = users.filter(user => operationDepartmentIds.has(user.department_id) || /operation|operations|العمليات/i.test(String(user.department || user.job_title || '')));
     const assigneeSelect = document.getElementById('orderProjectAssignees');
-    assigneeSelect.innerHTML = operationsUsers.map(user => `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}</option>`).join('');
+    assigneeSelect.innerHTML = users.map(user => `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}</option>`).join('');
     document.getElementById('orderEquipmentList').innerHTML = '';
     orderEquipmentRowCounter = 0;
     window.addOrderEquipmentRow();
@@ -14691,7 +14814,7 @@ window.handleOrderSubmit = async (event) => {
     const dealId = document.getElementById('orderDealId').value;
     const oldStage = document.getElementById('crmOrderModal').dataset.oldStage || '';
     const assignedPeople = Array.from(document.getElementById('orderProjectAssignees').selectedOptions).map(option => option.value);
-    if (!assignedPeople.length) return showToast(t('crm_select_project_team') || 'Select at least one Operations employee.', 'warning');
+    if (!assignedPeople.length) return showToast(t('crm_select_project_team') || 'Select at least one employee.', 'warning');
     const equipmentRows = Array.from(document.querySelectorAll('#orderEquipmentList [data-equipment-row]'));
     if (!equipmentRows.length) return showToast(t('crm_add_equipment_item') || 'Add at least one equipment item.', 'warning');
     submitButton.disabled = true;
@@ -16508,6 +16631,36 @@ function isOperationsManagerProjectProfile(profile = currentUserProfile) {
     const values = [profile?.role, profile?.job_title, profile?.job_title_ar].map(normalizeAccessValue).filter(Boolean);
     return values.some(value => value === 'OPERATIONS MANAGER' || value.includes('OPERATIONS MANAGER') || value === 'مدير العمليات');
 }
+
+window.handleDealWorkflowDesignTaskStatusChange = async function (select) {
+    const workflowTask = activeDealWorkflowContext?.workflow?.designTask;
+    const task = workflowTask?.id ? cacheTaskRecord(workflowTask) : null;
+    if (!task || !isMq08Profile() || !canMq08ChangeCrmDesignDealStatus(task)) {
+        if (select && task) select.value = crmDesignDealStatusFromTask(task);
+        return showToast(taskDetailText('Only the assigned employee MQ-08 can change this Design task status.', 'يمكن فقط للموظفة المعيّنة MQ-08 تغيير حالة مهمة التصميم.'), 'warning');
+    }
+
+    const previousStatus = crmDesignDealStatusFromTask(task);
+    const requestedStatus = String(select?.value || '').toUpperCase();
+    const taskStatus = { IN_PROGRESS: 'in_progress', LATE: 'late', COMPLETED: 'completed' }[requestedStatus];
+    if (!taskStatus) {
+        select.value = previousStatus;
+        return;
+    }
+
+    select.disabled = true;
+    const result = await window.taskV2ChangeStage(task.id, taskStatus);
+    if (result?.error) {
+        select.value = previousStatus;
+        select.disabled = false;
+        return;
+    }
+
+    const refreshedWorkflow = await db.fetchDealWorkflow(activeDealWorkflowContext.deal.id);
+    renderDealWorkflowContents(refreshedWorkflow);
+    void window.refreshCrmDashboardInBackground?.();
+    if (window.lucide) window.lucide.createIcons();
+};
 
 function canViewFullProjectCommandCenter(profile = currentUserProfile) {
     const accessValues = [profile?.role || currentUserRole, profile?.job_title, profile?.job_title_ar]

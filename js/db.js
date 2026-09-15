@@ -3081,7 +3081,7 @@ const db = {
         try {
             // Join with clients
             const { data, error } = await supabaseClient.from('crm_deals')
-                .select('*, crm_clients(name)')
+                .select('*, crm_clients(*)')
                 .order('created_at', { ascending: false });
             if (error) throw error;
             return (data || []).map(applyI18nGetters);
@@ -3203,7 +3203,7 @@ const db = {
                 supabaseClient.from('crm_deal_attachments').select('*').eq('deal_id', dealId).order('created_at', { ascending: false }),
                 supabaseClient.from('crm_deal_activity').select('*, profiles:actor_id(full_name, display_name_ar)').eq('deal_id', dealId).order('created_at', { ascending: false }),
                 supabaseClient.from('projects').select('id, deal_id, project_name, project_status, project_amount, paid_amount, event_location, start_date, end_date').eq('deal_id', dealId).maybeSingle(),
-                supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at').eq('crm_deal_id', dealId).eq('crm_workflow_kind', 'QUOTE_PROPOSAL_DESIGN').order('created_at', { ascending: false }).limit(1).maybeSingle()
+                supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids').eq('crm_deal_id', dealId).eq('crm_workflow_kind', 'QUOTE_PROPOSAL_DESIGN').order('created_at', { ascending: false }).limit(1).maybeSingle()
             ]);
             const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || project.error || designTask.error;
             if (firstError) throw firstError;

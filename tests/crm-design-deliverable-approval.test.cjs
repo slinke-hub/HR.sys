@@ -33,7 +33,7 @@ assert.match(app, /Completed Design files/);
 assert.match(app, /openDealImagePreview\(this\)/);
 assert.match(app, /notification\.event_type === 'crm_design_task_approval_requested'[\s\S]*renderView\('approvals'\)[\s\S]*setApprovalsTab\?\.\('crm'\)[\s\S]*openDealWorkflowModal/);
 
-assert.match(db, /tasks'\)\.select\('id, title, status, submission_links, completion_requested_at'\)/);
+assert.match(db, /tasks'\)\.select\('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids'\)/);
 assert.match(db, /task_attachments'[\s\S]*\.in\('file_url', submissionReferences\)/);
 assert.match(db, /designFiles/);
 assert.match(db, /async decideCrmDesignTaskApprovals\(stepIds, decision/);

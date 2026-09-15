@@ -2403,6 +2403,7 @@ button.btn-icon [data-lucide] {
   gap: 1rem;
   margin-bottom: 1rem;
 }
+.deal-attachment-form[hidden] { display: none !important; }
 .deal-attachment-type-field { display: grid; gap: .4rem; max-width: 360px; }
 .deal-attachment-upload-section {
   display: grid;
@@ -2638,6 +2639,49 @@ button.btn-icon [data-lucide] {
 .crm-order-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
 .crm-order-grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .crm-order-grid .form-group, .crm-equipment-row .form-group { margin: 0; min-width: 0; }
+.crm-datetime-field { display: grid; align-content: start; gap: .45rem; }
+.crm-datetime-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 3rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-elevated)), var(--color-bg-elevated));
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--color-primary) 9%, transparent);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.crm-datetime-control:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 17%, transparent), 0 12px 28px color-mix(in srgb, var(--color-primary) 13%, transparent);
+  transform: translateY(-1px);
+}
+.crm-datetime-control > svg {
+  position: absolute;
+  inset-inline-start: .9rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  color: var(--color-primary);
+  pointer-events: none;
+}
+.crm-datetime-control .form-control {
+  min-height: 3rem;
+  padding-inline-start: 2.85rem;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+.crm-datetime-control .form-control:focus { border: 0; box-shadow: none; }
+.crm-datetime-control input::-webkit-calendar-picker-indicator {
+  padding: .45rem;
+  border-radius: 8px;
+  background-color: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  cursor: pointer;
+}
+[data-theme="dark"] .crm-datetime-control input::-webkit-calendar-picker-indicator { filter: invert(1); }
 .crm-radio-group {
   display: flex;
   flex-wrap: wrap;
@@ -2650,6 +2694,18 @@ button.btn-icon [data-lucide] {
 .crm-radio-group legend { padding-inline: .35rem; font-weight: 700; }
 .crm-radio-group label { display: inline-flex; align-items: center; gap: .4rem; }
 .crm-order-section-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.crm-optional-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: .25rem .65rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-bg-elevated));
+  color: var(--color-primary);
+  font-size: .72rem;
+  font-weight: 800;
+}
 .crm-equipment-list { display: grid; gap: .75rem; }
 .crm-equipment-row {
   display: grid;
@@ -4342,6 +4398,77 @@ input,
 
 .task-detail-description span {
   color: var(--color-text-secondary);
+}
+
+.task-crm-design-status-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
+  border-radius: 14px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)), var(--color-surface));
+}
+
+.task-crm-design-status-control[hidden] { display: none !important; }
+
+.deal-workflow-design-status-control {
+  margin: 1rem 0 0;
+}
+
+.deal-workflow-design-status-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .75rem;
+  min-width: min(24rem, 100%);
+}
+
+.deal-workflow-design-status-actions .status-badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.task-crm-design-status-copy {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  min-width: 0;
+}
+
+.task-crm-design-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 2.5rem;
+  border-radius: 11px;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+.task-crm-design-status-icon svg { width: 1.25rem; height: 1.25rem; }
+.task-crm-design-status-copy label { display: block; color: var(--color-text); font-weight: 750; }
+.task-crm-design-status-copy small { display: block; margin-top: .2rem; color: var(--color-text-secondary); line-height: 1.35; }
+
+.task-crm-design-status-select {
+  width: min(15rem, 42%);
+  min-width: 10.5rem;
+  font-weight: 700;
+}
+
+.task-crm-design-status-select:disabled {
+  cursor: not-allowed;
+  opacity: .75;
+}
+
+@media (max-width: 640px) {
+  .task-crm-design-status-control { align-items: stretch; flex-direction: column; }
+  .task-crm-design-status-select { width: 100%; }
+  .deal-workflow-design-status-actions { align-items: stretch; flex-direction: column; }
 }
 
 .task-detail-tabs,

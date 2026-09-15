@@ -21,7 +21,7 @@ const COPY = {
     activityLabel: 'Client activity', noAnalytics: 'No client analytics yet',
     account: 'account', accounts: 'accounts', today: 'Today', daysAgo: 'days ago', viewDeal: 'View deal', editDeal: 'Edit deal', deleteDeal: 'Delete deal', unassigned: 'Unassigned',
     approvalPending: 'Approval pending', approvalApproved: 'Approved', approvalRejected: 'Needs revision',
-    designInProgress: 'In progress', designLate: 'Late', designCompleted: 'Completed',
+    designInProgress: 'In progress', designLate: 'Late', designCompleted: 'Complete · Waiting for approval',
     designApprovalPending: 'Design approval pending', designRejected: 'Design changes required'
   },
   ar: {
@@ -38,7 +38,7 @@ const COPY = {
     activityLabel: 'نشاط العميل', noAnalytics: 'لا توجد تحليلات للعملاء بعد',
     account: 'حساب', accounts: 'حسابات', today: 'اليوم', daysAgo: 'أيام مضت', viewDeal: 'عرض الصفقة', editDeal: 'تعديل الصفقة', deleteDeal: 'حذف الصفقة', unassigned: 'غير معيّن',
     approvalPending: 'بانتظار الاعتماد', approvalApproved: 'معتمدة', approvalRejected: 'تحتاج تعديلاً',
-    designInProgress: 'قيد التنفيذ', designLate: 'متأخر', designCompleted: 'مكتمل',
+    designInProgress: 'قيد التنفيذ', designLate: 'متأخر', designCompleted: 'مكتملة · بانتظار الاعتماد',
     designApprovalPending: 'بانتظار اعتماد التصميم', designRejected: 'التصميم يحتاج تعديلاً'
   }
 };
@@ -101,7 +101,7 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals }) {
       ? { label: text.designLate, classes: 'tw-bg-rose-50 tw-text-rose-700 tw-ring-1 tw-ring-rose-200' }
       : designTaskStatus === 'COMPLETED'
         ? { label: text.designCompleted, classes: 'tw-bg-emerald-50 tw-text-emerald-700 tw-ring-1 tw-ring-emerald-200' }
-        : { label: text.designInProgress, classes: 'tw-bg-blue-50 tw-text-blue-700 tw-ring-1 tw-ring-blue-200' }
+        : { label: text.designInProgress, classes: 'tw-bg-amber-50 tw-text-amber-700 tw-ring-1 tw-ring-amber-200' }
     : null;
   const workflowBadge = designBadge || (workflowStatus === 'PENDING_APPROVAL'
     ? { label: text.approvalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
@@ -110,7 +110,7 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals }) {
       : workflowStatus === 'REJECTED'
         ? { label: text.approvalRejected, classes: 'tw-bg-rose-50 tw-text-rose-700' }
         : workflowStatus === 'DESIGN_IN_PROGRESS'
-          ? { label: text.designInProgress, classes: 'tw-bg-blue-50 tw-text-blue-700' }
+          ? { label: text.designInProgress, classes: 'tw-bg-amber-50 tw-text-amber-700' }
           : workflowStatus === 'DESIGN_PENDING_APPROVAL'
             ? { label: text.designApprovalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
             : workflowStatus === 'DESIGN_REJECTED'
