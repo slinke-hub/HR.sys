@@ -18,7 +18,7 @@ assert.match(migration, /CREATE TRIGGER trg_clean_task_history_on_delete/);
 assert.match(migration, /BEFORE DELETE ON public\.tasks/);
 
 // 2. Verify db.uploadTaskAttachment records to task_attachments table
-assert.match(db, /uploadTaskAttachment\(taskId,\s*userId,\s*file\)/);
+assert.match(db, /uploadTaskAttachment\(taskId,\s*userId,\s*file(?:,|\))/);
 assert.match(db, /supabaseClient[\s\S]*?\.from\('task_attachments'\)[\s\S]*?\.insert/);
 
 // 3. Verify db.deleteTaskAttachmentObjects supports multiple storage buckets

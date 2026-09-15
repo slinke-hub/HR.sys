@@ -24,9 +24,9 @@ assert.match(app, /task\.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN'/);
 assert.match(app, /\['late','Late'\]/);
 
 assert.match(db, /async replaceDealPresentationAttachments\(dealId, userId, entries, options = \{\}\)/);
-assert.match(db, /\.in\('category', replacementCategories\)/);
-assert.match(db, /\.delete\(\)[\s\S]*\.in\('id', previousIds\)/);
-assert.match(db, /storage\.from\('crm-deal-files'\)\.remove\(previousPaths\)/);
+assert.match(db, /rpc\('archive_crm_deal_attachments'/);
+assert.match(db, /p_categories: replacementCategories/);
+assert.doesNotMatch(db.match(/async replaceDealPresentationAttachments[\s\S]*?async logDealActivity/)?.[0] || '', /previousPaths|\.delete\(\)[\s\S]*previousIds/);
 assert.match(db, /async fetchPendingCrmApprovals\(\)[\s\S]*rpc\('list_crm_deals_secure'\)/);
 assert.match(db, /async fetchDealPresentationAttachments\(dealId\)/);
 assert.match(db, /\.in\('category', \['QUOTATION', 'CLIENT_IDENTITY', 'PROPOSAL'\]\)/);

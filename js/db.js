@@ -1323,6 +1323,23 @@ const db = {
             return { success: false, error };
         }
     },
+    async fetchProjectSharedAttachments(projectId) {
+        if (!supabaseClient || !projectId) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('list_project_shared_attachments', {
+                p_project_id: projectId
+            });
+            if (error) throw error;
+            return Promise.all((data || []).map(async attachment => ({
+                ...attachment,
+                storage_reference: attachment.file_url,
+                file_url: await this.resolveStorageReference(attachment.file_url)
+            })));
+        } catch (error) {
+            console.error('fetchProjectSharedAttachments Error:', error);
+            return [];
+        }
+    },
     async updateProjectPortfolioItems(projectId, changes) {
         if (!supabaseClient) return { success: false };
         try {
@@ -1834,7 +1851,7 @@ const db = {
             return { success: false, error };
         }
     },
-    async uploadTaskAttachment(taskId, userId, file) {
+    async uploadTaskAttachment(taskId, userId, file, visibleToProjectAssignee = false, attachmentScope = 'TASK') {
         if (!supabaseClient || !taskId || !userId || !file) {
             return { success: false, error: new Error('No file selected.') };
         }
@@ -1847,21 +1864,26 @@ const db = {
             if (uploadError) throw uploadError;
             const storageUrl = createStorageReference('task-attachments', path);
 
-            // Also insert record into task_attachments table if available
-            try {
-                await supabaseClient.from('task_attachments').insert([{
+            const { data: attachmentRow, error: attachmentError } = await supabaseClient
+                .from('task_attachments')
+                .insert([{
                     task_id: taskId,
                     user_id: userId,
                     file_url: storageUrl,
                     file_name: file.name || safeName,
                     file_type: file.type || null,
-                    file_size: file.size || null
-                }]);
-            } catch (tblErr) {
-                console.warn('Could not insert task_attachments row:', tblErr);
+                    file_size: file.size || null,
+                    visible_to_project_assignee: visibleToProjectAssignee === true,
+                    attachment_scope: String(attachmentScope || 'TASK').toUpperCase() === 'COMMENT' ? 'COMMENT' : 'TASK'
+                }])
+                .select('id, task_id, file_url, file_name, file_type, file_size, visible_to_project_assignee, attachment_scope, created_at')
+                .single();
+            if (attachmentError) {
+                await supabaseClient.storage.from('task-attachments').remove([path]);
+                throw attachmentError;
             }
 
-            return { success: true, url: storageUrl, name: file.name || safeName };
+            return { success: true, url: storageUrl, name: file.name || safeName, data: attachmentRow };
         } catch (error) {
             console.error('uploadTaskAttachment Error:', error);
             return { success: false, error };
@@ -3226,7 +3248,7 @@ const db = {
             const [approvals, designApprovals, attachments, activity, projects, designTask] = await Promise.all([
                 supabaseClient.from('crm_deal_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
                 supabaseClient.from('crm_design_task_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
-                supabaseClient.from('crm_deal_attachments').select('*').eq('deal_id', dealId).order('created_at', { ascending: false }),
+                supabaseClient.from('crm_deal_attachments').select('*').eq('deal_id', dealId).eq('is_archived', false).order('created_at', { ascending: false }),
                 supabaseClient.from('crm_deal_activity').select('*, profiles:actor_id(full_name, display_name_ar)').eq('deal_id', dealId).order('created_at', { ascending: false }),
                 this.fetchProjects(),
                 supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids').eq('crm_deal_id', dealId).eq('crm_workflow_kind', 'QUOTE_PROPOSAL_DESIGN').order('created_at', { ascending: false }).limit(1).maybeSingle()
@@ -3277,8 +3299,9 @@ const db = {
         try {
             const { data, error } = await supabaseClient
                 .from('crm_deal_attachments')
-                .select('id, deal_id, category, file_name, file_url, description, created_at')
+                .select('id, deal_id, category, file_name, file_url, description, visible_to_project_assignee, created_at')
                 .eq('deal_id', dealId)
+                .eq('is_archived', false)
                 .in('category', ['QUOTATION', 'CLIENT_IDENTITY', 'PROPOSAL'])
                 .order('created_at', { ascending: true });
             if (error) throw error;
@@ -3375,6 +3398,56 @@ const db = {
             return { success: false, error };
         }
     },
+    async fetchTaskAttachments(taskId) {
+        if (!supabaseClient || !taskId) return [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('task_attachments')
+                .select('id, task_id, file_url, file_name, file_type, file_size, visible_to_project_assignee, attachment_scope, created_at')
+                .eq('task_id', taskId)
+                .eq('is_archived', false)
+                .eq('attachment_scope', 'TASK')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return Promise.all((data || []).map(async attachment => ({
+                ...attachment,
+                storage_reference: attachment.file_url,
+                file_url: await this.resolveStorageReference(attachment.file_url)
+            })));
+        } catch (error) {
+            console.error('fetchTaskAttachments Error:', error);
+            return [];
+        }
+    },
+    async archiveTaskAttachments(taskId, keepIds = []) {
+        if (!supabaseClient || !taskId) return { success: false, error: new Error('Task is required.') };
+        try {
+            const { data, error } = await supabaseClient.rpc('archive_task_attachments', {
+                p_task_id: taskId,
+                p_keep_ids: (keepIds || []).filter(Boolean)
+            });
+            if (error) throw error;
+            return { success: true, count: Number(data || 0) };
+        } catch (error) {
+            console.error('archiveTaskAttachments Error:', error);
+            return { success: false, error };
+        }
+    },
+    async setProjectAttachmentVisibility(attachmentType, attachmentId, visible) {
+        if (!supabaseClient || !attachmentId) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.rpc('set_project_attachment_visibility', {
+                p_attachment_type: attachmentType,
+                p_attachment_id: attachmentId,
+                p_visible: visible === true
+            });
+            if (error) throw error;
+            return { success: data === true };
+        } catch (error) {
+            console.error('setProjectAttachmentVisibility Error:', error);
+            return { success: false, error };
+        }
+    },
     async decideCrmDesignTaskApprovals(stepIds, decision, note = '') {
         if (!supabaseClient) return { success: false };
         try {
@@ -3395,7 +3468,7 @@ const db = {
             return { success: false, error };
         }
     },
-    async uploadDealAttachment(dealId, userId, file, category, description) {
+    async uploadDealAttachment(dealId, userId, file, category, description, visibleToProjectAssignee = false) {
         if (!supabaseClient) return { success: false };
         try {
             const safeName = String(file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -3408,7 +3481,8 @@ const db = {
                 file_name: file.name,
                 file_url: createStorageReference('crm-deal-files', path),
                 description: description || null,
-                uploaded_by: userId
+                uploaded_by: userId,
+                visible_to_project_assignee: visibleToProjectAssignee === true
             }]).select().single();
             if (error) throw error;
             return { success: true, data };
@@ -3419,19 +3493,17 @@ const db = {
     },
     async replaceDealPresentationAttachments(dealId, userId, entries, options = {}) {
         if (!supabaseClient) return { success: false };
-        const replacementCategories = ['QUOTATION'];
-        if (options.replaceClientIdentity === true) replacementCategories.push('CLIENT_IDENTITY');
-        if (options.replaceProposal !== false) replacementCategories.push('PROPOSAL');
+        const requestedCategories = Array.isArray(options.replaceCategories)
+            ? options.replaceCategories
+            : [
+                'QUOTATION',
+                ...(options.replaceClientIdentity === true ? ['CLIENT_IDENTITY'] : []),
+                ...(options.replaceProposal !== false ? ['PROPOSAL'] : [])
+            ];
+        const replacementCategories = [...new Set(requestedCategories.map(value => String(value || '').toUpperCase()).filter(Boolean))];
         const uploadedPaths = [];
         let insertedRows = [];
         try {
-            const { data: previousRows, error: previousError } = await supabaseClient
-                .from('crm_deal_attachments')
-                .select('id, file_url, category')
-                .eq('deal_id', dealId)
-                .in('category', replacementCategories);
-            if (previousError) throw previousError;
-
             const rows = [];
             for (const entry of entries || []) {
                 if (!entry?.file || !replacementCategories.includes(String(entry.category || '').toUpperCase())) continue;
@@ -3448,7 +3520,8 @@ const db = {
                     file_name: entry.file.name,
                     file_url: createStorageReference('crm-deal-files', path),
                     description: entry.description || null,
-                    uploaded_by: userId
+                    uploaded_by: userId,
+                    visible_to_project_assignee: entry.visibleToProjectAssignee === true
                 });
             }
             if (!rows.length) throw new Error('No presentation files were selected.');
@@ -3460,24 +3533,12 @@ const db = {
             if (insertError) throw insertError;
             insertedRows = createdRows || [];
 
-            const previousIds = (previousRows || []).map(row => row.id).filter(Boolean);
-            if (previousIds.length) {
-                const { error: deleteError } = await supabaseClient
-                    .from('crm_deal_attachments')
-                    .delete()
-                    .in('id', previousIds);
-                if (deleteError) throw deleteError;
-            }
-
-            const previousPaths = [...new Set((previousRows || []).map(row => {
-                const reference = parseStorageReference(row.file_url);
-                return reference?.bucket === 'crm-deal-files' ? reference.path : '';
-            }).filter(Boolean))];
-            if (previousPaths.length) {
-                const { error: cleanupError } = await supabaseClient.storage.from('crm-deal-files').remove(previousPaths);
-                if (cleanupError) console.warn('Presentation was replaced, but old file cleanup was incomplete:', cleanupError.message || cleanupError);
-                previousPaths.forEach(path => signedStorageUrlCache.delete(`crm-deal-files/${path}`));
-            }
+            const { error: archiveError } = await supabaseClient.rpc('archive_crm_deal_attachments', {
+                p_deal_id: dealId,
+                p_categories: replacementCategories,
+                p_keep_ids: insertedRows.map(row => row.id).filter(Boolean)
+            });
+            if (archiveError) throw archiveError;
             return { success: true, data: insertedRows };
         } catch (error) {
             if (insertedRows.length) {
@@ -3485,6 +3546,21 @@ const db = {
             }
             if (uploadedPaths.length) await supabaseClient.storage.from('crm-deal-files').remove(uploadedPaths);
             console.error('replaceDealPresentationAttachments Error:', error);
+            return { success: false, error };
+        }
+    },
+    async archiveDealAttachments(dealId, categories, keepIds = []) {
+        if (!supabaseClient || !dealId) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.rpc('archive_crm_deal_attachments', {
+                p_deal_id: dealId,
+                p_categories: (categories || []).map(value => String(value || '').toUpperCase()).filter(Boolean),
+                p_keep_ids: (keepIds || []).filter(Boolean)
+            });
+            if (error) throw error;
+            return { success: true, count: Number(data || 0) };
+        } catch (error) {
+            console.error('archiveDealAttachments Error:', error);
             return { success: false, error };
         }
     },

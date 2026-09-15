@@ -42,7 +42,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=1788202890005">
     <link rel="stylesheet" href="css/layout.css?v=1788202890007">
-    <link rel="stylesheet" href="css/components.css?v=2026091507">
+    <link rel="stylesheet" href="css/components.css?v=2026091510">
     <link rel="stylesheet" href="css/hr-suite-beta.css?v=2026090901">
     <link rel="stylesheet" href="css/android.css?v=2026090702">
     <link rel="stylesheet" href="css/crm-tailwind.css?v=2026090904">
@@ -353,11 +353,13 @@
                 <section class="crm-request-file-section">
                     <label class="form-label" for="presentationQuoteFile" data-i18n="crm_quote_document">Quote document *</label>
                     <input id="presentationQuoteFile" class="form-control" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" required>
+                    <label class="attachment-sharing-choice"><input id="presentationQuoteProjectVisible" type="checkbox"><span data-i18n="attachment_share_project_file">Allow the project assignee to view and download this file</span></label>
                 </section>
                 <section class="crm-request-file-section crm-client-identity-section">
                     <label class="form-label" for="presentationClientIdentityFiles" data-i18n="crm_client_identity">Client identity</label>
                     <small data-i18n="crm_client_identity_help">Upload one or more PDF files or images.</small>
                     <input id="presentationClientIdentityFiles" class="form-control" type="file" accept=".pdf,application/pdf,image/*" multiple>
+                    <label class="attachment-sharing-choice"><input id="presentationIdentityProjectVisible" type="checkbox"><span data-i18n="attachment_share_project_files">Allow the project assignee to view and download these files</span></label>
                 </section>
                 <section id="presentationProposalSection" class="crm-request-file-section" hidden>
                     <div class="crm-proposal-section-heading">
@@ -405,7 +407,7 @@
                 <section class="crm-order-section">
                     <h3 data-i18n="crm_order_confirmation_section">Order confirmation</h3>
                     <div class="crm-order-grid">
-                        <div class="form-group"><label class="form-label" data-i18n="crm_employee_name">Employee's Name</label><input type="text" id="orderEmployeeName" class="form-control" readonly></div>
+                        <div class="form-group"><label class="form-label" for="orderProjectAssignees" data-i18n="crm_assign_project_to">Assign project to</label><select id="orderProjectAssignees" class="form-control" required><option value="" data-i18n="crm_select_project_assignee">Select an employee...</option></select></div>
                         <div class="form-group"><label class="form-label" data-i18n="crm_event_date">Event Date</label><input type="date" id="orderEventDate" class="form-control" required onchange="syncCrmOrderScheduleDefaults()"></div>
                         <div class="form-group"><label class="form-label" data-i18n="crm_event_end_date">Event End Date</label><input type="date" id="orderEventEndDate" class="form-control" required oninput="this.dataset.manual='true'; syncCrmOrderScheduleDefaults()"></div>
                         <div class="form-group"><label class="form-label" data-i18n="crm_event_start_time">Event starting time</label><input type="time" id="orderEventStartTime" class="form-control" required onchange="syncCrmOrderScheduleDefaults()"></div>
@@ -441,10 +443,10 @@
                         <label><input type="radio" name="orderInstallationType" value="OUTDOOR"><span data-i18n="crm_outdoor">Outdoor</span></label>
                         <label><input type="radio" name="orderInstallationType" value="INDOOR_OUTDOOR"><span data-i18n="crm_indoor_outdoor">Indoor and Outdoor</span></label>
                     </fieldset>
-                    <div class="form-group"><label class="form-label" for="orderProjectAssignees" data-i18n="crm_assign_project_to">Assign project to</label><select id="orderProjectAssignees" class="form-control" multiple required></select><small data-i18n="crm_multi_select_help">Hold Ctrl or Command to select more than one employee.</small></div>
                 </section>
                 <section class="crm-order-section">
-                    <div class="crm-order-section-heading"><h3 data-i18n="crm_order_equipment">Order's Equipment</h3><button type="button" class="btn btn-secondary btn-sm" onclick="addOrderEquipmentRow()"><i data-lucide="plus"></i><span data-i18n="crm_add_item">Add item</span></button></div>
+                    <div class="crm-order-section-heading"><h3><span data-i18n="crm_order_equipment">Order's Equipment</span> <span class="crm-optional-badge" data-i18n="crm_optional_section">Optional</span></h3><button type="button" class="btn btn-secondary btn-sm" onclick="addOrderEquipmentRow()"><i data-lucide="plus"></i><span data-i18n="crm_add_item">Add item</span></button></div>
+                    <p class="page-subtitle" data-i18n="crm_equipment_optional_help">Add equipment only when it is needed for this project.</p>
                     <div id="orderEquipmentList" class="crm-equipment-list"></div>
                 </section>
                 <section class="crm-order-section">
@@ -1396,6 +1398,7 @@
                             <input type="file" id="editTaskFiles" multiple style="display: none;" onchange="window.handleEditTaskFilesSelect(this)">
                         </div>
                         <div id="editTaskFilesList" style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;"></div>
+                        <label class="attachment-sharing-choice"><input id="editTaskFilesProjectVisible" type="checkbox"><span data-i18n="attachment_share_project_replacements">Allow the project assignee to view and download the replacement files</span></label>
                     </div>
                 </div>
 
@@ -1680,13 +1683,13 @@
     <script src="js/vendor/xlsx.full.min.js"></script>
     <script src="js/vendor/tesseract/tesseract.min.js?v=7.0.0"></script>
     <script src="js/document-ocr.js?v=2026091503"></script>
-    <script src="js/db.js?v=2026091508"></script>
-    <script src="js/data.js?v=2026091507"></script>
+    <script src="js/db.js?v=2026091510"></script>
+    <script src="js/data.js?v=2026091510"></script>
     <script src="js/contract.js?v=1788202890003"></script>
     <script src="js/payroll.js"></script>
     <script src="js/crm-dashboard.bundle.js?v=2026091505"></script>
     <script src="js/hr-suite-beta.js?v=2026090901"></script>
-    <script src="js/app.js?v=2026091512"></script>
+    <script src="js/app.js?v=2026091515"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

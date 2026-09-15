@@ -47,6 +47,6 @@ assert.match(css, /container-type:inline-size/);
 assert.match(css, /max-width:min\(1080px,calc\(100vw - 2rem\)\)/);
 assert.match(css, /@container \(max-width:560px\)/);
 assert.match(css, /\.project-inline-form>\* \{ min-width:0; max-width:100%; \}/);
-assert.match(html, /css\/components\.css\?v=2026091507/);
+assert.match(html, /css\/components\.css\?v=2026091510/);
 
 console.log('Professional project portfolio is independent, responsive, governed, and activity-aware.');

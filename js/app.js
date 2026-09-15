@@ -4226,22 +4226,38 @@ async function prepareTeamworkTaskDetail(task) {
             grid.insertAdjacentElement('afterend', content);
         }
         const storedLinks = [...(task.content_links || []), ...(task.submission_links || [])].filter(Boolean);
-        const [resolvedTaskLinks, crmPresentationAttachments] = await Promise.all([
+        const [resolvedTaskLinks, taskAttachmentRows, crmPresentationAttachments] = await Promise.all([
             db.resolveStorageReferences(storedLinks),
+            db.fetchTaskAttachments(task.id),
             task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN' && task.crm_deal_id
                 ? db.fetchDealPresentationAttachments(task.crm_deal_id)
                 : Promise.resolve([])
         ]);
-        const links = resolvedTaskLinks.map(safeExternalUrl).filter(Boolean);
+        const managedReferences = new Set(taskAttachmentRows.map(file => file.storage_reference).filter(Boolean));
+        const links = resolvedTaskLinks
+            .map((url, index) => ({ url: safeExternalUrl(url), reference: storedLinks[index] }))
+            .filter(item => item.url && !managedReferences.has(item.reference));
         const imageExtensions = /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i;
         const fileNameFromUrl = link => decodeURIComponent(String(link).split('?')[0].split('/').pop() || 'Attachment');
-        const attachmentHTML = links.map(link => {
-            const safeLink = escapeHTML(link);
-            const label = escapeHTML(fileNameFromUrl(link));
-            return imageExtensions.test(String(link))
+        const canManageTaskFileSharing = canEditTaskRecord(task) && !isMq20Profile();
+        const managedAttachmentHTML = taskAttachmentRows.map(file => {
+            const safeLink = escapeHTML(safeExternalUrl(file.file_url));
+            const label = escapeHTML(file.file_name || fileNameFromUrl(file.file_url));
+            const isImage = String(file.file_type || '').startsWith('image/') || imageExtensions.test(String(file.file_name || file.file_url));
+            const shareToggle = canManageTaskFileSharing ? `<label class="attachment-sharing-toggle"><input type="checkbox" ${file.visible_to_project_assignee ? 'checked' : ''} onchange="setProjectAttachmentVisibility(this,'TASK','${escapeHTML(file.id)}')"><span>${taskDetailText('Share with project assignee', 'مشاركة مع المكلّف بالمشروع')}</span></label>` : '';
+            return `<article class="task-detail-managed-attachment">${isImage
+                ? `<button type="button" class="task-detail-image-attachment" data-image-url="${safeLink}" data-image-name="${label}" onclick="openDealImagePreview(this)" title="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}" aria-label="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}: ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></button>`
+                : `<a href="${safeLink}" target="_blank" rel="noopener"><i data-lucide="download"></i>${label}</a>`}
+                ${shareToggle}</article>`;
+        }).join('');
+        const looseAttachmentHTML = links.map(item => {
+            const safeLink = escapeHTML(item.url);
+            const label = escapeHTML(fileNameFromUrl(item.url));
+            return imageExtensions.test(String(item.url))
                 ? `<button type="button" class="task-detail-image-attachment" data-image-url="${safeLink}" data-image-name="${label}" onclick="openDealImagePreview(this)" title="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}" aria-label="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}: ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></button>`
                 : `<a href="${safeLink}" target="_blank" rel="noopener"><i data-lucide="download"></i>${label}</a>`;
         }).join('');
+        const attachmentHTML = managedAttachmentHTML + looseAttachmentHTML;
         const crmQuoteFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION' && safeExternalUrl(file.file_url));
         const crmClientIdentityFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY' && safeExternalUrl(file.file_url));
         const crmProposalImages = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'PROPOSAL' && safeExternalUrl(file.file_url));
@@ -4283,7 +4299,7 @@ async function prepareTeamworkTaskDetail(task) {
             <nav class="task-detail-tabs" aria-label="${taskDetailText('Task information', 'معلومات المهمة')}"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">${taskDetailText('Details', 'التفاصيل')}</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">${taskDetailText('Proofs', 'الإثباتات')}</button></nav>
             <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
             <section class="task-detail-files">
-                <div class="task-detail-files-heading"><h3>${taskDetailText('Files & links', 'الملفات والروابط')}</h3>${canUploadFiles ? `<button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> ${taskDetailText('Upload files', 'رفع الملفات')}</button><input id="taskAttachmentInput" type="file" multiple style="display: none;" onchange="uploadTaskAttachment(this)">` : ''}</div>
+                <div class="task-detail-files-heading"><h3>${taskDetailText('Files & links', 'الملفات والروابط')}</h3>${canUploadFiles ? `<div class="task-file-upload-controls"><label class="attachment-sharing-choice"><input id="taskAttachmentProjectVisible" type="checkbox"><span>${taskDetailText('Share new files with project assignee', 'مشاركة الملفات الجديدة مع المكلّف بالمشروع')}</span></label><button type="button" class="btn btn-secondary task-file-upload-button" onclick="document.getElementById('taskAttachmentInput').click()"><i data-lucide="paperclip"></i> ${taskDetailText('Replace files', 'استبدال الملفات')}</button><input id="taskAttachmentInput" type="file" multiple style="display: none;" onchange="uploadTaskAttachment(this)"></div>` : ''}</div>
                 <div id="taskDetailFileList">${attachmentHTML ? `<div class="task-detail-link-list">${attachmentHTML}</div>` : ''}${crmPresentationAssetsHTML || attachmentHTML ? crmPresentationAssetsHTML : `<div class="task-detail-file-drop"><i data-lucide="cloud-upload"></i><span>${taskDetailText('No files or links have been added', 'لم تتم إضافة ملفات أو روابط')}</span></div>`}</div>
             </section>`;
     }
@@ -4419,26 +4435,34 @@ window.uploadTaskAttachment = async function (input) {
 
     let successCount = 0;
     const newLinks = [];
+    const newAttachmentIds = [];
+    const shareWithProjectAssignee = document.getElementById('taskAttachmentProjectVisible')?.checked === true;
 
     for (const file of files) {
-        const upload = await db.uploadTaskAttachment(task.id, currentUser.id, file);
+        const upload = await db.uploadTaskAttachment(task.id, currentUser.id, file, shareWithProjectAssignee, 'TASK');
         if (!upload.success) {
             showToast(upload.error?.message || `Unable to upload ${file.name}.`, 'danger');
             continue;
         }
         newLinks.push(upload.url);
+        if (upload.data?.id) newAttachmentIds.push(upload.data.id);
         successCount++;
     }
 
     if (newLinks.length > 0) {
-        const links = [...new Set([...(task.submission_links || []), ...newLinks])];
+        const links = [...new Set(newLinks)];
         const update = await db.updateTask(task.id, { submission_links: links, upload_link: links[0] || null });
         if (!update.success) {
             showToast(update.error?.message || 'The files uploaded, but could not be linked to the task.', 'danger');
         } else {
             task.submission_links = links;
             task.upload_link = links[0] || null;
-            showToast(`${successCount} file(s) uploaded successfully.`, 'success');
+            const archive = await db.archiveTaskAttachments(task.id, newAttachmentIds);
+            if (!archive.success) {
+                showToast(archive.error?.message || taskDetailText('New files were saved, but older files could not be archived.', 'تم حفظ الملفات الجديدة، لكن تعذر أرشفة الملفات القديمة.'), 'warning');
+            } else {
+                showToast(`${successCount} file(s) uploaded successfully. Older files were archived.`, 'success');
+            }
         }
     } else if (files.length > 0) {
         showToast(window.t('msg_toast_14') || 'No files were successfully uploaded.', 'danger');
@@ -4705,7 +4729,7 @@ window.handleTaskCommentSubmit = async function (e) {
     const uploadedAttachments = [];
     let uploadFailed = false;
     for (const file of files) {
-        const upload = await db.uploadTaskAttachment(id, currentUser.id, file);
+        const upload = await db.uploadTaskAttachment(id, currentUser.id, file, false, 'COMMENT');
         if (!upload.success) {
             uploadFailed = true;
             showToast(upload.error?.message || taskDetailText(`Unable to upload ${file.name}.`, `تعذر رفع ${file.name}.`), 'danger');
@@ -9774,6 +9798,7 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
     if (files.some(file => file.size > maximumBytes)) return showToast(t('crm_file_too_large') || 'Each file must be 15 MB or smaller.', 'warning');
 
     const uploadedReferences = [];
+    const uploadedAttachmentIds = [];
     const previousReferences = Array.isArray(task.submission_links) ? [...task.submission_links] : [];
     let taskLinksUpdated = false;
     if (submitButton) submitButton.disabled = true;
@@ -9782,6 +9807,7 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
             const upload = await db.uploadTaskAttachment(task.id, currentUser.id, file);
             if (!upload.success) throw upload.error || new Error(`Unable to upload ${file.name}.`);
             uploadedReferences.push(upload.url);
+            if (upload.data?.id) uploadedAttachmentIds.push(upload.data.id);
         }
         const update = await db.updateTask(task.id, {
             submission_links: uploadedReferences,
@@ -9802,6 +9828,8 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
             commentAttachments
         );
         if (!comment.success) throw comment.error || new Error(taskDetailText('The Design files could not be shared in the task comments.', 'تعذرت مشاركة ملفات التصميم في تعليقات المهمة.'));
+        const archive = await db.archiveTaskAttachments(task.id, uploadedAttachmentIds);
+        if (!archive.success) throw archive.error || new Error(taskDetailText('Older Design files could not be archived.', 'تعذرت أرشفة ملفات التصميم القديمة.'));
         task.submission_links = uploadedReferences;
         task.upload_link = uploadedReferences[0] || null;
         window.closeCrmDesignCompletionModal(true);
@@ -10124,6 +10152,8 @@ window.openEditTaskModal = async function (id) {
         // Files - reset
         document.getElementById('editTaskFiles').value = '';
         document.getElementById('editTaskFilesList').innerHTML = '';
+        const editTaskFilesProjectVisible = document.getElementById('editTaskFilesProjectVisible');
+        if (editTaskFilesProjectVisible) editTaskFilesProjectVisible.checked = false;
 
         const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
         const canDeleteTask = !isMq20Profile() && (isTaskAdmin() || task.created_by === currentUser?.id
@@ -10253,8 +10283,9 @@ window.handleEditTaskSubmit = async function (e) {
         updates.watchers = Array.from(watchersSelect.selectedOptions).map(opt => opt.value);
     }
     
-    // Handle File Uploads
+    // Handle File Uploads. New selections replace the visible set; old rows stay archived.
     const filesInput = document.getElementById('editTaskFiles');
+    const replacementAttachmentIds = [];
     if (filesInput && filesInput.files.length > 0) {
         let uploadedUrls = [];
         try {
@@ -10262,23 +10293,23 @@ window.handleEditTaskSubmit = async function (e) {
             const originalText = uploadBtn.textContent;
             uploadBtn.textContent = 'Uploading...';
             uploadBtn.disabled = true;
+            const shareWithProjectAssignee = document.getElementById('editTaskFilesProjectVisible')?.checked === true;
             
             for (let i = 0; i < filesInput.files.length; i++) {
                 const file = filesInput.files[i];
-                const fileExt = file.name.split('.').pop();
-                const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
-                const filePath = `task_attachments/${fileName}`;
-                const { error: uploadError } = await window.supabaseClient.storage.from('hr-documents').upload(filePath, file);
-                if (!uploadError) {
-                    uploadedUrls.push(`storage://hr-documents/${filePath}`);
+                const upload = await db.uploadTaskAttachment(id, currentUser.id, file, shareWithProjectAssignee, 'TASK');
+                if (upload.success) {
+                    uploadedUrls.push(upload.url);
+                    if (upload.data?.id) replacementAttachmentIds.push(upload.data.id);
                 } else {
-                    console.error('File upload error:', uploadError);
+                    console.error('File upload error:', upload.error);
                 }
             }
             
             if (uploadedUrls.length > 0) {
-                const task = window.taskCache[id];
-                updates.file_links = (task.file_links || []).concat(uploadedUrls);
+                updates.file_links = uploadedUrls;
+                updates.submission_links = uploadedUrls;
+                updates.upload_link = uploadedUrls[0] || null;
             }
             
             uploadBtn.textContent = originalText;
@@ -10301,6 +10332,10 @@ window.handleEditTaskSubmit = async function (e) {
     if (error) {
         showToast(t('toast_failed_to_update_task_details'), "danger");
     } else {
+        if (replacementAttachmentIds.length) {
+            const archive = await db.archiveTaskAttachments(id, replacementAttachmentIds);
+            if (!archive.success) showToast(archive.error?.message || taskDetailText('Task updated, but older attachments could not be archived.', 'تم تحديث المهمة، لكن تعذر أرشفة المرفقات القديمة.'), 'warning');
+        }
         const selectedDepartment = (window.taskDepartmentsCache || []).find(department => getCanonicalDepartmentName(department) === updates.department);
         const selectedAssignee = (window.taskAllUsersCache || []).find(user => user.id === primaryAssigneeId);
         const updatedTask = cacheTaskRecord({
@@ -14251,6 +14286,10 @@ function renderDealWorkflowContents(workflow) {
     const renderAttachmentItems = files => files.map(file => {
         const isImage = /\.(png|jpe?g|webp|gif|bmp|svg)(?:\?|$)/i.test(String(file.file_url || '')) || ['PROPOSAL', 'PHOTO'].includes(String(file.category || '').toUpperCase());
         const isClientIdentity = String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY';
+        const shareControl = !isMq08Viewer ? `<label class="attachment-sharing-toggle" title="${escapeHTML(taskDetailText('Control project assignee access', 'التحكم في وصول المكلّف بالمشروع'))}">
+            <input type="checkbox" ${file.visible_to_project_assignee ? 'checked' : ''} onchange="setProjectAttachmentVisibility(this,'DEAL','${escapeHTML(file.id)}')">
+            <span>${escapeHTML(taskDetailText('Share with project assignee', 'مشاركة مع المكلّف بالمشروع'))}</span>
+        </label>` : '';
         return `<article class="deal-attachment-item ${isImage ? 'deal-attachment-image' : ''}">
             ${isImage ? `<img src="${escapeHTML(file.file_url)}" alt="${escapeHTML(file.description || file.file_name)}" loading="lazy">` : '<i data-lucide="paperclip"></i>'}
             <span><strong>${escapeHTML(file.file_name)}</strong><small>${escapeHTML(file.description || file.category.replace(/_/g, ' '))}</small></span>
@@ -14259,6 +14298,7 @@ function renderDealWorkflowContents(workflow) {
                     ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)">${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
                     : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener">${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
                 ${isClientIdentity ? `<button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(file.file_url)}" data-file-name="${escapeHTML(file.file_name || 'client-identity')}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${escapeHTML(taskDetailText('Download', 'تنزيل'))}</button>` : ''}
+                ${shareControl}
             </div>
         </article>`;
     }).join('');
@@ -14297,6 +14337,26 @@ function renderDealWorkflowContents(workflow) {
         closeButton.hidden = completed;
     }
 }
+
+window.setProjectAttachmentVisibility = async function (input, attachmentType, attachmentId) {
+    if (!input || !attachmentId) return;
+    const requested = input.checked === true;
+    input.disabled = true;
+    const result = await db.setProjectAttachmentVisibility(attachmentType, attachmentId, requested);
+    input.disabled = false;
+    if (!result.success) {
+        input.checked = !requested;
+        showToast(result.error?.message || taskDetailText('Could not update attachment access.', 'تعذر تحديث صلاحية المرفق.'), 'danger');
+        return;
+    }
+    if (attachmentType === 'DEAL' && activeDealWorkflowContext?.workflow?.attachments) {
+        const attachment = activeDealWorkflowContext.workflow.attachments.find(item => item.id === attachmentId);
+        if (attachment) attachment.visible_to_project_assignee = requested;
+    }
+    showToast(requested
+        ? taskDetailText('The project assignee can now view and download this attachment.', 'يمكن للمكلّف بالمشروع الآن عرض هذا المرفق وتنزيله.')
+        : taskDetailText('This attachment is now hidden from the project assignee.', 'تم إخفاء هذا المرفق عن المكلّف بالمشروع.'), 'success');
+};
 
 window.startDealApprovalWorkflow = async function () {
     const dealId = document.getElementById('workflowDealId').value;
@@ -14416,6 +14476,7 @@ function appendDealAttachmentUploadRow(kind, shouldScroll = true) {
             <span class="form-label" data-deal-attachment-description-title></span>
             <textarea class="form-control" rows="2" data-deal-attachment-description ${isProposal ? 'required' : ''}></textarea>
         </label>
+        <label class="attachment-sharing-choice"><input type="checkbox" data-deal-attachment-project-visible><span>${escapeHTML(taskDetailText('Allow the project assignee to view and download this attachment', 'السماح للمكلّف بالمشروع بعرض هذا المرفق وتنزيله'))}</span></label>
     </article>`);
     updateDealAttachmentUploadRowControls(kind);
     if (window.lucide) window.lucide.createIcons();
@@ -14486,7 +14547,8 @@ window.handleDealAttachmentUpload = async function (event) {
     const needsProposal = uploadType === 'PROPOSAL' || uploadType === 'QUOTE_PROPOSAL';
     const collectEntries = selector => Array.from(form.querySelectorAll(selector)).map(row => ({
         file: row.querySelector('[data-deal-attachment-file]')?.files?.[0] || null,
-        description: row.querySelector('[data-deal-attachment-description]')?.value?.trim() || ''
+        description: row.querySelector('[data-deal-attachment-description]')?.value?.trim() || '',
+        visibleToProjectAssignee: row.querySelector('[data-deal-attachment-project-visible]')?.checked === true
     }));
     const quoteEntries = needsQuote ? collectEntries('#dealQuoteUploadRows [data-deal-attachment-upload-row]') : [];
     const proposalEntries = needsProposal ? collectEntries('#dealProposalUploadRows [data-deal-attachment-upload-row]') : [];
@@ -14512,10 +14574,13 @@ window.handleDealAttachmentUpload = async function (event) {
     const button = document.getElementById('dealAttachmentUploadButton');
     button.disabled = true;
     try {
-        for (const entry of allEntries) {
-            const result = await db.uploadDealAttachment(dealId, currentUser.id, entry.file, entry.category, entry.description);
-            if (!result.success) throw result.error || new Error(t('crm_upload_failed') || 'Upload failed.');
-        }
+        const result = await db.replaceDealPresentationAttachments(dealId, currentUser.id, allEntries, {
+            replaceCategories: [
+                ...(needsQuote ? ['QUOTATION'] : []),
+                ...(needsProposal ? ['PROPOSAL'] : [])
+            ]
+        });
+        if (!result.success) throw result.error || new Error(t('crm_upload_failed') || 'Upload failed.');
         window.resetDealAttachmentUploadForm();
         renderDealWorkflowContents(await db.fetchDealWorkflow(dealId));
         showToast(t('crm_files_uploaded') || 'Files uploaded successfully.', 'success');
@@ -14623,6 +14688,7 @@ window.addProposalImageRow = function (shouldScroll = true) {
         </div>
         <label data-proposal-file-label><span>${escapeHTML(t('crm_proposal_image') || 'Proposal image')} *</span><input class="form-control" type="file" accept="image/*" data-proposal-file required onchange="updateProposalImageFileName(this)"></label>
         <label><span data-proposal-description-title></span><textarea class="form-control" data-proposal-description rows="2" required></textarea></label>
+        <label class="attachment-sharing-choice"><input type="checkbox" data-proposal-project-visible><span>${escapeHTML(taskDetailText('Allow the project assignee to view and download this image', 'السماح للمكلّف بالمشروع بعرض هذه الصورة وتنزيلها'))}</span></label>
     </div>`);
     window.updateProposalImageRowControls();
     if (window.lucide) window.lucide.createIcons();
@@ -14665,7 +14731,8 @@ window.handleCrmPresentationRequestSubmit = async function (event) {
     const proposalEntries = requestType === 'QUOTE_PROPOSAL'
         ? Array.from(form.querySelectorAll('[data-proposal-image-row]')).map(row => ({
             file: row.querySelector('[data-proposal-file]')?.files?.[0] || null,
-            description: row.querySelector('[data-proposal-description]')?.value?.trim() || ''
+            description: row.querySelector('[data-proposal-description]')?.value?.trim() || '',
+            visibleToProjectAssignee: row.querySelector('[data-proposal-project-visible]')?.checked === true
         }))
         : [];
     const proposalFiles = proposalEntries.map(entry => entry.file).filter(Boolean);
@@ -14692,8 +14759,18 @@ window.handleCrmPresentationRequestSubmit = async function (event) {
     button.disabled = true;
     try {
         const replacementEntries = [
-            { file: quoteFile, category: 'QUOTATION', description: t('crm_quote_document') || 'Quote document' },
-            ...clientIdentityFiles.map(file => ({ file, category: 'CLIENT_IDENTITY', description: t('crm_client_identity') || 'Client identity' })),
+            {
+                file: quoteFile,
+                category: 'QUOTATION',
+                description: t('crm_quote_document') || 'Quote document',
+                visibleToProjectAssignee: document.getElementById('presentationQuoteProjectVisible')?.checked === true
+            },
+            ...clientIdentityFiles.map(file => ({
+                file,
+                category: 'CLIENT_IDENTITY',
+                description: t('crm_client_identity') || 'Client identity',
+                visibleToProjectAssignee: document.getElementById('presentationIdentityProjectVisible')?.checked === true
+            })),
             ...proposalEntries.map(entry => ({ ...entry, category: 'PROPOSAL' }))
         ];
         const replacement = await db.replaceDealPresentationAttachments(dealId, currentUser.id, replacementEntries, {
@@ -14840,9 +14917,9 @@ window.addOrderEquipmentRow = function (item = {}) {
     const row = document.createElement('div');
     row.className = 'crm-equipment-row';
     row.dataset.equipmentRow = String(rowId);
-    row.innerHTML = `<div class="form-group"><label class="form-label">${escapeHTML(t('crm_item') || 'Item')}</label><input class="form-control" data-equipment-item required value="${escapeHTML(item.item || '')}"></div>
-        <div class="form-group"><label class="form-label">${escapeHTML(t('crm_quantity') || 'Quantity')}</label><input class="form-control" data-equipment-quantity required value="${escapeHTML(item.quantity || '')}"></div>
-        <div class="form-group"><label class="form-label">${escapeHTML(t('crm_upload_image_optional') || 'Upload image (optional)')}</label><input class="form-control" data-equipment-image type="file" accept="image/*"></div>
+    row.innerHTML = `<div class="form-group"><label class="form-label">${escapeHTML(t('crm_item') || 'Item')}</label><input class="form-control" data-equipment-item value="${escapeHTML(item.item || '')}"></div>
+        <div class="form-group"><label class="form-label">${escapeHTML(t('crm_quantity') || 'Quantity')}</label><input class="form-control" data-equipment-quantity value="${escapeHTML(item.quantity || '')}"></div>
+        <div class="form-group"><label class="form-label">${escapeHTML(t('crm_upload_image_optional') || 'Upload image (optional)')}</label><input class="form-control" data-equipment-image type="file" accept="image/*"><label class="attachment-sharing-choice"><input type="checkbox" data-equipment-project-visible><span>${escapeHTML(taskDetailText('Allow the project assignee to view and download this image', 'السماح للمكلّف بالمشروع بعرض هذه الصورة وتنزيلها'))}</span></label></div>
         <button type="button" class="btn btn-icon crm-equipment-remove" onclick="this.closest('[data-equipment-row]').remove()" aria-label="${escapeHTML(t('crm_remove_item') || 'Remove item')}"><i data-lucide="trash-2"></i></button>`;
     container.appendChild(row);
     if (window.lucide) window.lucide.createIcons();
@@ -14896,11 +14973,6 @@ window.prepareCrmOrderModal = async function (dealId, oldStage) {
     });
     modal.dataset.oldStage = oldStage || deal.stage || '';
     document.getElementById('orderDealId').value = dealId;
-    const wonByEmployee = users.find(user => String(user.id) === String(currentUser?.id)) || currentUserProfile;
-    const wonByName = window.formatEmployeeName(wonByEmployee);
-    document.getElementById('orderEmployeeName').value = wonByName && wonByName !== 'Unknown'
-        ? wonByName
-        : (currentUser?.email?.split('@')[0] || '');
     const client = deal.crm_clients || {};
     document.getElementById('orderClientName').value = client.name || '';
     document.getElementById('orderClientCompany').value = client.company || '';
@@ -14910,10 +14982,10 @@ window.prepareCrmOrderModal = async function (dealId, oldStage) {
     document.getElementById('orderPaidAmount').value = '';
     applyBusinessFinancialVisibility(modal);
     const assigneeSelect = document.getElementById('orderProjectAssignees');
-    assigneeSelect.innerHTML = users.map(user => `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}</option>`).join('');
+    assigneeSelect.innerHTML = `<option value="">${escapeHTML(t('crm_select_project_assignee') || 'Select an employee...')}</option>`
+        + users.map(user => `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}</option>`).join('');
     document.getElementById('orderEquipmentList').innerHTML = '';
     orderEquipmentRowCounter = 0;
-    window.addOrderEquipmentRow();
     modal.classList.add('show');
     updateTranslations();
     if (window.lucide) window.lucide.createIcons();
@@ -14934,24 +15006,29 @@ window.handleOrderSubmit = async (event) => {
     if (eventDate && eventEndDate && eventEndDate < eventDate) {
         return showToast(t('crm_event_end_before_start') || 'Event End Date cannot be before the Event Date.', 'warning');
     }
-    const assignedPeople = Array.from(document.getElementById('orderProjectAssignees').selectedOptions).map(option => option.value);
+    const selectedAssignee = document.getElementById('orderProjectAssignees').value;
+    const assignedPeople = selectedAssignee ? [selectedAssignee] : [];
     if (!assignedPeople.length) return showToast(t('crm_select_project_team') || 'Select at least one employee.', 'warning');
     const equipmentRows = Array.from(document.querySelectorAll('#orderEquipmentList [data-equipment-row]'));
-    if (!equipmentRows.length) return showToast(t('crm_add_equipment_item') || 'Add at least one equipment item.', 'warning');
     submitButton.disabled = true;
     try {
         const equipment = [];
+        const newEquipmentAttachmentIds = [];
         for (const row of equipmentRows) {
             const item = row.querySelector('[data-equipment-item]').value.trim();
             const quantity = row.querySelector('[data-equipment-quantity]').value.trim();
             const imageFile = row.querySelector('[data-equipment-image]').files[0];
+            if (!item && !quantity && !imageFile) continue;
+            if (!item || !quantity) throw new Error(t('crm_equipment_row_incomplete') || 'Each added equipment row needs an item and quantity.');
             let imageUrl = null;
             if (imageFile) {
                 if (!String(imageFile.type || '').startsWith('image/')) throw new Error(t('crm_equipment_images_only') || 'Equipment attachments must be images.');
                 if (imageFile.size > 15 * 1024 * 1024) throw new Error(t('crm_file_too_large') || 'Each file must be 15 MB or smaller.');
-                const upload = await db.uploadDealAttachment(dealId, currentUser.id, imageFile, 'PHOTO', `${t('crm_equipment') || 'Equipment'}: ${item}`);
+                const shareWithProjectAssignee = row.querySelector('[data-equipment-project-visible]')?.checked === true;
+                const upload = await db.uploadDealAttachment(dealId, currentUser.id, imageFile, 'PHOTO', `${t('crm_equipment') || 'Equipment'}: ${item}`, shareWithProjectAssignee);
                 if (!upload.success) throw upload.error || new Error(t('crm_upload_failed') || 'Upload failed');
                 imageUrl = upload.data?.file_url || null;
+                if (upload.data?.id) newEquipmentAttachmentIds.push(upload.data.id);
             }
             equipment.push({ item, quantity, image_url: imageUrl });
         }
@@ -14980,6 +15057,10 @@ window.handleOrderSubmit = async (event) => {
         }
         const result = await db.createProjectFromWonDealV2(orderData, dealId);
         if (!result.success) throw result.error || new Error(t('crm_project_create_failed') || 'Failed to create the project');
+        if (newEquipmentAttachmentIds.length) {
+            const archive = await db.archiveDealAttachments(dealId, ['PHOTO'], newEquipmentAttachmentIds);
+            if (!archive.success) showToast(archive.error?.message || taskDetailText('The project was saved, but older order attachments could not be archived.', 'تم حفظ المشروع، لكن تعذرت أرشفة مرفقات الطلب القديمة.'), 'warning');
+        }
         window.closeCRMOrderModal();
         window.setCrmDealStageLocally?.(dealId, 'WON');
         showToast(t('crm_project_created_deal_won') || 'Project created and deal marked as won.', 'success');
@@ -17192,6 +17273,26 @@ function projectTodoList(todos, project, canManage) {
     }).join('');
 }
 
+function projectAttachmentList(attachments, canManage) {
+    if (!attachments.length) return `<p class="project-detail-empty">${taskDetailText('No current attachments are shared with this project.', 'لا توجد مرفقات حالية مشتركة مع هذا المشروع.')}</p>`;
+    const imageExtensions = /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i;
+    return `<div class="project-attachment-grid">${attachments.map(file => {
+        const url = safeExternalUrl(file.file_url);
+        const name = file.file_name || taskDetailText('Attachment', 'مرفق');
+        const isImage = String(file.file_type || '').startsWith('image/') || imageExtensions.test(String(name)) || imageExtensions.test(String(url));
+        const typeLabel = String(file.category || file.attachment_type || 'FILE').replace(/_/g, ' ');
+        return `<article class="project-attachment-card ${isImage ? 'is-image' : ''}">
+            ${isImage ? `<button type="button" class="project-attachment-preview" data-image-url="${escapeHTML(url)}" data-image-name="${escapeHTML(name)}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)"><img src="${escapeHTML(url)}" alt="${escapeHTML(file.description || name)}" loading="lazy"></button>` : `<div class="project-attachment-file-icon"><i data-lucide="file-text"></i></div>`}
+            <div class="project-attachment-copy"><strong>${escapeHTML(name)}</strong><small>${escapeHTML(file.description || typeLabel)}</small></div>
+            <div class="project-attachment-actions">
+                ${!isImage ? `<a class="btn btn-secondary btn-sm" href="${escapeHTML(url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${taskDetailText('Open', 'فتح')}</a>` : ''}
+                <button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(url)}" data-file-name="${escapeHTML(name)}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${taskDetailText('Download', 'تنزيل')}</button>
+                ${canManage ? `<label class="attachment-sharing-toggle"><input type="checkbox" ${file.visible_to_project_assignee ? 'checked' : ''} onchange="setProjectAttachmentVisibility(this,'${escapeHTML(file.attachment_type)}','${escapeHTML(file.attachment_id)}')"><span>${taskDetailText('Shared with assignee', 'مشترك مع المكلّف')}</span></label>` : ''}
+            </div>
+        </article>`;
+    }).join('')}</div>`;
+}
+
 async function fetchAssignedProjectTodoContext(projectId, todoId = null) {
     const cached = window.assignedProjectTodoContext;
     if (cached?.projectId === projectId && (!todoId || cached?.todoId === todoId) && cached?.items?.length) return cached;
@@ -17264,7 +17365,11 @@ window.openProjectDetail = async function (id) {
     if (!project) return openAssignedProjectTodoDetail(id);
     if (!canViewFullProjectCommandCenter(currentUserProfile, project)) return openAssignedProjectTodoDetail(id);
     window.activeProjectDetailId = id;
-    const [updates, todos] = await Promise.all([db.fetchProjectUpdates(id), db.fetchProjectTodos(id)]);
+    const [updates, todos, attachments] = await Promise.all([
+        db.fetchProjectUpdates(id),
+        db.fetchProjectTodos(id),
+        db.fetchProjectSharedAttachments(id)
+    ]);
     const status = normalizeProjectStatus(project);
     const health = effectiveProjectHealth(project);
     const budget = Number(project.budget_amount ?? project.project_amount ?? 0);
@@ -17284,6 +17389,7 @@ window.openProjectDetail = async function (id) {
         <section><h3><i data-lucide="milestone"></i>${projectText('milestones')}</h3><div class="project-detail-list">${projectDetailList(milestones, 'milestone', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectMilestone(event,'${id}')"><input id="projectMilestoneTitle" class="form-control" placeholder="${projectText('milestoneHint')}" required><input id="projectMilestoneDate" type="date" class="form-control"><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addMilestone')}</button></form>` : ''}</section>
         <section><h3><i data-lucide="shield-alert"></i>${projectText('risks')}</h3><div class="project-detail-list">${projectDetailList(risks, 'risk', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectRisk(event,'${id}')"><input id="projectRiskTitle" class="form-control" placeholder="${projectText('riskHint')}" required><select id="projectRiskSeverity" class="form-control"><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option><option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option></select><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addRisk')}</button></form>` : ''}</section>
         <section><h3><i data-lucide="message-square-text"></i>${projectText('updates')}</h3><div class="project-update-feed">${updates.length ? updates.map(update => `<article><i></i><div><strong>${escapeHTML(projectProfileName(update.author_id))}</strong><p>${escapeHTML(update.summary || '')}</p><time>${new Date(update.created_at).toLocaleString()}</time></div></article>`).join('') : `<p class="project-detail-empty">${projectText('noUpdates')}</p>`}</div><form class="project-update-form" onsubmit="addProjectUpdate(event,'${id}')"><textarea id="projectUpdateSummary" class="form-control" rows="2" placeholder="${projectText('updateHint')}" required></textarea><button class="btn btn-primary" type="submit"><i data-lucide="send"></i>${projectText('postUpdate')}</button></form></section>
+        <section class="project-attachments-section project-detail-span-2"><div class="project-todo-heading"><h3><i data-lucide="paperclip"></i>${taskDetailText('Project attachments', 'مرفقات المشروع')}</h3><span>${attachments.length}</span></div>${projectAttachmentList(attachments, canManageTodos)}</section>
         <section class="project-todo-section project-detail-span-2"><div class="project-todo-heading"><h3><i data-lucide="list-checks"></i>${projectText('todoList')}</h3><span>${todos.filter(todo => todo.status !== 'DONE').length}</span></div><div class="project-todo-list">${projectTodoList(todos, project, canManageTodos)}</div>${todoForm}</section></div>`;
     document.getElementById('projectDetailModal').classList.add('active');
     if (window.lucide) window.lucide.createIcons();

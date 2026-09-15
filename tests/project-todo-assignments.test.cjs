@@ -48,13 +48,13 @@ assert.match(app, /window\.addProjectTodo/);
 assert.match(app, /window\.toggleProjectTodo/);
 assert.match(app, /window\.deleteProjectTodo/);
 assert.match(app, /table: 'project_todos'/);
-assert.match(app, /Promise\.all\(\[db\.fetchProjectUpdates\(id\), db\.fetchProjectTodos\(id\)\]\)/);
+assert.match(app, /Promise\.all\(\[[\s\S]*db\.fetchProjectUpdates\(id\)[\s\S]*db\.fetchProjectTodos\(id\)[\s\S]*db\.fetchProjectSharedAttachments\(id\)/);
 
 assert.match(css, /\.project-todo-form/);
 assert.match(css, /\.project-todo-item\.is-overdue/);
 assert.match(css, /@container \(max-width:560px\)[^}]*[\s\S]*?\.project-todo-form \{ grid-template-columns:1fr; \}/);
-assert.match(html, /css\/components\.css\?v=2026091507/);
-assert.match(html, /js\/db\.js\?v=2026091508/);
-assert.match(html, /js\/app\.js\?v=2026091512/);
+assert.match(html, /css\/components\.css\?v=2026091510/);
+assert.match(html, /js\/db\.js\?v=2026091510/);
+assert.match(html, /js\/app\.js\?v=2026091515/);
 
 console.log('Project To Do assignments are scoped, bilingual, deadline-aware, responsive, and independent from Tasks Manager.');

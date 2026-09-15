@@ -35,10 +35,10 @@ assert.match(dashboard, /designCompleted, classes: 'tw-bg-emerald-50 tw-text-eme
 assert.match(css, /\.task-crm-design-status-control/);
 assert.match(css, /\.task-crm-design-status-select/);
 assert.match(css, /\.deal-workflow-design-status-actions/);
-assert.match(html, /css\/components\.css\?v=2026091507/);
-assert.match(html, /js\/db\.js\?v=2026091508/);
+assert.match(html, /css\/components\.css\?v=2026091510/);
+assert.match(html, /js\/db\.js\?v=2026091510/);
 assert.match(html, /js\/crm-dashboard\.bundle\.js\?v=2026091505/);
-assert.match(html, /js\/app\.js\?v=2026091512/);
-assert.match(worker, /muqam-hr-mobile-v244/);
+assert.match(html, /js\/app\.js\?v=2026091515/);
+assert.match(worker, /muqam-hr-mobile-v247/);
 
 console.log('MQ-08 CRM Design task deal-status selector tests passed.');

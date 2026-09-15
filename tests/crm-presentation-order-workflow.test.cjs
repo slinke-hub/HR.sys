@@ -14,13 +14,14 @@ const migration = read('supabase/migrations/20260909110000_crm_presentation_orde
 const autoDiscussionMigration = read('supabase/migrations/20260910110000_crm_approved_deals_auto_discussion.sql');
 const wonProjectScheduleMigration = read('supabase/migrations/20260915140000_won_project_client_and_schedule.sql');
 const eventEndScheduleMigration = read('supabase/migrations/20260915180000_won_project_event_end_schedule_defaults.sql');
+const optionalEquipmentMigration = read('supabase/migrations/20260915190000_won_project_optional_equipment.sql');
 
 for (const id of [
   'crmPresentationChoiceModal', 'crmPresentationRequestModal', 'presentationQuoteFile',
   'presentationClientIdentityFiles', 'presentationProposalDescriptions', 'crmOrderModal',
-  'orderEmployeeName', 'orderEventDate', 'orderEventEndDate', 'orderEventStartTime', 'orderInstallationTime',
+  'orderProjectAssignees', 'orderEventDate', 'orderEventEndDate', 'orderEventStartTime', 'orderInstallationTime',
   'orderUninstallationTime', 'orderClientName', 'orderClientCompany', 'orderClientEmail',
-  'orderClientPhone', 'orderLocationUrl', 'orderLocationText', 'orderProjectAssignees',
+  'orderClientPhone', 'orderLocationUrl', 'orderLocationText',
   'orderEquipmentList'
 ]) assert.match(html, new RegExp(`id="${id}"`), `Missing workflow field ${id}`);
 
@@ -42,6 +43,12 @@ assert.match(html, /id="orderUninstallationTime"[^>]*dataset\.manual='true'/);
 assert.match(html, /class="crm-datetime-control"/);
 assert.match(html, /class="crm-optional-badge" data-i18n="crm_optional_section"/);
 assert.match(html, /data-i18n="crm_financial_optional_help"/);
+assert.match(html, /data-i18n="crm_equipment_optional_help"/);
+assert.doesNotMatch(app.match(/window\.addOrderEquipmentRow = function[\s\S]*?^};/m)?.[0] || '', /data-equipment-(?:item|quantity)[^>]*required/);
+assert.doesNotMatch(app.match(/window\.prepareCrmOrderModal = async function[\s\S]*?^};/m)?.[0] || '', /window\.addOrderEquipmentRow\(\)/);
+assert.doesNotMatch(app, /if \(!equipmentRows\.length\)/);
+assert.match(app, /if \(!item && !quantity && !imageFile\) continue/);
+assert.match(app, /if \(!item \|\| !quantity\) throw new Error\(t\('crm_equipment_row_incomplete'\)/);
 assert.doesNotMatch(html.match(/id="orderProjectAmount"[^>]*>/)?.[0] || '', /required/);
 assert.doesNotMatch(html.match(/id="orderPaidAmount"[^>]*>/)?.[0] || '', /required/);
 assert.match(html, /crm-add-proposal-image[^>]*onclick="addProposalImageRow\(\)"/);
@@ -74,7 +81,7 @@ assert.match(app, /function renderDealPresentationAssets\(attachments\)/);
 assert.match(app, /category \|\| ''\)\.toUpperCase\(\) === 'QUOTATION'/);
 assert.match(app, /category \|\| ''\)\.toUpperCase\(\) === 'PROPOSAL'/);
 assert.match(app, /category \|\| ''\)\.toUpperCase\(\) === 'CLIENT_IDENTITY'/);
-assert.match(app, /clientIdentityFiles\.map\(file => \(\{ file, category: 'CLIENT_IDENTITY'/);
+assert.match(app, /clientIdentityFiles\.map\(file => \(\{[\s\S]*?category: 'CLIENT_IDENTITY'/);
 assert.match(app, /deal-presentation-image-card/);
 assert.match(app, /<figcaption>[\s\S]*file\.description/);
 assert.match(app, /db\.startCrmPresentationApproval\(dealId, requestType\)/);
@@ -92,9 +99,13 @@ assert.match(app, /shiftCrmOrderDateTime\(eventDate, eventTime, -2\)/);
 assert.match(app, /shiftCrmOrderDateTime\(eventEndDate, eventTime, 2\)/);
 assert.match(app, /event_end_date: eventEndDate \|\| null/);
 assert.match(app, /eventEndDate < eventDate/);
-assert.match(app, /wonByEmployee = users\.find\(user => String\(user\.id\) === String\(currentUser\?\.id\)\) \|\| currentUserProfile/);
-assert.match(app, /orderEmployeeName'\)\.value = wonByName && wonByName !== 'Unknown'/);
-assert.match(app, /assigneeSelect\.innerHTML = users\.map\(user =>/);
+assert.doesNotMatch(html, /id="orderEmployeeName"/);
+assert.equal((html.match(/id="orderProjectAssignees"/g) || []).length, 1);
+assert.match(html, /id="orderProjectAssignees"[\s\S]*id="orderEventDate"/);
+assert.doesNotMatch(html.match(/id="orderProjectAssignees"[^>]*>/)?.[0] || '', /multiple/);
+assert.match(app, /const selectedAssignee = document\.getElementById\('orderProjectAssignees'\)\.value/);
+assert.match(app, /const assignedPeople = selectedAssignee \? \[selectedAssignee\] : \[\]/);
+assert.match(app, /assigneeSelect\.innerHTML = `<option value="">[\s\S]*users\.map\(user =>/);
 assert.doesNotMatch(app, /const operationDepartmentIds/);
 assert.doesNotMatch(app, /const operationsUsers/);
 assert.match(app, /task\?\.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN'/);
@@ -152,5 +163,11 @@ assert.match(eventEndScheduleMigration, /\(v_event_date \+ v_event_start_time\) 
 assert.match(eventEndScheduleMigration, /\(v_event_end_date \+ v_event_start_time\) \+ INTERVAL '2 days'/);
 assert.match(eventEndScheduleMigration, /event_date, start_date, end_date/);
 assert.match(eventEndScheduleMigration, /event_date = v_event_date, start_date = v_event_date, end_date = v_event_end_date/);
+
+assert.match(optionalEquipmentMigration, /v_equipment jsonb/);
+assert.match(optionalEquipmentMigration, /jsonb_typeof\(p_order->'equipment'\) = 'array'/);
+assert.doesNotMatch(optionalEquipmentMigration, /jsonb_array_length[\s\S]*= 0/);
+assert.match(optionalEquipmentMigration, /jsonb_array_elements\(v_equipment\)/);
+assert.match(optionalEquipmentMigration, /equipment = v_equipment/);
 
 console.log('CRM presentation approvals, Design review, and Won order workflow tests passed.');

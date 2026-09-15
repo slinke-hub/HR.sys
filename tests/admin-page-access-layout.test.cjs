@@ -36,6 +36,6 @@ assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.page-access-toolbar \{ gr
 assert.match(db, /from\('user_permissions'\)[\s\S]*\.eq\('user_id', userId\)[\s\S]*\.maybeSingle\(\)/);
 assert.match(html, /frame-src 'self' blob: https:\/\/vercel\.live/);
 assert.match(vercel, /frame-src 'self' blob: https:\/\/vercel\.live/);
-assert.match(serviceWorker, /muqam-hr-mobile-v244/);
+assert.match(serviceWorker, /muqam-hr-mobile-v247/);
 
 console.log('Admin page access layout and interaction checks passed.');
