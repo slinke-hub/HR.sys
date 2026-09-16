@@ -2100,7 +2100,8 @@ function showToast(message, type = 'info', detail = '') {
 
     displayMessage = localizeRuntimeText(displayMessage);
     displayDetail = localizeRuntimeText(displayDetail);
-    if (currentLang === 'ar') {
+    if (currentLang === 'ar' && type === 'danger') {
+        // Only replace untranslated English error messages — never replace success/warning/info toasts
         if (/[A-Za-z]{2,}/.test(displayMessage) && !/[\u0600-\u06FF]/.test(displayMessage)) {
             displayMessage = 'حدث خطأ غير متوقع';
         }
@@ -13336,7 +13337,9 @@ window.handleSaveTaskList = async function (event) {
         showToast(missingDepartmentColumn ? 'Run task_list_department_visibility_migration.sql in Supabase, then try again.' : (result.error?.message || 'Unable to save the private list.'), 'danger');
         return;
     }
-    showToast(id ? 'Private list sharing updated.' : 'Private task list created.', 'success');
+    showToast(id
+        ? (currentLang === 'ar' ? 'تم تحديث إعدادات القائمة.' : 'List settings updated.')
+        : (currentLang === 'ar' ? 'تم إنشاء القائمة الخاصة.' : 'Private task list created.'), 'success');
     window.closeTaskListModal();
     window.scheduleTaskWorkspaceRefresh(100);
 };
