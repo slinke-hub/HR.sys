@@ -96,6 +96,43 @@
                 if (parsed) return parsed;
             }
         }
+        
+        // Fallback: Find any future date in the entire text
+        const unlabelledDates = [];
+        const normalizedForFallback = normalized.replace(/[.]/g, '/');
+        
+        const r1 = /\b(20\d{2}|19\d{2}|21\d{2}|22\d{2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(\d{1,2})\b/g;
+        let m1;
+        while ((m1 = r1.exec(normalizedForFallback))) unlabelledDates.push(validIsoDate(m1[1], m1[2], m1[3]));
+        
+        const r2 = /\b(\d{1,2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(20\d{2}|19\d{2}|21\d{2}|22\d{2})\b/g;
+        let m2;
+        while ((m2 = r2.exec(normalizedForFallback))) unlabelledDates.push(validIsoDate(m2[3], m2[2], m2[1]));
+
+        const monthNames = {
+            january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
+            may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8,
+            september: 9, sep: 9, october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12
+        };
+        const r3 = /\b(\d{1,2})\s+([a-z]{3,9})\s*,?\s*(20\d{2}|19\d{2}|21\d{2}|22\d{2})\b/gi;
+        let m3;
+        while ((m3 = r3.exec(normalizedForFallback))) {
+            if (monthNames[m3[2].toLowerCase()]) unlabelledDates.push(validIsoDate(m3[3], monthNames[m3[2].toLowerCase()], m3[1]));
+        }
+
+        const r4 = /\b([a-z]{3,9})\s+(\d{1,2}),?\s*(20\d{2}|19\d{2}|21\d{2}|22\d{2})\b/gi;
+        let m4;
+        while ((m4 = r4.exec(normalizedForFallback))) {
+            if (monthNames[m4[1].toLowerCase()]) unlabelledDates.push(validIsoDate(m4[3], monthNames[m4[1].toLowerCase()], m4[2]));
+        }
+        
+        const todayStr = new Date().toISOString().split('T')[0];
+        const validFutureDates = unlabelledDates.filter(d => d && d >= todayStr);
+        if (validFutureDates.length > 0) {
+            // Return the furthest future date as it's most likely the expiry date
+            return validFutureDates.sort((a, b) => a.localeCompare(b)).pop();
+        }
+
         return '';
     }
 

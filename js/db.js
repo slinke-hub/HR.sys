@@ -697,17 +697,18 @@ const db = {
 
     // --- Leave Management ---
     async submitLeaveRequest(userId, requestData) {
-        if (!supabaseClient) return true;
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {
+            const finalRequestData = { status: 'PENDING', ...requestData, employee_id: userId };
             const { error } = await supabaseClient
                 .from('leave_requests')
-                .insert([{ ...requestData, employee_id: userId }]);
+                .insert([finalRequestData]);
             if (error) throw error;
             await this.flushTaskNotificationEmails();
-            return true;
+            return { success: true };
         } catch (error) {
             console.error("Error submitting leave request:", error.message);
-            return false;
+            return { success: false, error };
         }
     },
 

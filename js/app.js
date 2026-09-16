@@ -875,12 +875,11 @@ window.handleCreateRequest = async (e) => {
         const shortDuration = Number(document.getElementById('requestShortLeaveDuration').value);
         if (!shortReason) return showToast(window.t('msg_toast_2') || 'Select a reason for the short leave.', 'danger');
         const today = new Date().toISOString().slice(0, 10);
-        const success = await db.submitLeaveRequest(empId, {
+        res = await db.submitLeaveRequest(empId, {
             leave_type: 'Short Leave', start_date: today, end_date: today,
             reason: shortReason, short_leave_reason: shortReason,
             short_leave_duration_minutes: shortDuration
         });
-        res = { success };
     } else {
         res = await db.createRequest(empId, reqType, leaveType, loanAmount, numberOfDays);
     }
@@ -2282,7 +2281,7 @@ window.handleLeaveSubmit = async function (e) {
     const shortDuration = isShortLeave ? Number(document.getElementById('leaveShortDuration').value) : null;
     const reason = isShortLeave ? shortReason : document.getElementById('leaveReason').value;
 
-    const success = await db.submitLeaveRequest(currentUser.id, {
+    const res = await db.submitLeaveRequest(currentUser.id, {
         leave_type: type,
         start_date: start,
         end_date: end,
@@ -2291,11 +2290,11 @@ window.handleLeaveSubmit = async function (e) {
         short_leave_duration_minutes: shortDuration
     });
 
-    if (success) {
+    if (res.success) {
         showToast(t('toast_leave_applied'), 'success');
         renderView('leave');
     } else {
-        showToast(t('toast_failed_to_submit_leave'), 'danger');
+        showToast(res.error?.message || t('toast_failed_to_submit_leave'), 'danger');
     }
 }
 
@@ -3153,12 +3152,14 @@ async function renderDashboard() {
                     <label><input type="radio" name="dashboardShortLeaveReason" value="I am running late to the office."> ${t('dashboard_short_late')}</label>
                     <label><input type="radio" name="dashboardShortLeaveReason" value="I will be out for a meeting."> ${t('dashboard_short_meeting')}</label>
                     <label><input type="radio" name="dashboardShortLeaveReason" value="I need to attend an urgent family matter."> ${t('dashboard_short_family')}</label>
+                    <label><input type="radio" name="dashboardShortLeaveReason" value="I have an important outing to run."> ${t('dashboard_short_outing')}</label>
                 </div>
                 <div class="short-leave-durations">
                     <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(15)">${t('dashboard_15_minutes')}</button>
                     <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(60)">${t('dashboard_1_hour')}</button>
                     <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(120)">${t('dashboard_2_hours')}</button>
                     <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(180)">${t('dashboard_3_hours')}</button>
+                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(1440)">${t('dashboard_1_day')}</button>
                 </div>
             </div>` : ''}
             
@@ -4551,13 +4552,13 @@ window.submitDashboardShortLeave = async function (durationMinutes) {
     const buttons = document.querySelectorAll('.short-leave-duration-button');
     buttons.forEach(button => button.disabled = true);
     const today = new Date().toISOString().slice(0, 10);
-    const success = await db.submitLeaveRequest(currentUser.id, {
+    const res = await db.submitLeaveRequest(currentUser.id, {
         leave_type: 'Short Leave', start_date: today, end_date: today,
         reason: selectedReason.value, short_leave_reason: selectedReason.value,
         short_leave_duration_minutes: durationMinutes
     });
     buttons.forEach(button => button.disabled = false);
-    if (!success) return showToast(window.t('msg_toast_15') || 'Failed to submit short leave request.', 'danger');
+    if (!res.success) return showToast(res.error?.message || window.t('msg_toast_15') || 'Failed to submit short leave request.', 'danger');
     showToast(window.t('msg_toast_16') || 'Short leave request submitted successfully.', 'success');
     renderView('dashboard');
 };
@@ -4979,6 +4980,7 @@ async function renderLeave() {
                                 <option value="I am running late to the office.">I am running late to the office.</option>
                                 <option value="I will be out for a meeting.">I will be out for a meeting.</option>
                                 <option value="I need to attend an urgent family matter.">I need to attend an urgent family matter.</option>
+                                <option value="I have an important outing to run.">I have an important outing to run.</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -4986,6 +4988,7 @@ async function renderLeave() {
                             <select id="leaveShortDuration" class="form-control">
                                 <option value="15">15 Minutes</option><option value="60">1 Hour</option>
                                 <option value="120">2 Hours</option><option value="180">3 Hours</option>
+                                <option value="1440">1 Day</option>
                             </select>
                         </div>
                     </div>
@@ -16419,6 +16422,7 @@ async function renderMyRequestStatuses() {
         const canWithdraw = normalizedStatus === 'PENDING' && Boolean(request.source_table && reqRowId);
         return `<tr class="my-request-status-row" id="request-row-${reqRowId}" data-request-id="${reqRowId}" data-request-date="${requestDate}">
             <td>${new Date(request.created_at).toLocaleDateString()}</td>
+            <td>${escapeHTML(request.submitter_name || window.currentUser?.full_name || 'Me')}</td>
             <td><strong>${escapeHTML(request.request_type || 'Employee Request')}</strong><br><small>${escapeHTML(request.request_details || '')}</small></td>
             <td><span class="status-badge ${badgeClass}">${escapeHTML(normalizedStatus)}</span></td>
             <td><div class="my-request-current-stage"><strong>${escapeHTML(stageLabel)}</strong>${normalizedStatus === 'PENDING' ? `<small>${escapeHTML(request.current_approver_name || 'Management')}</small>` : ''}</div></td>
@@ -16436,8 +16440,8 @@ async function renderMyRequestStatuses() {
         <input type="date" id="myRequestStatusDate" class="form-control" onchange="filterMyRequestStatuses()">
     </div></div>
     <div class="card fade-in-up"><div class="table-responsive"><table class="data-table">
-        <thead><tr><th>${t('date')}</th><th>${t('ui_request')}</th><th>${t('status')}</th><th>${t('ui_approval_stage')}</th><th>${t('ui_rejection_reason')}</th><th>${t('ui_actions')}</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--color-text-secondary)">${t('ui_no_submitted_requests')}</td></tr>`}</tbody>
+        <thead><tr><th>${t('date')}</th><th>${t('ui_submitter') || 'Submitter'}</th><th>${t('ui_request')}</th><th>${t('status')}</th><th>${t('ui_approval_stage')}</th><th>${t('ui_rejection_reason')}</th><th>${t('ui_actions')}</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--color-text-secondary)">${t('ui_no_submitted_requests')}</td></tr>`}</tbody>
     </table></div></div>`;
 }
 
@@ -16497,7 +16501,7 @@ async function renderRequests() {
             leaveType: r.leave_type || '',
             employee_id: r.employee_id,
             details: r.leave_type === 'Short Leave'
-                ? `Short Leave: ${r.short_leave_reason || r.reason || 'No reason'} — ${r.short_leave_duration_minutes || 0} minutes`
+                ? `Short Leave: ${r.short_leave_reason || r.reason || 'No reason'} — ${r.short_leave_duration_minutes === 1440 ? '1 Day' : (r.short_leave_duration_minutes || 0) + ' minutes'}`
                 : `${r.leave_type}: ${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}`,
             status: r.status,
             created_at: r.created_at,
