@@ -1583,9 +1583,9 @@ const db = {
         try {
             const { data, error } = await supabaseClient.from('task_lists')
                 .update({ ...updates, updated_at: new Date().toISOString() })
-                .eq('id', listId).select().single();
+                .eq('id', listId).select();
             if (error) throw error;
-            return { success: true, data };
+            return { success: true, data: data?.[0] };
         } catch (error) {
             console.error('updateTaskList Error:', error);
             return { success: false, error };
