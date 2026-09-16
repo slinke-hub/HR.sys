@@ -2561,6 +2561,7 @@ window.handleLoginSubmit = async function (e) {
     viewHistory = [];
     appHistoryInitialized = false;
     startNotificationsRealtime();
+    startTasksRealtime();
     renderView(currentView);
 }
 
@@ -12390,6 +12391,7 @@ function renderNotificationDetails(notification, compact = false) {
 // ==========================================
 let notificationsInterval;
 let notificationsChannel = null;
+let tasksChannel = null;
 let notificationsInitialized = false;
 let knownNotificationIds = new Set();
 let notificationAudioContext = null;
@@ -12480,6 +12482,28 @@ async function pollNotifications(options = {}) {
             `).join('');
         }
     }
+}
+
+function stopTasksRealtime() {
+    if (tasksChannel && window.supabaseClient?.removeChannel) {
+        window.supabaseClient.removeChannel(tasksChannel);
+    }
+    tasksChannel = null;
+}
+
+async function startTasksRealtime() {
+    stopTasksRealtime();
+    if (!currentUser || !window.supabaseClient) return;
+    
+    tasksChannel = window.supabaseClient
+        .channel('public:tasks-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, payload => {
+            if (window.scheduleTaskWorkspaceRefresh) window.scheduleTaskWorkspaceRefresh(100);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'task_lists' }, payload => {
+            if (window.scheduleTaskWorkspaceRefresh) window.scheduleTaskWorkspaceRefresh(100);
+        })
+        .subscribe();
 }
 
 function stopNotificationsRealtime() {
@@ -16262,6 +16286,7 @@ async function initApp() {
     db.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT' || !session) {
             stopNotificationsRealtime();
+            stopTasksRealtime();
             currentUser = null;
             currentUserRole = null;
             currentUserProfile = null;
@@ -16335,6 +16360,7 @@ async function initApp() {
         if (restoredNav && restoredNav.style.display === 'none') currentView = 'dashboard';
 
         await startNotificationsRealtime();
+        await startTasksRealtime();
     } else {
         currentView = 'login';
     }
