@@ -1,5 +1,52 @@
 BEGIN;
 
+-- 1. Fix the first trigger function (validate_task_list_department_access)
+CREATE OR REPLACE FUNCTION public.validate_task_list_department_access()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  owner_department uuid;
+  caller_role text;
+  invalid_member uuid;
+BEGIN
+  SELECT role INTO caller_role FROM public.profiles WHERE id = auth.uid();
+  SELECT department_id INTO owner_department FROM public.profiles WHERE id = NEW.owner_id;
+  
+  -- If NEW.department_id is set to a specific department but they are not an admin/owner, force it to their own department
+  IF NEW.department_id IS NOT NULL AND NEW.department_id IS DISTINCT FROM owner_department THEN
+      IF UPPER(COALESCE(caller_role, '')) NOT IN ('ADMIN','OWNER','ROLE_SYSTEM_ADMIN','SYSTEM_ADMIN') THEN 
+          NEW.department_id := owner_department; 
+      END IF;
+  END IF;
+
+  NEW.visible_to_all := false;
+  NEW.shared_with := array_remove(COALESCE(NEW.shared_with, '{}'::uuid[]), NEW.owner_id);
+  NEW.can_add_users := array_remove(COALESCE(NEW.can_add_users, '{}'::uuid[]), NEW.owner_id);
+  NEW.can_delete_users := array_remove(COALESCE(NEW.can_delete_users, '{}'::uuid[]), NEW.owner_id);
+  
+  -- If the list is assigned to a department, ensure we only share with people in that department
+  IF NEW.department_id IS NOT NULL THEN
+      SELECT member_id INTO invalid_member 
+      FROM unnest(NEW.shared_with || NEW.can_add_users || NEW.can_delete_users) AS member_id 
+      LEFT JOIN public.profiles member ON member.id = member_id 
+      WHERE member.id IS NULL OR member.department_id IS DISTINCT FROM NEW.department_id 
+      LIMIT 1;
+      
+      IF invalid_member IS NOT NULL THEN 
+          RAISE EXCEPTION 'Task-list access can only be granted to employees in the selected department' USING ERRCODE = '42501'; 
+      END IF;
+  END IF;
+
+  NEW.updated_at := now(); 
+  RETURN NEW;
+END;
+$$;
+
+
+-- 2. Fix the second trigger function (validate_task_list_department_visibility)
 CREATE OR REPLACE FUNCTION public.validate_task_list_department_visibility()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -37,15 +84,17 @@ BEGIN
 
   NEW.shared_with := array_remove(coalesce(NEW.shared_with, '{}'::uuid[]), NEW.owner_id);
 
-  SELECT viewer_id INTO invalid_viewer
-  FROM unnest(NEW.shared_with) viewer_id
-  LEFT JOIN public.profiles viewer ON viewer.id = viewer_id
-  WHERE viewer.id IS NULL OR (NOT NEW.visible_to_all AND NEW.department_id IS NOT NULL AND viewer.department_id IS DISTINCT FROM NEW.department_id)
-  LIMIT 1;
+  IF NEW.department_id IS NOT NULL THEN
+      SELECT viewer_id INTO invalid_viewer
+      FROM unnest(NEW.shared_with) viewer_id
+      LEFT JOIN public.profiles viewer ON viewer.id = viewer_id
+      WHERE viewer.id IS NULL OR (NOT NEW.visible_to_all AND viewer.department_id IS DISTINCT FROM NEW.department_id)
+      LIMIT 1;
 
-  IF invalid_viewer IS NOT NULL THEN
-    RAISE EXCEPTION 'A task list can only be shared with employees in its department'
-      USING ERRCODE = '42501';
+      IF invalid_viewer IS NOT NULL THEN
+        RAISE EXCEPTION 'A task list can only be shared with employees in its department'
+          USING ERRCODE = '42501';
+      END IF;
   END IF;
 
   NEW.updated_at := now();
@@ -54,6 +103,7 @@ END;
 $$;
 
 
+-- 3. Fix the RPC function used for creation (create_task_list_for_user)
 CREATE OR REPLACE FUNCTION public.create_task_list_for_user(
   p_name text,
   p_shared_with uuid[] DEFAULT '{}'::uuid[],
@@ -73,7 +123,6 @@ DECLARE caller_id uuid := auth.uid(); caller_role text; own_department uuid; tar
 BEGIN
   IF caller_id IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501'; END IF;
   SELECT role, department_id INTO caller_role, own_department FROM public.profiles WHERE id = caller_id;
-  IF own_department IS NULL THEN RAISE EXCEPTION 'A department must be assigned before creating a task list' USING ERRCODE = '23514'; END IF;
   
   target_department := p_department_id;
   IF target_department IS NOT NULL AND target_department IS DISTINCT FROM own_department THEN
