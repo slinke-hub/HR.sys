@@ -13108,11 +13108,14 @@ document.addEventListener('pointerdown', event => {
 
 window.refreshTaskListDepartmentControls = function(selectedViewers, selectedAdd, selectedDelete) {
     const ownDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
-    const departmentId = document.getElementById('taskListDepartment')?.value || ownDepartmentId;
+    // When private list (value=''), show all employees as potential share candidates
+    const rawDeptValue = document.getElementById('taskListDepartment')?.value || '';
+    const departmentId = rawDeptValue || null;  // null = private, no department filter
     const currentSelections = (containerId) => new Set(Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked:not([data-select-all])`)).map(input => input.value));
     const viewers = selectedViewers instanceof Set ? selectedViewers : currentSelections('taskListViewersOptions');
     const addUsers = selectedAdd instanceof Set ? selectedAdd : currentSelections('taskListAddUsersOptions');
     const deleteUsers = selectedDelete instanceof Set ? selectedDelete : currentSelections('taskListDeleteUsersOptions');
+    // If private (no department), show all active employees; otherwise filter by department
     const departmentUsers = (window.taskListShareCandidates || []).filter(user => user.id !== currentUser?.id && (!departmentId || user.department_id === departmentId));
     const options = departmentUsers.map(user => {
         const label = window.formatEmployeeName(user) || user.id.substring(0, 8);
@@ -13256,7 +13259,7 @@ window.openTaskListModal = function (listId = '') {
         departmentSelect.innerHTML = '<option value="">None (Private List)</option>' + (availableDepartments.length
             ? availableDepartments.map(department => `<option value="${escapeHTML(department.id)}">${escapeHTML(getTaskDepartmentLabel(department))}</option>`).join('')
             : '');
-        departmentSelect.value = list ? (list.department_id || '') : (ownDepartment ? ownDepartment.id : '');
+        departmentSelect.value = list ? (list.department_id || '') : '';
         departmentSelect.disabled = false;
     }
     
@@ -13321,12 +13324,14 @@ window.handleSaveTaskList = async function (event) {
         notify_complete: notifyComplete
     };
 
+    console.log('[TaskList] Saving payload:', JSON.stringify(payload));
     const result = id
         ? await db.updateTaskList(id, payload)
         : await db.createTaskList(name, currentUser.id, sharedWith, payload);
         
     submit.disabled = false;
     if (!result.success) {
+        console.error('[TaskList] Save failed:', result.error?.code, result.error?.message, result.error);
         const missingDepartmentColumn = result.error?.code === 'PGRST204' || String(result.error?.message || '').includes('department_id');
         showToast(missingDepartmentColumn ? 'Run task_list_department_visibility_migration.sql in Supabase, then try again.' : (result.error?.message || 'Unable to save the private list.'), 'danger');
         return;
