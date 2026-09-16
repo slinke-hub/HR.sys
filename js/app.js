@@ -2551,7 +2551,7 @@ window.handleLoginSubmit = async function (e) {
         'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
         'archived_contracts', 'messages', 'notifications', 'performance',
         'documents', 'profile', 'projects', 'approvals', 'tasks',
-        'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta'
+        'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta', 'whatsapp_inbox'
     ]);
     const _loginRequestedView = new URLSearchParams(window.location.search).get('view');
     const _loginSavedView = _loginRequestedView || (currentUser ? (localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view')) : null);
@@ -7532,6 +7532,7 @@ async function renderTasks() {
         if (list.visible_to_all) return true;
         if (canMq07UseDesignTaskList(list)) return true;
         if (hasGrantedTask) return true;
+        if (list.shared_with && list.shared_with.includes(currentUser?.id)) return true;
         if (!viewerProfile?.department_id || !list.department_id) return false;
         return list.department_id === viewerProfile.department_id;
     });
@@ -8317,12 +8318,12 @@ async function renderTasksV2() {
                     
                     <div id="taskListTabAccess" class="task-list-tab-content" style="display: none;">
                         <div class="form-group" style="margin-bottom: 1.5rem;">
-                            <label class="form-label" for="taskListDepartment" style="font-weight: 500; margin-bottom: 0.5rem;">Visible to department *</label>
-                            <select id="taskListDepartment" class="form-control" required onchange="window.refreshTaskListDepartmentControls()">
-                                <option value="">Select department</option>
+                            <label class="form-label" for="taskListDepartment" style="font-weight: 500; margin-bottom: 0.5rem;">Visible to department</label>
+                            <select id="taskListDepartment" class="form-control" onchange="window.refreshTaskListDepartmentControls()">
+                                <option value="">None (Private List)</option>
                                 <option value="all">Visible to all departments</option>
                             </select>
-                            <small class="text-muted" style="display: block; margin-top: 0.5rem;">Employees can only see task lists assigned to their own department.</small>
+                            <small class="text-muted" style="display: block; margin-top: 0.5rem;">Leave blank for a private list. Otherwise, employees in the selected department can see it.</small>
                         </div>
                         <div class="form-group" style="margin-bottom: 1.5rem;">
                             <label class="form-label" style="font-weight: 500; margin-bottom: 0.5rem;">Shared With</label>
@@ -12206,6 +12207,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'clients': content = await renderClients(); break;
             case 'crm': content = await renderCRM(); break;
             case 'integrations': content = await renderIntegrations(); break;
+            case 'whatsapp_inbox': content = await window.renderWhatsAppInbox(); break;
             case 'hr_suite_beta': content = await window.renderHrSuiteBeta(); break;
             default:
                 content = `
@@ -13251,11 +13253,11 @@ window.openTaskListModal = function (listId = '') {
         const ownDepartment = (window.taskDepartmentsCache || []).find(department => department.id === viewerDepartmentId);
         const canManageDepartments = isTaskAdmin();
         const availableDepartments = canManageDepartments ? (window.taskDepartmentsCache || []) : (ownDepartment ? [ownDepartment] : []);
-        departmentSelect.innerHTML = availableDepartments.length
+        departmentSelect.innerHTML = '<option value="">None (Private List)</option>' + (availableDepartments.length
             ? availableDepartments.map(department => `<option value="${escapeHTML(department.id)}">${escapeHTML(getTaskDepartmentLabel(department))}</option>`).join('')
-            : '<option value="">No department assigned</option>';
-        departmentSelect.value = list?.department_id || viewerDepartmentId;
-        departmentSelect.disabled = !canManageDepartments;
+            : '');
+        departmentSelect.value = list ? (list.department_id || '') : (ownDepartment ? ownDepartment.id : '');
+        departmentSelect.disabled = false;
     }
     
     // Set selected viewers
@@ -13287,10 +13289,7 @@ window.handleSaveTaskList = async function (event) {
     const description = document.getElementById('taskListDescription').value.trim();
     const template = document.getElementById('taskListTemplate').value;
     const ownDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id || '';
-    const canManageDepartments = isTaskAdmin();
-    const departmentSelection = canManageDepartments
-        ? (document.getElementById('taskListDepartment')?.value || ownDepartmentId)
-        : ownDepartmentId;
+    const departmentSelection = document.getElementById('taskListDepartment')?.value || '';
     const departmentId = departmentSelection || null;
     
     const sharedWith = Array.from(document.querySelectorAll('#taskListViewersOptions input[type="checkbox"]:checked:not([data-select-all])')).map(cb => cb.value);
@@ -13301,8 +13300,8 @@ window.handleSaveTaskList = async function (event) {
     const notifyAssignee = document.getElementById('taskListNotifyAssignee')?.checked || false;
     const notifyComplete = document.getElementById('taskListNotifyComplete')?.checked || false;
     
-    if (!name || !departmentSelection) {
-        showToast(window.t('msg_toast_45') || 'Select the department that can see this task list.', 'warning');
+    if (!name) {
+        showToast(window.t('msg_toast_26') || 'Please enter a name for the task list.', 'warning');
         return;
     }
     const submit = event.currentTarget.querySelector('button[type="submit"]');
@@ -16083,6 +16082,24 @@ window.handleCreateDeal = async (e) => {
 // ==========================================
 // Integrations / Webhooks Features
 // ==========================================
+
+window.toggleWhatsappBeta = function(enabled) {
+    if (enabled) {
+        localStorage.setItem('whatsapp_inbox_beta', 'true');
+        const navItem = document.getElementById('navWhatsAppBeta');
+        if (navItem) navItem.style.display = 'flex';
+        showToast('WhatsApp Inbox (Beta) has been enabled for Admins.', 'success');
+    } else {
+        localStorage.removeItem('whatsapp_inbox_beta');
+        const navItem = document.getElementById('navWhatsAppBeta');
+        if (navItem) navItem.style.display = 'none';
+        if (window.currentView === 'whatsapp_inbox') {
+            renderView('dashboard');
+        }
+        showToast('WhatsApp Inbox (Beta) disabled.', 'success');
+    }
+};
+
 async function renderIntegrations() {
     if (currentUserRole !== 'ADMIN') {
         return `<div class="page-header"><h1 class="page-title">${t('ui_unauthorized')}</h1></div>`;
@@ -16133,6 +16150,23 @@ async function renderIntegrations() {
                     </table>
                 </div>
             </div>
+            
+            <div class="card" style="grid-column: span 12 / span 12; border-left: 4px solid var(--color-primary);">
+                <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span><i data-lucide="message-circle" style="width:20px;height:20px;margin-inline-end:8px;vertical-align:middle;"></i> WhatsApp Beta</span>
+                    <small class="nav-beta-badge" style="position:static;">EXPERIMENTAL</small>
+                </div>
+                <div style="margin-bottom: 1.5rem; color: var(--color-text-secondary); line-height: 1.5;">
+                    <p>Enable the WhatsApp Inbox Beta feature to allow authorized administrators to view and manage demo conversations.</p>
+                </div>
+                <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-bottom:1.5rem;">
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                        <input type="checkbox" id="settingWhatsappBetaEnabled" onchange="window.toggleWhatsappBeta(this.checked)" ${localStorage.getItem('whatsapp_inbox_beta') === 'true' ? 'checked' : ''}>
+                        <span style="font-weight:500;">Enable WhatsApp Inbox (Beta)</span>
+                    </label>
+                </div>
+            </div>
+
             <div class="card" style="grid-column: span 12 / span 12; background: var(--color-surface-hover);">
                 <div class="card-title">How to use Integrations</div>
                 <p style="color: var(--color-text-secondary); margin-bottom: 1rem; line-height: 1.5;">
