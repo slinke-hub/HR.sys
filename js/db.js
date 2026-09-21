@@ -14,6 +14,12 @@ const PRIVATE_STORAGE_BUCKETS = new Set([
     'hr-documents'
 ]);
 const signedStorageUrlCache = new Map();
+const isMissingRpcError = error => {
+    const code = String(error?.code || '');
+    const message = String(error?.message || error || '').toLowerCase();
+    return error?.status === 404 || code === '42883' || code === 'PGRST202'
+        || message.includes('function') && message.includes('does not exist');
+};
 
 function createStorageReference(bucket, path) {
     return `storage://${bucket}/${String(path || '').replace(/^\/+/, '')}`;
@@ -1124,6 +1130,12 @@ const db = {
     async fetchTasksWithProfiles() {
         if (!supabaseClient) return [];
         try {
+            const secureResult = await supabaseClient.rpc('list_accessible_tasks_secure');
+            if (!secureResult.error) {
+                const secureTasks = Array.isArray(secureResult.data) ? secureResult.data : (secureResult.data ? [secureResult.data] : []);
+                return secureTasks.map(applyI18nGetters);
+            }
+            if (!isMissingRpcError(secureResult.error)) throw secureResult.error;
             const { data, error } = await supabaseClient
                 .from('tasks')
                 .select('*, profiles:assignee_id(id, full_name, role), projects(project_name)')
@@ -1278,10 +1290,7 @@ const db = {
     async createProject(projectData) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
-                .from('projects')
-                .insert([{ ...projectData, created_by: projectData.created_by || (await supabaseClient.auth.getUser()).data.user?.id }])
-                .select('id');
+            const { data, error } = await supabaseClient.rpc('create_project_secure', { p_project: projectData || {} });
             if (error) throw error;
             return { success: true, data };
         } catch (error) {
@@ -1292,14 +1301,9 @@ const db = {
     async deleteProject(projectId) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
-                .from('projects')
-                .delete()
-                .eq('id', projectId)
-                .select('id');
-            
+            const { data, error } = await supabaseClient.rpc('delete_project_secure', { p_project_id: projectId });
             if (error) throw error;
-            if (!data || data.length === 0) {
+            if (data !== true) {
                 return { success: false, error: new Error("Permission denied or project not found.") };
             }
             return { success: true };
@@ -1311,14 +1315,13 @@ const db = {
     async updateProject(projectId, projectData) {
         if (!supabaseClient) return { success: false };
         try {
-            const { data, error } = await supabaseClient
-                .from('projects')
-                .update(projectData)
-                .eq('id', projectId)
-                .select('id');
+            const { data, error } = await supabaseClient.rpc('update_project_secure', {
+                p_project_id: projectId,
+                p_changes: projectData || {}
+            });
             if (error) throw error;
-            if (!data?.length) throw new Error('Permission denied or project not found.');
-            return { success: true, data: data[0] };
+            if (!data?.id) throw new Error('Permission denied or project not found.');
+            return { success: true, data };
         } catch (error) {
             console.error("updateProject Error:", error);
             return { success: false, error };
@@ -1341,31 +1344,50 @@ const db = {
             return [];
         }
     },
-    async updateProjectPortfolioItems(projectId, changes) {
-        if (!supabaseClient) return { success: false };
+    async changeProjectStatus(projectId, status) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
         try {
-            const { data, error } = await supabaseClient
-                .from('projects')
-                .update(changes)
-                .eq('id', projectId)
-                .select('id, milestones, risks, health_status')
-                .maybeSingle();
+            const { data, error } = await supabaseClient.rpc('change_project_status', { p_project_id: projectId, p_status: status });
             if (error) throw error;
-            if (!data?.id) throw new Error('Permission denied or project not found.');
             return { success: true, data };
         } catch (error) {
-            console.error('updateProjectPortfolioItems Error:', error);
+            console.error('changeProjectStatus Error:', error);
+            return { success: false, error };
+        }
+    },
+    async assignProjectTeam(projectId, projectManagerId, assigneeIds = []) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const normalizedIds = [...new Set((Array.isArray(assigneeIds) ? assigneeIds : [assigneeIds]).filter(Boolean))];
+            const { data, error } = await supabaseClient.rpc('assign_project_team', {
+                p_project_id: projectId, p_project_manager_id: projectManagerId || null, p_assignee_ids: normalizedIds
+            });
+            if (error) throw error;
+            await this.flushTaskNotificationEmails();
+            return { success: true, data };
+        } catch (error) {
+            console.error('assignProjectTeam Error:', error);
+            return { success: false, error };
+        }
+    },
+    async updateProjectPortfolioItems(projectId, changes) {
+        return this.updateProject(projectId, changes || {});
+    },
+    async fetchProjectDetails(projectId) {
+        if (!supabaseClient || !projectId) return { success: false, error: new Error('Project is required.') };
+        try {
+            const { data, error } = await supabaseClient.rpc('get_project_detail_secure', { p_project_id: projectId });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('fetchProjectDetails Error:', error);
             return { success: false, error };
         }
     },
     async fetchProjectUpdates(projectId) {
         if (!supabaseClient || !projectId) return [];
         try {
-            const { data, error } = await supabaseClient
-                .from('project_updates')
-                .select('*')
-                .eq('project_id', projectId)
-                .order('created_at', { ascending: false });
+            const { data, error } = await supabaseClient.rpc('list_project_updates_secure', { p_project_id: projectId });
             if (error) throw error;
             return data || [];
         } catch (error) {
@@ -1374,30 +1396,12 @@ const db = {
         }
     },
     async createProjectUpdate(projectId, summary, updateType = 'UPDATE') {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { data: authData } = await supabaseClient.auth.getUser();
-            const { data, error } = await supabaseClient
-                .from('project_updates')
-                .insert([{ project_id: projectId, author_id: authData.user?.id, summary, update_type: updateType }])
-                .select()
-                .single();
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            console.error('createProjectUpdate Error:', error);
-            return { success: false, error };
-        }
+        return this.createProjectUpdateSecure(projectId, summary, updateType);
     },
     async fetchProjectTodos(projectId) {
         if (!supabaseClient || !projectId) return [];
         try {
-            const { data, error } = await supabaseClient
-                .from('project_todos')
-                .select('*')
-                .eq('project_id', projectId)
-                .order('status', { ascending: false })
-                .order('due_at', { ascending: true });
+            const { data, error } = await supabaseClient.rpc('list_project_todos_secure', { p_project_id: projectId });
             if (error) throw error;
             return data || [];
         } catch (error) {
@@ -1604,6 +1608,12 @@ const db = {
     async fetchTasks(_userId = null) {
         if (!supabaseClient) return [];
         try {
+            const secureResult = await supabaseClient.rpc('list_accessible_tasks_secure');
+            if (!secureResult.error) {
+                const secureTasks = Array.isArray(secureResult.data) ? secureResult.data : (secureResult.data ? [secureResult.data] : []);
+                return secureTasks.map(applyI18nGetters);
+            }
+            if (!isMissingRpcError(secureResult.error)) throw secureResult.error;
             // Row-level security is the single source of truth for task visibility.
             const { data, error } = await supabaseClient
                 .from('tasks').select('*').order('created_at', { ascending: false });
@@ -1657,6 +1667,12 @@ const db = {
                 ,repeat_interval: Number(repeatInterval) || 1
                 ,notify_via_email: notifyViaEmail === true
             };
+            const secureCreate = await supabaseClient.rpc('create_task_secure', { p_payload: newTask });
+            if (!secureCreate.error) {
+                await this.flushTaskNotificationEmails();
+                return { success: true, data: secureCreate.data };
+            }
+            if (!isMissingRpcError(secureCreate.error)) throw secureCreate.error;
             let currentTask = { ...newTask };
             let retryCount = 0;
             let lastError = null;
@@ -1732,11 +1748,18 @@ const db = {
                 // completion-approval columns are being deployed; selecting an
                 // unrelated column would make an otherwise valid status update
                 // fail with HTTP 400.
-                const { data, error } = await supabaseClient.from('tasks').update({ status }).eq('id', taskId).select('id,status').single();
+                const { data, error } = await supabaseClient.rpc('change_task_status', {
+                    p_task_id: taskId,
+                    p_status: status
+                });
                 if (error) throw error;
                 await this.flushTaskNotificationEmails();
                 return { success: true, data };
             } catch (error) {
+                if (isMissingRpcError(error)) {
+                    const { data, error: fallbackError } = await supabaseClient.from('tasks').update({ status }).eq('id', taskId).select('id,status').single();
+                    if (!fallbackError) return { success: true, data, compatibilityFallback: true };
+                }
                 lastError = error;
                 const message = String(error?.message || error || '').toLowerCase();
                 const isTransient = message.includes('failed to fetch') || message.includes('network') || message.includes('connection') || message.includes('timeout');
@@ -1754,9 +1777,50 @@ const db = {
         console.error("updateTaskStatus Error:", lastError);
         return { success: false, error: lastError };
     },
+    async completeTask(taskId) {
+        return this.updateTaskStatus(taskId, 'completed');
+    },
+    async reopenTask(taskId, status = 'todo') {
+        return this.updateTaskStatus(taskId, status);
+    },
+    async fetchTaskDetails(taskId) {
+        if (!supabaseClient || !taskId) return null;
+        try {
+            const { data, error } = await supabaseClient.rpc('get_task_secure', { p_task_id: taskId });
+            if (!error) return data || null;
+            if (!isMissingRpcError(error)) throw error;
+            const tasks = await this.fetchTasksWithProfiles();
+            return (tasks || []).find(task => String(task.id) === String(taskId)) || null;
+        } catch (error) {
+            console.error('fetchTaskDetails Error:', error);
+            return null;
+        }
+    },
+    async assignTask(taskId, assigneeIds = []) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const normalizedIds = [...new Set((Array.isArray(assigneeIds) ? assigneeIds : [assigneeIds]).filter(Boolean))];
+            const { data, error } = await supabaseClient.rpc('assign_task', { p_task_id: taskId, p_assignee_ids: normalizedIds });
+            if (error) throw error;
+            await this.flushTaskNotificationEmails();
+            return { success: true, data };
+        } catch (error) {
+            if (isMissingRpcError(error)) {
+                const { data, error: fallbackError } = await supabaseClient.from('tasks')
+                    .update({ assignee_id: normalizedIds[0] || null, assignee_ids: normalizedIds })
+                    .eq('id', taskId).select('id,assignee_id,assignee_ids').single();
+                if (!fallbackError) return { success: true, data, compatibilityFallback: true };
+            }
+            console.error('assignTask Error:', error);
+            return { success: false, error };
+        }
+    },
     async updateTask(taskId, updates) {
         if (!supabaseClient) return { success: false };
         try {
+            if (updates && Object.keys(updates).length === 1 && Object.prototype.hasOwnProperty.call(updates, 'status')) {
+                return this.updateTaskStatus(taskId, updates.status);
+            }
             // Postgres rejects empty strings for UUID/date columns. Several task
             // fields are optional in the editor, so normalize cleared controls
             // to SQL NULL before sending the PATCH request.
@@ -1784,6 +1848,15 @@ const db = {
                     normalizedUpdates[field] = normalizedUpdates[field].filter(value => value !== null && value !== undefined && value !== '');
                 }
             });
+            const secureUpdate = await supabaseClient.rpc('update_task_secure', {
+                p_task_id: taskId,
+                p_patch: normalizedUpdates
+            });
+            if (!secureUpdate.error) {
+                await this.flushTaskNotificationEmails();
+                return { success: true, data: secureUpdate.data };
+            }
+            if (!isMissingRpcError(secureUpdate.error)) throw secureUpdate.error;
             let currentUpdates = { ...normalizedUpdates };
             let retryCount = 0;
             let lastError = null;
@@ -1865,20 +1938,26 @@ const db = {
             if (uploadError) throw uploadError;
             const storageUrl = createStorageReference('task-attachments', path);
 
-            const { data: attachmentRow, error: attachmentError } = await supabaseClient
-                .from('task_attachments')
-                .insert([{
-                    task_id: taskId,
-                    user_id: userId,
-                    file_url: storageUrl,
-                    file_name: file.name || safeName,
-                    file_type: file.type || null,
-                    file_size: file.size || null,
-                    visible_to_project_assignee: visibleToProjectAssignee === true,
-                    attachment_scope: String(attachmentScope || 'TASK').toUpperCase() === 'COMMENT' ? 'COMMENT' : 'TASK'
-                }])
-                .select('id, task_id, file_url, file_name, file_type, file_size, visible_to_project_assignee, attachment_scope, created_at')
-                .single();
+            const scope = String(attachmentScope || 'TASK').toUpperCase() === 'COMMENT' ? 'COMMENT' : 'TASK';
+            let { data: attachmentRow, error: attachmentError } = await supabaseClient.rpc('register_task_attachment', {
+                p_task_id: taskId,
+                p_file_url: storageUrl,
+                p_file_name: file.name || safeName,
+                p_file_type: file.type || null,
+                p_file_size: file.size || null,
+                p_attachment_scope: scope,
+                p_visible: visibleToProjectAssignee === true
+            });
+            if (isMissingRpcError(attachmentError)) {
+                const fallback = await supabaseClient.from('task_attachments').insert([{
+                    task_id: taskId, user_id: userId, file_url: storageUrl,
+                    file_name: file.name || safeName, file_type: file.type || null,
+                    file_size: file.size || null, visible_to_project_assignee: visibleToProjectAssignee === true,
+                    attachment_scope: scope
+                }]).select('id, task_id, file_url, file_name, file_type, file_size, visible_to_project_assignee, attachment_scope, created_at').single();
+                attachmentRow = fallback.data;
+                attachmentError = fallback.error;
+            }
             if (attachmentError) {
                 await supabaseClient.storage.from('task-attachments').remove([path]);
                 throw attachmentError;
@@ -1915,6 +1994,9 @@ const db = {
     async deleteTask(taskId) {
         if (!supabaseClient) return { success: false, error: { message: "Not connected" } };
         try {
+            const secureDelete = await supabaseClient.rpc('delete_task_secure', { p_task_id: taskId });
+            if (!secureDelete.error) return { success: secureDelete.data === true, data: secureDelete.data };
+            if (!isMissingRpcError(secureDelete.error)) throw secureDelete.error;
             // 1. Retrieve the task record before deletion to locate any storage files
             let taskRecord = null;
             try {
@@ -2060,11 +2142,14 @@ const db = {
     async fetchTaskComments(taskId) {
         if (!supabaseClient) return [];
         try {
-            const { data, error } = await supabaseClient
+            let { data, error } = await supabaseClient.rpc('list_task_comments_secure', { p_task_id: taskId });
+            if (isMissingRpcError(error)) {
+                ({ data, error } = await supabaseClient
                 .from('task_comments')
                 .select('*')
                 .eq('task_id', taskId)
-                .order('created_at', { ascending: true });
+                .order('created_at', { ascending: true }));
+            }
             if (error) throw error;
 
             const comments = Array.isArray(data) ? data : [];
@@ -2115,17 +2200,19 @@ const db = {
     async addTaskComment(taskId, userId, content, attachments = []) {
         if (!supabaseClient) return { success: false };
         try {
-            const payload = {
-                task_id: taskId,
-                user_id: userId,
-                content: String(content || '').trim()
-            };
-            if (Array.isArray(attachments) && attachments.length > 0) {
-                payload.attachments = attachments;
+            const normalizedContent = String(content || '').trim();
+            const secure = await supabaseClient.rpc('add_task_comment', {
+                p_task_id: taskId,
+                p_content: normalizedContent,
+                p_attachments: Array.isArray(attachments) ? attachments : []
+            });
+            if (!secure.error) {
+                await this.flushTaskNotificationEmails();
+                return { success: true, data: secure.data };
             }
-            let { error } = await supabaseClient
-                .from('task_comments')
-                .insert([payload]);
+            if (!isMissingRpcError(secure.error)) throw secure.error;
+            const payload = { task_id: taskId, user_id: userId, content: normalizedContent, attachments: Array.isArray(attachments) ? attachments : [] };
+            let { error } = await supabaseClient.from('task_comments').insert([payload]);
 
             if (error && payload.attachments && (error.code === 'PGRST204' || error.status === 404 || /attachments/i.test(error.message || ''))) {
                 console.warn('task_comments.attachments column not found in database; retrying without attachments column...');
@@ -3204,11 +3291,59 @@ const db = {
     async updateDealStage(dealId, newStage) {
         if (!supabaseClient) return { success: false };
         try {
-            const { error } = await supabaseClient.from('crm_deals').update({ stage: newStage }).eq('id', dealId);
+            const { data, error } = await supabaseClient.rpc('change_crm_deal_stage', {
+                p_deal_id: dealId,
+                p_new_stage: newStage
+            });
             if (error) throw error;
-            return { success: true };
+            return { success: true, data };
         } catch (error) {
             console.error("updateDealStage Error:", error);
+            return { success: false, error };
+        }
+    },
+    async updateTaskComment(commentId, content, attachments = null) {
+        if (!supabaseClient || !commentId) return { success: false, error: new Error('Comment is required.') };
+        try {
+            const { data, error } = await supabaseClient.rpc('update_task_comment', {
+                p_comment_id: commentId, p_content: String(content || '').trim(), p_attachments: attachments
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) { console.error('updateTaskComment Error:', error); return { success: false, error }; }
+    },
+    async deleteTaskComment(commentId) {
+        if (!supabaseClient || !commentId) return { success: false, error: new Error('Comment is required.') };
+        try {
+            const { data, error } = await supabaseClient.rpc('delete_task_comment', { p_comment_id: commentId });
+            if (error) throw error;
+            return { success: data === true, data };
+        } catch (error) { console.error('deleteTaskComment Error:', error); return { success: false, error }; }
+    },
+    async createProjectUpdateSecure(projectId, summary, updateType = 'UPDATE') {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('create_project_update_secure', {
+                p_project_id: projectId, p_summary: summary, p_update_type: updateType
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('createProjectUpdateSecure Error:', error);
+            return { success: false, error };
+        }
+    },
+    async markDealLost(dealId, reason) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.rpc('mark_crm_deal_lost', {
+                p_deal_id: dealId,
+                p_reason: reason || null
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('markDealLost Error:', error);
             return { success: false, error };
         }
     },
@@ -3317,18 +3452,7 @@ const db = {
     },
     async closeWonDealProject(projectId) {
         if (!supabaseClient) return { success: false };
-        try {
-            const { data, error } = await supabaseClient.from('projects')
-                .update({ project_status: 'Completed' })
-                .eq('id', projectId)
-                .select('id, deal_id, project_status')
-                .single();
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            console.error('closeWonDealProject Error:', error);
-            return { success: false, error };
-        }
+        return this.changeProjectStatus(projectId, 'COMPLETED');
     },
     async startDealApproval(dealId, approvers) {
         if (!supabaseClient) return { success: false };
@@ -3343,6 +3467,19 @@ const db = {
             return { success: true };
         } catch (error) {
             console.error('startDealApproval Error:', error);
+            return { success: false, error };
+        }
+    },
+    async finalizeCrmDealApproval(dealId) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.rpc('finalize_crm_deal_approval', {
+                p_deal_id: dealId
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('finalizeCrmDealApproval Error:', error);
             return { success: false, error };
         }
     },
@@ -3401,13 +3538,16 @@ const db = {
     async fetchTaskAttachments(taskId) {
         if (!supabaseClient || !taskId) return [];
         try {
-            const { data, error } = await supabaseClient
+            let { data, error } = await supabaseClient.rpc('list_task_attachments_secure', { p_task_id: taskId, p_scope: 'TASK' });
+            if (isMissingRpcError(error)) {
+                ({ data, error } = await supabaseClient
                 .from('task_attachments')
                 .select('id, task_id, file_url, file_name, file_type, file_size, visible_to_project_assignee, attachment_scope, created_at')
                 .eq('task_id', taskId)
                 .eq('is_archived', false)
                 .eq('attachment_scope', 'TASK')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false }));
+            }
             if (error) throw error;
             return Promise.all((data || []).map(async attachment => ({
                 ...attachment,
@@ -3432,6 +3572,22 @@ const db = {
             console.error('archiveTaskAttachments Error:', error);
             return { success: false, error };
         }
+    },
+    async removeTaskAttachment(attachmentId) {
+        if (!supabaseClient || !attachmentId) return { success: false, error: new Error('Attachment is required.') };
+        try {
+            const { data, error } = await supabaseClient.rpc('remove_task_attachment', { p_attachment_id: attachmentId });
+            if (error) throw error;
+            return { success: data === true, data };
+        } catch (error) { console.error('removeTaskAttachment Error:', error); return { success: false, error }; }
+    },
+    async fetchTaskActivity(taskId) {
+        if (!supabaseClient || !taskId) return [];
+        try {
+            const { data, error } = await supabaseClient.rpc('list_task_activity_secure', { p_task_id: taskId });
+            if (error) throw error;
+            return Array.isArray(data) ? data : [];
+        } catch (error) { console.error('fetchTaskActivity Error:', error); return []; }
     },
     async setProjectAttachmentVisibility(attachmentType, attachmentId, visible) {
         if (!supabaseClient || !attachmentId) return { success: false };
@@ -3480,6 +3636,8 @@ const db = {
                 category: category || 'OTHER',
                 file_name: file.name,
                 file_url: createStorageReference('crm-deal-files', path),
+                file_type: file.type || null,
+                file_size: Number(file.size) || null,
                 description: description || null,
                 uploaded_by: userId,
                 visible_to_project_assignee: visibleToProjectAssignee === true
@@ -3519,6 +3677,8 @@ const db = {
                     category: String(entry.category || '').toUpperCase(),
                     file_name: entry.file.name,
                     file_url: createStorageReference('crm-deal-files', path),
+                    file_type: entry.file.type || null,
+                    file_size: Number(entry.file.size) || null,
                     description: entry.description || null,
                     uploaded_by: userId,
                     visible_to_project_assignee: entry.visibleToProjectAssignee === true

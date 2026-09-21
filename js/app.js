@@ -399,7 +399,7 @@ let deferredPrompt;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=1788202890057', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026092101', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -2844,23 +2844,10 @@ async function renderTeamHierarchyWidget() {
 }
 
 async function translateSaudiNewsTitle(title) {
-    if (currentLang !== 'en' || !/[\u0600-\u06FF]/.test(title || '')) return title;
-    const cacheKey = `saudi_news_en_${title}`;
-    try {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) return cached;
-        const endpoint = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=en&dt=t&q=${encodeURIComponent(title)}`;
-        const response = await fetch(endpoint);
-        if (!response.ok) throw new Error(`Translation failed (${response.status})`);
-        const payload = await response.json();
-        const translated = (payload?.[0] || []).map(part => part?.[0] || '').join('').trim();
-        if (translated) {
-            localStorage.setItem(cacheKey, translated);
-            return translated;
-        }
-    } catch (error) {
-        console.warn('Saudi news title translation unavailable; retaining the approved Arabic headline.', error);
-    }
+    // Keep the approved Arabic headline in every UI language. Calling a
+    // third-party translation endpoint for each dashboard item made startup
+    // wait on five avoidable network requests and conflicted with the app's
+    // bilingual content policy.
     return title;
 }
 
@@ -2910,11 +2897,14 @@ async function renderDashboard() {
     const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(newsQuery)}&hl=${newsHl}&gl=${newsGl}&ceid=${newsCeid}`;
     const newsApiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
 
-    // Run independent fetches in parallel
+    // Run independent fetches in parallel. News is optional and gets a short
+    // timeout so a slow external feed cannot hold up the dashboard.
+    const newsController = new AbortController();
+    const newsTimeout = setTimeout(() => newsController.abort(), 1800);
     const [todayAttendance, announcements, newsRes, profile, dashboardLeaves, dashboardGenericRequests, dashboardAttendance, dashboardTasks] = await Promise.all([
         db.fetchTodayAttendance(currentUser?.id),
         db.fetchAnnouncements(),
-        fetch(newsApiUrl).catch(() => null),
+        fetch(newsApiUrl, { signal: newsController.signal }).catch(() => null).finally(() => clearTimeout(newsTimeout)),
         db.getUserProfile(currentUser?.id),
         db.fetchLeaveRequests(currentUser?.id),
         db.fetchGenericRequests(),
@@ -4167,7 +4157,9 @@ window.openTaskAssigneePicker = function (taskId) {
         modal.querySelector('#taskAssigneePickerSave').onclick = async () => {
             const selected = Array.from(modal.querySelectorAll('#taskAssigneePickerOptions input[type="checkbox"]:checked:not(#taskAssigneeSelectAll)')).map(input => input.value);
             if (!selected.length) return showToast(window.t('msg_toast_12') || 'Select at least one employee.', 'warning');
-            const save = await db.updateTask(modal.dataset.taskId, { assignee_id: selected[0], assignee_ids: selected });
+            const save = window.hrDomainServices?.tasks?.assign
+                ? await window.hrDomainServices.tasks.assign(modal.dataset.taskId, selected)
+                : await db.assignTask(modal.dataset.taskId, selected);
             if (!save.success) return showToast(save.error?.message || 'Unable to update assignment.', 'danger');
             const selectedUsers = getTaskAssignmentDirectory().filter(user => selected.includes(user.id));
             const current = window.taskCache?.[modal.dataset.taskId];
@@ -4660,7 +4652,7 @@ window.setTaskDetailInfoTab = function (tab) {
     if (window.lucide) window.lucide.createIcons();
 };
 
-window.setTaskActivityTab = function (tab) {
+window.setTaskActivityTab = async function (tab) {
     const task = window.activeTaskDetail;
     const panel = document.getElementById('taskSidePanel');
     const activityPanel = document.getElementById('taskActivityPanel');
@@ -4674,7 +4666,14 @@ window.setTaskActivityTab = function (tab) {
     if (composer) composer.style.display = tab === 'comments' && canComment ? '' : 'none';
     activityPanel.style.display = tab === 'comments' ? 'none' : 'block';
     if (tab === 'activity') {
-        activityPanel.innerHTML = `<div class="task-activity-event"><i data-lucide="circle-plus"></i><div><strong>${taskDetailText('Task created', 'تم إنشاء المهمة')}</strong><span>${task.created_at ? new Date(task.created_at).toLocaleString(currentLang === 'ar' ? 'ar-SA' : undefined) : taskDetailText('Date unavailable', 'التاريخ غير متاح')}</span></div></div><div class="task-activity-event"><i data-lucide="workflow"></i><div><strong>${taskDetailText('Current stage', 'المرحلة الحالية')}: ${escapeHTML(taskDetailValue(task.status, 'status'))}</strong><span>${taskDetailText('Assigned to', 'مُعيّنة إلى')} ${escapeHTML(window.formatEmployeeName(task.assignee) || taskDetailText('Unassigned', 'غير معيّن'))}</span></div></div>`;
+        activityPanel.innerHTML = `<div class="task-tab-empty">${taskDetailText('Loading activity…', 'جارٍ تحميل النشاط…')}</div>`;
+        const events = db.fetchTaskActivity ? await db.fetchTaskActivity(task.id) : [];
+        const profiles = window.taskAllUsersCache || window.usersCache || [];
+        const actorName = actorId => {
+            const profile = profiles.find(item => String(item.id) === String(actorId));
+            return profile ? (window.formatEmployeeName(profile) || profile.full_name || profile.display_name) : taskDetailText('System', 'النظام');
+        };
+        activityPanel.innerHTML = events.length ? events.map(event => `<div class="task-activity-event"><i data-lucide="${event.action === 'TASK_STATUS_CHANGED' ? 'workflow' : event.action === 'TASK_ASSIGNED' ? 'user-round-check' : 'circle-plus'}"></i><div><strong>${escapeHTML(String(event.action || '').replace(/_/g, ' '))}</strong><span>${escapeHTML(actorName(event.actor_id))} · ${event.created_at ? new Date(event.created_at).toLocaleString(currentLang === 'ar' ? 'ar-SA' : undefined) : ''}</span>${event.from_status || event.to_status ? `<small>${escapeHTML(event.from_status || '')} → ${escapeHTML(event.to_status || '')}</small>` : ''}</div></div>`).join('') : `<div class="task-tab-empty">${taskDetailText('No activity recorded yet.', 'لا يوجد نشاط بعد.')}</div>`;
     } else if (tab === 'info') {
         activityPanel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Created by', 'أنشأها')}</span><strong>${escapeHTML(window.formatEmployeeName(task.creator) || taskDetailText('System', 'النظام'))}</strong></div><div><span>${taskDetailText('Assigned to', 'مُعيّنة إلى')}</span><strong>${escapeHTML(window.formatEmployeeName(task.assignee) || taskDetailText('Unassigned', 'غير معيّن'))}</strong></div><div><span>${taskDetailText('Visibility', 'الظهور')}</span><strong>${escapeHTML(taskDetailValue(task.visibility || 'public', 'visibility'))}</strong></div><div><span>${taskDetailText('Estimated time', 'الوقت المقدر')}</span><strong>${escapeHTML(task.estimated_time || taskDetailText('Not set', 'غير محدد'))}</strong></div></div>`;
     }
@@ -11151,6 +11150,9 @@ window.initCustomTranslations = async function () {
                 if (t.trans_ar && typeof i18n !== 'undefined' && i18n.ar) i18n.ar[t.trans_key] = t.trans_ar;
             });
         }
+        // Apply server overrides when they arrive without blocking auth and
+        // the first page render on this optional request.
+        if (typeof updateTranslations === 'function') updateTranslations();
     } catch (e) {
         console.error("Error loading system translations:", e);
     }
@@ -13799,13 +13801,11 @@ async function ensureApprovedDealIsInDiscussion(deal, workflow) {
     // to Discussion after the last Design approval.
     if (isProposalDesignWorkflow) return false;
 
-    // The database transition guard evaluates the new stage and workflow
-    // status together. Persist both atomically so a fully approved deal can
-    // enter Discussion without weakening the guard for unapproved deals.
-    const stageResult = await db.updateDeal(deal.id, {
-        stage: 'NEGOTIATION',
-        workflow_status: 'APPROVED'
-    });
+    // Finalization is an atomic server-side operation. The client only asks
+    // the database to verify unanimous approval and perform the transition.
+    const stageResult = await (window.hrDomainServices?.deals?.finalizeApproval
+        ? window.hrDomainServices.deals.finalizeApproval(deal.id)
+        : db.finalizeCrmDealApproval(deal.id));
     if (!stageResult.success) {
         showToast(stageResult.error?.message || t('crm_stage_update_failed') || 'Could not move the approved deal to Discussion.', 'danger');
         return false;
@@ -14421,9 +14421,9 @@ window.startDealApprovalWorkflow = async function () {
     };
     if (Object.values(approvers).some(value => !value)) return showToast(t('crm_select_all_approvers') || 'Select all three approvers.', 'warning');
     const previousStage = activeDealWorkflowContext?.deal?.stage || 'LEAD';
-    const preparation = await db.updateDeal(dealId, { stage: 'PITCH', proposal_sent_at: new Date().toISOString() });
-    if (!preparation.success) return showToast(preparation.error?.message || t('crm_approval_start_failed') || 'Could not start approval.', 'danger');
-    const result = await db.startDealApproval(dealId, approvers);
+    const result = window.hrDomainServices?.deals?.startApproval
+        ? await window.hrDomainServices.deals.startApproval(dealId, approvers)
+        : await db.startDealApproval(dealId, approvers);
     if (!result.success) return showToast(result.error?.message || t('crm_approval_start_failed') || 'Could not start approval.', 'danger');
     if (canonicalDealLifecycleStage(previousStage) !== 'PITCH') await db.logDealActivity(dealId, 'STAGE_CHANGED', previousStage, 'PITCH', null);
     showToast(t('crm_approval_started') || 'Approval workflow started.', 'success');
@@ -14913,9 +14913,9 @@ window.dropDeal = async (ev, newStage) => {
     const reactManaged = Boolean(card && document.getElementById('crm-react-root')?.contains(card));
     if (!reactManaged) window.moveDealCard(dealId, newStage);
 
-    const res = newStage === 'PROPOSAL'
-        ? await db.updateDeal(dealId, { stage: newStage, proposal_sent_at: new Date().toISOString() })
-        : await db.updateDealStage(dealId, newStage);
+    const res = await (window.hrDomainServices?.deals?.changeStage
+        ? window.hrDomainServices.deals.changeStage(dealId, newStage)
+        : db.updateDealStage(dealId, newStage));
     if (res.success) {
         await db.logDealActivity(dealId, 'STAGE_CHANGED', oldStage, newStage, null);
         showToast(t('toast_deal_moved_to') + newStage, "success");
@@ -14943,8 +14943,9 @@ window.handleLostReasonSubmit = async (e) => {
     if (reactManaged) window.setCrmDealStageLocally?.(dealId, 'LOST');
     else window.moveDealCard(dealId, 'LOST');
 
-    // Instead of updateDealStage, we update the full deal or updateDeal with reason
-    const res = await db.updateDeal(dealId, { stage: 'LOST', lost_reason: reason });
+    const res = await (window.hrDomainServices?.deals?.markLost
+        ? window.hrDomainServices.deals.markLost(dealId, reason)
+        : db.markDealLost(dealId, reason));
     if (res.success) {
         showToast(t('toast_deal_marked_as_lost'), "success");
         void window.refreshCrmDashboardInBackground?.();
@@ -16255,7 +16256,10 @@ window.handleDeleteWebhook = (id) => {
 
 // Init
 async function initApp() {
-    await window.initCustomTranslations();
+    // Custom translations are an enhancement. Start them in the background so
+    // a slow translations query cannot delay session restoration and the first
+    // visible page.
+    void window.initCustomTranslations();
     updateTranslations();
 
     // Subscribe to realtime updates for translations
@@ -17335,7 +17339,33 @@ window.handleUpdateProject = async function (event) {
     if (!validateProjectPayload(payload)) return;
     closeProjectEditor('editProjectModal');
     showToast(t('toast_updating_project'), "info");
-    const { success } = await db.updateProject(id, payload);
+    const service = window.hrDomainServices?.projects;
+    let success = true;
+    const status = payload.lifecycle_status;
+    const managerId = payload.project_manager_id || null;
+    const assigneeIds = Array.isArray(payload.assigned_people) ? payload.assigned_people : [];
+    if (service?.changeStatus || db.changeProjectStatus) {
+        const result = service?.changeStatus
+            ? await service.changeStatus(id, status)
+            : await db.changeProjectStatus(id, status);
+        success = result?.success === true;
+    }
+    if (success && (service?.assignTeam || db.assignProjectTeam)) {
+        const result = service?.assignTeam
+            ? await service.assignTeam(id, managerId, assigneeIds)
+            : await db.assignProjectTeam(id, managerId, assigneeIds);
+        success = result?.success === true;
+    }
+    if (success) {
+        const remaining = { ...payload };
+        delete remaining.lifecycle_status;
+        delete remaining.project_status;
+        delete remaining.project_manager_id;
+        delete remaining.assigned_people;
+        success = Object.keys(remaining).length === 0
+            ? true
+            : (await db.updateProject(id, remaining)).success === true;
+    }
 
     if (success) {
         showToast(t('toast_project_updated_successfully'), "success");
@@ -17494,7 +17524,7 @@ window.closeProjectDetail = () => { window.activeProjectDetailId = null; documen
 window.addProjectMilestone = async function (event, id) { event.preventDefault(); const project = window.projectCache[id]; const items = [...(project.milestones || []), { title: document.getElementById('projectMilestoneTitle').value.trim(), due_date: document.getElementById('projectMilestoneDate').value || null, completed: false }]; const result = await db.updateProjectPortfolioItems(id, { milestones: items }); if (result.success) { project.milestones = items; openProjectDetail(id); } };
 window.addProjectRisk = async function (event, id) { event.preventDefault(); const project = window.projectCache[id]; const items = [...(project.risks || []), { title: document.getElementById('projectRiskTitle').value.trim(), severity: document.getElementById('projectRiskSeverity').value, resolved: false }]; const result = await db.updateProjectPortfolioItems(id, { risks: items, health_status: 'AT_RISK' }); if (result.success) { project.risks = items; project.health_status = 'AT_RISK'; openProjectDetail(id); } };
 window.toggleProjectListItem = async function (id, type, index) { const project = window.projectCache[id]; const key = type === 'milestone' ? 'milestones' : 'risks'; const flag = type === 'milestone' ? 'completed' : 'resolved'; const items = (project[key] || []).map((item, itemIndex) => itemIndex === index ? { ...item, [flag]: true } : item); const changes = { [key]: items }; if (type === 'risk' && items.every(item => item.resolved)) changes.health_status = 'ON_TRACK'; const result = await db.updateProjectPortfolioItems(id, changes); if (result.success) { project[key] = items; if (changes.health_status) project.health_status = changes.health_status; openProjectDetail(id); } };
-window.addProjectUpdate = async function (event, id) { event.preventDefault(); const summary = document.getElementById('projectUpdateSummary').value.trim(); const result = await db.createProjectUpdate(id, summary, 'UPDATE'); if (result.success) openProjectDetail(id); else showToast('Unable to save project update.', 'error'); };
+window.addProjectUpdate = async function (event, id) { event.preventDefault(); const summary = document.getElementById('projectUpdateSummary').value.trim(); const service = window.hrDomainServices?.projects; const result = service?.addUpdate ? await service.addUpdate(id, summary, 'UPDATE') : await db.createProjectUpdateSecure(id, summary, 'UPDATE'); if (result.success) openProjectDetail(id); else showToast('Unable to save project update.', 'error'); };
 window.addProjectTodo = async function (event, projectId) {
     event.preventDefault();
     const title = document.getElementById('projectTodoTitle')?.value.trim();

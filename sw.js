@@ -1,10 +1,10 @@
 // Bump whenever the shell or versioned scripts change so already-open clients
 // activate a fresh worker and do not keep executing a stale application bundle.
-const CACHE_NAME = 'muqam-hr-mobile-v247';
+const CACHE_NAME = 'muqam-hr-mobile-v249';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.json', '/offline.html',
   '/css/variables.css', '/css/layout.css', '/css/components.css', '/css/hr-suite-beta.css', '/css/android.css', '/css/crm-tailwind.css',
-  '/js/DragDropTouch.js', '/js/data.js', '/js/db.js', '/js/contract.js', '/js/payroll.js', '/js/hr-suite-beta.js', '/js/crm-dashboard.bundle.js', '/js/app.js',
+  '/js/DragDropTouch.js', '/js/data.js', '/js/db.js', '/js/shared-services.js', '/js/contract.js', '/js/payroll.js', '/js/hr-suite-beta.js', '/js/crm-dashboard.bundle.js', '/js/app.js',
   '/js/vendor/lucide.min.js', '/js/vendor/supabase.js', '/js/vendor/chart.umd.min.js', '/js/vendor/xlsx.full.min.js', '/js/vendor/tesseract/tesseract.min.js', '/js/document-ocr.js',
   '/images/logo.png', '/images/logo-dark.png', '/images/favicon.png?v=1'
 ];
@@ -44,22 +44,25 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Use network-first for application assets. Cache-first allowed an old
-  // versioned app.js to execute once while its replacement downloaded in the
-  // background, producing mixed-build runtime errors after deployments.
+  // Versioned application assets are served from cache immediately and
+  // refreshed in the background. Exact query-string matches are preferred so
+  // a newly deployed bundle never receives an older version by accident.
   event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(request);
+    if (cached) {
+      fetch(request, { cache: 'no-store' }).then(response => {
+        if (response.ok && response.type !== 'opaque') cache.put(request, response);
+      }).catch(() => {});
+      return cached;
+    }
     try {
-      const response = await fetch(request, { cache: 'no-store' });
-      if (response.ok && response.type !== 'opaque') {
-        const responseForCache = response.clone();
-        caches.open(CACHE_NAME)
-          .then(cache => cache.put(request, responseForCache))
-          .catch(error => console.warn('Service worker cache update skipped:', error));
-      }
+      const response = await fetch(request);
+      if (response.ok && response.type !== 'opaque') cache.put(request, response.clone());
       return response;
     } catch (error) {
-      const cached = await caches.match(request, { ignoreSearch: true });
-      if (cached) return cached;
+      const fallback = await cache.match(request, { ignoreSearch: true });
+      if (fallback) return fallback;
       throw error;
     }
   })());

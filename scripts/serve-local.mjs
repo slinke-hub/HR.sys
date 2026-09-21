@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { createBrotliCompress, createGzip } from 'node:zlib';
 import { extname, resolve, sep } from 'node:path';
 
 const host = '127.0.0.1';
@@ -52,6 +53,9 @@ function setSecurityHeaders(response) {
   response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   response.setHeader('Origin-Agent-Cluster', '?1');
   response.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+  // Keep HTML fresh while allowing immutable/versioned assets to be reused.
+  // The app uses query-string versions for deploys, so caching these large
+  // bundles avoids downloading them on every navigation or refresh.
   response.setHeader('Cache-Control', 'no-store');
 }
 
@@ -98,7 +102,25 @@ const server = createServer(async (request, response) => {
     if (!fileStat.isFile()) throw new Error('Not a file');
     response.statusCode = 200;
     response.setHeader('Content-Type', mimeTypes.get(extname(filePath).toLowerCase()) || 'application/octet-stream');
-    response.setHeader('Content-Length', fileStat.size);
+    const contentType = mimeTypes.get(extname(filePath).toLowerCase()) || 'application/octet-stream';
+    const compressible = /^(text\/|application\/javascript|application\/json|image\/svg\+xml)/i.test(contentType);
+    const acceptEncoding = String(request.headers['accept-encoding'] || '');
+    let output = response;
+    if (compressible && acceptEncoding.includes('br')) {
+      response.setHeader('Content-Encoding', 'br');
+      output = createBrotliCompress();
+      output.pipe(response);
+    } else if (compressible && acceptEncoding.includes('gzip')) {
+      response.setHeader('Content-Encoding', 'gzip');
+      output = createGzip();
+      output.pipe(response);
+    } else {
+      response.setHeader('Content-Length', fileStat.size);
+    }
+    response.setHeader('Vary', 'Accept-Encoding');
+    if (pathname !== '/' && pathname !== '/index.html' && extname(filePath).toLowerCase() !== '.html') {
+      response.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+    }
     if (request.method === 'HEAD') {
       response.end();
       return;
@@ -106,7 +128,7 @@ const server = createServer(async (request, response) => {
     createReadStream(filePath).on('error', () => {
       if (!response.headersSent) sendText(response, 500, 'Internal server error');
       else response.destroy();
-    }).pipe(response);
+    }).pipe(output);
   } catch (_) {
     sendText(response, 404, 'Not found');
   }

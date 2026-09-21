@@ -127,7 +127,7 @@ assert.match(db, /async fetchPendingCrmDesignTaskApprovals\(\)/);
 assert.match(db, /async decideCrmDesignTaskApproval\(stepId, decision, note\)/);
 assert.match(db, /async createProjectFromWonDealV2\(orderData, dealId\)/);
 assert.match(db, /rpc\('list_crm_deals_secure'\)/);
-assert.match(db, /update\(\{ status \}\).*select\('id,status'\)\.single\(\)/s);
+assert.match(db, /rpc\('change_task_status'/);
 
 assert.match(migration, /CREATE OR REPLACE FUNCTION public\.start_crm_presentation_approval/);
 assert.match(migration, /ADD COLUMN IF NOT EXISTS completion_requested_at timestamptz/);
