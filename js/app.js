@@ -394,12 +394,10 @@ async function syncLegacyLocalProfilePhoto(profile) {
 // ==========================================
 // PWA Installation
 // ==========================================
-let deferredPrompt;
-
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=2026092101', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026092402', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -944,11 +942,6 @@ window.updateRequestStatus = async (reqId, status) => {
         showToast(t('toast_failed_to_update_status'), "danger");
     }
 };
-
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-});
 
 window.addEventListener('load', () => {
     if (window.location.hash.includes('type=recovery')) {
@@ -2346,7 +2339,7 @@ async function canCurrentUserAccessView(viewId) {
     if (isAdmin) return true;
 
     if (viewId === 'users') return canCurrentUserManageUsers();
-    if (viewId === 'hr_suite_beta') return window.canCurrentUserUseHrSuiteBeta?.() === true;
+    if (['hr_suite_beta', 'ats_beta', 'lms_beta', 'appraisals_beta', 'surveys_beta', 'shifts_beta', 'expenses_beta'].includes(viewId)) return window.canCurrentUserUseHrSuiteBeta?.() === true;
     if (viewId === 'crm') return canCurrentUserUseCRM();
     if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
 
@@ -2552,7 +2545,7 @@ window.handleLoginSubmit = async function (e) {
         'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
         'archived_contracts', 'messages', 'notifications', 'performance',
         'documents', 'profile', 'projects', 'approvals', 'tasks',
-        'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta', 'whatsapp_inbox'
+        'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta', 'ats_beta', 'lms_beta', 'appraisals_beta', 'surveys_beta', 'shifts_beta', 'expenses_beta', 'whatsapp_inbox'
     ]);
     const _loginRequestedView = new URLSearchParams(window.location.search).get('view');
     const _loginSavedView = _loginRequestedView || (currentUser ? (localStorage.getItem(`muqam_hr_last_view_${currentUser.id}`) || localStorage.getItem('muqam_hr_last_view')) : null);
@@ -12213,6 +12206,12 @@ window.renderView = async function (viewId, isBack = false) {
             case 'integrations': content = await renderIntegrations(); break;
             case 'whatsapp_inbox': content = await window.renderWhatsAppInbox(); break;
             case 'hr_suite_beta': content = await window.renderHrSuiteBeta(); break;
+            case 'ats_beta': content = window.renderAtsBeta(); break;
+            case 'lms_beta': content = window.renderLmsBeta(); break;
+            case 'appraisals_beta': content = window.renderAppraisalsBeta(); break;
+            case 'surveys_beta': content = window.renderSurveysBeta(); break;
+            case 'shifts_beta': content = window.renderShiftsBeta(); break;
+            case 'expenses_beta': content = window.renderExpensesBeta(); break;
             default:
                 content = `
                     <div class="page-header">
@@ -16262,8 +16261,11 @@ async function initApp() {
     void window.initCustomTranslations();
     updateTranslations();
 
-    // Subscribe to realtime updates for translations
-    if (typeof db !== 'undefined' && db.subscribeToTranslations) {
+    // Translation live updates are optional. Register the handler now, but do
+    // not open a realtime socket on the login screen or while Supabase is
+    // unreachable. This avoids a noisy reconnect loop during outages.
+    const subscribeToTranslations = () => {
+        if (!currentUser || typeof db === 'undefined' || !db.subscribeToTranslations) return;
         db.subscribeToTranslations(payload => {
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
                 const { trans_key, trans_en, trans_ar } = payload.new;
@@ -16281,7 +16283,7 @@ async function initApp() {
                 renderView('translations');
             }
         });
-    }
+    };
 
     // Check for existing session
     const { data: { session } } = await db.getSession();
@@ -16350,7 +16352,7 @@ async function initApp() {
             'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
             'archived_contracts', 'messages', 'notifications', 'performance',
             'documents', 'profile', 'projects', 'approvals', 'tasks',
-            'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta'
+            'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta', 'ats_beta', 'lms_beta', 'appraisals_beta', 'surveys_beta', 'shifts_beta', 'expenses_beta'
         ]);
         const urlParams = new URLSearchParams(window.location.search);
         const requestedView = urlParams.get('view');
@@ -16365,6 +16367,7 @@ async function initApp() {
 
         await startNotificationsRealtime();
         await startTasksRealtime();
+        subscribeToTranslations();
     } else {
         currentView = 'login';
     }

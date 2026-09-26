@@ -1,10 +1,10 @@
 // Bump whenever the shell or versioned scripts change so already-open clients
 // activate a fresh worker and do not keep executing a stale application bundle.
-const CACHE_NAME = 'muqam-hr-mobile-v249';
+const CACHE_NAME = 'muqam-hr-mobile-v250';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.json', '/offline.html',
   '/css/variables.css', '/css/layout.css', '/css/components.css', '/css/hr-suite-beta.css', '/css/android.css', '/css/crm-tailwind.css',
-  '/js/DragDropTouch.js', '/js/data.js', '/js/db.js', '/js/shared-services.js', '/js/contract.js', '/js/payroll.js', '/js/hr-suite-beta.js', '/js/crm-dashboard.bundle.js', '/js/app.js',
+  '/js/DragDropTouch.js', '/js/data.js', '/js/db.js', '/js/shared-services.js', '/js/contract.js', '/js/payroll.js', '/js/hr-suite-beta.js', '/js/enterprise-beta.js', '/js/crm-dashboard.bundle.js', '/js/app.js',
   '/js/vendor/lucide.min.js', '/js/vendor/supabase.js', '/js/vendor/chart.umd.min.js', '/js/vendor/xlsx.full.min.js', '/js/vendor/tesseract/tesseract.min.js', '/js/document-ocr.js',
   '/images/logo.png', '/images/logo-dark.png', '/images/favicon.png?v=1'
 ];

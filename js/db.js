@@ -4,6 +4,100 @@
 const SUPABASE_URL = 'https://bbbetcdioiaozdjkvwxu.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJiYmV0Y2Rpb2lhb3pkamt2d3h1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTM0NjQsImV4cCI6MjEwMTU4OTQ2NH0.GhV7HsGnAXA8Zb_IV3hxhwI9qmbM3qhcuWRMSXKUNcw';
 
+const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
+const SUPABASE_CONNECTIVITY_TIMEOUT_MS = 1800;
+let supabaseNetworkAvailable = true;
+let supabaseNetworkFailureAt = 0;
+
+function createSupabaseNetworkError(message = 'Supabase is temporarily unreachable.') {
+    const error = new Error(message);
+    error.name = 'SupabaseNetworkError';
+    error.isNetworkError = true;
+    return error;
+}
+
+function isSupabaseNetworkError(error) {
+    const name = String(error?.name || '').toLowerCase();
+    const message = String(error?.message || error || '').toLowerCase();
+    return error?.isNetworkError === true
+        || name.includes('retryablefetch')
+        || name.includes('network')
+        || message.includes('timed out')
+        || message.includes('failed to fetch')
+        || message.includes('network request failed');
+}
+
+function fetchSupabaseWithTimeout(input, init = {}) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SUPABASE_REQUEST_TIMEOUT_MS);
+    const upstreamSignal = init.signal;
+    const abortFromUpstream = () => controller.abort(upstreamSignal.reason);
+    if (upstreamSignal) {
+        if (upstreamSignal.aborted) abortFromUpstream();
+        else upstreamSignal.addEventListener('abort', abortFromUpstream, { once: true });
+    }
+    return fetch(input, { ...init, signal: controller.signal })
+        .then(response => {
+            supabaseNetworkAvailable = true;
+            return response;
+        })
+        .catch(error => {
+            supabaseNetworkAvailable = false;
+            supabaseNetworkFailureAt = Date.now();
+            if (error?.name === 'AbortError') throw createSupabaseNetworkError('Supabase request timed out.');
+            throw error;
+        })
+        .finally(() => {
+            clearTimeout(timeoutId);
+            upstreamSignal?.removeEventListener('abort', abortFromUpstream);
+        });
+}
+
+async function probeSupabaseConnectivity() {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        supabaseNetworkAvailable = false;
+        supabaseNetworkFailureAt = Date.now();
+        return false;
+    }
+    if (!supabaseNetworkAvailable && Date.now() - supabaseNetworkFailureAt < SUPABASE_CONNECTIVITY_TIMEOUT_MS) return false;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SUPABASE_CONNECTIVITY_TIMEOUT_MS);
+    try {
+        // A public Auth settings probe avoids starting an Auth request that
+        // would otherwise emit an SDK timeout stack trace when the project is
+        // down. The REST root rejects HEAD requests with 401 even when the
+        // project is healthy, so it is not a useful connectivity signal.
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/settings`, {
+            method: 'GET',
+            mode: 'cors',
+            headers: { apikey: SUPABASE_ANON_KEY },
+            signal: controller.signal
+        });
+        if (!response.ok && response.status >= 500) throw new Error(`Supabase unavailable (${response.status})`);
+        supabaseNetworkAvailable = true;
+        supabaseNetworkFailureAt = 0;
+        return true;
+    } catch (_) {
+        supabaseNetworkAvailable = false;
+        supabaseNetworkFailureAt = Date.now();
+        return false;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function withSupabaseTimeout(promise, fallback, timeoutMs = SUPABASE_REQUEST_TIMEOUT_MS) {
+    let timeoutId;
+    const timeout = new Promise(resolve => {
+        timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+    });
+    // Supabase query builders are thenable objects rather than native
+    // Promises, so normalize them before attaching catch/finally handlers.
+    const guardedPromise = Promise.resolve(promise).catch(() => fallback);
+    return Promise.race([guardedPromise.finally(() => clearTimeout(timeoutId)), timeout]);
+}
+
 // Initialize the Supabase client
 // This uses the global supabase object loaded via the CDN in index.html
 let supabaseClient = null;
@@ -44,7 +138,11 @@ function parseStorageReference(value) {
 }
 
 if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
-    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { fetch: fetchSupabaseWithTimeout },
+        db: { timeout: SUPABASE_REQUEST_TIMEOUT_MS, retry: false },
+        realtime: { params: { eventsPerSecond: 10 } }
+    });
     window.supabaseClient = supabaseClient;
     console.log("Supabase client initialized successfully.");
 } else {
@@ -132,7 +230,10 @@ const db = {
             if (error) throw error;
             return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
-            console.error("Error fetching system translations:", error);
+            const message = String(error?.message || error || '').toLowerCase();
+            if (!message.includes('supabase') && !message.includes('fetch') && !message.includes('timeout')) {
+                console.error("Error fetching system translations:", error);
+            }
             return [];
         }
     },
@@ -179,7 +280,7 @@ const db = {
         }
     },
     subscribeToTranslations(callback) {
-        if (!supabaseClient) return null;
+        if (!supabaseClient || !supabaseNetworkAvailable || (typeof navigator !== 'undefined' && navigator.onLine === false)) return null;
         const channel = supabaseClient.channel('system_translations_changes')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'system_translations' }, payload => {
                 callback(payload);
@@ -561,17 +662,25 @@ const db = {
     async recordFailedLogin(email) {
         if (!supabaseClient) return null;
         try {
-            await supabaseClient.rpc('record_failed_login', { user_email: email });
+            await withSupabaseTimeout(
+                supabaseClient.rpc('record_failed_login', { user_email: email }),
+                { data: null, error: createSupabaseNetworkError() },
+                4000
+            );
         } catch (error) {
-            console.error("Error recording failed login:", error);
+            if (!error?.isNetworkError) console.error("Error recording failed login:", error);
         }
     },
     async resetLoginLockout(email) {
         if (!supabaseClient) return null;
         try {
-            await supabaseClient.rpc('reset_login_lockout', { user_email: email });
+            await withSupabaseTimeout(
+                supabaseClient.rpc('reset_login_lockout', { user_email: email }),
+                { data: null, error: createSupabaseNetworkError() },
+                4000
+            );
         } catch (error) {
-            console.error("Error resetting login lockout:", error);
+            if (!error?.isNetworkError) console.error("Error resetting login lockout:", error);
         }
     },
 
@@ -642,15 +751,27 @@ const db = {
             console.warn("Mock Login Success");
             return { user: { email }, error: null };
         }
+
+        if (!(await probeSupabaseConnectivity())) {
+            return { user: null, error: createSupabaseNetworkError('Unable to reach the sign-in service. Please check your connection and try again.') };
+        }
         
         try {
-            const { data, error } = await supabaseClient.auth.signInWithPassword({
-                email: email,
-                password: password
-            });
-            return { user: data?.user, error };
+            const { data, error } = await withSupabaseTimeout(
+                supabaseClient.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                }),
+                { data: null, error: createSupabaseNetworkError('Unable to reach the sign-in service. Please check your connection and try again.') },
+                10000
+            );
+            return { user: data?.user, error: isSupabaseNetworkError(error)
+                ? createSupabaseNetworkError('Unable to reach the sign-in service. Please check your connection and try again.')
+                : error };
         } catch (error) {
-            return { user: null, error };
+            return { user: null, error: isSupabaseNetworkError(error)
+                ? createSupabaseNetworkError('Unable to reach the sign-in service. Please check your connection and try again.')
+                : error };
         }
     },
 
@@ -1052,7 +1173,18 @@ const db = {
     // ==========================================
     async getSession() {
         if (!supabaseClient) return { data: { session: null } };
-        return await supabaseClient.auth.getSession();
+        if (!(await probeSupabaseConnectivity())) {
+            return { data: { session: null }, error: createSupabaseNetworkError('Unable to reach Supabase. Please check your connection.') };
+        }
+        const result = await withSupabaseTimeout(
+            supabaseClient.auth.getSession(),
+            { data: { session: null }, error: createSupabaseNetworkError('Unable to reach Supabase. Please check your connection.') },
+            7000
+        );
+        if (!result?.data?.session && isSupabaseNetworkError(result?.error)) {
+            return { data: { session: null }, error: createSupabaseNetworkError('Unable to reach Supabase. Please check your connection.') };
+        }
+        return result?.data ? result : { data: { session: null }, error: result?.error || null };
     },
 
     onAuthStateChange(callback) {
@@ -1205,7 +1337,18 @@ const db = {
     // ==========================================
     async getSession() {
         if (!supabaseClient) return { data: { session: null } };
-        return await supabaseClient.auth.getSession();
+        if (!(await probeSupabaseConnectivity())) {
+            return { data: { session: null }, error: createSupabaseNetworkError('Unable to reach Supabase. Please check your connection.') };
+        }
+        const result = await withSupabaseTimeout(
+            supabaseClient.auth.getSession(),
+            { data: { session: null }, error: createSupabaseNetworkError('Unable to reach Supabase. Please check your connection.') },
+            7000
+        );
+        if (!result?.data?.session && isSupabaseNetworkError(result?.error)) {
+            return { data: { session: null }, error: createSupabaseNetworkError('Unable to reach Supabase. Please check your connection.') };
+        }
+        return result?.data ? result : { data: { session: null }, error: result?.error || null };
     },
 
     onAuthStateChange(callback) {
