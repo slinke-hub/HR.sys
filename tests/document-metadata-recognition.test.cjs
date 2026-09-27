@@ -24,11 +24,23 @@ assert.deepEqual(
   { ...parseMetadata('اسم المالك: محمد أحمد\nتاريخ الانتهاء: ١٧/٠٤/٢٠٢٨') },
   { ownerName: 'محمد أحمد', expirationDate: '2028-04-17' }
 );
+assert.equal(
+  parseMetadata('هوية مقيم\nتاريخ الانتهاء: ٢٠٢٥/٠١/٢٨', { documentType: 'Iqaman' }).expirationDate,
+  '2025-01-28'
+);
+assert.equal(
+  parseMetadata('هوية مقيم\nتاريخ الانتهاء: ١٤٤٦/٠٧/٢٨', { documentType: 'Iqaman' }).expirationDate,
+  '2025-01-28'
+);
 assert.equal(parseMetadata('Issue date 01/01/2024\nRenewal date 01/01/2028').expirationDate, '');
 assert.equal(parseMetadata('Document date: 2028-04-17').expirationDate, '');
 
 assert.match(app, /name: 'Montasir',[\s\S]*email: 'montasir\.hr@muqam\.net'/);
 assert.match(app, /window\.autoPopulateEmployeeDocumentMetadata = async function/);
+assert.match(app, /id="empDocName" class="form-control" onchange="handleEmployeeDocumentTypeChange\(\)"/);
+for (const documentType of ['Iqaman', 'Passport', 'CR File', 'License', "Employee's Working License", 'Subscription']) {
+  assert.match(app, new RegExp(`value="${documentType.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}"`));
+}
 assert.match(app, /value="\$\{escapeHTML\(EMPLOYEE_DOCUMENT_DEFAULT_RESPONSIBLE\.name\)\}"/);
 assert.match(app, /id="empOwnerEmail" class="form-control">/);
 assert.match(app, /id="empOwnerPhone" class="form-control">/);

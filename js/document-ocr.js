@@ -14,6 +14,15 @@
             .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
     }
 
+    function normalizeDocumentText(value) {
+        return normalizeDigits(value)
+            .replace(/[\u200E\u200F\u202A-\u202E]/g, '')
+            .replace(/[／⁄∕]/g, '/')
+            .replace(/[٫]/g, '.')
+            .replace(/ـ/g, '')
+            .replace(/\s*([/\-])\s*/g, '$1');
+    }
+
     function validIsoDate(year, month, day) {
         const numericYear = Number(year);
         const numericMonth = Number(month);
@@ -25,13 +34,42 @@
         return `${String(numericYear).padStart(4, '0')}-${String(numericMonth).padStart(2, '0')}-${String(numericDay).padStart(2, '0')}`;
     }
 
-    function parseDateCandidate(value) {
-        const normalized = normalizeDigits(value).replace(/[.]/g, '/');
-        let match = normalized.match(/\b(20\d{2}|19\d{2}|21\d{2}|22\d{2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(\d{1,2})\b/);
-        if (match) return validIsoDate(match[1], match[2], match[3]);
+    function hijriToGregorian(year, month, day) {
+        const hijriYear = Number(year);
+        const hijriMonth = Number(month);
+        const hijriDay = Number(day);
+        if (hijriYear < 1300 || hijriYear > 1600 || hijriMonth < 1 || hijriMonth > 12 || hijriDay < 1 || hijriDay > 30) return '';
+        const julianDay = Math.floor((11 * hijriYear + 3) / 30) + 354 * hijriYear + 30 * hijriMonth
+            - Math.floor((hijriMonth - 1) / 2) + hijriDay + 1948440 - 385;
+        let left = julianDay + 68569;
+        const century = Math.floor(4 * left / 146097);
+        left -= Math.floor((146097 * century + 3) / 4);
+        const yearPart = Math.floor(4000 * (left + 1) / 1461001);
+        left -= Math.floor(1461 * yearPart / 4) - 31;
+        const monthPart = Math.floor(80 * left / 2447);
+        const dayPart = left - Math.floor(2447 * monthPart / 80);
+        left = Math.floor(monthPart / 11);
+        const monthValue = monthPart + 2 - 12 * left;
+        const yearValue = 100 * (century - 49) + yearPart + left;
+        return validIsoDate(yearValue, monthValue, dayPart);
+    }
 
-        match = normalized.match(/\b(\d{1,2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(20\d{2}|19\d{2}|21\d{2}|22\d{2})\b/);
-        if (match) return validIsoDate(match[3], match[2], match[1]);
+    function validDocumentDate(year, month, day, options = {}) {
+        const parsedYear = Number(year);
+        if (options.allowHijri && parsedYear >= 1300 && parsedYear <= 1600) {
+            return hijriToGregorian(parsedYear, month, day);
+        }
+        return validIsoDate(parsedYear, month, day);
+    }
+
+    function parseDateCandidate(value, options = {}) {
+        const normalized = normalizeDocumentText(value).replace(/[.]/g, '/');
+        const yearPattern = options.allowHijri ? '(?:1[3-6]\\d{2}|(?:19|20|21|22)\\d{2})' : '(?:19|20|21|22)\\d{2}';
+        let match = normalized.match(new RegExp(`\\b(${yearPattern})\\s*[\\/-]\\s*(\\d{1,2})\\s*[\\/-]\\s*(\\d{1,2})\\b`));
+        if (match) return validDocumentDate(match[1], match[2], match[3], options);
+
+        match = normalized.match(new RegExp(`\\b(\\d{1,2})\\s*[\\/-]\\s*(\\d{1,2})\\s*[\\/-]\\s*(${yearPattern})\\b`));
+        if (match) return validDocumentDate(match[3], match[2], match[1], options);
 
         const monthNames = {
             january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
@@ -39,9 +77,9 @@
             september: 9, sep: 9, october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12
         };
         match = normalized.match(/\b(\d{1,2})\s+([a-z]{3,9})\s*,?\s*(20\d{2}|19\d{2}|21\d{2}|22\d{2})\b/i);
-        if (match && monthNames[match[2].toLowerCase()]) return validIsoDate(match[3], monthNames[match[2].toLowerCase()], match[1]);
+        if (match && monthNames[match[2].toLowerCase()]) return validDocumentDate(match[3], monthNames[match[2].toLowerCase()], match[1], options);
         match = normalized.match(/\b([a-z]{3,9})\s+(\d{1,2}),?\s*(20\d{2}|19\d{2}|21\d{2}|22\d{2})\b/i);
-        if (match && monthNames[match[1].toLowerCase()]) return validIsoDate(match[3], monthNames[match[1].toLowerCase()], match[2]);
+        if (match && monthNames[match[1].toLowerCase()]) return validDocumentDate(match[3], monthNames[match[1].toLowerCase()], match[2], options);
         return '';
     }
 
@@ -83,63 +121,94 @@
         return '';
     }
 
-    function findExpirationDate(text) {
-        const normalized = normalizeDigits(text);
-        const labelledCandidates = [
-            /(?:expiry\s+date|expiration\s+date|date\s+of\s+expiry|expires?(?:\s+on)?|valid\s+(?:until|through|thru))\s*[:|\-–—]?\s*([^\n]{0,60})/gi,
-            /(?:تاريخ\s*(?:الانتهاء|الإنتهاء)|تاريخ\s*نهاية\s*الصلاحية|ينتهي\s*(?:في)?|صالح\s*حتى)\s*[:|\-–—]?\s*([^\n]{0,60})/g
-        ];
-        for (const pattern of labelledCandidates) {
-            let match;
-            while ((match = pattern.exec(normalized))) {
-                const parsed = parseDateCandidate(match[1]);
-                if (parsed) return parsed;
-            }
-        }
-        
-        // Fallback: Find any future date in the entire text
-        const unlabelledDates = [];
-        const normalizedForFallback = normalized.replace(/[.]/g, '/');
-        
-        const r1 = /\b(20\d{2}|19\d{2}|21\d{2}|22\d{2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(\d{1,2})\b/g;
-        let m1;
-        while ((m1 = r1.exec(normalizedForFallback))) unlabelledDates.push(validIsoDate(m1[1], m1[2], m1[3]));
-        
-        const r2 = /\b(\d{1,2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(20\d{2}|19\d{2}|21\d{2}|22\d{2})\b/g;
-        let m2;
-        while ((m2 = r2.exec(normalizedForFallback))) unlabelledDates.push(validIsoDate(m2[3], m2[2], m2[1]));
+    function isIqamaDocument(options = {}) {
+        const documentType = String(options.documentType || '').toLowerCase();
+        return /iqama|iqaman|إقامة|اقامة/.test(documentType);
+    }
 
+    function collectDateCandidates(value, options = {}) {
+        const normalized = normalizeDocumentText(value).replace(/[.]/g, '/');
+        const yearPattern = options.allowHijri ? '(?:1[3-6]\\d{2}|(?:19|20|21|22)\\d{2})' : '(?:19|20|21|22)\\d{2}';
+        const candidates = [];
+        const seen = new Set();
+        const add = (raw, index) => {
+            const iso = parseDateCandidate(raw, options);
+            if (iso && !seen.has(iso)) {
+                seen.add(iso);
+                candidates.push({ iso, index: Number(index) || 0 });
+            }
+        };
+        const yearFirst = new RegExp(`\\b${yearPattern}\\s*[\\/-]\\s*\\d{1,2}\\s*[\\/-]\\s*\\d{1,2}\\b`, 'g');
+        const dayFirst = new RegExp(`\\b\\d{1,2}\\s*[\\/-]\\s*\\d{1,2}\\s*[\\/-]\\s*${yearPattern}\\b`, 'g');
+        for (const match of normalized.matchAll(yearFirst)) add(match[0], match.index);
+        for (const match of normalized.matchAll(dayFirst)) add(match[0], match.index);
         const monthNames = {
             january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
             may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8,
             september: 9, sep: 9, october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12
         };
-        const r3 = /\b(\d{1,2})\s+([a-z]{3,9})\s*,?\s*(20\d{2}|19\d{2}|21\d{2}|22\d{2})\b/gi;
-        let m3;
-        while ((m3 = r3.exec(normalizedForFallback))) {
-            if (monthNames[m3[2].toLowerCase()]) unlabelledDates.push(validIsoDate(m3[3], monthNames[m3[2].toLowerCase()], m3[1]));
+        const namedDate = /\b(?:\d{1,2}\s+[a-z]{3,9}\s*,?\s*(?:19|20|21|22)\d{2}|[a-z]{3,9}\s+\d{1,2},?\s*(?:19|20|21|22)\d{2})\b/gi;
+        for (const match of normalized.matchAll(namedDate)) {
+            const raw = match[0];
+            const words = raw.replace(',', '').split(/\s+/);
+            const monthWord = words.find(word => monthNames[word.toLowerCase()]);
+            if (monthWord) add(raw, match.index);
         }
-
-        const r4 = /\b([a-z]{3,9})\s+(\d{1,2}),?\s*(20\d{2}|19\d{2}|21\d{2}|22\d{2})\b/gi;
-        let m4;
-        while ((m4 = r4.exec(normalizedForFallback))) {
-            if (monthNames[m4[1].toLowerCase()]) unlabelledDates.push(validIsoDate(m4[3], monthNames[m4[1].toLowerCase()], m4[2]));
-        }
-        
-        const todayStr = new Date().toISOString().split('T')[0];
-        const validFutureDates = unlabelledDates.filter(d => d && d >= todayStr);
-        if (validFutureDates.length > 0) {
-            // Return the furthest future date as it's most likely the expiry date
-            return validFutureDates.sort((a, b) => a.localeCompare(b)).pop();
-        }
-
-        return '';
+        return candidates;
     }
 
-    function parseMetadata(text) {
+    function findExpirationDate(text, options = {}) {
+        const normalized = normalizeDocumentText(text);
+        const parseOptions = { ...options, allowHijri: Boolean(options.allowHijri || isIqamaDocument(options)) };
+        const labelledCandidates = [
+            /(?:expiry\s+date|expiration\s+date|date\s+of\s+expiry|expires?(?:\s+on)?|valid\s+(?:until|through|thru))\s*[:|\-–—]?\s*([^\n]{0,80})/gi,
+            /(?:تاريخ\s*(?:الانتهاء|الإنتهاء|الانتها|الإنته|انتهاء)|تاريخ\s*نهاية\s*الصلاحية|ينتهي\s*(?:في)?|صالح\s*حتى)\s*[:|\-–—]?\s*([^\n]{0,80})/g
+        ];
+        for (const pattern of labelledCandidates) {
+            let match;
+            while ((match = pattern.exec(normalized))) {
+                const parsed = collectDateCandidates(match[1], parseOptions)[0]?.iso;
+                if (parsed) return parsed;
+            }
+        }
+
+        // OCR can place the Arabic label and the date on adjacent lines, or reverse
+        // their order in right-to-left text. Inspect a small neighborhood around it.
+        const expiryLabel = /(?:expiry|expiration|valid|expires?|الانتهاء|الإنتهاء|الانتها|الإنته|نهاية\s*الصلاحية|ينتهي|صالح\s*حتى)/i;
+        const lines = normalized.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        for (let index = 0; index < lines.length; index += 1) {
+            if (!expiryLabel.test(lines[index])) continue;
+            const nearbyLines = [lines[index], lines[index + 1], lines[index - 1]].filter(Boolean);
+            for (const line of nearbyLines) {
+                const parsed = collectDateCandidates(line, parseOptions)[0]?.iso;
+                if (parsed) return parsed;
+            }
+        }
+
+        const unlabelledDates = collectDateCandidates(normalized, parseOptions);
+        if (isIqamaDocument(options) && unlabelledDates.length > 0) {
+            const labelIndex = normalized.search(/(?:expiry|expiration|valid|expires?|الانتهاء|الإنتهاء|الانتها|الإنته|نهاية\s*الصلاحية)/i);
+            if (labelIndex >= 0) {
+                return unlabelledDates.slice().sort((left, right) => Math.abs(left.index - labelIndex) - Math.abs(right.index - labelIndex))[0].iso;
+            }
+            // Iqama cards commonly contain issue/birth dates as well. When OCR
+            // loses the labels, the latest valid date is the safest expiry guess.
+            return unlabelledDates.map(candidate => candidate.iso).sort((left, right) => left.localeCompare(right)).pop();
+        }
+
+        // Avoid guessing from documents that only expose issue, birth, renewal,
+        // or other non-expiry dates without an expiry label.
+        if (/(?:issue|issued|birth|renewal|document)\s+date|تاريخ\s*(?:الميلاد|الإصدار|الاصدار)/i.test(normalized)) return '';
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const validFutureDates = unlabelledDates.map(candidate => candidate.iso).filter(date => date && date >= todayStr);
+        return validFutureDates.sort((left, right) => left.localeCompare(right)).pop() || '';
+    }
+
+    function parseMetadata(text, options = {}) {
         return {
             ownerName: findOwnerName(text),
-            expirationDate: findExpirationDate(text)
+            expirationDate: findExpirationDate(text, options)
         };
     }
 
@@ -286,7 +355,7 @@
         });
     }
 
-    async function recognizeSources(sources, initialText, onProgress) {
+    async function recognizeSources(sources, initialText, onProgress, parseOptions = {}) {
         let worker;
         let text = initialText || '';
         try {
@@ -295,7 +364,7 @@
                 onProgress?.({ phase: 'ocr', progress: index / Math.max(1, sources.length) });
                 const result = await worker.recognize(sources[index]);
                 text += `\n${result?.data?.text || ''}`;
-                const metadata = parseMetadata(text);
+                const metadata = parseMetadata(text, parseOptions);
                 if (metadata.ownerName && metadata.expirationDate) break;
             }
             return text;
@@ -304,7 +373,7 @@
         }
     }
 
-    async function extractPdfText(file, onProgress) {
+    async function extractPdfText(file, onProgress, parseOptions = {}) {
         onProgress?.({ phase: 'pdf', progress: 0 });
         const pdfjs = await loadPdfJs();
         const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false });
@@ -319,7 +388,7 @@
                 text += `\n${content.items.map(item => `${item.str || ''}${item.hasEOL ? '\n' : ' '}`).join('')}`;
                 onProgress?.({ phase: 'pdf', progress: pageNumber / pageCount });
             }
-            const embeddedMetadata = parseMetadata(text);
+            const embeddedMetadata = parseMetadata(text, parseOptions);
             if (embeddedMetadata.ownerName && embeddedMetadata.expirationDate) return text;
 
             for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
@@ -333,7 +402,7 @@
                 await page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport }).promise;
                 canvases.push(canvas);
             }
-            return recognizeSources(canvases, text, onProgress);
+            return recognizeSources(canvases, text, onProgress, parseOptions);
         } finally {
             await pdf.destroy();
         }
@@ -343,12 +412,16 @@
         if (!file) return { ownerName: '', expirationDate: '', text: '' };
         const onProgress = options.onProgress;
         let text = '';
+        const parseOptions = {
+            ...options,
+            allowHijri: Boolean(options.allowHijri || isIqamaDocument(options))
+        };
         if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
-            text = await extractPdfText(file, onProgress);
+            text = await extractPdfText(file, onProgress, parseOptions);
         } else {
-            text = await recognizeSources([file], '', onProgress);
+            text = await recognizeSources([file], '', onProgress, parseOptions);
         }
-        return { ...parseMetadata(text), text };
+        return { ...parseMetadata(text, parseOptions), text };
     }
 
     async function extractBusinessCard(file, options = {}) {

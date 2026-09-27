@@ -105,11 +105,22 @@ const taskDetailValue = (value, type = '') => {
     if (!raw) return taskDetailText('Not set', 'غير محدد');
     const key = raw.toLowerCase().replace(/[\s-]+/g, '_');
     const maps = {
-        status: { todo: 'قيد الانتظار', in_progress: 'قيد التنفيذ', review: 'قيد المراجعة', pending_approval: 'بانتظار الموافقة', completed: 'مكتملة', approved: 'معتمدة', rejected: 'مرفوضة' },
+        status: { todo: 'قيد الانتظار', in_progress: 'قيد التنفيذ', late: 'متأخرة', review: 'قيد المراجعة', pending_approval: 'بانتظار الموافقة', completed: 'مكتملة', canceled: 'ملغاة', approved: 'معتمدة', rejected: 'مرفوضة' },
         priority: { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة', critical: 'حرجة' },
         visibility: { public: 'عام', private: 'خاص', team: 'الفريق' }
     };
     return currentLang === 'ar' ? (maps[type]?.[key] || raw) : raw;
+};
+const taskStatusClass = value => {
+    const normalized = String(value || 'todo').trim().toLowerCase()
+        .replace(/[_\s]+/g, '-')
+        .replace(/[^a-z0-9-]/g, '');
+    return normalized || 'todo';
+};
+const updateTaskStatusControlClass = (control, status) => {
+    if (!control) return;
+    [...control.classList].filter(name => name.startsWith('status-')).forEach(name => control.classList.remove(name));
+    control.classList.add(`status-${taskStatusClass(status)}`);
 };
 const getLocalizedTaskTitle = task => {
     const localized = task?.title_i18n?.[currentLang] || task?.title_i18n?.en || task?.title || '';
@@ -6491,6 +6502,7 @@ window.autoPopulateEmployeeDocumentMetadata = async function (file) {
 
     try {
         const result = await extractor.extract(file, {
+            documentType: document.getElementById('empDocName')?.value || '',
             onProgress: progress => setEmployeeDocumentRecognitionStatus(
                 progress.phase === 'pdf' ? 'doc_recognition_reading' : 'doc_recognition_scanning',
                 'working',
@@ -6549,6 +6561,11 @@ window.updateEmployeeDocumentFileName = async function (event) {
         }
     }
     if (files.length > 0) await window.autoPopulateEmployeeDocumentMetadata(files[0]);
+};
+
+window.handleEmployeeDocumentTypeChange = async function () {
+    const file = document.getElementById('empDocFile')?.files?.[0];
+    if (file) await window.autoPopulateEmployeeDocumentMetadata(file);
 };
 
 window.handleEmployeeDocSave = async function (e) {
@@ -6977,8 +6994,16 @@ async function renderDocuments() {
                             <input type="text" class="form-control" value="${t('doc_auto_generated')}" readonly>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">${t('doc_document_name')}</label>
-                            <input type="text" id="empDocName" class="form-control" required>
+                            <label class="form-label" for="empDocName">${t('doc_document_type')}</label>
+                            <select id="empDocName" class="form-control" onchange="handleEmployeeDocumentTypeChange()" required>
+                                <option value="" selected disabled>${t('doc_select_type')}</option>
+                                <option value="Iqaman">Iqaman</option>
+                                <option value="Passport">Passport</option>
+                                <option value="CR File">CR File</option>
+                                <option value="License">License</option>
+                                <option value="Employee's Working License">Employee's Working License</option>
+                                <option value="Subscription">Subscription</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label class="form-label">${t('doc_owner_name')}</label>
@@ -7751,8 +7776,8 @@ function renderTaskCard(task) {
             </div>
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
-                ${canChangeTaskStage ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
-                    ['todo','To do'],['in_progress','In progress'], ...(isCrmProposalDesignTask ? [['late','Late']] : []), ['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done']
+                ${canChangeTaskStage ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select status-${taskStatusClass(task.status)}" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
+                    ['todo','To do'],['in_progress','In progress'], ...(isCrmProposalDesignTask ? [['late','Late']] : []), ['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done'],['canceled','Canceled']
                 ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
                 <button type="button" class="task-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>
                     <i data-lucide="users"></i>
@@ -7996,26 +8021,37 @@ async function renderTasksV2() {
             ? formattedRowCreatorName
             : taskDetailText('System', 'النظام');
         const assigneeHTML = `<i data-lucide="users" style="width:14px;height:14px;"></i><span class="task-assignee-full-name">${escapeHTML(rowAssigneeName)}</span>`;
+        const inlineStatusOptions = [
+            ['todo', taskDetailText('To do', 'للعمل')],
+            ['in_progress', taskDetailText('In progress', 'قيد التنفيذ')],
+            ['late', taskDetailText('Late', 'متأخر')],
+            ['completed', taskDetailText('Completed', 'مكتمل')],
+            ['canceled', taskDetailText('Canceled', 'ملغاة')]
+        ];
+        if (!inlineStatusOptions.some(([value]) => value === task.status)) {
+            inlineStatusOptions.unshift([task.status, taskDetailValue(task.status, 'status')]);
+        }
+        const inlineStatusSelect = `<label class="task-v2-inline-status" onclick="event.stopPropagation()"><span class="sr-only">${taskDetailText('Task status', 'حالة المهمة')}</span><select class="task-v2-stage-select status-${taskStatusClass(task.status)}" aria-label="${taskDetailText('Change task status', 'تغيير حالة المهمة')}" onchange="window.handleTaskCardStageChange('${task.id}', this.value)" ${canChangeTaskStageRecord(task) ? '' : 'disabled'}>${inlineStatusOptions.map(([value, label]) => `<option value="${escapeHTML(value)}" ${task.status === value ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></label>`;
 
         return `
-            <article class="task-v2-row ${isCompleted ? 'completed' : ''} ${isNestedSubtask ? 'task-v2-subtask-row' : 'task-v2-main-row'}" data-task-id="${task.id}" data-parent-task-id="${task.parent_task_id || ''}" data-task-depth="${taskDepth}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="--task-subtask-depth:${taskDepth}; cursor:pointer; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--color-border); background: var(--color-surface); transition: background 0.2s; flex-wrap: wrap; gap: 0.5rem;">
-                <div class="task-v2-row-left" style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
+            <article class="task-v2-row ${isCompleted ? 'completed' : ''} ${isNestedSubtask ? 'task-v2-subtask-row' : 'task-v2-main-row'}" data-task-id="${task.id}" data-parent-task-id="${task.parent_task_id || ''}" data-task-depth="${taskDepth}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="--task-subtask-depth:${taskDepth}; cursor:pointer;">
+                <div class="task-v2-row-left task-v2-title-cell">
                     <button class="task-v2-check-btn" onclick="event.stopPropagation(); window.taskV2ToggleComplete('${task.id}', event)" ${!canManageTask ? 'disabled' : ''} style="background:none; border:none; cursor:pointer; display:flex; align-items:center; padding:0;">
                         <i data-lucide="check-circle-2" style="width: 20px; height: 20px; color: ${stageCheckColor};"></i>
                     </button>
-                    <div class="task-v2-row-content" style="display: flex; flex-direction: column;">
+                    <div class="task-v2-row-content">
                         <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="margin: 0; font-size: 0.95rem; font-weight: 700; cursor: pointer; ${isCompleted ? 'text-decoration: line-through; opacity: 0.6;' : 'color: var(--color-text);'}">
                             ${task.parent_task_id ? '<span class="task-relation-badge is-subtask">Subtask</span> ' : ''}
                             ${escapeHTML(task.displayTitle)}
                         </h4>
                         <div class="task-focus-people" aria-label="${taskDetailText('Task people', 'أشخاص المهمة')}">
                             <span class="task-focus-assignee"><i data-lucide="user-round"></i><span>${taskDetailText('Assigned To:', 'مُعيّنة إلى:')}</span><strong>${escapeHTML(rowAssigneeName)}</strong></span>
-                            <span class="task-focus-creator"><i data-lucide="user-round-plus"></i><span>${taskDetailText('Created by:', 'أنشأها:')}</span><strong>${escapeHTML(rowCreatorName)}</strong></span>
                         </div>
                     </div>
                 </div>
-                
-                <div class="task-v2-row-actions" style="display: flex; align-items: center; gap: 1rem; flex-shrink: 0;">
+                <div class="task-v2-row-status">${inlineStatusSelect}</div>
+                <div class="task-v2-row-creator"><i data-lucide="user-round-plus"></i><span>${taskDetailText('Created by:', 'أنشأها:')}</span><strong>${escapeHTML(rowCreatorName)}</strong></div>
+                <div class="task-v2-row-actions">
                     <button type="button" class="task-assignee task-row-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignee" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>${assigneeHTML}</button>
                     ${task.due_date ? `<span class="task-row-due${dueClass}" style="display:flex; align-items: center; gap:4px; font-size:0.8rem; color:var(--color-text-secondary); white-space:nowrap; flex-shrink:0;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date}</span>` : ''}
                     ${task.category && task.category !== 'General' ? `<span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--color-primary); font-size: 0.75rem;">${escapeHTML(task.category)}</span>` : ''}
@@ -8033,6 +8069,7 @@ async function renderTasksV2() {
     const selectedActiveCount = selectedScopeTasks.filter(task => ['in_progress', 'late'].includes(task.status)).length;
     const review = tasks.filter(t => t.status === 'review');
     const done = tasks.filter(t => t.status === 'completed');
+    const canceled = tasks.filter(t => ['canceled', 'cancelled'].includes(String(t.status || '').toLowerCase()));
     
     // Add additional statuses like Approved/Rejected if used
     const approved = tasks.filter(t => t.status === 'Approved');
@@ -8043,7 +8080,8 @@ async function renderTasksV2() {
         { status: 'in_progress', badge: 'in_progress', label: 'In progress', tone: 'blue', tasks: inProgress },
         { status: 'review', badge: 'review', label: 'Review', tone: 'purple', tasks: review },
         { status: 'Pending Approval', badge: 'pending', label: 'Awaiting approval', tone: 'amber', tasks: pending },
-        { status: 'completed', badge: 'completed', label: 'Done', tone: 'green', tasks: done }
+        { status: 'completed', badge: 'completed', label: 'Done', tone: 'green', tasks: done },
+        { status: 'canceled', badge: 'canceled', label: 'Canceled', tone: 'slate', tasks: canceled }
     ];
     if (approved.length || rejected.length) {
         stageDefinitions.push(
@@ -8453,6 +8491,7 @@ async function renderTasksV2() {
                             <option value="review">Review</option>
                             <option value="Pending Approval">Awaiting Approval</option>
                             <option value="completed">Completed</option>
+                            <option value="canceled">Canceled</option>
                         </select>
                         <select id="taskV2PriorityFilter" class="form-control" onchange="window.filterTasksV2()">
                             <option value="all">All Priorities</option>
@@ -8499,6 +8538,12 @@ async function renderTasksV2() {
                 <div class="task-v2-rows" id="task-v2-rows-container" style="display: ${taskViewMode === 'focus' ? 'block' : 'none'};">
                     <div class="task-focus-header">
                         <div><span class="task-focus-kicker">Needs attention</span><h3>Focus view</h3></div>
+                    </div>
+                    <div class="task-v2-table-header" role="row">
+                        <span>${taskDetailText('Task Title', 'عنوان المهمة')}</span>
+                        <span>${taskDetailText('Task Status', 'حالة المهمة')}</span>
+                        <span>${taskDetailText('Created By', 'أنشأها')}</span>
+                        <span>${taskDetailText('Actions', 'الإجراءات')}</span>
                     </div>
                     ${taskRows || '<div class="empty-state">No tasks found.</div>'}
                     
@@ -8994,15 +9039,21 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus) {
     const previousStatus = task.status;
     const result = await window.handleUpdateTaskStatus(taskId, requestedStatus);
     if (result?.error) {
-        document.querySelectorAll(`[data-task-id="${taskId}"] .task-v2-stage-select`).forEach(select => { select.value = previousStatus; });
+        document.querySelectorAll(`[data-task-id="${taskId}"] .task-v2-stage-select, [data-task-id="${taskId}"] .task-stage-select`).forEach(select => {
+            select.value = previousStatus;
+            updateTaskStatusControlClass(select, previousStatus);
+        });
         return result;
     }
     const actualStatus = result.status || requestedStatus;
     task.status = actualStatus;
     document.querySelectorAll(`[data-task-id="${taskId}"]`).forEach(node => {
         node.dataset.status = actualStatus;
-        const select = node.querySelector('.task-v2-stage-select');
-        if (select) select.value = actualStatus;
+        const select = node.querySelector('.task-v2-stage-select, .task-stage-select');
+        if (select) {
+            select.value = actualStatus;
+            updateTaskStatusControlClass(select, actualStatus);
+        }
         if (node.id === `task-card-${taskId}`) {
             const target = document.getElementById(`col-${actualStatus}`);
             if (target) target.appendChild(node);
@@ -9981,8 +10032,11 @@ window.handleTaskDrop = async function (e, status) {
         if (targetCol) {
             targetCol.appendChild(taskCard);
             taskCard.setAttribute('data-status', actualStatus);
-            const stageSelect = taskCard.querySelector('.task-v2-stage-select');
-            if (stageSelect) stageSelect.value = actualStatus;
+            const stageSelect = taskCard.querySelector('.task-v2-stage-select, .task-stage-select');
+            if (stageSelect) {
+                stageSelect.value = actualStatus;
+                updateTaskStatusControlClass(stageSelect, actualStatus);
+            }
 
             const statusId = actualStatus === 'Pending Approval' ? 'pending' : actualStatus;
             const currentStatusId = currentStatus === 'Pending Approval' ? 'pending' : currentStatus;
@@ -10005,8 +10059,11 @@ window.handleTaskDrop = async function (e, status) {
     if (window.taskCache?.[id]) window.taskCache[id].status = savedStatus;
     if (taskCard) {
         taskCard.setAttribute('data-status', savedStatus);
-        const savedStageSelect = taskCard.querySelector('.task-v2-stage-select');
-        if (savedStageSelect) savedStageSelect.value = savedStatus;
+        const savedStageSelect = taskCard.querySelector('.task-v2-stage-select, .task-stage-select');
+        if (savedStageSelect) {
+            savedStageSelect.value = savedStatus;
+            updateTaskStatusControlClass(savedStageSelect, savedStatus);
+        }
         const savedColumn = document.getElementById(`col-${savedStatus}`);
         if (savedColumn && taskCard.parentElement !== savedColumn) savedColumn.appendChild(taskCard);
     }
@@ -12352,6 +12409,8 @@ function renderNotificationDetails(notification, compact = false) {
     const comment = String(notification?.metadata?.comment_text || '').trim();
     const attachments = Array.isArray(notification?.metadata?.attachment_links) ? notification.metadata.attachment_links.filter(Boolean) : [];
     const eventType = String(notification?.event_type || '').toLowerCase();
+    const fromStatus = String(notification?.metadata?.from_status || '').trim();
+    const toStatus = String(notification?.metadata?.to_status || '').trim();
     const isTaskNotification = Boolean(notification?.task_id) && (eventType.startsWith('task_') || eventType.startsWith('subtask_'));
     const actorName = isTaskNotification
         ? String(notification?.metadata?.actor_name || notification?.metadata?.creator_name || '').trim()
@@ -12371,6 +12430,7 @@ function renderNotificationDetails(notification, compact = false) {
     if (!actorName && !comment && !attachments.length) return '';
     return `<div class="notification-details ${compact ? 'compact' : ''}" onclick="event.stopPropagation()">
         ${actorName ? `<div class="notification-actor"><i data-lucide="${actorIcon}"></i><span>${escapeHTML(actorLabel)} <strong>${escapeHTML(actorName)}</strong></span></div>` : ''}
+        ${eventType === 'task_status_changed' && (fromStatus || toStatus) ? `<div class="notification-status-change"><strong>${taskDetailText('Status:', 'الحالة:')}</strong> <span>${escapeHTML(taskDetailValue(fromStatus, 'status'))} → ${escapeHTML(taskDetailValue(toStatus, 'status'))}</span></div>` : ''}
         ${comment ? `<div class="notification-comment"><strong>${taskDetailText('Comment:', 'تعليق:')}</strong><span>${escapeHTML(comment)}</span></div>` : ''}
         ${attachments.length ? `<div class="notification-attachments"><strong>${taskDetailText('Files:', 'الملفات:')}</strong>${attachments.map((url, index) => {
         const safeUrl = safeExternalUrl(url);
