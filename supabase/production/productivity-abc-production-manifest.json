@@ -1,0 +1,27 @@
+{
+  "targetProjectRef": "bbbetcdioiaozdjkvwxu",
+  "stagingProjectRef": "jcfyyxsuspukcmybyhjj",
+  "status": "BLOCKED_PENDING_FREEZE_AND_RECOVERY",
+  "migrationFiles": [
+    "supabase/migrations/20260928120000_notification_backend_services.sql",
+    "supabase/migrations/20260930100000_auth_backend_services.sql",
+    "supabase/migrations/20260930101000_client_backend_services.sql",
+    "supabase/migrations/20260930102000_deal_backend_services.sql",
+    "supabase/migrations/20260930103000_file_backend_services.sql",
+    "supabase/migrations/20260930104000_productivity_phase_a.sql",
+    "supabase/migrations/20260930105000_productivity_phase_b.sql",
+    "supabase/migrations/20260930106000_productivity_phase_c.sql"
+  ],
+  "edgeFunctions": [
+    "file-signed-url"
+  ],
+  "notes": [
+    "Reconciled against production-migrations.txt and staging-migrations.txt on 2026-09-30.",
+    "The schema-only baseline 20260830000000 is excluded; its missing production history row is assertion-only and must not be replayed.",
+    "Existing migrations through 20260927100000 are present in both remote histories and are not replayed.",
+    "20260928120000 is the staging-verified notification backend artifact and is absent from both remote history rows; it is included as a reviewed production migration.",
+    "Auth, Client, Deal, File, and Productivity Phase A/B/C artifacts are converted into reviewed production migrations in the ordered set above.",
+    "The manifest remains blocked until the release candidate is committed/frozen and backup/PITR is manually confirmed.",
+    "Do not execute this manifest until the controlled Web/backend cutover plan is approved."
+  ]
+}

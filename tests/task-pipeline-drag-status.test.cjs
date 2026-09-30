@@ -9,7 +9,7 @@ const end = source.indexOf('\nwindow.openEditTaskModal', start);
 assert.ok(start >= 0 && end > start, 'Task drag-and-drop handler was not found');
 
 const handlerSource = source.slice(start, end);
-assert.match(handlerSource, /const stageSelect = taskCard\.querySelector\('\.task-v2-stage-select'\)/);
+assert.match(handlerSource, /const stageSelect = taskCard\.querySelector\('\.task-v2-stage-select, \.task-stage-select'\)/);
 assert.match(handlerSource, /stageSelect\.value = actualStatus/);
 assert.match(handlerSource, /const savedStatus = result\.status \|\| finalStatus/);
 assert.match(handlerSource, /savedStageSelect\.value = savedStatus/);

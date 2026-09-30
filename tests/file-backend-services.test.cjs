@@ -1,0 +1,68 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const root = path.resolve(__dirname, '..');
+const sql = fs.readFileSync(path.join(root, 'supabase', 'staging', 'file_backend_services.sql'), 'utf8');
+const db = fs.readFileSync(path.join(root, 'js', 'db.js'), 'utf8');
+const shared = fs.readFileSync(path.join(root, 'src', 'shared', 'domain-services.ts'), 'utf8');
+const contracts = fs.readFileSync(path.join(root, 'src', 'shared', 'file-contracts.ts'), 'utf8');
+const applyScript = fs.readFileSync(path.join(root, 'supabase', 'staging', 'apply-file-backend-services.ps1'), 'utf8');
+const verify = fs.readFileSync(path.join(root, 'supabase', 'staging', 'staging_verify.sql'), 'utf8');
+const policyReconciliation = fs.readFileSync(path.join(root, 'supabase', 'staging', 'staging_attachment_policy_reconciliation.sql'), 'utf8');
+const readinessScript = fs.readFileSync(path.join(root, 'supabase', 'staging', 'file-readiness-test.ps1'), 'utf8');
+const signedUrlFunction = fs.readFileSync(path.join(root, 'supabase', 'functions', 'file-signed-url', 'index.ts'), 'utf8');
+
+assert.match(sql, /storage_object_metadata_allowed/);
+assert.match(sql, /26214400/);
+assert.match(sql, /can_read_contract_document_file/);
+assert.match(sql, /can_read_hr_document_file/);
+assert.match(sql, /can_upload_task_attachment_file/);
+assert.match(sql, /contract_documents_storage_insert_secure/);
+assert.match(sql, /hr_documents_storage_insert_secure/);
+assert.match(sql, /sensitive_crm_deal_files_insert/);
+assert.match(sql, /task_attachment_storage_insert_secure/);
+assert.match(sql, /list_contract_documents_secure/);
+assert.match(sql, /register_contract_document_secure/);
+assert.match(sql, /delete_contract_document_secure/);
+assert.match(sql, /REVOKE INSERT, UPDATE, DELETE ON public\.contract_documents FROM authenticated/);
+assert.doesNotMatch(sql, /COPY\s+|INSERT\s+INTO\s+public\.(profiles|employees|crm_clients|crm_deals|projects|tasks)\b/i);
+assert.doesNotMatch(sql, /DROP\s+(TABLE|COLUMN)\b/i);
+assert.doesNotMatch(sql, /bbbetcdioiaozdjkvwxu/i);
+assert.match(applyScript, /jcfyyxsuspukcmybyhjj/);
+assert.match(applyScript, /bbbetcdioiaozdjkvwxu/);
+assert.match(applyScript, /linkedRef -cne \$TargetRef/);
+
+// The browser must not silently downgrade to direct attachment table writes.
+assert.doesNotMatch(db, /if\s*\(isMissingRpcError\(attachmentError\)\)[\s\S]{0,800}from\(['"]task_attachments['"]\)\.insert/i);
+assert.doesNotMatch(db, /if\s*\(isMissingRpcError\(error\)\)[\s\S]{0,600}from\(['"]task_attachments['"]\)\.select/i);
+assert.match(db, /resolveStorageReference\(value, expiresIn = 300\)/);
+assert.match(db, /functions\.invoke\('file-signed-url'/);
+assert.doesNotMatch(db, /storage\s*\.from\(reference\.bucket\)\s*\.createSignedUrl/);
+assert.match(signedUrlFunction, /MAX_SIGNED_URL_TTL_SECONDS = 300/);
+assert.match(signedUrlFunction, /Math\.min\(/);
+assert.match(signedUrlFunction, /auth\.getUser/);
+assert.match(signedUrlFunction, /createSignedUrl\(path, expiresIn\)/);
+assert.match(db, /Math\.min\(Math\.max\(Number\(expiresIn\) \|\| 300, 60\), 300\)/);
+assert.match(db, /register_contract_document_secure/);
+assert.match(shared, /files:/);
+assert.match(shared, /contractDocuments/);
+assert.match(contracts, /StoredFileReference/);
+assert.match(contracts, /'download'/);
+assert.match(verify, /storage_object_metadata_allowed/);
+assert.match(verify, /can_read_hr_document_file/);
+assert.doesNotMatch(policyReconciliation, /USING \(bucket_id = 'hr-documents'\);/);
+assert.match(policyReconciliation, /storage_object_metadata_allowed/);
+const storageReconciliation = fs.readFileSync(path.join(root, 'supabase', 'staging', 'staging_storage_reconciliation.sql'), 'utf8');
+assert.match(storageReconciliation, /file_size_limit/);
+assert.match(storageReconciliation, /26214400/);
+assert.match(storageReconciliation, /allowed_mime_types/);
+assert.match(readinessScript, /SECURITY TEST FILE PROJECT/);
+assert.match(readinessScript, /outsider_signed_url_rejected/);
+assert.match(readinessScript, /signed_url_large_expiration_capped/);
+assert.match(readinessScript, /signed_url_missing_auth_rejected/);
+assert.match(readinessScript, /signed_url_parent_bucket_mismatch_rejected/);
+assert.match(readinessScript, /malicious_metadata_rejected/);
+assert.match(readinessScript, /bbbetcdioiaozdjkvwxu/);
+
+console.log('file-backend-services.test.cjs: PASS');

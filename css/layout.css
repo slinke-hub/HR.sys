@@ -654,6 +654,13 @@ html[dir="rtl"] #globalBackButton svg { transform: scaleX(-1); }
   .app-container {
     flex-direction: column;
   }
+
+  /* The desktop shell hides the legacy sidebar in favour of the top
+     navigation. On phones the existing bottom navigation is the primary
+     route to Dashboard, My Day, Tasks, Requests and More. */
+  .app-container > .sidebar {
+    display: flex !important;
+  }
   
   .sidebar {
     width: 100%;
@@ -952,7 +959,9 @@ iframe {
 
   .view-container {
     width: 100%;
-    padding: .875rem max(.75rem, env(safe-area-inset-right)) calc(5rem + env(safe-area-inset-bottom, 0px)) max(.75rem, env(safe-area-inset-left));
+    /* Keep the final card/action above the fixed bottom navigation, including
+       the nav shadow and the device safe-area inset. */
+    padding: .875rem max(.75rem, env(safe-area-inset-right)) calc(6.5rem + env(safe-area-inset-bottom, 0px)) max(.75rem, env(safe-area-inset-left));
   }
 
   .topbar {

@@ -11,3 +11,7 @@ entrypoint = "./functions/task-notification-email/index.js"
 [functions.push-notification-dispatcher]
 verify_jwt = false
 entrypoint = "./functions/push-notification-dispatcher/index.ts"
+
+[functions.file-signed-url]
+verify_jwt = false
+entrypoint = "./functions/file-signed-url/index.ts"

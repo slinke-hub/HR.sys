@@ -46,6 +46,6 @@ assert.match(app, /paidAmount >= projectAmount/);
 assert.match(db, /this\.fetchProjects\(\)/);
 assert.match(db, /project: \(projects \|\| \[\]\)\.find\(project => String\(project\.deal_id\) === String\(dealId\)\)/);
 assert.match(db, /async closeWonDealProject\(projectId\)/);
-assert.match(db, /update\(\{ project_status: 'Completed' \}\)/);
+assert.match(db, /return this\.changeProjectStatus\(projectId, 'COMPLETED'\)/);
 
 console.log('CRM lifecycle, approval, won/lost, and project closing workflow tests passed.');

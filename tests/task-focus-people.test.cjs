@@ -10,7 +10,9 @@ assert.match(appSource, /const rowAssigneeNames = rowAssigneeProfiles\.map/);
 assert.match(appSource, /const rowCreator = usersById\.get\(String\(task\.created_by\)\) \|\| task\.creator/);
 assert.match(appSource, /class="task-focus-people"/);
 assert.match(appSource, /class="task-focus-assignee"/);
-assert.match(appSource, /class="task-focus-creator"/);
+// The current task table uses the row-specific creator class while retaining
+// the same creator/assignee content contract.
+assert.match(appSource, /class="task-v2-row-creator"/);
 assert.match(appSource, /font-weight: 700/);
 assert.match(appSource, /taskDetailText\('Assigned To:', 'مُعيّنة إلى:'\)/);
 assert.match(appSource, /taskDetailText\('Created by:', 'أنشأها:'\)/);

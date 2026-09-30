@@ -336,6 +336,112 @@ const canViewEmployeesRadar = () => {
 };
 const canInteractWithTask = task => !!task && !isMq20Profile() && (canEditTaskRecord(task) || [task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
 
+const canManageTaskDependencies = task => {
+    const role = String(currentUserRole || currentUserProfile?.role || '').trim().toUpperCase().replace(/[_-]+/g, ' ');
+    const managerRole = ['ADMIN', 'MANAGER', 'SUPERVISOR', 'CEO', 'GM', 'GENERAL MANAGER'].includes(role);
+    return !!task && !isMq20Profile() && managerRole && canEditTaskRecord(task);
+};
+
+function taskDependencyContext(task) {
+    const dependencies = Array.isArray(task?._dependencies) ? task._dependencies : [];
+    const predecessorIds = new Set(dependencies.filter(item => item.relationship === 'depends_on').map(item => item.predecessor_task_id));
+    const successorIds = new Set(dependencies.filter(item => item.relationship === 'unlocks').map(item => item.successor_task_id));
+    const taskId = String(task?.id || '');
+    const projectId = task?.project_id || null;
+    const candidates = Object.values(window.taskCache || {})
+        .filter(candidate => candidate?.id && String(candidate.id) !== taskId && !candidate.archived_at)
+        .filter(candidate => (candidate.project_id || null) === projectId)
+        .filter(candidate => !predecessorIds.has(candidate.id) && !successorIds.has(candidate.id))
+        .sort((a, b) => String(getLocalizedTaskTitle(a) || a.title || '').localeCompare(String(getLocalizedTaskTitle(b) || b.title || '')));
+    return { dependencies, candidates };
+}
+
+function taskDependencyStatusLabel(status) {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'completed' || normalized === 'approved') return taskDetailText('Completed', 'مكتملة');
+    if (normalized === 'in_progress') return taskDetailText('In progress', 'قيد التنفيذ');
+    if (normalized === 'late') return taskDetailText('Late', 'متأخرة');
+    if (normalized === 'canceled') return taskDetailText('Canceled', 'ملغاة');
+    return taskDetailText('To do', 'للعمل');
+}
+
+function renderTaskDependencyPanel(task, dependencies, canManage) {
+    const rows = (dependencies || []).map(dependency => {
+        const dependsOn = dependency.relationship === 'depends_on';
+        const related = dependsOn ? dependency.predecessor : dependency.successor;
+        const label = dependsOn ? taskDetailText('Depends on', 'يعتمد على') : taskDetailText('Unlocks', 'يفتح المهام التالية');
+        const state = dependency.is_blocking ? taskDetailText('Waiting', 'بانتظار') : taskDetailText('Ready', 'جاهزة');
+        const relatedTitle = getLocalizedTaskTitle(related) || related?.title || taskDetailText('Related task', 'المهمة المرتبطة');
+        return `<article class="task-dependency-item ${dependency.is_blocking ? 'is-blocking' : 'is-satisfied'}"><div class="task-dependency-item-copy"><span class="task-dependency-label">${escapeHTML(label)}</span><strong>${escapeHTML(relatedTitle)}</strong><small>${escapeHTML(taskDependencyStatusLabel(related?.status))}</small></div><span class="task-dependency-state">${escapeHTML(state)}</span>${canManage ? `<button type="button" class="task-dependency-remove" onclick="window.removeTaskDependencyFromDetail('${escapeHTML(dependency.dependency_id)}','${escapeHTML(task.id)}',event)" aria-label="${escapeHTML(taskDetailText('Remove dependency', 'إزالة الاعتمادية'))}" title="${escapeHTML(taskDetailText('Remove dependency', 'إزالة الاعتمادية'))}"><i data-lucide="x"></i></button>` : ''}</article>`;
+    }).join('');
+    return `<section class="task-dependency-panel" aria-labelledby="taskDependencyHeading"><header><i data-lucide="workflow"></i><div><h3 id="taskDependencyHeading">${taskDetailText('Dependencies', 'اعتماديات المهمة')}</h3><p>${taskDetailText('Dependencies keep the next step clear and actionable.', 'توضح الاعتماديات الخطوة التالية وتحدد متى تصبح قابلة للتنفيذ.')}</p></div>${canManage ? `<button type="button" class="btn btn-secondary task-dependency-add" onclick="window.openTaskDependencyModal('${escapeHTML(task.id)}')"><i data-lucide="plus"></i>${taskDetailText('Add dependency', 'إضافة اعتمادية')}</button>` : ''}</header><div class="task-dependency-list">${rows || `<div class="task-tab-empty">${taskDetailText('No dependencies yet.', 'لا توجد اعتماديات بعد.')}</div>`}</div></section>`;
+}
+
+window.openTaskDependencyModal = async function (taskId) {
+    const task = window.taskCache?.[taskId];
+    if (!task || !canManageTaskDependencies(task)) {
+        showToast(taskDetailText('Only authorized managers can manage dependencies.', 'يمكن للمديرين المصرح لهم فقط إدارة الاعتماديات.'), 'warning');
+        return;
+    }
+    const context = taskDependencyContext(task);
+    const modal = document.createElement('div');
+    modal.className = 'my-day-modal-backdrop task-dependency-modal-backdrop';
+    modal.innerHTML = `<div class="my-day-modal task-dependency-modal" role="dialog" aria-modal="true" aria-labelledby="taskDependencyModalTitle"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}">&times;</button><h2 id="taskDependencyModalTitle">${taskDetailText('Add predecessor dependency', 'إضافة اعتمادية سابقة')}</h2><p class="task-dependency-modal-help">${taskDetailText('Choose the task that must be completed before this task can start.', 'اختر المهمة التي يجب إكمالها قبل بدء هذه المهمة.')}</p><label>${taskDetailText('Search Tasks...', 'البحث في المهام...')}<input id="taskDependencySearch" class="form-control" type="search" placeholder="${escapeHTML(taskDetailText('Search Tasks...', 'البحث في المهام...'))}"></label><div id="taskDependencyCandidates" class="task-dependency-candidates" role="listbox" aria-label="${escapeHTML(taskDetailText('Available tasks', 'المهام المتاحة'))}"></div><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary task-dependency-cancel">${taskDetailText('Cancel', 'إلغاء')}</button><button type="button" class="btn btn-primary task-dependency-save" disabled>${taskDetailText('Add dependency', 'إضافة اعتمادية')}</button></div></div>`;
+    document.body.appendChild(modal);
+    const candidatesHost = modal.querySelector('#taskDependencyCandidates');
+    const search = modal.querySelector('#taskDependencySearch');
+    const saveButton = modal.querySelector('.task-dependency-save');
+    let selectedId = '';
+    const renderCandidates = () => {
+        const query = String(search.value || '').trim().toLowerCase();
+        const visible = context.candidates.filter(candidate => {
+            const haystack = `${candidate.title || ''} ${candidate.displayTitle || ''} ${candidate.project_name || ''} ${candidate.assignee?.full_name || ''}`.toLowerCase();
+            return !query || haystack.includes(query);
+        });
+        candidatesHost.innerHTML = visible.length ? visible.map(candidate => `<button type="button" class="task-dependency-candidate${selectedId === candidate.id ? ' is-selected' : ''}" data-task-id="${escapeHTML(candidate.id)}" role="option" aria-selected="${selectedId === candidate.id}"><strong>${escapeHTML(getLocalizedTaskTitle(candidate) || candidate.title || taskDetailText('Untitled task', 'مهمة بدون عنوان'))}</strong><small>${escapeHTML(candidate.project_name || taskDetailText('No project', 'بدون مشروع'))} · ${escapeHTML(window.formatEmployeeName?.(candidate.assignee) || taskDetailText('Unassigned', 'غير معيّن'))} · ${escapeHTML(taskDependencyStatusLabel(candidate.status))}</small></button>`).join('') : `<div class="task-tab-empty">${taskDetailText('No valid tasks found in this project context.', 'لم يتم العثور على مهام صالحة ضمن سياق المشروع.')}</div>`;
+        candidatesHost.querySelectorAll('.task-dependency-candidate').forEach(button => button.addEventListener('click', () => {
+            selectedId = button.dataset.taskId || '';
+            saveButton.disabled = !selectedId;
+            renderCandidates();
+        }));
+    };
+    const close = () => modal.remove();
+    modal.querySelector('.my-day-modal-close').onclick = close;
+    modal.querySelector('.task-dependency-cancel').onclick = close;
+    modal.addEventListener('click', event => { if (event.target === modal) close(); });
+    search.addEventListener('input', renderCandidates);
+    saveButton.onclick = async () => {
+        if (!selectedId) return;
+        saveButton.disabled = true;
+        const result = await db.createTaskDependency(selectedId, task.id);
+        if (!result?.success) {
+            saveButton.disabled = false;
+            showToast(result.error?.message || taskDetailText('Unable to add dependency.', 'تعذر إضافة الاعتمادية.'), 'danger');
+            return;
+        }
+        close();
+        showToast(taskDetailText('Dependency added.', 'تمت إضافة الاعتمادية.'), 'success');
+        await window.openTaskDetailsModal(task.id);
+    };
+    renderCandidates();
+    if (window.lucide) window.lucide.createIcons();
+    search.focus();
+};
+
+window.removeTaskDependencyFromDetail = async function (dependencyId, taskId, event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const task = window.taskCache?.[taskId];
+    if (!task || !canManageTaskDependencies(task)) {
+        showToast(taskDetailText('Only authorized managers can remove dependencies.', 'يمكن للمديرين المصرح لهم فقط إزالة الاعتماديات.'), 'warning');
+        return;
+    }
+    const result = await db.removeTaskDependency(dependencyId);
+    if (!result?.success) return showToast(result.error?.message || taskDetailText('Unable to remove dependency.', 'تعذر إزالة الاعتمادية.'), 'danger');
+    showToast(taskDetailText('Dependency removed.', 'تمت إزالة الاعتمادية.'), 'success');
+    await window.openTaskDetailsModal(task.id);
+};
+
 function crmDesignDealStatusFromTask(task) {
     const status = String(task?.status || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
     if (['completed', 'approved', 'pending approval'].includes(status)) return 'COMPLETED';
@@ -1867,6 +1973,7 @@ const arabicRuntimeUiText = Object.freeze({
     ,'You are not authorized to view this page.': 'غير مصرح لك بعرض هذه الصفحة.'
     ,'You do not have permission to view archived contracts.': 'ليس لديك صلاحية لعرض العقود المؤرشفة.'
     ,'all': 'الكل'
+    ,'Canceled': 'ملغاة'
     ,'clocked in now': 'حاضرون الآن'
     ,'with': 'مع'
 });
@@ -2348,6 +2455,8 @@ async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const isAdmin = isAdminRole(normalizedRole);
     if (isAdmin) return true;
+    if (viewId === 'my-day') return true;
+    if (viewId === 'project-command-center') return canViewFullProjectCommandCenter();
 
     if (viewId === 'users') return canCurrentUserManageUsers();
     if (['hr_suite_beta', 'ats_beta', 'lms_beta', 'appraisals_beta', 'surveys_beta', 'shifts_beta', 'expenses_beta'].includes(viewId)) return window.canCurrentUserUseHrSuiteBeta?.() === true;
@@ -2413,7 +2522,7 @@ window.updateSidebarVisibility = async function () {
     const templatesNav = document.getElementById('navTemplates');
     const approvalsNav = document.getElementById('navApprovals');
     const payrollNav = document.getElementById('navPayroll');
-    const projectsNav = document.querySelector('.nav-item[data-view="projects"]');
+    const projectsNav = document.querySelectorAll('.nav-item[data-view="projects"]');
     const crmNav = document.querySelector('.nav-item[data-view="crm"]');
     const clientsNav = document.querySelector('.nav-item[data-view="clients"]');
     const leaveCalculatorNav = document.getElementById('navLeaveCalculator');
@@ -2425,7 +2534,9 @@ window.updateSidebarVisibility = async function () {
     
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
         const viewId = item.dataset.view;
-        if (isAdmin) {
+        if (viewId === 'my-day') {
+            item.style.display = 'flex';
+        } else if (isAdmin) {
             item.style.display = 'flex';
         } else if (window.appUserPermissions && window.appUserPermissions.includes(viewId)) {
             item.style.display = 'flex';
@@ -2433,7 +2544,7 @@ window.updateSidebarVisibility = async function () {
             const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole);
             item.style.display = perm && perm.allowed_pages && perm.allowed_pages.includes(viewId) ? 'flex' : 'none';
         } else {
-            const employeeAllowedViews = new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'employees']);
+            const employeeAllowedViews = new Set(['dashboard', 'my-day', 'requests', 'time', 'tasks', 'documents', 'employees']);
             if (normalizedRole === 'EMPLOYEE') {
                 item.style.display = employeeAllowedViews.has(viewId) ? 'flex' : 'none';
             } else {
@@ -2461,7 +2572,14 @@ window.updateSidebarVisibility = async function () {
     if (payrollNav) payrollNav.style.display = (isAdmin || isAccountantManager) ? 'flex' : 'none';
 
     const canUseMarketingPages = await canCurrentUserUseCRM();
-    if (projectsNav) projectsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
+    // Managers and supervisors can use the Project Command Center even when
+    // they are not members of the Sales/Marketing departments. Keep the
+    // portfolio entry reachable for those users instead of hiding the only
+    // navigation path to a page they are already authorized to open.
+    const managerProjectAccess = ['MANAGER', 'SUPERVISOR'].includes(normalizedRole)
+        || /manager|supervisor|مدير|مشرف/i.test(String(currentUserProfile?.job_title || currentUserProfile?.job_title_ar || ''));
+    const canUseProjectPages = canUseMarketingPages || managerProjectAccess || canViewFullProjectCommandCenter();
+    projectsNav.forEach(item => { item.style.display = canUseProjectPages ? 'flex' : 'none'; });
     if (crmNav) crmNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (clientsNav) clientsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
 
@@ -2507,17 +2625,21 @@ window.handleLoginSubmit = async function (e) {
     // Update last_login
     await db.updateLastLogin(user.id);
 
-    const profile = await db.getUserProfile(user.id);
-    if (profile && profile.is_active === false) {
+    const profileResult = db.getCurrentUserProfile
+        ? await db.getCurrentUserProfile()
+        : { profile: await db.getUserProfile(user.id), error: null };
+    const profile = profileResult?.profile || null;
+    if (profileResult?.error || !profile) {
         await db.logout();
         currentUser = null;
         currentUserProfile = null;
         currentUserRole = null;
-        showToast('This account is locked. Please contact an administrator.', 'danger');
+        const locked = profileResult?.error?.code === 'PROFILE_INACTIVE';
+        showToast(locked ? 'This account is locked. Please contact an administrator.' : 'Your HR.sys profile could not be loaded. Please contact an administrator.', 'danger');
         await renderView('login');
         return;
     }
-    if (profile) {
+    {
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
         currentUserRole = isExecutiveAdminProfile(profile) ? 'ADMIN' : profile.role;
@@ -2555,7 +2677,8 @@ window.handleLoginSubmit = async function (e) {
         'dashboard', 'time', 'leave', 'requests', 'archived',
         'payroll', 'expenses', 'analytics', 'admin', 'users', 'employees',
         'archived_contracts', 'messages', 'notifications', 'performance',
-        'documents', 'profile', 'projects', 'approvals', 'tasks',
+        'documents', 'profile', 'projects', 'project-command-center', 'approvals', 'tasks',
+        'my-day',
         'departments', 'translations', 'clients', 'crm', 'schedule', 'integrations', 'custody_handover', 'hr_suite_beta', 'ats_beta', 'lms_beta', 'appraisals_beta', 'surveys_beta', 'shifts_beta', 'expenses_beta', 'whatsapp_inbox'
     ]);
     const _loginRequestedView = new URLSearchParams(window.location.search).get('view');
@@ -4205,6 +4328,10 @@ async function prepareTeamworkTaskDetail(task) {
     const canManagePrivateTask = !task.task_list_id || taskList?.owner_id === currentUser?.id;
     if (header) {
         const canEdit = canEditTaskRecord(task) && !isMq20Profile();
+        const dependencyBlocked = task.dependency_blocked === true;
+        const canCompleteAndHandOff = canChangeTaskStageRecord(task)
+            && String(task.status || '').toLowerCase() !== 'completed'
+            && !dependencyBlocked;
         const canApproveCompletion = !isMq20Profile() && task.status === 'Pending Approval' && (isTaskAdmin()
             || (!task.task_list_id && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id));
         let actions = header.querySelector('.task-detail-actions');
@@ -4213,7 +4340,7 @@ async function prepareTeamworkTaskDetail(task) {
             actions.className = 'task-detail-actions';
             header.appendChild(actions);
         }
-        actions.innerHTML = `${canApproveCompletion ? `<button type="button" class="btn btn-primary" onclick="approveTaskCompletion('${task.id}')"><i data-lucide="check-circle"></i> ${taskDetailText('Approve', 'اعتماد')}</button>` : ''}${canEdit ? `<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById('detailsTaskId').value)"><i data-lucide="pencil"></i> ${taskDetailText('Edit', 'تعديل')}</button>` : ''}<button type="button" class="task-detail-close" aria-label="${taskDetailText('Close task', 'إغلاق المهمة')}" onclick="window.closeTaskDetailsModal()">&times;</button>`;
+        actions.innerHTML = `${canApproveCompletion ? `<button type="button" class="btn btn-primary" onclick="approveTaskCompletion('${task.id}')"><i data-lucide="check-circle"></i> ${taskDetailText('Approve', 'اعتماد')}</button>` : ''}${canCompleteAndHandOff ? `<button type="button" class="btn btn-primary task-detail-handoff" onclick="window.handleCompleteAndHandOffTask('${task.id}')"><i data-lucide="check-check"></i> ${taskDetailText('Complete & Hand Off', 'إنهاء وتسليم')}</button>` : ''}${canEdit ? `<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById('detailsTaskId').value)"><i data-lucide="pencil"></i> ${taskDetailText('Edit', 'تعديل')}</button>` : ''}<button type="button" class="task-detail-close" aria-label="${taskDetailText('Close task', 'إغلاق المهمة')}" onclick="window.closeTaskDetailsModal()">&times;</button>`;
         header.querySelector('.close-modal')?.remove();
     }
     const grid = panel.querySelector('.task-details-grid');
@@ -4225,13 +4352,28 @@ async function prepareTeamworkTaskDetail(task) {
             grid.insertAdjacentElement('afterend', content);
         }
         const storedLinks = [...(task.content_links || []), ...(task.submission_links || [])].filter(Boolean);
-        const [resolvedTaskLinks, taskAttachmentRows, crmPresentationAttachments] = await Promise.all([
+        const [resolvedTaskLinks, taskAttachmentRows, crmPresentationAttachments, taskDependencies] = await Promise.all([
             db.resolveStorageReferences(storedLinks),
             db.fetchTaskAttachments(task.id),
             task.crm_deal_id
                 ? db.fetchDealPresentationAttachments(task.crm_deal_id)
-                : Promise.resolve([])
+                : Promise.resolve([]),
+            db.fetchTaskDependencies ? db.fetchTaskDependencies(task.id) : Promise.resolve([])
         ]);
+        task._dependencies = taskDependencies || [];
+        window.activeTaskDependencies = task._dependencies;
+        const canManageDependencies = canManageTaskDependencies(task);
+        const successorDependencies = task._dependencies.filter(item => item.relationship === 'unlocks');
+        const taskActions = header?.querySelector('.task-detail-actions');
+        if (taskActions) {
+            taskActions.querySelector('.task-handoff-context')?.remove();
+            if (successorDependencies.length) {
+                const context = document.createElement('div');
+                context.className = 'task-handoff-context';
+                context.innerHTML = `<strong>${escapeHTML(taskDetailText('Next work', 'العمل التالي'))}</strong><span>${escapeHTML(successorDependencies.map(item => getLocalizedTaskTitle(item.successor) || item.successor?.title || taskDetailText('Successor task', 'المهمة التالية')).join(' · '))}</span><small>${escapeHTML(taskDetailText('Complete this task to make the next work actionable when all dependencies are satisfied.', 'أكمل هذه المهمة لتصبح المهمة التالية قابلة للتنفيذ عند استيفاء جميع الاعتماديات.'))}</small>`;
+                taskActions.appendChild(context);
+            }
+        }
         const managedReferences = new Set(taskAttachmentRows.map(file => file.storage_reference).filter(Boolean));
         const links = resolvedTaskLinks
             .map((url, index) => ({ url: safeExternalUrl(url), reference: storedLinks[index] }))
@@ -4309,6 +4451,7 @@ async function prepareTeamworkTaskDetail(task) {
         const canUploadFiles = canInteractWithTask(task);
         content.innerHTML = `
             ${crmDesignDealStatusHTML}
+            ${taskDependencies.length || canManageDependencies ? renderTaskDependencyPanel(task, taskDependencies, canManageDependencies) : ''}
             <section class="task-detail-description"><p>${task.description ? escapeHTML(task.description) : `<span>${taskDetailText('Add a description', 'أضف وصفاً')}</span>`}</p></section>
             <nav class="task-detail-tabs" aria-label="${taskDetailText('Task information', 'معلومات المهمة')}"><button type="button" class="active" data-task-info-tab="details" onclick="setTaskDetailInfoTab('details')">${taskDetailText('Details', 'التفاصيل')}</button><button type="button" data-task-info-tab="proofs" onclick="setTaskDetailInfoTab('proofs')">${taskDetailText('Proofs', 'الإثباتات')}</button></nav>
             <section id="taskDetailInfoPanel" class="task-detail-tab-panel"></section>
@@ -4628,7 +4771,9 @@ window.setTaskDetailInfoTab = function (tab) {
         ].filter(([, value]) => value);
         panel.innerHTML = fields.length ? `<div class="task-detail-data-grid">${fields.map(([label, value]) => `<div><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong></div>`).join('')}</div>` : `<div class="task-tab-empty">${taskDetailText('No custom fields have been set.', 'لم يتم تعيين حقول مخصصة.')}</div>`;
     } else if (tab === 'dependencies') {
-        panel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Parent task', 'المهمة الرئيسية')}</span><strong>${parent ? escapeHTML(getLocalizedTaskTitle(parent)) : taskDetailText('None', 'لا يوجد')}</strong></div><div><span>${taskDetailText('Subtasks', 'المهام الفرعية')}</span><strong>${subtasks.length}</strong></div><div><span>${taskDetailText('Blocking dependencies', 'التبعيات المانعة')}</span><strong>${taskDetailText('None', 'لا يوجد')}</strong></div></div>`;
+        const dependencies = Array.isArray(window.activeTaskDependencies) ? window.activeTaskDependencies : [];
+        const blockingDependencies = dependencies.filter(item => item.relationship === 'depends_on' && item.is_blocking);
+        panel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Parent task', 'المهمة الرئيسية')}</span><strong>${parent ? escapeHTML(getLocalizedTaskTitle(parent)) : taskDetailText('None', 'لا يوجد')}</strong></div><div><span>${taskDetailText('Subtasks', 'المهام الفرعية')}</span><strong>${subtasks.length}</strong></div><div><span>${taskDetailText('Blocking dependencies', 'التبعيات المانعة')}</span><strong>${blockingDependencies.length ? escapeHTML(blockingDependencies.map(item => item.predecessor?.title || '').filter(Boolean).join(', ')) : taskDetailText('None', 'لا يوجد')}</strong></div></div>`;
     } else if (tab === 'proofs') {
         const proofImageExtensions = /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i;
         panel.innerHTML = proofLinks.length ? `<div class="task-detail-link-list">${proofLinks.map(link => {
@@ -6563,6 +6708,27 @@ window.updateEmployeeDocumentFileName = async function (event) {
     if (files.length > 0) await window.autoPopulateEmployeeDocumentMetadata(files[0]);
 };
 
+window.handleCompleteAndHandOffTask = async function (taskId) {
+    const task = window.activeTaskDetail || window.taskCache?.[taskId];
+    if (!task || task.dependency_blocked) {
+        showToast(taskDetailText('Complete the previous task before handing this one off.', 'أكمل المهمة السابقة قبل تسليم هذه المهمة.'), 'warning');
+        return;
+    }
+    const result = await db.completeAndHandOffTask(taskId);
+    if (!result?.success) {
+        showToast(result?.error?.message || taskDetailText('Unable to complete and hand off this task.', 'تعذر إنهاء وتسليم هذه المهمة.'), 'danger');
+        return;
+    }
+    const successorCount = Array.isArray(result.data?.successor_task_ids) ? result.data.successor_task_ids.length : 0;
+    showToast(successorCount
+        ? taskDetailText('Task completed. The next task is ready.', 'اكتملت المهمة. المهمة التالية جاهزة.')
+        : taskDetailText('Task completed and handed off.', 'اكتملت المهمة وتم تسليمها.'), 'success');
+    if (window.taskCache?.[taskId]) window.taskCache[taskId].status = 'completed';
+    window.closeTaskDetailsModal?.();
+    delete window.viewHTMLCache['my-day'];
+    if (typeof renderView === 'function') await renderView(currentView === 'my-day' ? 'my-day' : 'tasks');
+};
+
 window.handleEmployeeDocumentTypeChange = async function () {
     const file = document.getElementById('empDocFile')?.files?.[0];
     if (file) await window.autoPopulateEmployeeDocumentMetadata(file);
@@ -7512,6 +7678,151 @@ window.handleUpdateProfileDetails = async function (e) {
 
 
 
+const MY_DAY_WAITING_CATEGORIES = [
+    ['CLIENT', 'Client'], ['SUPPLIER', 'Supplier'], ['MANAGEMENT', 'Management'],
+    ['APPROVAL', 'Approval'], ['DESIGN', 'Design'], ['PRODUCTION', 'Production'],
+    ['ANOTHER_EMPLOYEE', 'Another employee'], ['MISSING_INFORMATION', 'Missing information'], ['OTHER', 'Other']
+];
+const MY_DAY_BLOCKED_CATEGORIES = [
+    ['CLIENT', 'Client'], ['SUPPLIER', 'Supplier'], ['ANOTHER_EMPLOYEE', 'Another employee'],
+    ['MANAGEMENT', 'Management'], ['APPROVAL', 'Approval'], ['MISSING_INFORMATION', 'Missing information'],
+    ['TECHNICAL_PROBLEM', 'Technical problem'], ['OTHER', 'Other']
+];
+
+function myDayStateLabel(state) {
+    const labels = {
+        ACTIVE: ['Active', 'نشطة'], WAITING: ['Waiting', 'بانتظار'], BLOCKED: ['Blocked', 'متوقفة'],
+        COMPLETED_TODAY: ['Completed today', 'مكتملة اليوم'], DO_NOW: ['Do now', 'نفّذ الآن'],
+        DUE_TODAY: ['Due today', 'مستحقة اليوم'], OVERDUE: ['Overdue', 'متأخرة'], NEXT: ['Next', 'التالية']
+    };
+    const pair = labels[String(state || '').toUpperCase()] || [String(state || ''), String(state || '')];
+    return currentLang === 'ar' ? pair[1] : pair[0];
+}
+
+function myDayTaskTitle(task) {
+    return task?.title_i18n?.[currentLang] || task?.title_i18n?.en || task?.title || task?.description || taskDetailText('Untitled task', 'مهمة بدون عنوان');
+}
+
+function myDayActionButton(task, action, label, kind = '') {
+    const id = escapeHTML(task.id);
+    return `<button type="button" class="my-day-action ${kind}" onclick="window.handleMyDayAction('${id}','${action}')">${escapeHTML(label)}</button>`;
+}
+
+async function renderMyDay() {
+    const tasks = await db.fetchMyDay();
+    const groups = ['DO_NOW', 'DUE_TODAY', 'WAITING', 'BLOCKED', 'OVERDUE', 'NEXT', 'COMPLETED_TODAY'];
+    const grouped = Object.fromEntries(groups.map(section => [section, []]));
+    (tasks || []).forEach(task => {
+        const section = grouped[task.my_day_section] ? task.my_day_section : 'NEXT';
+        grouped[section].push(task);
+    });
+    const sectionCopy = {
+        DO_NOW: ['Do now', 'نفّذ الآن'], DUE_TODAY: ['Due today', 'مستحقة اليوم'], WAITING: ['Waiting', 'بانتظار'],
+        BLOCKED: ['Blocked', 'متوقفة'], OVERDUE: ['Overdue', 'متأخرة'], NEXT: ['Next', 'التالية'], COMPLETED_TODAY: ['Completed today', 'مكتملة اليوم']
+    };
+    const renderCard = task => {
+        const state = String(task.work_state || 'ACTIVE').toUpperCase();
+        const dependencyBlocked = task.dependency_blocked === true;
+        const title = myDayTaskTitle(task);
+        const reason = dependencyBlocked
+            ? taskDetailText(`Waiting for previous task${task.blocking_task_title ? `: ${task.blocking_task_title}` : ''}`, `بانتظار المهمة السابقة${task.blocking_task_title ? `: ${task.blocking_task_title}` : ''}`)
+            : (task.my_day_reason || myDayStateLabel(task.my_day_section));
+        const due = task.due_date ? new Date(`${task.due_date}T00:00:00`).toLocaleDateString(currentLang === 'ar' ? 'ar-SA' : undefined) : taskDetailText('No due date', 'لا يوجد موعد استحقاق');
+        let actions = '';
+        if (dependencyBlocked) {
+            actions = `<span class="my-day-dependency-note"><i data-lucide="lock-keyhole"></i>${escapeHTML(taskDetailText('Waiting for previous task', 'بانتظار المهمة السابقة'))}${task.blocking_task_title ? `: ${escapeHTML(task.blocking_task_title)}` : ''}</span>`;
+        } else if (state === 'WAITING' || state === 'BLOCKED') {
+            actions = myDayActionButton(task, 'resume', taskDetailText('Resume', 'استئناف'), 'secondary');
+        } else if (state !== 'COMPLETED_TODAY' && String(task.status || '').toLowerCase() !== 'completed') {
+            if (String(task.status || '').toLowerCase() !== 'in_progress') actions += myDayActionButton(task, 'start', taskDetailText('Start', 'بدء'), 'primary');
+            actions += myDayActionButton(task, 'waiting', taskDetailText('Waiting', 'انتظار'), 'secondary');
+            actions += myDayActionButton(task, 'blocked', taskDetailText("I'm blocked", 'أنا متعطل'), 'warning');
+            actions += myDayActionButton(task, 'complete', taskDetailText('Complete', 'إكمال'), 'success');
+            actions += myDayActionButton(task, 'handoff', taskDetailText('Complete & Hand Off', 'إنهاء وتسليم'), 'handoff');
+        }
+        const badgeLabel = dependencyBlocked ? taskDetailText('Dependency blocked', 'متوقفة بسبب اعتمادية') : myDayStateLabel(state === 'ACTIVE' ? task.my_day_section : state);
+        return `<article class="my-day-task-card${dependencyBlocked ? ' dependency-blocked-card' : ''}"><div class="my-day-task-copy"><div class="my-day-task-title" title="${escapeHTML(title)}">${escapeHTML(title)}</div><div class="my-day-task-meta"><span class="my-day-state-badge state-${escapeHTML(dependencyBlocked ? 'dependency' : state.toLowerCase())}">${escapeHTML(badgeLabel)}</span><span>${escapeHTML(reason)}</span><span>${escapeHTML(due)}</span></div></div><div class="my-day-task-actions">${actions}</div></article>`;
+    };
+    const sections = groups.map(section => {
+        const copy = sectionCopy[section];
+        const items = grouped[section];
+        return `<section class="my-day-section my-day-section-${section.toLowerCase()}" aria-labelledby="my-day-${section.toLowerCase()}"><div class="my-day-section-heading"><h2 id="my-day-${section.toLowerCase()}">${escapeHTML(currentLang === 'ar' ? copy[1] : copy[0])}</h2><span class="my-day-count">${items.length}</span></div>${items.length ? items.map(renderCard).join('') : `<div class="my-day-empty">${escapeHTML(taskDetailText('Nothing here yet.', 'لا توجد مهام هنا حالياً.'))}</div>`}</section>`;
+    }).join('');
+    let managerPanel = '';
+    const managerRole = ['ADMIN', 'MANAGER', 'SUPERVISOR', 'CEO', 'GM', 'GENERAL MANAGER'].includes(String(currentUserRole || currentUserProfile?.role || '').toUpperCase());
+    if (managerRole) {
+        const [states, dependencyBlockers] = await Promise.all([db.fetchTaskWorkStates(), db.fetchTaskDependencyBlockers ? db.fetchTaskDependencyBlockers() : Promise.resolve([])]);
+        const dependencyTaskIds = new Set(dependencyBlockers.map(item => item.task_id).filter(Boolean));
+        const manualStates = states.filter(item => !dependencyTaskIds.has(item.task_id));
+        const combinedCount = manualStates.length + dependencyBlockers.length;
+        const formatSince = value => {
+            if (!value) return taskDetailText('Since not available', 'وقت البدء غير متاح');
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return taskDetailText('Since not available', 'وقت البدء غير متاح');
+            return taskDetailText(`Since ${date.toLocaleDateString('en-GB')}`, `منذ ${date.toLocaleDateString('ar-SA')}`);
+        };
+        const formatDue = value => value ? taskDetailText(`Due ${value}`, `الاستحقاق ${value}`) : taskDetailText('No due date', 'لا يوجد موعد استحقاق');
+        const renderWorkState = item => {
+            const blocked = String(item.work_state || '').toUpperCase() === 'BLOCKED';
+            const reason = blocked ? (item.blocked_note || item.blocked_category) : (item.waiting_note || item.waiting_category);
+            const reasonLabel = reason ? `${taskDetailText('Reason', 'السبب')}: ${reason}` : taskDetailText('Reason not provided', 'لم يتم تحديد السبب');
+            const project = item.project_name || taskDetailText('No project', 'بدون مشروع');
+            return `<article class="my-day-team-row my-day-team-context-row"><div class="my-day-team-copy"><strong>${escapeHTML(item.title || taskDetailText('Untitled task', 'مهمة بدون عنوان'))}</strong><small>${escapeHTML(item.assignee_name || taskDetailText('Unassigned', 'غير معيّن'))} · ${escapeHTML(project)}</small><div class="my-day-team-meta"><span>${escapeHTML(reasonLabel)}</span><span>${escapeHTML(formatSince(blocked ? item.blocked_since : item.waiting_since))}</span><span>${escapeHTML(formatDue(item.due_date))}</span><span>${escapeHTML(taskDetailText(`Priority: ${item.priority || 'medium'}`, `الأولوية: ${item.priority || 'متوسطة'}`))}</span></div></div><span class="my-day-state-badge state-${escapeHTML(String(item.work_state || '').toLowerCase())}">${escapeHTML(myDayStateLabel(item.work_state))}</span></article>`;
+        };
+        const renderDependencyBlocker = item => `<article class="my-day-team-row my-day-team-context-row dependency-blocker-row"><div class="my-day-team-copy"><strong>${escapeHTML(item.title || taskDetailText('Untitled task', 'مهمة بدون عنوان'))}</strong><small>${escapeHTML(item.assignee_name || taskDetailText('Unassigned', 'غير معيّن'))} · ${escapeHTML(item.project_name || taskDetailText('No project', 'بدون مشروع'))}</small><div class="my-day-team-meta"><span>${escapeHTML(taskDetailText(`Waiting for: ${item.blocking_task_title || 'previous task'}`, `بانتظار: ${item.blocking_task_title || 'المهمة السابقة'}`))}</span><span>${escapeHTML(formatSince(item.waiting_since))}</span><span>${escapeHTML(formatDue(item.due_date))}</span></div></div><span class="my-day-state-badge state-waiting dependency-state-badge">${escapeHTML(taskDetailText('Dependency blocked', 'متوقفة بسبب اعتمادية'))}</span></article>`;
+        managerPanel = `<section class="my-day-manager-panel"><div class="my-day-section-heading"><div><h2>${escapeHTML(taskDetailText('Team waiting and blockers', 'انتظار وتعطّل الفريق'))}</h2><p class="my-day-manager-help">${escapeHTML(taskDetailText('Who is stuck, why, on what project, and for how long.', 'من المتعطل؟ ولماذا؟ وعلى أي مشروع؟ ومنذ متى؟'))}</p></div><span class="my-day-count">${combinedCount}</span></div>${manualStates.map(renderWorkState).join('')}${dependencyBlockers.map(renderDependencyBlocker).join('')}${combinedCount ? '' : `<div class="my-day-empty">${escapeHTML(taskDetailText('No team blockers.', 'لا توجد عوائق للفريق.'))}</div>`}</section>`;
+    }
+    return `<div class="page-header my-day-header"><div><p class="page-eyebrow">${escapeHTML(taskDetailText('Focus mode', 'وضع التركيز'))}</p><h1 class="page-title">${escapeHTML(taskDetailText('My Day', 'يومي'))}</h1><p class="page-subtitle">${escapeHTML(taskDetailText('A focused view of your assigned work.', 'عرض مركّز للمهام المسندة إليك.'))}</p></div><button type="button" class="btn btn-secondary" onclick="renderView('tasks')"><i data-lucide="list-checks"></i>${escapeHTML(taskDetailText('Full Task Manager', 'مدير المهام الكامل'))}</button></div><div class="my-day-grid">${sections}</div>${managerPanel}`;
+}
+
+window.handleMyDayAction = async function (taskId, action) {
+    let result;
+    if (action === 'waiting' || action === 'blocked') return window.openMyDayWorkStateModal(taskId, action);
+    if (action === 'start') result = await db.startTask(taskId);
+    if (action === 'resume') result = await db.resumeTaskProductivity(taskId);
+    if (action === 'complete') result = await db.completeTaskProductivity(taskId);
+    if (action === 'handoff') result = await db.completeAndHandOffTask(taskId);
+    if (!result?.success) return showToast(result?.error?.message || taskDetailText('Unable to update task.', 'تعذر تحديث المهمة.'), 'danger');
+    showToast(taskDetailText('Task updated.', 'تم تحديث المهمة.'), 'success');
+    delete window.viewHTMLCache['my-day'];
+    await renderView('my-day');
+};
+
+window.openMyDayWorkStateModal = async function (taskId, mode) {
+    const blocked = mode === 'blocked';
+    const categories = blocked ? MY_DAY_BLOCKED_CATEGORIES : MY_DAY_WAITING_CATEGORIES;
+    const title = blocked ? taskDetailText("I'm blocked", 'أنا متعطل') : taskDetailText('Mark as waiting', 'وضع في الانتظار');
+    const existing = document.getElementById('myDayWorkStateModal');
+    existing?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'myDayWorkStateModal';
+    modal.className = 'my-day-modal-backdrop';
+    let employeeOptions = '';
+    try {
+        const employees = await db.fetchUsers(false);
+        employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>` + (employees || []).filter(employee => employee.id !== currentUser?.id).map(employee => `<option value="${escapeHTML(employee.id)}">${escapeHTML(window.formatEmployeeName?.(employee) || employee.full_name || employee.email || '')}</option>`).join('');
+    } catch (_) {
+        employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>`;
+    }
+    modal.innerHTML = `<div class="my-day-modal" role="dialog" aria-modal="true"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}">&times;</button><h2>${escapeHTML(title)}</h2><label>${escapeHTML(taskDetailText('Reason', 'السبب'))}<select id="myDayWorkCategory">${categories.map(([value, label]) => `<option value="${value}">${escapeHTML(currentLang === 'ar' ? ({CLIENT:'العميل',SUPPLIER:'المورد',MANAGEMENT:'الإدارة',APPROVAL:'الموافقة',DESIGN:'التصميم',PRODUCTION:'الإنتاج',ANOTHER_EMPLOYEE:'موظف آخر',MISSING_INFORMATION:'معلومات ناقصة',TECHNICAL_PROBLEM:'مشكلة تقنية',OTHER:'أخرى'}[value] || label) : label)}</option>`).join('')}</select></label><label>${escapeHTML(taskDetailText('Waiting for (optional)', 'بانتظار (اختياري)'))}<select id="myDayRelatedUser">${employeeOptions}</select></label><label>${escapeHTML(taskDetailText('Note (optional)', 'ملاحظة (اختيارية)'))}<textarea id="myDayWorkNote" rows="3"></textarea></label><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary my-day-modal-cancel">${escapeHTML(taskDetailText('Cancel', 'إلغاء'))}</button><button type="button" class="btn btn-primary my-day-modal-submit">${escapeHTML(taskDetailText('Save', 'حفظ'))}</button></div></div>`;
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.my-day-modal-close').onclick = close;
+    modal.querySelector('.my-day-modal-cancel').onclick = close;
+    modal.addEventListener('click', event => { if (event.target === modal) close(); });
+    modal.querySelector('.my-day-modal-submit').onclick = async () => {
+        const category = modal.querySelector('#myDayWorkCategory').value;
+        const relatedUserId = modal.querySelector('#myDayRelatedUser').value || null;
+        const note = modal.querySelector('#myDayWorkNote').value.trim() || null;
+        const result = blocked ? await db.markTaskBlocked(taskId, category, relatedUserId, note) : await db.markTaskWaiting(taskId, category, relatedUserId, note);
+        if (!result?.success) return showToast(result?.error?.message || taskDetailText('Unable to update task.', 'تعذر تحديث المهمة.'), 'danger');
+        close();
+        showToast(taskDetailText('Task updated.', 'تم تحديث المهمة.'), 'success');
+        delete window.viewHTMLCache['my-day'];
+        await renderView('my-day');
+    };
+};
+
 async function renderTasks() {
     console.log("renderTasks: Fetching data for V2...");
     const tasksPromise = db.fetchTasks();
@@ -7615,7 +7926,7 @@ async function renderTasks() {
     }).map(task => String(task.id));
     
     window.projectsCache = projects;
-    window.projectOptionsCache = projects.map(p => `<option value="${p.id}">${p.project_name}</option>`).join('');
+    window.projectOptionsCache = projects.map(p => `<option value="${escapeHTML(p.id)}">${escapeHTML(p.project_name || p.id)}</option>`).join('');
 
     let users = allUsers;
     const isRegularEmployee = currentUserRole === 'EMPLOYEE';
@@ -8042,6 +8353,7 @@ async function renderTasksV2() {
                     <div class="task-v2-row-content">
                         <h4 onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')" style="margin: 0; font-size: 0.95rem; font-weight: 700; cursor: pointer; ${isCompleted ? 'text-decoration: line-through; opacity: 0.6;' : 'color: var(--color-text);'}">
                             ${task.parent_task_id ? '<span class="task-relation-badge is-subtask">Subtask</span> ' : ''}
+                            ${task.dependency_blocked ? `<span class="task-relation-badge is-dependency-blocked">${taskDetailText('Waiting for previous task', 'بانتظار المهمة السابقة')}</span> ` : ''}
                             ${escapeHTML(task.displayTitle)}
                         </h4>
                         <div class="task-focus-people" aria-label="${taskDetailText('Task people', 'أشخاص المهمة')}">
@@ -8081,7 +8393,7 @@ async function renderTasksV2() {
         { status: 'review', badge: 'review', label: 'Review', tone: 'purple', tasks: review },
         { status: 'Pending Approval', badge: 'pending', label: 'Awaiting approval', tone: 'amber', tasks: pending },
         { status: 'completed', badge: 'completed', label: 'Done', tone: 'green', tasks: done },
-        { status: 'canceled', badge: 'canceled', label: 'Canceled', tone: 'slate', tasks: canceled }
+        { status: 'canceled', badge: 'canceled', label: taskDetailText('Canceled', 'ملغاة'), tone: 'slate', tasks: canceled }
     ];
     if (approved.length || rejected.length) {
         stageDefinitions.push(
@@ -8170,7 +8482,13 @@ async function renderTasksV2() {
                 </div>
                 <form autocomplete="off" onsubmit="handleCreateTask(event)" id="standardTaskForm">
                     <input type="hidden" id="taskParentId" value="">
-                    <input type="hidden" id="taskProject" value="">
+                    <div class="form-group task-project-field">
+                        <label class="form-label" for="taskProject">Project (optional)</label>
+                        <select id="taskProject" class="form-control" onchange="window.handleTaskProjectChange('new')">
+                            <option value="">No project</option>
+                            ${projectOptions}
+                        </select>
+                    </div>
                     <input type="hidden" id="taskListId" value="">
 
                     <div class="create-task-body">
@@ -8466,6 +8784,7 @@ async function renderTasksV2() {
                             <span class="badge task-count-badge" style="margin-left: auto; background: var(--color-surface); color: var(--color-text-secondary); border-radius: 4px; padding: 0.15rem 0.4rem; font-size: 0.75rem;">${tasks.length}</span>
                         </li>
                         ${personalListItems}
+                        ${projectItems ? `<li class="task-v2-section-label" aria-hidden="true"><span>Projects</span></li>${projectItems}` : ''}
                     </ul>
                     
                     <div class="task-list-sidebar-actions" style="margin-top: auto; padding-top: 1rem; padding-bottom: 1rem; text-align: center;">
@@ -8491,7 +8810,7 @@ async function renderTasksV2() {
                             <option value="review">Review</option>
                             <option value="Pending Approval">Awaiting Approval</option>
                             <option value="completed">Completed</option>
-                            <option value="canceled">Canceled</option>
+                            <option value="canceled">${taskDetailText('Canceled', 'ملغاة')}</option>
                         </select>
                         <select id="taskV2PriorityFilter" class="form-control" onchange="window.filterTasksV2()">
                             <option value="all">All Priorities</option>
@@ -8527,10 +8846,10 @@ async function renderTasksV2() {
                 
                 <div class="task-pipeline-health" aria-label="Pipeline health summary">
                     <div class="task-health-heading"><i data-lucide="activity"></i><span>Pipeline health</span></div>
-                    <button type="button" class="task-health-item tone-slate ${window.taskV2HealthFilter === 'waiting' ? 'active' : ''}" data-task-health-filter="waiting" aria-pressed="${window.taskV2HealthFilter === 'waiting'}" onclick="window.setTaskV2HealthFilter('waiting')"><span class="task-health-dot"></span><strong data-task-health-count="waiting">${selectedWaitingCount}</strong><span>waiting</span></button>
-                    <button type="button" class="task-health-item tone-blue ${window.taskV2HealthFilter === 'active' ? 'active' : ''}" data-task-health-filter="active" aria-pressed="${window.taskV2HealthFilter === 'active'}" onclick="window.setTaskV2HealthFilter('active')"><span class="task-health-dot"></span><strong data-task-health-count="active">${selectedActiveCount}</strong><span>active</span></button>
-                    <button type="button" class="task-health-item tone-amber ${window.taskV2HealthFilter === 'due_this_week' ? 'active' : ''}" data-task-health-filter="due_this_week" aria-pressed="${window.taskV2HealthFilter === 'due_this_week'}" onclick="window.setTaskV2HealthFilter('due_this_week')"><span class="task-health-dot"></span><strong data-task-health-count="due_this_week">${dueSoonCount}</strong><span>due this week</span></button>
-                    <button type="button" class="task-health-item tone-red ${window.taskV2HealthFilter === 'overdue' ? 'active' : ''}" data-task-health-filter="overdue" aria-pressed="${window.taskV2HealthFilter === 'overdue'}" onclick="window.setTaskV2HealthFilter('overdue')"><span class="task-health-dot"></span><strong data-task-health-count="overdue">${overdueCount}</strong><span>overdue</span></button>
+                    <button type="button" class="task-health-item tone-slate ${window.taskV2HealthFilter === 'waiting' ? 'active' : ''}" data-task-health-filter="waiting" aria-pressed="${window.taskV2HealthFilter === 'waiting'}" onclick="window.setTaskV2HealthFilter('waiting')"><span class="task-health-dot"></span><i class="task-health-icon" data-lucide="clock-3" aria-hidden="true"></i><strong data-task-health-count="waiting">${selectedWaitingCount}</strong><span>waiting</span></button>
+                    <button type="button" class="task-health-item tone-blue ${window.taskV2HealthFilter === 'active' ? 'active' : ''}" data-task-health-filter="active" aria-pressed="${window.taskV2HealthFilter === 'active'}" onclick="window.setTaskV2HealthFilter('active')"><span class="task-health-dot"></span><i class="task-health-icon" data-lucide="play-circle" aria-hidden="true"></i><strong data-task-health-count="active">${selectedActiveCount}</strong><span>active</span></button>
+                    <button type="button" class="task-health-item tone-amber ${window.taskV2HealthFilter === 'due_this_week' ? 'active' : ''}" data-task-health-filter="due_this_week" aria-pressed="${window.taskV2HealthFilter === 'due_this_week'}" onclick="window.setTaskV2HealthFilter('due_this_week')"><span class="task-health-dot"></span><i class="task-health-icon" data-lucide="calendar-clock" aria-hidden="true"></i><strong data-task-health-count="due_this_week">${dueSoonCount}</strong><span>due this week</span></button>
+                    <button type="button" class="task-health-item tone-red ${window.taskV2HealthFilter === 'overdue' ? 'active' : ''}" data-task-health-filter="overdue" aria-pressed="${window.taskV2HealthFilter === 'overdue'}" onclick="window.setTaskV2HealthFilter('overdue')"><span class="task-health-dot"></span><i class="task-health-icon" data-lucide="triangle-alert" aria-hidden="true"></i><strong data-task-health-count="overdue">${overdueCount}</strong><span>overdue</span></button>
                     <div class="task-health-total"><strong data-task-health-total>${selectedScopeTasks.length}</strong><span>total</span></div>
                     ${canCreateTask ? `<button class="btn btn-primary task-health-new-task" onclick="window.toggleTaskV2Create()"><i data-lucide="plus"></i><span>New Task</span></button>` : ''}
                 </div>
@@ -9202,6 +9521,11 @@ window.toggleTaskV2Create = function () {
     }
     const listInput = document.getElementById('taskListId');
     if (listInput) listInput.value = canUseList ? listId : '';
+    const projectInput = document.getElementById('taskProject');
+    if (projectInput) {
+        projectInput.value = listId ? '' : (selected !== 'all' ? selected : '');
+        projectInput.disabled = !!listId;
+    }
     if (modal.parentElement !== document.body) {
         window.createTaskModalPortalHome = {
             parent: modal.parentElement,
@@ -10606,7 +10930,7 @@ window.handleSaveContract = async function (e) {
                 showToast(`Unable to upload ${file.name}. ` + (uploadResult.error?.message || ''), 'warning');
             } else {
                 if (!policyUrl) policyUrl = uploadResult.url; // Use the first uploaded one as the main policy url if not set
-                uploadedDocs.push({ url: uploadResult.url, name: file.name });
+                uploadedDocs.push({ url: uploadResult.url, name: file.name, type: file.type || null, size: file.size || null });
             }
         }
     }
@@ -10647,7 +10971,7 @@ window.handleSaveContract = async function (e) {
     if (success) {
         for (const doc of uploadedDocs) {
             if (savedContract?.id) {
-                const documentResult = await db.addContractDocument(savedContract.id, currentContractEmployeeId, doc.url, doc.name, 'confidentiality_policy', currentUser?.id || null);
+                const documentResult = await db.addContractDocument(savedContract.id, currentContractEmployeeId, doc.url, doc.name, 'confidentiality_policy', currentUser?.id || null, doc.type, doc.size);
                 if (!documentResult.success) showToast(`Contract saved, but ${doc.name} could not be indexed.`, 'warning');
             }
         }
@@ -12222,6 +12546,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'contract': content = await renderContractPage(); break;
             case 'login': content = renderLogin(); break;
             case 'dashboard': content = await renderDashboard(); break;
+            case 'my-day': content = await renderMyDay(); break;
             case 'time': content = await renderTime(); break;
             case 'leave': content = await renderLeave(); break;
             case 'leave_calculator': content = await renderLeaveCalculator(); break;
@@ -12243,6 +12568,7 @@ window.renderView = async function (viewId, isBack = false) {
             case 'documents': content = await renderDocuments(); break;
             case 'profile': content = await renderProfile(); break;
             case 'projects': content = await renderProjects(); break;
+            case 'project-command-center': content = await renderProjectCommandCenter(); break;
             case 'approvals': content = await renderApprovals(); break;
             case 'tasks':
             case 'tasks_v2':
@@ -12714,7 +13040,7 @@ window.openNotificationDestination = async function (notificationId) {
         || actionView === 'crm';
     if (isCrmNotification) actionView = 'crm';
 
-    const allowedViews = new Set(['dashboard', 'tasks', 'requests', 'time', 'documents', 'expenses', 'performance', 'projects', 'crm', 'clients', 'approvals', 'profile', 'notifications']);
+    const allowedViews = new Set(['dashboard', 'tasks', 'requests', 'time', 'documents', 'expenses', 'performance', 'projects', 'project-command-center', 'crm', 'clients', 'approvals', 'profile', 'notifications']);
     await renderView(allowedViews.has(actionView) ? actionView : 'notifications');
     const dealId = notification.metadata?.deal_id;
     if (actionView === 'crm' && dealId) {
@@ -16369,18 +16695,24 @@ async function initApp() {
 
     if (session && session.user) {
         currentUser = session.user;
-        const profile = await db.getUserProfile(currentUser.id);
+        const profileResult = db.getCurrentUserProfile
+            ? await db.getCurrentUserProfile()
+            : { profile: await db.getUserProfile(currentUser.id), error: null };
+        const profile = profileResult?.profile || null;
+        if (profileResult?.error || !profile) {
+            await db.logout();
+            currentUser = null;
+            currentUserProfile = null;
+            currentUserRole = null;
+            currentView = 'login';
+            await renderView('login');
+            return;
+        }
         await syncLegacyLocalProfilePhoto(profile);
         currentUserProfile = profile;
         currentUserRole = isExecutiveAdminProfile(profile) ? 'ADMIN' : profile.role;
         await primeExecutiveEmployeeNameDirectory(profile);
         applyPreferredTheme(profile);
-
-        // TEMPORARY OVERRIDE: Force Admin role for privatepple@gmail.com in frontend
-        if (currentUser.email && currentUser.email.toLowerCase() === 'privatepple@gmail.com') {
-            currentUserRole = 'ADMIN';
-            profile.role = 'ADMIN';
-        }
 
         updateTopbarProfile(profile);
 
@@ -17037,8 +17369,8 @@ function projectText(key) {
         portfolio: ['Project portfolio', 'محفظة المشاريع'], subtitle: ['Plan, govern, and deliver projects from one command center.', 'خطط للمشاريع وأدرها ونفذها من مركز تحكم واحد.'],
         allProjects: ['All projects', 'كل المشاريع'], active: ['Active', 'نشط'], atRisk: ['At risk', 'معرّض للخطر'], completed: ['Completed', 'مكتمل'], budget: ['Portfolio budget', 'ميزانية المحفظة'],
         search: ['Search projects', 'البحث في المشاريع'], allStatus: ['All statuses', 'كل الحالات'], allHealth: ['All health states', 'كل حالات الصحة'], allOwners: ['All owners', 'كل المسؤولين'],
-        planning: ['Planning', 'تخطيط'], onHold: ['On hold', 'متوقف مؤقتاً'], cancelled: ['Cancelled', 'ملغي'], onTrack: ['On track', 'على المسار'], offTrack: ['Off track', 'خارج المسار'],
-        owner: ['Owner', 'المسؤول'], target: ['Target', 'الموعد المستهدف'], progress: ['Progress', 'التقدم'], team: ['Team', 'الفريق'], noDate: ['No target date', 'لا يوجد موعد مستهدف'],
+        planning: ['Planning', 'تخطيط'], onHold: ['On hold', 'متوقف مؤقتاً'], cancelled: ['Cancelled', 'ملغي'], onTrack: ['On track', 'على المسار'], offTrack: ['Off track', 'خارج المسار'], needsAttention: ['Needs attention', 'يحتاج إلى اهتمام'], critical: ['Critical', 'حرجة'],
+        owner: ['Owner', 'المسؤول'], target: ['Target', 'الموعد المستهدف'], eventDate: ['Event date', 'تاريخ الفعالية'], progress: ['Progress', 'التقدم'], team: ['Team', 'الفريق'], noDate: ['No target date', 'لا يوجد موعد مستهدف'],
         noProjects: ['No projects match these filters.', 'لا توجد مشاريع مطابقة لهذه المرشحات.'], open: ['Open command center', 'فتح مركز التحكم'], edit: ['Edit project', 'تعديل المشروع'],
         overview: ['Overview', 'نظرة عامة'], milestones: ['Milestones', 'المراحل الرئيسية'], risks: ['Risks & issues', 'المخاطر والمشكلات'], updates: ['Project updates', 'تحديثات المشروع'],
         description: ['Project brief', 'ملخص المشروع'], client: ['Client / stakeholder', 'العميل / صاحب المصلحة'], cost: ['Actual cost', 'التكلفة الفعلية'], variance: ['Budget remaining', 'المتبقي من الميزانية'],
@@ -17047,7 +17379,8 @@ function projectText(key) {
         due: ['Due', 'الاستحقاق'], resolved: ['Resolved', 'تم الحل'], resolve: ['Resolve', 'حل'], done: ['Done', 'مكتمل'], markDone: ['Mark done', 'تحديد كمكتمل'], createdFromDeal: ['Created from CRM deal', 'تم إنشاؤه من صفقة CRM'], invalidDates: ['Target date cannot be before the start date.', 'لا يمكن أن يكون التاريخ المستهدف قبل تاريخ البدء.'],
         todoList: ['Project To Do list', 'قائمة مهام المشروع'], todoTitle: ['To Do item', 'مهمة المشروع'], todoTitleHint: ['What needs to be done?', 'ما المطلوب إنجازه؟'], assignee: ['Assign to', 'إسناد إلى'], assigneeHelp: ['Select one or more employees', 'اختر موظفاً واحداً أو أكثر'], dueDateTime: ['Due date and time', 'تاريخ ووقت الاستحقاق'], addTodo: ['Add To Do', 'إضافة مهمة'], noTodos: ['No project To Do items yet.', 'لا توجد مهام للمشروع بعد.'], complete: ['Complete', 'إكمال'], reopen: ['Reopen', 'إعادة فتح'], remove: ['Delete', 'حذف'], todoReadOnly: ['The Operations Manager assigns project To Do items here.', 'يقوم مدير العمليات بإسناد مهام المشروع هنا.'], todoRequired: ['Enter a title, select at least one eligible employee, and choose a due date and time.', 'أدخل عنواناً واختر موظفاً مؤهلاً واحداً على الأقل وحدد تاريخ ووقت الاستحقاق.'], todoAdded: ['Project To Do item assigned.', 'تم إسناد مهمة المشروع.'], todoAddFailed: ['Unable to add the project To Do item.', 'تعذر إضافة مهمة المشروع.'], todoUpdated: ['Project To Do item updated.', 'تم تحديث مهمة المشروع.'], todoUpdateFailed: ['Unable to update the project To Do item.', 'تعذر تحديث مهمة المشروع.'], todoDeleteTitle: ['Delete project To Do item', 'حذف مهمة المشروع'], todoDeleteConfirm: ['Delete this project To Do item?', 'هل تريد حذف مهمة المشروع هذه؟'], todoDeleted: ['Project To Do item deleted.', 'تم حذف مهمة المشروع.'], todoDeleteFailed: ['Unable to delete the project To Do item.', 'تعذر حذف مهمة المشروع.'],
         assignedTodoPage: ['Assigned project To-Do', 'مهمة مشروع مسندة'], assignedTodoPrivacy: ['Only your assigned project To-Do items are shown. Project details are restricted to managers and executives.', 'تظهر فقط مهام المشروع المسندة إليك. تفاصيل المشروع متاحة للمديرين والإدارة التنفيذية فقط.'], todoUnavailable: ['This project To-Do is no longer available or is not assigned to you.', 'مهمة المشروع هذه لم تعد متاحة أو غير مسندة إليك.'],
-        low: ['Low', 'منخفضة'], medium: ['Medium', 'متوسطة'], high: ['High', 'عالية'], critical: ['Critical', 'حرجة']
+        low: ['Low', 'منخفضة'], medium: ['Medium', 'متوسطة'], high: ['High', 'عالية'], critical: ['Critical', 'حرجة'],
+        commandCenter: ['Project Command Center', 'مركز قيادة المشاريع'], commandCenterSubtitle: ['See what needs attention, what is coming next, and who owns the next action.', 'اعرف ما يحتاج إلى اهتمام وما هو قادم ومن المسؤول عن الإجراء التالي.'], attentionNeeded: ['Attention needed', 'يحتاج إلى اهتمام'], upcomingEvents: ['Upcoming events', 'الفعاليات القادمة'], allOnTrack: ['All other projects', 'بقية المشاريع على المسار'], noAttention: ['No projects need attention right now.', 'لا توجد مشاريع تحتاج إلى اهتمام حالياً.'], noUpcoming: ['No upcoming events in this window.', 'لا توجد فعاليات قادمة خلال هذه الفترة.'], viewCommandCenter: ['Command center', 'مركز القيادة'], openProject: ['Open project', 'فتح المشروع'], eventToday: ['Event today', 'الفعالية اليوم'], eventTomorrow: ['Event tomorrow', 'الفعالية غداً'], eventInDays: ['Event in {days} days', 'الفعالية خلال {days} أيام'], pastEvent: ['Event date passed', 'تاريخ الفعالية مضى'], noEvent: ['No event date', 'لا يوجد تاريخ فعالية'], tasksLabel: ['Tasks', 'المهام'], completedTasks: ['Completed', 'مكتملة'], actionableTasks: ['Actionable', 'قابلة للتنفيذ'], dueTodayTasks: ['Due today', 'مستحقة اليوم'], openTodos: ['Open To-Dos', 'مهام المشروع المفتوحة'], blockedTasks: ['Blocked', 'محظورة'], waitingTasks: ['Waiting', 'قيد الانتظار'], dependencyRisk: ['Dependency risk', 'خطر تبعية'], overdueTasks: ['Overdue', 'متأخرة'], overdueTodos: ['Overdue To-Dos', 'مهام مشروع متأخرة'], responsible: ['Responsible', 'المسؤول'], operationalSummary: ['Operational summary', 'الملخص التشغيلي'], commandCenterUnavailable: ['The Project Command Center is available to managers and administrators.', 'مركز قيادة المشاريع متاح للمديرين والمسؤولين فقط.']
     };
     return (copy[key] || [key, key])[ar ? 1 : 0];
 }
@@ -17064,7 +17397,7 @@ function projectStatusLabel(value) {
 }
 
 function projectHealthLabel(value) {
-    return ({ ON_TRACK: projectText('onTrack'), AT_RISK: projectText('atRisk'), OFF_TRACK: projectText('offTrack') })[value] || value;
+    return ({ ON_TRACK: projectText('onTrack'), NEEDS_ATTENTION: projectText('needsAttention'), AT_RISK: projectText('atRisk'), CRITICAL: projectText('critical'), OFF_TRACK: projectText('offTrack') })[value] || value;
 }
 
 function effectiveProjectHealth(project) {
@@ -17108,6 +17441,66 @@ function projectDateTime(value) {
     });
 }
 
+function projectCommandReasonLabel(code) {
+    const labels = { TASKS: projectText('tasksLabel'), COMPLETED_TASKS: projectText('completedTasks'), ACTIONABLE_TASKS: projectText('actionableTasks'), DUE_TODAY_TASKS: projectText('dueTodayTasks'), OPEN_TODOS: projectText('openTodos'), BLOCKED_TASKS: projectText('blockedTasks'), WAITING_TASKS: projectText('waitingTasks'), DEPENDENCY_RISK: projectText('dependencyRisk'), OVERDUE_TASKS: projectText('overdueTasks'), OVERDUE_TODOS: projectText('overdueTodos'), EVENT_TODAY: projectText('eventToday'), EVENT_TOMORROW: projectText('eventTomorrow') };
+    return labels[code] || (code === 'EVENT_SOON' ? projectText('upcomingEvents') : code);
+}
+
+function projectCommandEventLabel(item) {
+    if (item.event_status === 'TODAY') return projectText('eventToday');
+    if (item.event_status === 'TOMORROW') return projectText('eventTomorrow');
+    if (item.event_status === 'PAST') return projectText('pastEvent');
+    if (item.event_status === 'UPCOMING' && Number.isFinite(Number(item.event_countdown_days))) return projectText('eventInDays').replace('{days}', String(item.event_countdown_days));
+    return projectText('noEvent');
+}
+
+function renderProjectCommandCard(item) {
+    const health = String(item.health || 'ON_TRACK').toUpperCase().toLowerCase().replace('_', '-');
+    const counts = item.counts || {};
+    const reasons = (item.reason_codes || []).slice(0, 4).map(reason => `<li><span>${escapeHTML(projectCommandReasonLabel(reason.code))}</span><strong>${Number(reason.count || 0)}</strong></li>`).join('');
+    const owner = item.responsible_employee?.full_name || item.responsible_employee?.display_name || '—';
+    const safeId = escapeHTML(String(item.project_id || ''));
+    const countItems = [
+        ['tasks', 'TASKS', ''], ['completed_tasks', 'COMPLETED_TASKS', ''], ['actionable_tasks', 'ACTIONABLE_TASKS', ''], ['due_today_tasks', 'DUE_TODAY_TASKS', ''],
+        ['waiting_tasks', 'WAITING_TASKS', 'is-warning'], ['blocked_tasks', 'BLOCKED_TASKS', 'is-danger'], ['dependency_blocked_tasks', 'DEPENDENCY_RISK', 'is-danger'], ['overdue_tasks', 'OVERDUE_TASKS', 'is-danger'],
+        ['open_todos', 'OPEN_TODOS', ''], ['overdue_todos', 'OVERDUE_TODOS', 'is-danger']
+    ].map(([key, label, tone]) => `<span class="${tone}"><strong>${Number(counts[key] || 0)}</strong>${escapeHTML(projectCommandReasonLabel(label))}</span>`).join('');
+    return `<article class="project-command-card project-command-health-${health}" data-project-id="${safeId}">
+        <div class="project-command-card-head"><div><span class="project-health project-health-${health}"><i></i>${escapeHTML(projectHealthLabel(String(item.health || 'ON_TRACK')))}</span><h3>${escapeHTML(item.project_name || 'Project')}</h3><p>${escapeHTML(item.client_name || item.project_type || '')}</p></div><button type="button" class="btn btn-secondary btn-sm" onclick="openProjectCommandProject('${safeId}')">${projectText('openProject')} <i data-lucide="arrow-up-right"></i></button></div>
+        <div class="project-command-event"><i data-lucide="calendar-days"></i><span>${escapeHTML(projectCommandEventLabel(item))}</span>${item.event_date ? `<time>${escapeHTML(projectDate(item.event_date))}</time>` : ''}</div>
+        <div class="project-command-counts">${countItems}</div>
+        ${reasons ? `<ul class="project-command-reasons">${reasons}</ul>` : `<p class="project-command-on-track"><i data-lucide="circle-check"></i>${projectText('allOnTrack')}</p>`}
+        <div class="project-command-owner"><span>${projectText('responsible')}</span><strong>${escapeHTML(owner)}</strong><span>${Number(item.progress_percent || 0)}%</span></div>
+    </article>`;
+}
+
+async function renderProjectCommandCenter() {
+    if (!currentUser || !canViewFullProjectCommandCenter()) return `<section class="project-command-center-page"><div class="card project-command-denied"><i data-lucide="shield-alert"></i><p>${projectText('commandCenterUnavailable')}</p></div></section>`;
+    const [allResult, attentionResult, upcomingResult] = await Promise.all([
+        db.fetchProjectCommandCenter({ limit: 100 }),
+        db.fetchProjectAttentionNeeded(100),
+        db.fetchProjectUpcomingEvents(30, 100)
+    ]);
+    const all = allResult.success ? allResult.data : [];
+    const attention = attentionResult.success ? attentionResult.data : [];
+    const upcoming = upcomingResult.success ? upcomingResult.data : [];
+    if (!allResult.success) console.warn('Project Command Center aggregate unavailable.', allResult.error);
+    if (!attentionResult.success) console.warn('Project attention list unavailable.', attentionResult.error);
+    if (!upcomingResult.success) console.warn('Project upcoming events unavailable.', upcomingResult.error);
+    const cacheItems = [...all, ...attention, ...upcoming];
+    window.projectCommandCenterCache = Object.fromEntries(cacheItems.map(item => [item.project_id, item]));
+    const attentionIds = new Set(attention.map(item => item.project_id));
+    const onTrack = all.filter(item => !attentionIds.has(item.project_id));
+    const renderSection = (title, icon, items, empty) => `<section class="project-command-section"><div class="project-command-section-heading"><h2><i data-lucide="${icon}"></i>${title}</h2><span>${items.length}</span></div>${items.length ? `<div class="project-command-grid">${items.map(renderProjectCommandCard).join('')}</div>` : `<div class="project-command-empty"><i data-lucide="inbox"></i><p>${empty}</p></div>`}</section>`;
+    return `<section class="project-command-center-page"><header class="project-command-center-header"><div><span class="project-page-eyebrow"><i data-lucide="layout-dashboard"></i>${projectText('commandCenter')}</span><h1>${projectText('commandCenter')}</h1><p>${projectText('commandCenterSubtitle')}</p></div><button type="button" class="btn btn-secondary" onclick="renderView('projects')"><i data-lucide="folder-kanban"></i>${projectText('portfolio')}</button></header>${renderSection(projectText('attentionNeeded'), 'triangle-alert', attention, projectText('noAttention'))}${renderSection(projectText('upcomingEvents'), 'calendar-clock', upcoming, projectText('noUpcoming'))}${renderSection(projectText('allOnTrack'), 'circle-check', onTrack, projectText('noProjects'))}</section>`;
+}
+
+window.openProjectCommandProject = async function (id) {
+    const item = window.projectCommandCenterCache?.[id];
+    if (item) window.projectCache = { ...(window.projectCache || {}), [id]: { id, project_name: item.project_name, project_type: item.project_type, project_status: item.project_status, lifecycle_status: item.lifecycle_status, priority: item.priority, event_date: item.event_date, start_date: item.start_date, end_date: item.end_date, client_name: item.client_name, project_manager_id: item.responsible_employee?.id || null, assigned_people: item.responsible_employee?.id ? [item.responsible_employee.id] : [], progress_percent: item.progress_percent } };
+    await window.openProjectDetail(id);
+};
+
 function isOperationsManagerProjectProfile(profile = currentUserProfile) {
     const values = [profile?.role, profile?.job_title, profile?.job_title_ar].map(normalizeAccessValue).filter(Boolean);
     return values.some(value => value === 'OPERATIONS MANAGER' || value.includes('OPERATIONS MANAGER') || value === 'مدير العمليات');
@@ -17144,7 +17537,11 @@ window.handleDealWorkflowDesignTaskStatusChange = async function (select) {
 };
 
 function canViewFullProjectCommandCenter(profile = currentUserProfile, project = null) {
-    const accessValues = [profile?.role || currentUserRole, profile?.job_title, profile?.job_title_ar]
+    // Keep the authenticated session role in the access check even when the
+    // profile row carries a legacy/stale role value. Using `profile.role ||
+    // currentUserRole` previously masked the authoritative session role and
+    // could hide the manager's only navigation path to Command Center.
+    const accessValues = [profile?.role, currentUserRole, profile?.job_title, profile?.job_title_ar]
         .map(normalizeAccessValue)
         .filter(Boolean);
     return isTaskAdmin()
@@ -17184,7 +17581,7 @@ function projectFormPayload(prefix) {
         assigned_people: team, project_manager_id: ownerId,
         lifecycle_status: get('Status').value, health_status: get('Health').value,
         priority: get('Priority').value, progress_percent: Number(get('Progress').value || 0),
-        start_date: get('StartDate').value || null, end_date: get('EndDate').value || null,
+        start_date: get('StartDate').value || null, end_date: get('EndDate').value || null, event_date: get('EventDate').value || null,
         client_name: get('Client').value.trim() || null,
         project_tags: get('Tags').value.split(',').map(item => item.trim()).filter(Boolean)
     };
@@ -17259,7 +17656,7 @@ async function renderProjects() {
     const ownerOptions = (profiles || []).map(profile => `<option value="${profile.id}">${escapeHTML(window.formatEmployeeName(profile) || profile.id)}</option>`).join('');
     const cards = projects.length ? projects.map(p => renderProjectCard(p, canDeleteProject)).join('') : `<div class="project-empty-state"><i data-lucide="folder-kanban"></i><p>${projectText('noProjects')}</p></div>`;
     return `<section class="project-manager-page">
-        <header class="project-manager-header"><div><span class="project-page-eyebrow"><i data-lucide="briefcase-business"></i>${projectText('portfolio')}</span><h1>${t('ui_projects')}</h1><p>${projectText('subtitle')}</p></div>${canCreateProject ? `<button class="btn btn-primary" onclick="openProjectModal()"><i data-lucide="plus"></i>${t('ui_new_project_btn') || 'New Project'}</button>` : ''}</header>
+        <header class="project-manager-header"><div><span class="project-page-eyebrow"><i data-lucide="briefcase-business"></i>${projectText('portfolio')}</span><h1>${t('ui_projects')}</h1><p>${projectText('subtitle')}</p></div><div class="project-manager-header-actions">${canCreateProject ? `<button class="btn btn-primary" onclick="openProjectModal()"><i data-lucide="plus"></i>${t('ui_new_project_btn') || 'New Project'}</button>` : ''}${canViewFullProjectCommandCenter() ? `<button class="btn btn-secondary" onclick="renderView('project-command-center')"><i data-lucide="layout-dashboard"></i>${projectText('viewCommandCenter')}</button>` : ''}</div></header>
         <div class="project-kpi-grid">
             <button onclick="setProjectPortfolioStatus('ALL')"><i data-lucide="folders"></i><span>${projectText('allProjects')}</span><strong>${total}</strong></button>
             <button onclick="setProjectPortfolioStatus('ACTIVE')"><i data-lucide="activity"></i><span>${projectText('active')}</span><strong>${active}</strong></button>
@@ -17378,6 +17775,7 @@ window.openEditProjectModal = async function (id) {
     document.getElementById('editProjectProgress').value = project.progress_percent || 0;
     document.getElementById('editProjectStartDate').value = project.start_date || '';
     document.getElementById('editProjectEndDate').value = project.end_date || '';
+    document.getElementById('editProjectEventDate').value = project.event_date || '';
     await ensureBusinessFinancialAccess();
     document.getElementById('editProjectBudget').value = canCurrentUserViewBusinessFinancials() ? (project.budget_amount ?? project.project_amount ?? '') : '';
     document.getElementById('editProjectActualCost').value = canCurrentUserViewBusinessFinancials() ? (project.actual_cost ?? project.paid_amount ?? '') : '';
@@ -17553,12 +17951,14 @@ window.openProjectDetail = async function (id) {
     if (!project) return openAssignedProjectTodoDetail(id);
     if (!canViewFullProjectCommandCenter(currentUserProfile, project)) return openAssignedProjectTodoDetail(id);
     window.activeProjectDetailId = id;
-    const [updates, todos, attachments, canDeleteProject] = await Promise.all([
+    const [updates, todos, attachments, canDeleteProject, operationalSummaryResult] = await Promise.all([
         db.fetchProjectUpdates(id),
         db.fetchProjectTodos(id),
         db.fetchProjectSharedAttachments(id),
-        canCurrentUserUseCRM()
+        canCurrentUserUseCRM(),
+        db.fetchProjectOperationalSummary(id)
     ]);
+    const operationalSummary = operationalSummaryResult?.success ? operationalSummaryResult.data : null;
     const status = normalizeProjectStatus(project);
     const health = effectiveProjectHealth(project);
     const budget = Number(project.budget_amount ?? project.project_amount ?? 0);
@@ -17570,10 +17970,17 @@ window.openProjectDetail = async function (id) {
     const canEditProject = canManageTodos;
     const canViewFinancials = canCurrentUserViewBusinessFinancials();
     const todoAssigneeOptions = projectTodoAssigneeOptions(project);
-    const todoForm = canManageTodos ? `<form class="project-todo-form" onsubmit="addProjectTodo(event,'${id}')"><label><span>${projectText('todoTitle')}</span><input id="projectTodoTitle" class="form-control" placeholder="${projectText('todoTitleHint')}" maxlength="500" required></label><label><span>${projectText('assignee')}</span><select id="projectTodoAssignees" class="form-control" multiple required aria-label="${projectText('assigneeHelp')}" ${todoAssigneeOptions ? '' : 'disabled'}>${todoAssigneeOptions}</select><small>${projectText('assigneeHelp')}</small></label><label><span>${projectText('dueDateTime')}</span><input id="projectTodoDueAt" type="datetime-local" class="form-control" required></label><button class="btn btn-primary" type="submit" ${todoAssigneeOptions ? '' : 'disabled'}><i data-lucide="plus"></i>${projectText('addTodo')}</button></form>` : `<p class="project-todo-readonly"><i data-lucide="info"></i>${projectText('todoReadOnly')}</p>`;
+    const todoForm = canManageTodos ? `<form class="project-todo-form" onsubmit="addProjectTodo(event,'${id}')">
+            <label><span>${projectText('todoTitle')}</span><input id="projectTodoTitle" class="form-control" placeholder="${projectText('todoTitleHint')}" required></label>
+            <label><span>${projectText('assignee')}</span><select id="projectTodoAssignees" class="form-control" multiple required>${todoAssigneeOptions}</select><small>${projectText('assigneeHelp')}</small></label>
+            <label><span>${projectText('dueDateTime')}</span><input id="projectTodoDueAt" class="form-control" type="datetime-local" required></label>
+            <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i>${projectText('addTodo')}</button>
+        </form>` : '';
+    const operationalCountKeys = ['tasks', 'completed_tasks', 'actionable_tasks', 'due_today_tasks', 'waiting_tasks', 'blocked_tasks', 'dependency_blocked_tasks', 'overdue_tasks', 'open_todos', 'overdue_todos'];
+    const operationalCountLabels = { tasks: 'TASKS', completed_tasks: 'COMPLETED_TASKS', actionable_tasks: 'ACTIONABLE_TASKS', due_today_tasks: 'DUE_TODAY_TASKS', waiting_tasks: 'WAITING_TASKS', blocked_tasks: 'BLOCKED_TASKS', dependency_blocked_tasks: 'DEPENDENCY_RISK', overdue_tasks: 'OVERDUE_TASKS', open_todos: 'OPEN_TODOS', overdue_todos: 'OVERDUE_TODOS' };
     document.getElementById('projectDetailTitle').textContent = project.project_name || 'Project';
     document.getElementById('projectDetailBody').innerHTML = `<div class="project-command-summary"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span>${project.source === 'WON_DEAL' ? `<span class="project-source-badge"><i data-lucide="handshake"></i>${projectText('createdFromDeal')}</span>` : ''}</div><div class="project-command-actions" style="display:flex;gap:0.5rem;align-items:center;">${canEditProject ? `<button class="btn btn-secondary" onclick="closeProjectDetail();openEditProjectModal('${id}')"><i data-lucide="pencil"></i>${projectText('edit')}</button>` : ''}${canDeleteProject ? `<button class="btn btn-secondary" style="color:var(--color-danger);border-color:var(--color-danger);" onclick="closeProjectDetail();handleDeleteProject('${id}')"><i data-lucide="trash-2"></i>${projectText('delete') || 'Delete'}</button>` : ''}</div></div>
-        <div class="project-detail-kpis"><div><span>${projectText('progress')}</span><strong>${Number(project.progress_percent || 0)}%</strong></div><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div>${canViewFinancials ? `<div><span>${projectText('budget')}</span><strong>${projectMoney(budget)}</strong></div><div><span>${projectText('cost')}</span><strong>${projectMoney(cost)}</strong></div><div><span>${projectText('variance')}</span><strong class="${budget - cost < 0 ? 'is-negative' : ''}">${projectMoney(budget - cost)}</strong></div>` : ''}</div>
+        <div class="project-detail-kpis"><div><span>${projectText('progress')}</span><strong>${Number(project.progress_percent || 0)}%</strong></div><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div>${canViewFinancials ? `<div><span>${projectText('budget')}</span><strong>${projectMoney(budget)}</strong></div><div><span>${projectText('cost')}</span><strong>${projectMoney(cost)}</strong></div><div><span>${projectText('variance')}</span><strong class="${budget - cost < 0 ? 'is-negative' : ''}">${projectMoney(budget - cost)}</strong></div>` : ''}</div>${operationalSummary ? `<section class="project-operational-summary"><div class="project-todo-heading"><h3><i data-lucide="activity"></i>${projectText('operationalSummary')}</h3><span class="project-health project-health-${String(operationalSummary.health || 'ON_TRACK').toLowerCase().replace('_', '-')} ">${escapeHTML(projectHealthLabel(operationalSummary.health || 'ON_TRACK'))}</span></div><div class="project-operational-summary-grid">${operationalCountKeys.filter(key => Object.prototype.hasOwnProperty.call(operationalSummary.counts || {}, key)).map(key => `<div><span>${escapeHTML(projectCommandReasonLabel(operationalCountLabels[key]))}</span><strong>${Number(operationalSummary.counts[key] || 0)}</strong></div>`).join('')}</div></section>` : ''}
         <div class="project-detail-layout"><section><h3><i data-lucide="file-text"></i>${projectText('overview')}</h3><dl class="project-overview-list"><div><dt>${projectText('description')}</dt><dd>${escapeHTML(project.description || '—')}</dd></div><div><dt>${projectText('client')}</dt><dd>${escapeHTML(project.client_name || project.crm_clients?.company || project.crm_clients?.name || '—')}</dd></div><div><dt>${projectText('team')}</dt><dd>${(project.assigned_people || []).map(id => escapeHTML(projectProfileName(id))).join(', ') || '—'}</dd></div></dl></section>
         <section><h3><i data-lucide="milestone"></i>${projectText('milestones')}</h3><div class="project-detail-list">${projectDetailList(milestones, 'milestone', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectMilestone(event,'${id}')"><input id="projectMilestoneTitle" class="form-control" placeholder="${projectText('milestoneHint')}" required><input id="projectMilestoneDate" type="date" class="form-control"><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addMilestone')}</button></form>` : ''}</section>
         <section><h3><i data-lucide="shield-alert"></i>${projectText('risks')}</h3><div class="project-detail-list">${projectDetailList(risks, 'risk', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectRisk(event,'${id}')"><input id="projectRiskTitle" class="form-control" placeholder="${projectText('riskHint')}" required><select id="projectRiskSeverity" class="form-control"><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option><option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option></select><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addRisk')}</button></form>` : ''}</section>

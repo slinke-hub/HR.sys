@@ -29,10 +29,15 @@ assert.match(db, /p_categories: replacementCategories/);
 assert.doesNotMatch(db.match(/async replaceDealPresentationAttachments[\s\S]*?async logDealActivity/)?.[0] || '', /previousPaths|\.delete\(\)[\s\S]*previousIds/);
 assert.match(db, /async fetchPendingCrmApprovals\(\)[\s\S]*rpc\('list_crm_deals_secure'\)/);
 assert.match(db, /async fetchDealPresentationAttachments\(dealId\)/);
-assert.match(db, /\.in\('category', \['QUOTATION', 'CLIENT_IDENTITY', 'PROPOSAL'\]\)/);
+// Presentation assets now come through the authoritative secure attachment
+// RPC; category filtering is applied to the returned DTOs.
+assert.match(db, /rpc\('list_crm_deal_attachments_secure'/);
 assert.match(db, /replaceClientIdentity === true/);
 
-assert.match(app, /task\.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN'[\s\S]*db\.fetchDealPresentationAttachments\(task\.crm_deal_id\)/);
+// Task details resolve presentation assets from the linked deal through the
+// shared secure attachment service; the service is intentionally reusable for
+// all linked CRM tasks, not only the design-task subtype.
+assert.match(app, /task\.crm_deal_id[\s\S]*db\.fetchDealPresentationAttachments\(task\.crm_deal_id\)/);
 assert.match(app, /task-crm-presentation-assets/);
 assert.match(app, /task-crm-proposal-gallery/);
 assert.match(app, /crmClientIdentityFiles/);

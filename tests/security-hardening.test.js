@@ -30,7 +30,8 @@ assert.match(appSource, /password\.length < 12/);
 
 const dbSource = read('js/db.js');
 assert.match(dbSource, /function createStorageReference\(/);
-assert.match(dbSource, /createSignedUrl\(/);
+assert.match(dbSource, /functions\.invoke\('file-signed-url'/);
+assert.doesNotMatch(dbSource, /storage\s*\.from\([^)]*\)\.createSignedUrl/);
 assert.doesNotMatch(dbSource, /\.from\('(?:task-attachments|contract-documents|crm-deal-files)'\)\.getPublicUrl/);
 
 const html = read('index.html');

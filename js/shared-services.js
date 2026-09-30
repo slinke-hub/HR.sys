@@ -10,6 +10,16 @@
     };
 
     window.hrDomainServices = Object.freeze({
+        auth: Object.freeze({
+            signIn: (credentials) => db.signInSession(credentials || {}),
+            getSession: () => db.getAuthSession(),
+            refreshSession: () => db.refreshAuthSession(),
+            signOut: () => db.signOut(),
+            requestPasswordReset: email => db.sendPasswordResetEmail(String(email || '').trim()),
+            updatePassword: password => db.updateUserPassword(password),
+            getCurrentProfile: () => db.getCurrentUserProfile(),
+            onStateChange: listener => db.onAuthStateChange(listener),
+        }),
         tasks: Object.freeze({
             list: (...args) => db.fetchTasksWithProfiles ? db.fetchTasksWithProfiles(...args) : db.fetchTasks(...args),
             details: id => db.fetchTaskDetails
@@ -34,6 +44,23 @@
             comments: id => db.fetchTaskComments(requireId(id, 'Task')),
             attachments: id => db.fetchTaskAttachments(requireId(id, 'Task')),
             activity: id => db.fetchTaskActivity(requireId(id, 'Task')),
+        }),
+        productivity: Object.freeze({
+            myDay: () => db.fetchMyDay(),
+            completedToday: () => db.fetchMyCompletedToday(),
+            start: id => db.startTask(requireId(id, 'Task')),
+            waiting: (id, category, relatedUserId, note) => db.markTaskWaiting(requireId(id, 'Task'), category, relatedUserId || null, note || null),
+            blocked: (id, category, relatedUserId, note) => db.markTaskBlocked(requireId(id, 'Task'), category, relatedUserId || null, note || null),
+            resume: id => db.resumeTaskProductivity(requireId(id, 'Task')),
+            complete: id => db.completeTaskProductivity(requireId(id, 'Task')),
+            workStates: () => db.fetchTaskWorkStates(),
+            history: id => db.fetchTaskWorkHistory(requireId(id, 'Task')),
+            dependencies: id => db.fetchTaskDependencies(requireId(id, 'Task')),
+            createDependency: (predecessorTaskId, successorTaskId) => db.createTaskDependency(requireId(predecessorTaskId, 'Predecessor task'), requireId(successorTaskId, 'Successor task')),
+            removeDependency: id => db.removeTaskDependency(requireId(id, 'Dependency')),
+            dependencyHistory: id => db.fetchTaskDependencyHistory(requireId(id, 'Task')),
+            dependencyBlockers: () => db.fetchTaskDependencyBlockers(),
+            completeAndHandOff: id => db.completeAndHandOffTask(requireId(id, 'Task')),
         }),
         deals: Object.freeze({
             list: (...args) => db.fetchDeals(...args),
@@ -69,15 +96,41 @@
             updates: id => db.fetchProjectUpdates(requireId(id, 'Project')),
             activity: id => db.fetchProjectUpdates(requireId(id, 'Project')),
         }),
+        projectCommandCenter: Object.freeze({
+            list: options => db.fetchProjectCommandCenter(options || {}),
+            attention: limit => db.fetchProjectAttentionNeeded(limit || 20),
+            upcoming: (days, limit) => db.fetchProjectUpcomingEvents(days || 30, limit || 20),
+            health: id => db.fetchProjectHealth(requireId(id, 'Project')),
+            operationalSummary: id => db.fetchProjectOperationalSummary(requireId(id, 'Project')),
+        }),
         clients: Object.freeze({
-            list: () => db.fetchClients(),
+            list: search => db.fetchClients(search || ''),
+            search: search => db.fetchClients(search || ''),
+            details: id => db.fetchClientDetails(requireId(id, 'Client')),
             create: payload => db.createClient(payload || {}),
             update: (id, payload) => db.updateClient(requireId(id, 'Client'), payload || {}),
             delete: id => db.deleteClient(requireId(id, 'Client')),
         }),
         notifications: Object.freeze({
-            list: userId => db.fetchNotifications(requireId(userId, 'User')),
+            list: query => db.fetchNotifications(query || {}),
+            get: id => db.fetchNotification(requireId(id, 'Notification')),
+            unreadCount: () => db.getUnreadNotificationCount(),
             markRead: id => db.markNotificationRead(requireId(id, 'Notification')),
+            markAllRead: () => db.markNotificationsRead(),
+            delete: id => db.deleteNotification(requireId(id, 'Notification')),
+            registerDevice: device => db.registerNotificationDevice(device || {}),
+            updateDeviceToken: (id, token) => db.updateNotificationDeviceToken(requireId(id, 'Device'), requireId(token, 'Push token')),
+            unregisterDevice: id => db.unregisterNotificationDevice(requireId(id, 'Device')),
+        }),
+        files: Object.freeze({
+            signedUrl: (reference, expiresIn = 300) => db.resolveStorageReference(requireId(reference, 'Storage reference'), expiresIn),
+            taskAttachments: id => db.fetchTaskAttachments(requireId(id, 'Task')),
+            dealAttachments: id => db.fetchDealPresentationAttachments(requireId(id, 'Deal')),
+            projectAttachments: id => db.fetchProjectSharedAttachments(requireId(id, 'Project')),
+            contractDocuments: id => db.fetchContractDocuments(requireId(id, 'Contract')),
+            contractDocument: id => db.fetchContractDocument(requireId(id, 'Document')),
+            addContractDocument: (...args) => db.addContractDocument(...args),
+            deleteContractDocument: id => db.deleteContractDocument(requireId(id, 'Document')),
         }),
     });
 }());

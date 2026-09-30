@@ -11,6 +11,28 @@ export interface UploadFileRequest {
   description?: string | null;
 }
 
+export interface StoredFileReference {
+  id?: string;
+  owner_type: AttachmentOwner;
+  owner_id: string;
+  storage_reference: string;
+  file_name: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  is_archived?: boolean;
+  visible_to_project_assignee?: boolean;
+  created_at?: string;
+}
+
+/** The backend, not a native client, authorizes each operation. */
+export type FileOperation =
+  | 'list'
+  | 'view'
+  | 'download'
+  | 'upload'
+  | 'archive'
+  | 'remove';
+
 export const ALLOWED_UPLOAD_MIME_TYPES = Object.freeze([
   'application/pdf',
   'image/jpeg',

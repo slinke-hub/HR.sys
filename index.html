@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl" data-theme="light">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-src 'self' blob: https://vercel.live; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://vercel.live; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://bbbetcdioiaozdjkvwxu.supabase.co wss://bbbetcdioiaozdjkvwxu.supabase.co https://api.rss2json.com; worker-src 'self' blob:; manifest-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-src 'self' blob: https://vercel.live; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://vercel.live; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://bbbetcdioiaozdjkvwxu.supabase.co wss://bbbetcdioiaozdjkvwxu.supabase.co https://jcfyyxsuspukcmybyhjj.supabase.co wss://jcfyyxsuspukcmybyhjj.supabase.co https://api.rss2json.com; worker-src 'self' blob:; manifest-src 'self';">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <script>
@@ -38,8 +38,9 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=1788202890005">
-    <link rel="stylesheet" href="css/layout.css?v=1788202890007">
-    <link rel="stylesheet" href="css/components.css?v=2026091510">
+    <link rel="stylesheet" href="css/layout.css?v=2026093007">
+    <link rel="stylesheet" href="css/components.css?v=2026093007">
+    <link rel="stylesheet" href="css/task-manager-mobile-final.css?v=2026093008">
     <link rel="stylesheet" href="css/hr-suite-beta.css?v=2026090901">
     <link rel="stylesheet" href="css/android.css?v=2026090702">
     <link rel="stylesheet" href="css/crm-tailwind.css?v=2026090904">
@@ -73,6 +74,7 @@
 
             <nav class="sidebar-nav">
                 <a href="#" class="nav-item active" data-view="dashboard"><i data-lucide="layout-dashboard"></i><span data-i18n="nav_dashboard">Dashboard</span></a>
+                <a href="#" class="nav-item" data-view="my-day"><i data-lucide="sun"></i><span data-i18n="nav_my_day">My Day</span></a>
                 <a href="#" class="nav-item" data-view="tasks"><i data-lucide="list-checks"></i><span data-i18n="nav_task_manager">Task Manager</span></a>
                 <a href="#" class="nav-item" data-view="archived_tasks"><i data-lucide="archive"></i><span data-i18n="nav_archived_tasks">Archived Tasks</span></a>
                 <a href="#" class="nav-item" data-view="clients"><i data-lucide="users"></i><span data-i18n="nav_clients">Clients</span></a>
@@ -126,7 +128,9 @@
 
                 <nav class="header-navigation" aria-label="Primary navigation">
                     <a href="#" class="header-nav-item nav-item" data-view="dashboard"><i data-lucide="layout-dashboard"></i><span data-i18n="nav_dashboard">Dashboard</span></a>
+                    <a href="#" class="header-nav-item nav-item" data-view="my-day"><i data-lucide="sun"></i><span data-i18n="nav_my_day">My Day</span></a>
                     <a href="#" class="header-nav-item nav-item" data-view="tasks"><i data-lucide="list-checks"></i><span data-i18n="nav_task_manager">Task Manager</span></a>
+                    <a href="#" class="header-nav-item nav-item" id="headerNavProjects" data-view="projects" style="display:none"><i data-lucide="folder"></i><span data-i18n="nav_projects">Projects</span></a>
                     <a href="#" class="header-nav-item nav-item" data-view="time"><i data-lucide="clock"></i><span data-i18n="nav_time">Time &amp; Attendance</span></a>
                     <a href="#" class="header-nav-item nav-item" data-view="requests"><i data-lucide="file-signature"></i><span data-i18n="nav_employee_requests">Employee Requests</span></a>
                     <a href="#" class="header-nav-item nav-item" id="headerNavAdmin" data-view="admin" style="display:none"><i data-lucide="shield-check"></i><span data-i18n="nav_admin">Admin Hub</span></a>
@@ -1162,6 +1166,7 @@
                     <div class="form-group"><label class="form-label" data-i18n="pm_progress">Progress</label><div class="project-range-field"><input type="range" id="newProjectProgress" min="0" max="100" value="0" oninput="syncProjectProgressLabel('new')"><output id="newProjectProgressOutput">0%</output></div></div>
                     <div class="form-group"><label class="form-label" data-i18n="pm_start_date">Start date</label><input type="date" id="newProjectStartDate" class="form-control"></div>
                     <div class="form-group"><label class="form-label" data-i18n="pm_target_date">Target date</label><input type="date" id="newProjectEndDate" class="form-control"></div>
+                    <div class="form-group"><label class="form-label" data-i18n="pm_event_date">Event date</label><input type="date" id="newProjectEventDate" class="form-control"></div>
                     <div class="form-group" data-business-financials><label class="form-label" data-i18n="pm_budget">Budget (SAR)</label><input type="number" id="newProjectBudget" class="form-control" min="0" step="0.01"></div>
                     <div class="form-group" data-business-financials><label class="form-label" data-i18n="pm_actual_cost">Actual cost (SAR)</label><input type="number" id="newProjectActualCost" class="form-control" min="0" step="0.01"></div>
                     <div class="form-group"><label class="form-label" data-i18n="pm_client">Client / stakeholder</label><input type="text" id="newProjectClient" class="form-control"></div>
@@ -1191,6 +1196,7 @@
                     <div class="form-group"><label class="form-label" data-i18n="pm_progress">Progress</label><div class="project-range-field"><input type="range" id="editProjectProgress" min="0" max="100" value="0" oninput="syncProjectProgressLabel('edit')"><output id="editProjectProgressOutput">0%</output></div></div>
                     <div class="form-group"><label class="form-label" data-i18n="pm_start_date">Start date</label><input type="date" id="editProjectStartDate" class="form-control"></div>
                     <div class="form-group"><label class="form-label" data-i18n="pm_target_date">Target date</label><input type="date" id="editProjectEndDate" class="form-control"></div>
+                    <div class="form-group"><label class="form-label" data-i18n="pm_event_date">Event date</label><input type="date" id="editProjectEventDate" class="form-control"></div>
                     <div class="form-group" data-business-financials><label class="form-label" data-i18n="pm_budget">Budget (SAR)</label><input type="number" id="editProjectBudget" class="form-control" min="0" step="0.01"></div>
                     <div class="form-group" data-business-financials><label class="form-label" data-i18n="pm_actual_cost">Actual cost (SAR)</label><input type="number" id="editProjectActualCost" class="form-control" min="0" step="0.01"></div>
                     <div class="form-group"><label class="form-label" data-i18n="pm_client">Client / stakeholder</label><input type="text" id="editProjectClient" class="form-control"></div>
@@ -1692,7 +1698,8 @@
     <script defer src="js/vendor/xlsx.full.min.js"></script>
     <script defer src="js/vendor/tesseract/tesseract.min.js?v=7.0.0"></script>
     <script defer src="js/document-ocr.js?v=2026091503"></script>
-    <script defer src="js/db.js?v=2026091601"></script>
+    <script defer src="runtime-config.js"></script>
+    <script defer src="js/db.js?v=2026093001"></script>
     <script defer src="js/shared-services.js?v=2026091701"></script>
     <script defer src="js/data.js?v=2026091510"></script>
     <script defer src="js/contract.js?v=1788202890003"></script>
@@ -1702,7 +1709,7 @@
     <script defer src="js/enterprise-beta.js"></script>
     <script defer src="js/whatsapp-mock-data.js"></script>
     <script defer src="js/whatsapp-inbox.js"></script>
-    <script defer src="js/app.js?v=2026092401"></script>
+    <script defer src="js/app.js?v=2026093006"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">
