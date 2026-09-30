@@ -3,18 +3,23 @@ $env:SUPABASE_TELEMETRY_DISABLED = '1'
 
 $ProductionRef = 'bbbetcdioiaozdjkvwxu'
 $StagingRef = 'jcfyyxsuspukcmybyhjj'
-$ExpectedReleaseCommit = 'd296359e714b64b0b6ef6487b09e00ac3645c2c0'
+$ExpectedReleaseId = 'productivity-abc-2026-09-30'
+$ExpectedReleaseFingerprint = '19d1a33fbff7c34dacb7c9597f1b07f8bd17da18151dcb393c6e993e9696e506'
+$ExpectedMigrationFiles = @(
+  'supabase/migrations/20260928120000_notification_backend_services.sql',
+  'supabase/migrations/20260930100000_auth_backend_services.sql',
+  'supabase/migrations/20260930101000_client_backend_services.sql',
+  'supabase/migrations/20260930102000_deal_backend_services.sql',
+  'supabase/migrations/20260930103000_file_backend_services.sql',
+  'supabase/migrations/20260930104000_productivity_phase_a.sql',
+  'supabase/migrations/20260930105000_productivity_phase_b.sql',
+  'supabase/migrations/20260930106000_productivity_phase_c.sql'
+)
+$ExpectedEdgeFunctions = @('file-signed-url')
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ProductionBuildRoot = Join-Path $Root 'www-production'
 $LinkedRefPath = Join-Path $Root 'supabase/.temp/project-ref'
 $ManifestPath = Join-Path $Root 'supabase/production/productivity-abc-production-manifest.json'
-
-$gitCommand = @(Get-Command git -CommandType Application -ErrorAction Stop)[0]
-$gitPath = if ($gitCommand.Path) { $gitCommand.Path } else { $gitCommand.Source }
-$currentCommit = (& $gitPath -C $Root rev-parse --verify HEAD 2>$null | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $currentCommit -cne $ExpectedReleaseCommit) {
-  throw "ABORTED: current HEAD '$currentCommit' does not match the frozen release commit '$ExpectedReleaseCommit'."
-}
 
 function Quote-ProcessArgument([string]$Value) {
   if ($null -eq $Value -or $Value.Length -eq 0) { return '""' }
@@ -55,9 +60,26 @@ if (Test-Path -LiteralPath $LinkedRefPath) {
 if (-not (Test-Path -LiteralPath $ManifestPath)) { throw "Missing release manifest: $ManifestPath" }
 $manifest = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json
 if ([string]$manifest.targetProjectRef -cne $ProductionRef) { throw 'Release manifest target is not production.' }
+$manifestStagingRef = [string]$manifest.stagingProjectRef
+if ($manifestStagingRef -cne $StagingRef) { throw 'Manifest staging reference is not the reviewed staging project.' }
+if ([string]$manifest.releaseId -cne $ExpectedReleaseId) { throw 'Manifest release identity is not the reviewed release.' }
 if ([string]$manifest.status -notin @('BLOCKED_PENDING_PRODUCTION_INSPECTION', 'BLOCKED_PENDING_FREEZE_AND_RECOVERY', 'READY_FOR_MANUAL_APPROVAL')) {
   throw 'Unexpected release-manifest status; stop and review it before proceeding.'
 }
+$migrationFiles = @($manifest.migrationFiles)
+if (($migrationFiles -join '|') -cne ($ExpectedMigrationFiles -join '|')) { throw 'Manifest migration inventory does not exactly match the reviewed 8-migration release.' }
+$edgeFunctions = @($manifest.edgeFunctions)
+if (($edgeFunctions -join '|') -cne ($ExpectedEdgeFunctions -join '|')) { throw 'Manifest Edge Function inventory does not match the reviewed release.' }
+$canonical = [string]$manifest.releaseId + '|' + [string]$manifest.targetProjectRef + '|' + $manifestStagingRef + '|' + ($edgeFunctions -join ',') + '|' + ($migrationFiles -join '|')
+$sha = [System.Security.Cryptography.SHA256]::Create()
+$actualFingerprint = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical)))).Replace('-', '').ToLowerInvariant()
+if ($actualFingerprint -cne [string]$manifest.releaseFingerprint -or $actualFingerprint -cne $ExpectedReleaseFingerprint) { throw 'Manifest release fingerprint does not match the reviewed release.' }
+$gitCommand = @(Get-Command git -CommandType Application -ErrorAction Stop)[0]
+$gitPath = if ($gitCommand.Path) { $gitCommand.Path } else { $gitCommand.Source }
+$dirtyFiles = @(& $gitPath -C $Root diff --name-only HEAD 2>$null)
+if ($LASTEXITCODE -ne 0) { throw 'Unable to verify the working tree release state.' }
+$releaseDirtyFiles = @($dirtyFiles | Where-Object { $_ -and $_ -ne 'supabase/.temp/cli-latest' -and ($_ -match '^(supabase/production/|supabase/migrations/|supabase/functions/|js/|src/|css/|scripts/|package\.json$|vercel\.json$|index\.html$)') })
+if ($releaseDirtyFiles.Count -gt 0) { throw ('ABORTED: tracked runtime/release modifications are present: ' + ($releaseDirtyFiles -join ', ')) }
 
 if (-not (Test-Path -LiteralPath $ProductionBuildRoot)) {
   throw "Missing explicit production browser artifact: $ProductionBuildRoot. Run the production build first."
