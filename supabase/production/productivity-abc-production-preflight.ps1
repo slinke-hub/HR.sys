@@ -3,10 +3,18 @@ $env:SUPABASE_TELEMETRY_DISABLED = '1'
 
 $ProductionRef = 'bbbetcdioiaozdjkvwxu'
 $StagingRef = 'jcfyyxsuspukcmybyhjj'
+$ExpectedReleaseCommit = 'd296359e714b64b0b6ef6487b09e00ac3645c2c0'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ProductionBuildRoot = Join-Path $Root 'www-production'
 $LinkedRefPath = Join-Path $Root 'supabase/.temp/project-ref'
 $ManifestPath = Join-Path $Root 'supabase/production/productivity-abc-production-manifest.json'
+
+$gitCommand = @(Get-Command git -CommandType Application -ErrorAction Stop)[0]
+$gitPath = if ($gitCommand.Path) { $gitCommand.Path } else { $gitCommand.Source }
+$currentCommit = (& $gitPath -C $Root rev-parse --verify HEAD 2>$null | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $currentCommit -cne $ExpectedReleaseCommit) {
+  throw "ABORTED: current HEAD '$currentCommit' does not match the frozen release commit '$ExpectedReleaseCommit'."
+}
 
 function Quote-ProcessArgument([string]$Value) {
   if ($null -eq $Value -or $Value.Length -eq 0) { return '""' }

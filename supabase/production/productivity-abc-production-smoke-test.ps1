@@ -2,8 +2,16 @@ $ErrorActionPreference = 'Stop'
 $env:SUPABASE_TELEMETRY_DISABLED = '1'
 $ProductionRef = 'bbbetcdioiaozdjkvwxu'
 $StagingRef = 'jcfyyxsuspukcmybyhjj'
+$ExpectedReleaseCommit = 'd296359e714b64b0b6ef6487b09e00ac3645c2c0'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $LinkedRefPath = Join-Path $Root 'supabase/.temp/project-ref'
+
+$gitCommand = @(Get-Command git -CommandType Application -ErrorAction Stop)[0]
+$gitPath = if ($gitCommand.Path) { $gitCommand.Path } else { $gitCommand.Source }
+$currentCommit = (& $gitPath -C $Root rev-parse --verify HEAD 2>$null | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $currentCommit -cne $ExpectedReleaseCommit) {
+  throw "ABORTED: current HEAD '$currentCommit' does not match the frozen release commit '$ExpectedReleaseCommit'."
+}
 
 function Quote-ProcessArgument([string]$Value) {
   if ($null -eq $Value -or $Value.Length -eq 0) { return '""' }
@@ -26,7 +34,7 @@ function Invoke-SupabaseCli([string[]]$Arguments) {
 
 if (-not (Test-Path -LiteralPath $LinkedRefPath)) { throw 'Missing local Supabase project reference.' }
 $linked = (Get-Content -Raw -LiteralPath $LinkedRefPath).Trim()
-if ($linked -cne $ProductionRef -or $linked -ceq $StagingRef) { throw "ABORTED: linked project is '$linked', not production." }
+if ($linked -cne $StagingRef -or $linked -ceq $ProductionRef) { throw "ABORTED: linked project is '$linked'. This read-only smoke test requires the repository to remain linked to staging." }
 
 $sqlPath = Join-Path $env:TEMP ('hrsys-production-readonly-smoke-' + [guid]::NewGuid().ToString('N') + '.sql')
 $sql = @"
@@ -42,7 +50,7 @@ SELECT
 "@
 try {
   Set-Content -LiteralPath $sqlPath -Value $sql -Encoding UTF8
-  [void](Invoke-SupabaseCli @('db', 'query', '--linked', '--file', $sqlPath))
+  [void](Invoke-SupabaseCli @('db', 'query', '--project-ref', $ProductionRef, '--file', $sqlPath))
 } finally {
   if (Test-Path -LiteralPath $sqlPath) { Remove-Item -LiteralPath $sqlPath -Force -ErrorAction SilentlyContinue }
 }

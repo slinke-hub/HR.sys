@@ -1,7 +1,7 @@
 {
   "targetProjectRef": "bbbetcdioiaozdjkvwxu",
   "stagingProjectRef": "jcfyyxsuspukcmybyhjj",
-  "status": "BLOCKED_PENDING_FREEZE_AND_RECOVERY",
+  "status": "READY_FOR_MANUAL_APPROVAL",
   "migrationFiles": [
     "supabase/migrations/20260928120000_notification_backend_services.sql",
     "supabase/migrations/20260930100000_auth_backend_services.sql",
@@ -21,7 +21,7 @@
     "Existing migrations through 20260927100000 are present in both remote histories and are not replayed.",
     "20260928120000 is the staging-verified notification backend artifact and is absent from both remote history rows; it is included as a reviewed production migration.",
     "Auth, Client, Deal, File, and Productivity Phase A/B/C artifacts are converted into reviewed production migrations in the ordered set above.",
-    "The manifest remains blocked until the release candidate is committed/frozen and backup/PITR is manually confirmed.",
+    "Release candidate base d296359e714b64b0b6ef6487b09e00ac3645c2c0; production-targeting hardening is prepared locally and must be committed before deployment. Daily backup/recovery manually confirmed on 2026-09-30. PITR is not enabled and Storage API objects are not included in database backups.",
     "Do not execute this manifest until the controlled Web/backend cutover plan is approved."
   ]
 }
