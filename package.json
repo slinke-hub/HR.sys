@@ -16,6 +16,7 @@
     "test:productivity-phase-b": "node tests/productivity-phase-b.test.cjs",
     "security:check": "npm run test:security && npm audit --audit-level=high",
     "mobile:web": "node scripts/build-mobile.mjs",
+    "mobile:web:preview": "node scripts/build-preview.mjs",
     "mobile:web:production": "node scripts/build-production.mjs",
     "mobile:sync": "npm run mobile:web && node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor sync android",
     "mobile:open": "node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor open android",

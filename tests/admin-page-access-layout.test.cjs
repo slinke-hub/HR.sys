@@ -8,7 +8,7 @@ const app = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
 const db = fs.readFileSync(path.join(root, 'js/db.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'css/components.css'), 'utf8');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-const vercel = fs.readFileSync(path.join(root, 'vercel.json'), 'utf8');
+const vercel = fs.readFileSync(path.join(root, 'vercel.mjs'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 const pageAccessSource = app.slice(
   app.indexOf('async function renderAdminPageAccess()'),

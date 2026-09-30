@@ -1,0 +1,79 @@
+const productionRef = 'bbbetcdioiaozdjkvwxu';
+const stagingRef = 'jcfyyxsuspukcmybyhjj';
+const isProduction = String(process.env.VERCEL_ENV || '').toLowerCase() === 'production';
+
+const productionOrigin = `https://${productionRef}.supabase.co`;
+const stagingOrigin = `https://${stagingRef}.supabase.co`;
+const connectSources = isProduction
+  ? `${productionOrigin} wss://${productionRef}.supabase.co https://api.rss2json.com`
+  : `${productionOrigin} wss://${productionRef}.supabase.co ${stagingOrigin} wss://${stagingRef}.supabase.co https://api.rss2json.com`;
+
+export const config = {
+  buildCommand: isProduction ? 'npm run mobile:web:production' : 'npm run mobile:web:preview',
+  outputDirectory: isProduction ? 'www-production' : 'www',
+  headers: [
+    {
+      source: '/(.*)',
+      headers: [
+        {
+          key: 'Content-Security-Policy',
+          value: `default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; frame-src 'self' blob: https://vercel.live; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://vercel.live; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' ${connectSources}; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests`,
+        },
+        {
+          key: 'Strict-Transport-Security',
+          value: 'max-age=63072000; includeSubDomains; preload',
+        },
+        {
+          key: 'X-Content-Type-Options',
+          value: 'nosniff',
+        },
+        {
+          key: 'X-Frame-Options',
+          value: 'DENY',
+        },
+        {
+          key: 'Referrer-Policy',
+          value: 'strict-origin-when-cross-origin',
+        },
+        {
+          key: 'Permissions-Policy',
+          value: 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=()',
+        },
+        {
+          key: 'Cross-Origin-Opener-Policy',
+          value: 'same-origin',
+        },
+        {
+          key: 'Cross-Origin-Resource-Policy',
+          value: 'same-origin',
+        },
+        {
+          key: 'Origin-Agent-Cluster',
+          value: '?1',
+        },
+        {
+          key: 'X-Permitted-Cross-Domain-Policies',
+          value: 'none',
+        },
+      ],
+    },
+    {
+      source: '/sw.js',
+      headers: [
+        {
+          key: 'Cache-Control',
+          value: 'no-cache, no-store, must-revalidate',
+        },
+      ],
+    },
+    {
+      source: '/index.html',
+      headers: [
+        {
+          key: 'Cache-Control',
+          value: 'no-cache, no-store, must-revalidate',
+        },
+      ],
+    },
+  ],
+};

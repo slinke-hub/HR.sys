@@ -39,16 +39,14 @@ assert.match(html, /Content-Security-Policy/);
 assert.match(html, /object-src 'none'/);
 assert.match(html, /base-uri 'self'/);
 
-const vercel = JSON.parse(read('vercel.json'));
-assert.strictEqual(vercel.outputDirectory, 'www');
-assert.match(vercel.buildCommand, /mobile:web/);
-const globalHeaders = vercel.headers.find(entry => entry.source === '/(.*)').headers;
-const headerMap = Object.fromEntries(globalHeaders.map(header => [header.key, header.value]));
-assert.strictEqual(headerMap['X-Content-Type-Options'], 'nosniff');
-assert.strictEqual(headerMap['X-Frame-Options'], 'DENY');
-assert.match(headerMap['Content-Security-Policy'], /frame-ancestors 'none'/);
-assert.match(headerMap['Content-Security-Policy'], /upgrade-insecure-requests/);
-assert.match(headerMap['Strict-Transport-Security'], /max-age=63072000/);
+const vercel = read('vercel.mjs');
+assert.match(vercel, /buildCommand: isProduction \? 'npm run mobile:web:production' : 'npm run mobile:web:preview'/);
+assert.match(vercel, /outputDirectory: isProduction \? 'www-production' : 'www'/);
+assert.match(vercel, /frame-ancestors 'none'/);
+assert.match(vercel, /upgrade-insecure-requests/);
+assert.match(vercel, /X-Content-Type-Options/);
+assert.match(vercel, /X-Frame-Options/);
+assert.match(vercel, /max-age=63072000/);
 
 const androidManifest = read('android/app/src/main/AndroidManifest.xml');
 assert.match(androidManifest, /android:allowBackup="false"/);
