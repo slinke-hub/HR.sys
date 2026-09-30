@@ -2,7 +2,7 @@
   "targetProjectRef": "bbbetcdioiaozdjkvwxu",
   "stagingProjectRef": "jcfyyxsuspukcmybyhjj",
   "releaseId": "productivity-abc-2026-09-30",
-  "releaseFingerprint": "19d1a33fbff7c34dacb7c9597f1b07f8bd17da18151dcb393c6e993e9696e506",
+  "releaseFingerprint": "8a19ff52239be3550299460536aac9dfa2394d5dfe1eaad21e2a90d4635274c0",
   "status": "READY_FOR_MANUAL_APPROVAL",
   "migrationFiles": [
     "supabase/migrations/20260928120000_notification_backend_services.sql",

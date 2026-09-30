@@ -5,6 +5,8 @@
 -- Apply only to the linked security-project after a project-ref check.
 -- No data is seeded by this file.
 
+BEGIN;
+
 CREATE OR REPLACE FUNCTION public.get_crm_deal_secure(p_deal_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -381,3 +383,5 @@ CREATE POLICY sensitive_task_attachments_read ON storage.objects
   USING (bucket_id = 'task-attachments' AND public.can_read_task_attachment_file(name, auth.uid()));
 
 NOTIFY pgrst, 'reload schema';
+
+COMMIT;

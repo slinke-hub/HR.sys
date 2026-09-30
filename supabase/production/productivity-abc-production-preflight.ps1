@@ -4,7 +4,7 @@ $env:SUPABASE_TELEMETRY_DISABLED = '1'
 $ProductionRef = 'bbbetcdioiaozdjkvwxu'
 $StagingRef = 'jcfyyxsuspukcmybyhjj'
 $ExpectedReleaseId = 'productivity-abc-2026-09-30'
-$ExpectedReleaseFingerprint = '19d1a33fbff7c34dacb7c9597f1b07f8bd17da18151dcb393c6e993e9696e506'
+$ExpectedReleaseFingerprint = '8a19ff52239be3550299460536aac9dfa2394d5dfe1eaad21e2a90d4635274c0'
 $ExpectedMigrationFiles = @(
   'supabase/migrations/20260928120000_notification_backend_services.sql',
   'supabase/migrations/20260930100000_auth_backend_services.sql',
@@ -70,7 +70,14 @@ $migrationFiles = @($manifest.migrationFiles)
 if (($migrationFiles -join '|') -cne ($ExpectedMigrationFiles -join '|')) { throw 'Manifest migration inventory does not exactly match the reviewed 8-migration release.' }
 $edgeFunctions = @($manifest.edgeFunctions)
 if (($edgeFunctions -join '|') -cne ($ExpectedEdgeFunctions -join '|')) { throw 'Manifest Edge Function inventory does not match the reviewed release.' }
-$canonical = [string]$manifest.releaseId + '|' + [string]$manifest.targetProjectRef + '|' + $manifestStagingRef + '|' + ($edgeFunctions -join ',') + '|' + ($migrationFiles -join '|')
+$migrationParts = @()
+foreach ($relative in $migrationFiles) {
+  if ([string]$relative -match '(?i)staging|initial_schema|clear_|reset_|purge_|baseline') { throw "Unsafe or staging-only migration in manifest: $relative" }
+  $full = Join-Path $Root $relative
+  if (-not (Test-Path -LiteralPath $full)) { throw "Manifest migration is missing: $relative" }
+  $migrationParts += ($relative + '=' + (Get-FileHash -Algorithm SHA256 -LiteralPath $full).Hash.ToLowerInvariant())
+}
+$canonical = [string]$manifest.releaseId + '|' + [string]$manifest.targetProjectRef + '|' + $manifestStagingRef + '|' + ($edgeFunctions -join ',') + '|' + ($migrationParts -join '|')
 $sha = [System.Security.Cryptography.SHA256]::Create()
 $actualFingerprint = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical)))).Replace('-', '').ToLowerInvariant()
 if ($actualFingerprint -cne [string]$manifest.releaseFingerprint -or $actualFingerprint -cne $ExpectedReleaseFingerprint) { throw 'Manifest release fingerprint does not match the reviewed release.' }
