@@ -1,71 +1,36 @@
 const connectSources = 'https://bbbetcdioiaozdjkvwxu.supabase.co wss://bbbetcdioiaozdjkvwxu.supabase.co https://jcfyyxsuspukcmybyhjj.supabase.co wss://jcfyyxsuspukcmybyhjj.supabase.co https://api.rss2json.com';
 
+const securityHeaders = {
+  'Content-Security-Policy': `default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; frame-src 'self' blob: https://vercel.live; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://vercel.live; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' ${connectSources}; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests`,
+  'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=()',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Origin-Agent-Cluster': '?1',
+  'X-Permitted-Cross-Domain-Policies': 'none',
+};
+
 export const config = {
   buildCommand: 'node scripts/build-vercel.mjs',
   outputDirectory: 'www-vercel',
-  headers: [
+  routes: [
     {
-      source: '/(.*)',
-      headers: [
-        {
-          key: 'Content-Security-Policy',
-          value: `default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; frame-src 'self' blob: https://vercel.live; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://vercel.live; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' ${connectSources}; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests`,
-        },
-        {
-          key: 'Strict-Transport-Security',
-          value: 'max-age=63072000; includeSubDomains; preload',
-        },
-        {
-          key: 'X-Content-Type-Options',
-          value: 'nosniff',
-        },
-        {
-          key: 'X-Frame-Options',
-          value: 'DENY',
-        },
-        {
-          key: 'Referrer-Policy',
-          value: 'strict-origin-when-cross-origin',
-        },
-        {
-          key: 'Permissions-Policy',
-          value: 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=()',
-        },
-        {
-          key: 'Cross-Origin-Opener-Policy',
-          value: 'same-origin',
-        },
-        {
-          key: 'Cross-Origin-Resource-Policy',
-          value: 'same-origin',
-        },
-        {
-          key: 'Origin-Agent-Cluster',
-          value: '?1',
-        },
-        {
-          key: 'X-Permitted-Cross-Domain-Policies',
-          value: 'none',
-        },
-      ],
+      src: '/(.*)',
+      headers: securityHeaders,
+      continue: true,
     },
     {
-      source: '/sw.js',
-      headers: [
-        {
-          key: 'Cache-Control',
-          value: 'no-cache, no-store, must-revalidate',
-        },
-      ],
+      src: '/sw.js',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+      continue: true,
     },
     {
-      source: '/index.html',
-      headers: [
-        {
-          key: 'Cache-Control',
-          value: 'no-cache, no-store, must-revalidate',
-        },
-      ],
+      src: '/index.html',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+      continue: true,
     },
   ],
 };
