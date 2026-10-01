@@ -40,8 +40,14 @@ assert.match(html, /object-src 'none'/);
 assert.match(html, /base-uri 'self'/);
 
 const vercel = read('vercel.mjs');
-assert.match(vercel, /buildCommand: isProduction \? 'npm run mobile:web:production' : 'npm run mobile:web:preview'/);
-assert.match(vercel, /outputDirectory: isProduction \? 'www-production' : 'www'/);
+const vercelBuild = read('scripts/build-vercel.mjs');
+assert.match(vercel, /buildCommand: 'node scripts\/build-vercel\.mjs'/);
+assert.match(vercel, /outputDirectory: 'www-vercel'/);
+assert.doesNotMatch(vercel, /isProduction/);
+assert.match(vercelBuild, /VERCEL_TARGET_ENV/);
+assert.match(vercelBuild, /VERCEL_ENV/);
+assert.match(vercelBuild, /refusing to choose a build target/);
+assert.match(vercelBuild, /www-vercel/);
 assert.match(vercel, /frame-ancestors 'none'/);
 assert.match(vercel, /upgrade-insecure-requests/);
 assert.match(vercel, /X-Content-Type-Options/);

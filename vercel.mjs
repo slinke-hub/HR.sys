@@ -1,16 +1,8 @@
-const productionRef = 'bbbetcdioiaozdjkvwxu';
-const stagingRef = 'jcfyyxsuspukcmybyhjj';
-const isProduction = String(process.env.VERCEL_ENV || '').toLowerCase() === 'production';
-
-const productionOrigin = `https://${productionRef}.supabase.co`;
-const stagingOrigin = `https://${stagingRef}.supabase.co`;
-const connectSources = isProduction
-  ? `${productionOrigin} wss://${productionRef}.supabase.co https://api.rss2json.com`
-  : `${productionOrigin} wss://${productionRef}.supabase.co ${stagingOrigin} wss://${stagingRef}.supabase.co https://api.rss2json.com`;
+const connectSources = 'https://bbbetcdioiaozdjkvwxu.supabase.co wss://bbbetcdioiaozdjkvwxu.supabase.co https://jcfyyxsuspukcmybyhjj.supabase.co wss://jcfyyxsuspukcmybyhjj.supabase.co https://api.rss2json.com';
 
 export const config = {
-  buildCommand: isProduction ? 'npm run mobile:web:production' : 'npm run mobile:web:preview',
-  outputDirectory: isProduction ? 'www-production' : 'www',
+  buildCommand: 'node scripts/build-vercel.mjs',
+  outputDirectory: 'www-vercel',
   headers: [
     {
       source: '/(.*)',
