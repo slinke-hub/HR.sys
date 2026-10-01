@@ -7824,7 +7824,6 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
 };
 
 async function renderTasks() {
-    console.log("renderTasks: Fetching data for V2...");
     const tasksPromise = db.fetchTasks();
     const taskUsersPromise = canAssignTasksCompanyWide() ? db.fetchAllProfiles(true) : db.fetchUsers();
     const [fetchedUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists, watcherDirectory, taskListDirectory, projects, employeeAccessGrants] = await Promise.all([
@@ -8156,7 +8155,6 @@ window.addEventListener('resize', closeTaskContextMenu);
 window.addEventListener('scroll', closeTaskContextMenu, true);
 
 async function renderTasksV2() {
-    console.log("renderTasksV2: Loading tasks natively...");
     await renderTasks();
 
     window.taskV2HealthFilter = window.taskV2HealthFilter || 'all';
@@ -8960,7 +8958,15 @@ let taskWorkspaceRefreshTimer = null;
 let taskWorkspaceRefreshInFlight = false;
 let taskWorkspaceRefreshPending = false;
 
+function isTaskWorkspaceActive() {
+    return currentView === 'tasks' || currentView === 'tasks_v2';
+}
+
 async function refreshTaskWorkspaceInBackground() {
+    // Realtime events can arrive while another view is open. Do not start a
+    // hidden full workspace fetch; renderView() schedules an authoritative
+    // refresh when the user returns to Task Manager.
+    if (!isTaskWorkspaceActive()) return;
     if (taskWorkspaceRefreshInFlight) {
         taskWorkspaceRefreshPending = true;
         return;
@@ -9019,6 +9025,7 @@ async function refreshTaskWorkspaceInBackground() {
 
 window.scheduleTaskWorkspaceRefresh = function (delay = 0) {
     clearTimeout(taskWorkspaceRefreshTimer);
+    if (!isTaskWorkspaceActive()) return;
     taskWorkspaceRefreshTimer = setTimeout(refreshTaskWorkspaceInBackground, delay);
 };
 
