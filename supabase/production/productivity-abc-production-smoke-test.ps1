@@ -22,7 +22,13 @@ function Quote-ProcessArgument([string]$Value) {
   if ($null -eq $Value -or $Value.Length -eq 0) { return '""' }
   return '"' + ($Value -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
 }
-function Invoke-SupabaseCli([string[]]$Arguments) {
+function Sanitize-Diagnostic([string]$Text) {
+  if ($null -eq $Text) { return '' }
+  $safe = $Text -replace '(?i)(access[_ -]?token|service[_ -]?role|password|secret|api[_ -]?key|authorization)\s*[:=]\s*[^\s,;]+', '$1=[REDACTED]'
+  if ($safe.Length -gt 2000) { return $safe.Substring(0, 2000) + '…' }
+  return $safe.Trim()
+}
+function Invoke-SupabaseCli([string[]]$Arguments, [string]$Operation) {
   $command = Get-Command supabase -CommandType Application -ErrorAction Stop
   $startInfo = New-Object System.Diagnostics.ProcessStartInfo
   $startInfo.FileName = if ($command.Path) { $command.Path } else { $command.Source }
@@ -33,8 +39,34 @@ function Invoke-SupabaseCli([string[]]$Arguments) {
   if (-not $process.Start()) { throw 'Unable to start the Supabase CLI.' }
   $outTask = $process.StandardOutput.ReadToEndAsync(); $errTask = $process.StandardError.ReadToEndAsync(); $process.WaitForExit()
   $stdout = $outTask.GetAwaiter().GetResult(); $stderr = $errTask.GetAwaiter().GetResult()
-  if ($process.ExitCode -ne 0) { throw "Supabase smoke-test query failed with exit code $($process.ExitCode)." }
-  [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout; StdErr = $stderr }
+  [pscustomobject]@{
+    Operation = $Operation
+    Command = 'supabase ' + ($Arguments -join ' ')
+    ExitCode = $process.ExitCode
+    StdOut = $stdout
+    StdErr = $stderr
+  }
+}
+function Invoke-Git([string[]]$Arguments) {
+  $command = @(Get-Command git.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1)[0]
+  $gitPath = [string]$command.Source
+  if ([string]::IsNullOrWhiteSpace($gitPath)) { $gitPath = [string]$command.Path }
+  if ([string]::IsNullOrWhiteSpace($gitPath) -or -not (Test-Path -LiteralPath $gitPath -PathType Leaf)) {
+    throw 'Git executable was discovered but its filesystem path is unavailable.'
+  }
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = $gitPath
+  $startInfo.UseShellExecute = $false; $startInfo.CreateNoWindow = $true
+  $startInfo.RedirectStandardOutput = $true; $startInfo.RedirectStandardError = $true
+  $startInfo.Arguments = (($Arguments | ForEach-Object { Quote-ProcessArgument ([string]$_) }) -join ' ')
+  $process = New-Object System.Diagnostics.Process; $process.StartInfo = $startInfo
+  if (-not $process.Start()) { throw 'Unable to start Git.' }
+  $outTask = $process.StandardOutput.ReadToEndAsync(); $errTask = $process.StandardError.ReadToEndAsync(); $process.WaitForExit()
+  [pscustomobject]@{
+    ExitCode = $process.ExitCode
+    StdOut = $outTask.GetAwaiter().GetResult()
+    StdErr = $errTask.GetAwaiter().GetResult()
+  }
 }
 
 if (-not (Test-Path -LiteralPath $LinkedRefPath)) { throw 'Missing local Supabase project reference.' }
@@ -63,10 +95,14 @@ $canonical = [string]$manifest.releaseId + '|' + [string]$manifest.targetProject
 $sha = [System.Security.Cryptography.SHA256]::Create()
 $actualFingerprint = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical)))).Replace('-', '').ToLowerInvariant()
 if ($actualFingerprint -cne [string]$manifest.releaseFingerprint -or $actualFingerprint -cne $ExpectedReleaseFingerprint) { throw 'Manifest release fingerprint does not match the reviewed release.' }
-$gitCommand = @(Get-Command git -CommandType Application -ErrorAction Stop)[0]
-$gitPath = if ($gitCommand.Path) { $gitCommand.Path } else { $gitCommand.Source }
-$dirtyFiles = @(& $gitPath -C $Root diff --name-only HEAD 2>$null)
-if ($LASTEXITCODE -ne 0) { throw 'Unable to verify the working tree release state.' }
+$gitResult = Invoke-Git -Arguments @('-C', $Root, 'diff', '--name-only', 'HEAD')
+if ($gitResult.ExitCode -ne 0) {
+  throw "Unable to verify the working tree release state. exit_code=$($gitResult.ExitCode); stderr=$(Sanitize-Diagnostic $gitResult.StdErr)"
+}
+if (-not [string]::IsNullOrWhiteSpace($gitResult.StdErr)) {
+  Write-Warning ("Git emitted a non-fatal diagnostic with exit_code=0: " + (Sanitize-Diagnostic $gitResult.StdErr))
+}
+$dirtyFiles = @($gitResult.StdOut -split "`r?`n" | Where-Object { $_ })
 $releaseDirtyFiles = @($dirtyFiles | Where-Object { $_ -and $_ -ne 'supabase/.temp/cli-latest' -and ($_ -match '^(supabase/production/|supabase/migrations/|supabase/functions/|js/|src/|css/|scripts/|package\.json$|vercel\.json$|index\.html$)') })
 if ($releaseDirtyFiles.Count -gt 0) { throw ('ABORTED: tracked runtime/release modifications are present: ' + ($releaseDirtyFiles -join ', ')) }
 
@@ -84,7 +120,15 @@ SELECT
 "@
 try {
   Set-Content -LiteralPath $sqlPath -Value $sql -Encoding UTF8
-  [void](Invoke-SupabaseCli @('db', 'query', '--project-ref', $ProductionRef, '--file', $sqlPath))
+  $operation = 'production read-only smoke query'
+  $arguments = @('db', 'query', '--linked', '--project-ref', $ProductionRef, '--file', $sqlPath)
+  $result = Invoke-SupabaseCli -Arguments $arguments -Operation $operation
+  $safeStdOut = Sanitize-Diagnostic $result.StdOut
+  $safeStdErr = Sanitize-Diagnostic $result.StdErr
+  Write-Output "SMOKE CHECK: operation=$($result.Operation); project_ref=$ProductionRef; exit_code=$($result.ExitCode); command=$($result.Command); stdout=$safeStdOut; stderr=$safeStdErr"
+  if ($result.ExitCode -ne 0) {
+    throw "Supabase smoke-test query failed. operation=$($result.Operation); project_ref=$ProductionRef; exit_code=$($result.ExitCode); stdout=$safeStdOut; stderr=$safeStdErr"
+  }
 } finally {
   if (Test-Path -LiteralPath $sqlPath) { Remove-Item -LiteralPath $sqlPath -Force -ErrorAction SilentlyContinue }
 }
