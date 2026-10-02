@@ -1,7 +1,8 @@
 import type {
   Client,
+  ClientDetailsDto,
   Deal,
-  Project,
+  AuthoritativeProjectDto,
   ServiceResult,
   Task,
 } from './domain-types';
@@ -12,7 +13,7 @@ import type {
   TaskHandoffResult,
   WaitingCategory,
 } from './productivity-contract';
-import type { ProjectCommandCenterCard } from './productivity-phase-c-contract';
+import type { ProjectCommandCenterCard, ProjectCompletionReadiness, ProjectOperationalSummary } from './productivity-phase-c-contract';
 
 /**
  * Minimal adapter expected by the shared domain services. The web adapter is
@@ -76,11 +77,11 @@ export interface HrDomainAdapter {
   startDealApproval?: (id: string, approvers: Record<string, string>) => Promise<ServiceResult>;
   decideDealApproval?: (id: string, decision: string, note?: string) => Promise<ServiceResult>;
   decideCrmDesignTaskApproval?: (id: string, decision: string, note?: string) => Promise<ServiceResult>;
-  createProjectFromWonDealV2?: (payload: Record<string, unknown>, dealId: string) => Promise<ServiceResult<Project>>;
-  fetchProjects?: () => Promise<Project[]>;
-  fetchProjectDetails?: (id: string) => Promise<ServiceResult<Record<string, unknown>>>;
-  createProject?: (payload: Record<string, unknown>) => Promise<ServiceResult<Project>>;
-  updateProject?: (id: string, payload: Record<string, unknown>) => Promise<ServiceResult<Project>>;
+  createProjectFromWonDealV2?: (payload: Record<string, unknown>, dealId: string) => Promise<ServiceResult<unknown>>;
+  fetchProjects?: () => Promise<AuthoritativeProjectDto[]>;
+  fetchProjectDetails?: (id: string) => Promise<ServiceResult<{ project: AuthoritativeProjectDto; updates?: unknown[]; todos?: unknown[]; attachments?: unknown[] }>>;
+  createProject?: (payload: Record<string, unknown>) => Promise<ServiceResult<AuthoritativeProjectDto>>;
+  updateProject?: (id: string, payload: Record<string, unknown>) => Promise<ServiceResult<AuthoritativeProjectDto>>;
   changeProjectStatus?: (id: string, status: string) => Promise<ServiceResult>;
   assignProjectTeam?: (id: string, managerId: string | null, assigneeIds: string[]) => Promise<ServiceResult>;
   deleteProject?: (id: string) => Promise<ServiceResult>;
@@ -95,9 +96,10 @@ export interface HrDomainAdapter {
   fetchProjectAttentionNeeded?: (limit?: number) => Promise<ServiceResult<ProjectCommandCenterCard[]>>;
   fetchProjectUpcomingEvents?: (days?: number, limit?: number) => Promise<ServiceResult<ProjectCommandCenterCard[]>>;
   fetchProjectHealth?: (id: string) => Promise<ServiceResult<ProjectCommandCenterCard>>;
-  fetchProjectOperationalSummary?: (id: string) => Promise<ServiceResult<Record<string, unknown>>>;
+  fetchProjectOperationalSummary?: (id: string) => Promise<ServiceResult<ProjectOperationalSummary>>;
+  fetchProjectCompletionReadiness?: (id: string) => Promise<ServiceResult<ProjectCompletionReadiness>>;
   fetchClients?: (search?: string) => Promise<Client[]>;
-  fetchClientDetails?: (id: string) => Promise<Record<string, unknown> | null>;
+  fetchClientDetails?: (id: string) => Promise<ClientDetailsDto | null>;
   createClient?: (payload: Record<string, unknown>) => Promise<ServiceResult<Client>>;
   updateClient?: (id: string, payload: Record<string, unknown>) => Promise<ServiceResult<Client>>;
   deleteClient?: (id: string) => Promise<ServiceResult>;
@@ -195,6 +197,7 @@ export const createHrDomainServices = (adapter: HrDomainAdapter) => ({
     createFromWonDeal: (dealId: string, payload: Record<string, unknown>) => requireAdapter(adapter, 'createProjectFromWonDealV2')(payload || {}, requireId(dealId, 'Deal')),
     update: (id: string, payload: Record<string, unknown>) => requireAdapter(adapter, 'updateProject')(requireId(id, 'Project'), payload || {}),
     changeStatus: (id: string, status: string) => requireAdapter(adapter, 'changeProjectStatus')(requireId(id, 'Project'), String(status || '').trim()),
+    completionReadiness: (id: string) => requireAdapter(adapter, 'fetchProjectCompletionReadiness')(requireId(id, 'Project')),
     assignTeam: (id: string, managerId: string | null, assigneeIds: string[]) => requireAdapter(adapter, 'assignProjectTeam')(requireId(id, 'Project'), managerId || null, Array.isArray(assigneeIds) ? assigneeIds : []),
     delete: (id: string) => requireAdapter(adapter, 'deleteProject')(requireId(id, 'Project')),
     todos: (id: string) => requireAdapter(adapter, 'fetchProjectTodos')(requireId(id, 'Project')),

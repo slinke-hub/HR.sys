@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createBrotliCompress, createGzip } from 'node:zlib';
 import { extname, resolve, sep } from 'node:path';
+import { renderRuntimeDbBundle } from './runtime-db-bundle.mjs';
 
 const host = '127.0.0.1';
 const port = Number(process.env.HR_SYS_PORT || 4173);
@@ -30,18 +31,31 @@ function isStagingAnonKey(value) {
   } catch (_) { return false; }
 }
 
-async function getRuntimeConfigScript() {
-  const mode = String(process.env.HR_SYS_RUNTIME || 'production').trim().toLowerCase();
+async function getRuntimeSettings() {
+  const mode = String(process.env.HR_SYS_RUNTIME || '').trim();
+  if (mode === 'production') {
+    return { mode, valid: true, projectRef: productionRef, supabaseUrl: `https://${productionRef}.supabase.co` };
+  }
   if (mode !== 'staging') {
-    return `window.HR_RUNTIME_CONFIG=${JSON.stringify({ mode: 'production', valid: true, projectRef: productionRef })};`;
+    return { mode: mode || null, valid: false, error: 'Explicit local runtime environment is required.' };
   }
   const localEnv = await readLocalEnvFile();
   const anonKey = String(process.env.HR_SYS_STAGING_ANON_KEY || process.env.MUQAM_SUPABASE_ANON_KEY || localEnv.MUQAM_SUPABASE_ANON_KEY || '').trim();
   const valid = isStagingAnonKey(anonKey);
-  const config = valid
+  return valid
     ? { mode: 'staging', valid: true, projectRef: stagingRef, supabaseUrl: `https://${stagingRef}.supabase.co`, anonKey }
     : { mode: 'staging', valid: false, projectRef: stagingRef, error: 'Missing or invalid staging public anon key. Add MUQAM_SUPABASE_ANON_KEY to supabase/.env.staging.local.' };
-  return `window.HR_RUNTIME_CONFIG=${JSON.stringify(config)};`;
+}
+
+async function getRuntimeConfigScript() {
+  return `window.HR_RUNTIME_CONFIG=${JSON.stringify(await getRuntimeSettings())};`;
+}
+
+async function getBoundDatabaseScript() {
+  const mode = String(process.env.HR_SYS_RUNTIME || '').trim();
+  const targetMode = mode === 'production' || mode === 'staging' ? mode : 'unconfigured';
+  const sourceDb = await readFile(resolve(webRoot, 'js', 'db.js'), 'utf8');
+  return renderRuntimeDbBundle(sourceDb, targetMode);
 }
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -108,6 +122,19 @@ const server = createServer(async (request, response) => {
     response.setHeader('Content-Type', 'text/javascript; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store');
     response.end(await getRuntimeConfigScript());
+    return;
+  }
+  if ((request.url || '').split('?')[0] === '/js/db.js') {
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      response.setHeader('Allow', 'GET, HEAD');
+      sendText(response, 405, 'Method not allowed');
+      return;
+    }
+    response.statusCode = 200;
+    response.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+    response.setHeader('Cache-Control', 'no-store');
+    if (request.method === 'HEAD') response.end();
+    else response.end(await getBoundDatabaseScript());
     return;
   }
   if ((request.url || '').length > 4096) {

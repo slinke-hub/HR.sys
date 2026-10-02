@@ -11,6 +11,7 @@
     "crm:build": "npm run crm:css && npm run crm:js",
     "test:security": "node tests/security-hardening.test.js",
     "test:auth": "node tests/auth-backend-services.test.cjs",
+    "test:project-operations-phase-1": "node tests/project-operations-phase-1.test.cjs && node tests/project-operational-dto.test.cjs && node tests/project-operations-phase-1-migration-replay.test.cjs && node tests/runtime-config-isolation.test.cjs",
     "test:backend-readiness": "node tests/backend-shared-logic-readiness.test.cjs && node tests/backend-rls-threat-matrix.test.cjs && node tests/backend-task-readiness.test.cjs && node tests/backend-project-readiness.test.cjs",
     "test:productivity-phase-a": "node tests/productivity-phase-a.test.cjs",
     "test:productivity-phase-b": "node tests/productivity-phase-b.test.cjs",

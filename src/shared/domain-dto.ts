@@ -1,10 +1,12 @@
 import type {
   ActivityRecord,
+  AuthoritativeProjectDto,
   Client,
   Deal,
   FileAttachment,
   Notification,
   Project,
+  ProjectOperationalState,
   Task,
   TaskActivity,
   TaskComment,
@@ -65,8 +67,27 @@ export const toDealDto = (deal: Partial<Deal> | null | undefined, canViewFinanci
   return dto;
 };
 
-export const toProjectDto = (project: Partial<Project> | null | undefined, canViewFinancials = false) => {
+export const toProjectDto = (
+  project: Partial<Project> | null | undefined,
+  canViewFinancials = false,
+  operationalState: ProjectOperationalState,
+): AuthoritativeProjectDto | null => {
   if (!project) return null;
+  if (!operationalState || typeof operationalState !== 'object') {
+    throw new Error('Authoritative Project operational state is unavailable');
+  }
+  const progress = operationalState.progress_percent;
+  const health = operationalState.health_status;
+  const reasons = operationalState.reason_codes;
+  if (typeof progress !== 'number' || !Number.isFinite(progress) || progress < 0 || progress > 100) {
+    throw new Error('Authoritative Project progress is unavailable');
+  }
+  if (!['ON_TRACK', 'NEEDS_ATTENTION', 'AT_RISK', 'CRITICAL', 'UNKNOWN'].includes(health)) {
+    throw new Error('Authoritative Project health is unavailable');
+  }
+  if (!Array.isArray(reasons) || reasons.some(reason => !reason || typeof reason.code !== 'string' || !reason.code.trim() || typeof reason.count !== 'number' || !Number.isFinite(reason.count) || reason.count < 0)) {
+    throw new Error('Authoritative Project health reasons are unavailable');
+  }
   const dto: Record<string, unknown> = {
     id: project.id,
     project_name: project.project_name,
@@ -77,8 +98,11 @@ export const toProjectDto = (project: Partial<Project> | null | undefined, canVi
     assigned_people: Array.isArray(project.assigned_people) ? project.assigned_people : [],
     lifecycle_status: project.lifecycle_status ?? null,
     priority: project.priority ?? null,
-    health_status: project.health_status ?? null,
-    progress_percent: project.progress_percent ?? null,
+    // Never treat legacy database columns as operational state. Callers must
+    // pass the server-calculated snapshot explicitly.
+    health_status: health,
+    progress_percent: progress,
+    reason_codes: reasons.map(reason => ({ code: reason.code, count: reason.count })),
     client_name: project.client_name ?? null,
     created_by: project.created_by ?? null,
     project_manager_id: project.project_manager_id ?? null,
@@ -93,7 +117,7 @@ export const toProjectDto = (project: Partial<Project> | null | undefined, canVi
       if (key in source) dto[key] = source[key] ?? null;
     }
   }
-  return dto;
+  return dto as AuthoritativeProjectDto;
 };
 
 export const toClientDto = (client: Partial<Client> | null | undefined) => client ? ({

@@ -1,8 +1,9 @@
 import { cp, mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { resolveBuildOutput } from './runtime-db-bundle.mjs';
 
 const projectRoot = resolve(import.meta.dirname, '..');
-const outputRoot = resolve(projectRoot, 'www');
+const outputRoot = resolveBuildOutput(projectRoot, 'www');
 const assetDirectories = ['css', 'images', 'js', 'templates'];
 const rootFiles = ['index.html', 'manifest.json', 'offline.html', 'sw.js'];
 
@@ -21,4 +22,4 @@ for (const file of rootFiles) {
   await cp(resolve(projectRoot, file), resolve(outputRoot, file));
 }
 
-console.log('Mobile web bundle created in www/.');
+console.log(`Mobile web bundle created in ${outputRoot}.`);

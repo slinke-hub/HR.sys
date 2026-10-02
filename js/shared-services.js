@@ -86,6 +86,7 @@
             create: payload => db.createProject(payload || {}),
             update: (id, payload) => db.updateProject(requireId(id, 'Project'), payload || {}),
             changeStatus: (id, status) => db.changeProjectStatus(requireId(id, 'Project'), status),
+            completionReadiness: id => db.fetchProjectCompletionReadiness(requireId(id, 'Project')),
             assignTeam: (id, managerId, assigneeIds) => db.assignProjectTeam(requireId(id, 'Project'), managerId, assigneeIds),
             delete: id => db.deleteProject(requireId(id, 'Project')),
             todos: id => db.fetchProjectTodos(requireId(id, 'Project')),

@@ -25,6 +25,16 @@ export type DealStage =
 
 export type ProjectStatus = 'PLANNING' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type ProjectOperationalHealth = 'ON_TRACK' | 'NEEDS_ATTENTION' | 'AT_RISK' | 'CRITICAL' | 'UNKNOWN';
+
+export interface ProjectOperationalState {
+  /** Server-calculated from the authoritative project Task set. */
+  progress_percent: number;
+  /** Server-calculated health; UNKNOWN is explicit unavailable state only. */
+  health_status: ProjectOperationalHealth;
+  /** Structured server-calculated reasons; [] is a valid no-reasons result. */
+  reason_codes: Array<{ code: string; count: number }>;
+}
 
 export interface UserProfile {
   id: string;
@@ -71,8 +81,11 @@ export interface Project {
   assigned_people?: string[];
   lifecycle_status?: ProjectStatus | string;
   priority?: Priority | string;
+  /** Server-calculated live Project health; callers cannot set this field. */
   health_status?: string | null;
+  /** Server-calculated from the shared, project-scoped set of non-archived Tasks. */
   progress_percent?: number | null;
+  reason_codes?: Array<{ code: string; count: number }>;
   client_name?: string | null;
   milestones?: Array<Record<string, unknown>>;
   risks?: Array<Record<string, unknown>>;
@@ -84,6 +97,16 @@ export interface Project {
   project_manager_id?: string | null;
   start_date?: string | null;
   end_date?: string | null;
+}
+
+/** Project shape returned by authoritative list/detail/create/update RPCs. */
+export type AuthoritativeProjectDto = Omit<Project, 'health_status' | 'progress_percent' | 'reason_codes'> & ProjectOperationalState;
+
+/** Secure Client detail embeds only Project summaries carrying server state. */
+export interface ClientDetailsDto {
+  client: Record<string, unknown>;
+  deals: unknown[];
+  projects: AuthoritativeProjectDto[];
 }
 
 export interface Client {

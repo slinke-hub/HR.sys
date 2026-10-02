@@ -17387,9 +17387,15 @@ function projectText(key) {
         todoList: ['Project To Do list', 'قائمة مهام المشروع'], todoTitle: ['To Do item', 'مهمة المشروع'], todoTitleHint: ['What needs to be done?', 'ما المطلوب إنجازه؟'], assignee: ['Assign to', 'إسناد إلى'], assigneeHelp: ['Select one or more employees', 'اختر موظفاً واحداً أو أكثر'], dueDateTime: ['Due date and time', 'تاريخ ووقت الاستحقاق'], addTodo: ['Add To Do', 'إضافة مهمة'], noTodos: ['No project To Do items yet.', 'لا توجد مهام للمشروع بعد.'], complete: ['Complete', 'إكمال'], reopen: ['Reopen', 'إعادة فتح'], remove: ['Delete', 'حذف'], todoReadOnly: ['The Operations Manager assigns project To Do items here.', 'يقوم مدير العمليات بإسناد مهام المشروع هنا.'], todoRequired: ['Enter a title, select at least one eligible employee, and choose a due date and time.', 'أدخل عنواناً واختر موظفاً مؤهلاً واحداً على الأقل وحدد تاريخ ووقت الاستحقاق.'], todoAdded: ['Project To Do item assigned.', 'تم إسناد مهمة المشروع.'], todoAddFailed: ['Unable to add the project To Do item.', 'تعذر إضافة مهمة المشروع.'], todoUpdated: ['Project To Do item updated.', 'تم تحديث مهمة المشروع.'], todoUpdateFailed: ['Unable to update the project To Do item.', 'تعذر تحديث مهمة المشروع.'], todoDeleteTitle: ['Delete project To Do item', 'حذف مهمة المشروع'], todoDeleteConfirm: ['Delete this project To Do item?', 'هل تريد حذف مهمة المشروع هذه؟'], todoDeleted: ['Project To Do item deleted.', 'تم حذف مهمة المشروع.'], todoDeleteFailed: ['Unable to delete the project To Do item.', 'تعذر حذف مهمة المشروع.'],
         assignedTodoPage: ['Assigned project To-Do', 'مهمة مشروع مسندة'], assignedTodoPrivacy: ['Only your assigned project To-Do items are shown. Project details are restricted to managers and executives.', 'تظهر فقط مهام المشروع المسندة إليك. تفاصيل المشروع متاحة للمديرين والإدارة التنفيذية فقط.'], todoUnavailable: ['This project To-Do is no longer available or is not assigned to you.', 'مهمة المشروع هذه لم تعد متاحة أو غير مسندة إليك.'],
         low: ['Low', 'منخفضة'], medium: ['Medium', 'متوسطة'], high: ['High', 'عالية'], critical: ['Critical', 'حرجة'],
-        commandCenter: ['Project Command Center', 'مركز قيادة المشاريع'], commandCenterSubtitle: ['See what needs attention, what is coming next, and who owns the next action.', 'اعرف ما يحتاج إلى اهتمام وما هو قادم ومن المسؤول عن الإجراء التالي.'], attentionNeeded: ['Attention needed', 'يحتاج إلى اهتمام'], upcomingEvents: ['Upcoming events', 'الفعاليات القادمة'], allOnTrack: ['All other projects', 'بقية المشاريع على المسار'], noAttention: ['No projects need attention right now.', 'لا توجد مشاريع تحتاج إلى اهتمام حالياً.'], noUpcoming: ['No upcoming events in this window.', 'لا توجد فعاليات قادمة خلال هذه الفترة.'], viewCommandCenter: ['Command center', 'مركز القيادة'], openProject: ['Open project', 'فتح المشروع'], eventToday: ['Event today', 'الفعالية اليوم'], eventTomorrow: ['Event tomorrow', 'الفعالية غداً'], eventInDays: ['Event in {days} days', 'الفعالية خلال {days} أيام'], pastEvent: ['Event date passed', 'تاريخ الفعالية مضى'], noEvent: ['No event date', 'لا يوجد تاريخ فعالية'], tasksLabel: ['Tasks', 'المهام'], completedTasks: ['Completed', 'مكتملة'], actionableTasks: ['Actionable', 'قابلة للتنفيذ'], dueTodayTasks: ['Due today', 'مستحقة اليوم'], openTodos: ['Open To-Dos', 'مهام المشروع المفتوحة'], blockedTasks: ['Blocked', 'محظورة'], waitingTasks: ['Waiting', 'قيد الانتظار'], dependencyRisk: ['Dependency risk', 'خطر تبعية'], overdueTasks: ['Overdue', 'متأخرة'], overdueTodos: ['Overdue To-Dos', 'مهام مشروع متأخرة'], responsible: ['Responsible', 'المسؤول'], operationalSummary: ['Operational summary', 'الملخص التشغيلي'], commandCenterUnavailable: ['The Project Command Center is available to managers and administrators.', 'مركز قيادة المشاريع متاح للمديرين والمسؤولين فقط.']
+        completionNotReady: ['This project is not ready to complete:', 'هذا المشروع غير جاهز للإكمال:'], noTasksReason: ['projects must have at least one Task before completion', 'يجب أن يحتوي المشروع على مهمة واحدة على الأقل قبل إكماله'], incompleteTasks: ['incomplete tasks', 'مهام غير مكتملة'], blockedTasksReason: ['blocked tasks', 'مهام متعثرة'], waitingTasksReason: ['waiting tasks', 'مهام قيد الانتظار'], dependencyTasksReason: ['tasks blocked by dependencies', 'مهام معطلة بسبب التبعيات'], healthUnavailable: ['Health unavailable', 'حالة الصحة غير متاحة'], progressUnavailable: ['Progress unavailable', 'التقدم غير متاح'], healthReasonsUnavailable: ['Health reasons unavailable', 'أسباب الحالة غير متاحة'],
+        commandCenter: ['Project Command Center', 'مركز قيادة المشاريع'], commandCenterSubtitle: ['See what needs attention, what is coming next, and who owns the next action.', 'اعرف ما يحتاج إلى اهتمام وما هو قادم ومن المسؤول عن الإجراء التالي.'], attentionNeeded: ['Attention needed', 'يحتاج إلى اهتمام'], upcomingEvents: ['Upcoming events', 'الفعاليات القادمة'], allOnTrack: ['All other projects', 'بقية المشاريع على المسار'], noAttention: ['No projects need attention right now.', 'لا توجد مشاريع تحتاج إلى اهتمام حالياً.'], noUpcoming: ['No upcoming events in this window.', 'لا توجد فعاليات قادمة خلال هذه الفترة.'], viewCommandCenter: ['Command center', 'مركز القيادة'], openProject: ['Open project', 'فتح المشروع'], eventToday: ['Event today', 'الفعالية اليوم'], eventTomorrow: ['Event tomorrow', 'الفعالية غداً'], eventInDays: ['Event in {days} days', 'الفعالية خلال {days} أيام'], pastEvent: ['Event date passed', 'تاريخ الفعالية مضى'], noEvent: ['No event date', 'لا يوجد تاريخ فعالية'], tasksLabel: ['Tasks', 'المهام'], completedTasks: ['Completed', 'مكتملة'], actionableTasks: ['Actionable', 'قابلة للتنفيذ'], dueTodayTasks: ['Due today', 'مستحقة اليوم'], openTodos: ['Open To-Dos', 'مهام المشروع المفتوحة'], blockedTasks: ['Blocked', 'محظورة'], waitingTasks: ['Waiting', 'قيد الانتظار'], dependencyRisk: ['Dependency risk', 'خطر تبعية'], overdueTasks: ['Overdue', 'متأخرة'], overdueTodos: ['Overdue To-Dos', 'مهام مشروع متأخرة'], responsible: ['Responsible', 'المسؤول'], operationalSummary: ['Operational summary', 'الملخص التشغيلي'], commandCenterUnavailable: ['The Project Command Center is available to managers and administrators.', 'مركز قيادة المشاريع متاح للمديرين والمسؤولين فقط.'], projectDetailUnavailable: ['The latest Project details could not be loaded.', 'تعذر تحميل أحدث تفاصيل المشروع.']
     };
-    return (copy[key] || [key, key])[ar ? 1 : 0];
+    const fallbackCopy = {
+        progressUnavailable: ['Progress unavailable', 'التقدم غير متاح'],
+        healthReasonsUnavailable: ['Health reasons unavailable', 'أسباب الحالة غير متاحة'],
+        operationalSummaryUnavailable: ['The operational snapshot is unavailable.', 'الملخص التشغيلي غير متاح.']
+    };
+    return (copy[key] || fallbackCopy[key] || [key, key])[ar ? 1 : 0];
 }
 
 function normalizeProjectStatus(project) {
@@ -17404,20 +17410,51 @@ function projectStatusLabel(value) {
 }
 
 function projectHealthLabel(value) {
-    return ({ ON_TRACK: projectText('onTrack'), NEEDS_ATTENTION: projectText('needsAttention'), AT_RISK: projectText('atRisk'), CRITICAL: projectText('critical'), OFF_TRACK: projectText('offTrack') })[value] || value;
+    return ({ ON_TRACK: projectText('onTrack'), NEEDS_ATTENTION: projectText('needsAttention'), AT_RISK: projectText('atRisk'), CRITICAL: projectText('critical'), OFF_TRACK: projectText('offTrack'), UNKNOWN: projectText('healthUnavailable') })[value] || projectText('healthUnavailable');
 }
 
 function effectiveProjectHealth(project) {
-    const status = normalizeProjectStatus(project);
-    if (!['COMPLETED', 'CANCELLED'].includes(status) && project.end_date) {
-        const endOfTarget = new Date(`${project.end_date}T23:59:59`);
-        if (!Number.isNaN(endOfTarget.getTime()) && endOfTarget < new Date()) return 'OFF_TRACK';
-    }
-    const budget = Number(project.budget_amount ?? project.project_amount ?? 0);
-    const cost = Number(project.actual_cost ?? project.paid_amount ?? 0);
-    if (project.health_status === 'OFF_TRACK') return 'OFF_TRACK';
-    if (project.health_status === 'AT_RISK' || (budget > 0 && cost > budget)) return 'AT_RISK';
-    return 'ON_TRACK';
+    const value = project?.health ?? project?.health_status;
+    return ['ON_TRACK', 'NEEDS_ATTENTION', 'AT_RISK', 'CRITICAL', 'OFF_TRACK'].includes(String(value || '').toUpperCase())
+        ? String(value).toUpperCase()
+        : 'UNKNOWN';
+}
+
+function projectProgressValue(value) {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
+        ? value
+        : null;
+}
+
+function projectProgressLabel(value) {
+    const progress = projectProgressValue(value);
+    return progress === null ? projectText('progressUnavailable') : `${progress}%`;
+}
+
+function hasProjectOperationalSnapshot(value) {
+    if (!value || typeof value !== 'object' || projectProgressValue(value.progress_percent) === null) return false;
+    const health = String(value.health_status || value.health || '').toUpperCase();
+    if (!['ON_TRACK', 'NEEDS_ATTENTION', 'AT_RISK', 'CRITICAL', 'UNKNOWN'].includes(health)) return false;
+    return Array.isArray(value.reason_codes) && value.reason_codes.every(reason =>
+        reason && typeof reason.code === 'string' && reason.code.trim() &&
+        typeof reason.count === 'number' && Number.isFinite(reason.count) && reason.count >= 0
+    );
+}
+
+function projectOperationalCount(value) {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0
+        ? String(value)
+        : '—';
+}
+
+function hasProjectOperationalSummary(value) {
+    return hasProjectOperationalSnapshot(value) && value.counts && typeof value.counts === 'object' &&
+        ['NO_EVENT', 'PAST', 'TODAY', 'TOMORROW', 'UPCOMING'].includes(value.event_status) &&
+        (value.event_date === null || typeof value.event_date === 'string') &&
+        (value.event_countdown_days === null || (typeof value.event_countdown_days === 'number' && Number.isFinite(value.event_countdown_days))) &&
+        Array.isArray(value.tasks) && Array.isArray(value.todos) && value.financials_included === false &&
+        ['tasks', 'completed_tasks', 'actionable_tasks', 'overdue_tasks', 'due_today_tasks', 'waiting_tasks', 'blocked_tasks', 'dependency_blocked_tasks', 'open_todos', 'overdue_todos']
+            .every(key => typeof value.counts[key] === 'number' && Number.isFinite(value.counts[key]) && value.counts[key] >= 0);
 }
 
 function projectPriorityLabel(value) {
@@ -17454,30 +17491,32 @@ function projectCommandReasonLabel(code) {
 }
 
 function projectCommandEventLabel(item) {
+    if (item.event_status === 'NO_EVENT') return projectText('noEvent');
     if (item.event_status === 'TODAY') return projectText('eventToday');
     if (item.event_status === 'TOMORROW') return projectText('eventTomorrow');
     if (item.event_status === 'PAST') return projectText('pastEvent');
     if (item.event_status === 'UPCOMING' && Number.isFinite(Number(item.event_countdown_days))) return projectText('eventInDays').replace('{days}', String(item.event_countdown_days));
-    return projectText('noEvent');
+    return projectText('operationalSummaryUnavailable');
 }
 
 function renderProjectCommandCard(item) {
-    const health = String(item.health || 'ON_TRACK').toUpperCase().toLowerCase().replace('_', '-');
+    const healthState = effectiveProjectHealth(item);
+    const health = healthState.toLowerCase().replace('_', '-');
     const counts = item.counts || {};
-    const reasons = (item.reason_codes || []).slice(0, 4).map(reason => `<li><span>${escapeHTML(projectCommandReasonLabel(reason.code))}</span><strong>${Number(reason.count || 0)}</strong></li>`).join('');
+    const reasons = (Array.isArray(item.reason_codes) ? item.reason_codes : []).slice(0, 4).map(reason => `<li><span>${escapeHTML(projectCommandReasonLabel(reason.code))}</span><strong>${projectOperationalCount(reason.count)}</strong></li>`).join('');
     const owner = item.responsible_employee?.full_name || item.responsible_employee?.display_name || '—';
     const safeId = escapeHTML(String(item.project_id || ''));
     const countItems = [
         ['tasks', 'TASKS', ''], ['completed_tasks', 'COMPLETED_TASKS', ''], ['actionable_tasks', 'ACTIONABLE_TASKS', ''], ['due_today_tasks', 'DUE_TODAY_TASKS', ''],
         ['waiting_tasks', 'WAITING_TASKS', 'is-warning'], ['blocked_tasks', 'BLOCKED_TASKS', 'is-danger'], ['dependency_blocked_tasks', 'DEPENDENCY_RISK', 'is-danger'], ['overdue_tasks', 'OVERDUE_TASKS', 'is-danger'],
         ['open_todos', 'OPEN_TODOS', ''], ['overdue_todos', 'OVERDUE_TODOS', 'is-danger']
-    ].map(([key, label, tone]) => `<span class="${tone}"><strong>${Number(counts[key] || 0)}</strong>${escapeHTML(projectCommandReasonLabel(label))}</span>`).join('');
+    ].map(([key, label, tone]) => `<span class="${tone}"><strong>${projectOperationalCount(counts[key])}</strong>${escapeHTML(projectCommandReasonLabel(label))}</span>`).join('');
     return `<article class="project-command-card project-command-health-${health}" data-project-id="${safeId}">
-        <div class="project-command-card-head"><div><span class="project-health project-health-${health}"><i></i>${escapeHTML(projectHealthLabel(String(item.health || 'ON_TRACK')))}</span><h3>${escapeHTML(item.project_name || 'Project')}</h3><p>${escapeHTML(item.client_name || item.project_type || '')}</p></div><button type="button" class="btn btn-secondary btn-sm" onclick="openProjectCommandProject('${safeId}')">${projectText('openProject')} <i data-lucide="arrow-up-right"></i></button></div>
+        <div class="project-command-card-head"><div><span class="project-health project-health-${health}"><i></i>${escapeHTML(projectHealthLabel(healthState))}</span><h3>${escapeHTML(item.project_name || 'Project')}</h3><p>${escapeHTML(item.client_name || item.project_type || '')}</p></div><button type="button" class="btn btn-secondary btn-sm" onclick="openProjectCommandProject('${safeId}')">${projectText('openProject')} <i data-lucide="arrow-up-right"></i></button></div>
         <div class="project-command-event"><i data-lucide="calendar-days"></i><span>${escapeHTML(projectCommandEventLabel(item))}</span>${item.event_date ? `<time>${escapeHTML(projectDate(item.event_date))}</time>` : ''}</div>
         <div class="project-command-counts">${countItems}</div>
-        ${reasons ? `<ul class="project-command-reasons">${reasons}</ul>` : `<p class="project-command-on-track"><i data-lucide="circle-check"></i>${projectText('allOnTrack')}</p>`}
-        <div class="project-command-owner"><span>${projectText('responsible')}</span><strong>${escapeHTML(owner)}</strong><span>${Number(item.progress_percent || 0)}%</span></div>
+        ${reasons ? `<ul class="project-command-reasons">${reasons}</ul>` : healthState === 'ON_TRACK' ? `<p class="project-command-on-track"><i data-lucide="circle-check"></i>${projectText('allOnTrack')}</p>` : `<p class="project-command-on-track">${projectText(healthState === 'UNKNOWN' ? 'healthUnavailable' : 'healthReasonsUnavailable')}</p>`}
+        <div class="project-command-owner"><span>${projectText('responsible')}</span><strong>${escapeHTML(owner)}</strong><span>${escapeHTML(projectProgressLabel(item.progress_percent))}</span></div>
     </article>`;
 }
 
@@ -17504,7 +17543,7 @@ async function renderProjectCommandCenter() {
 
 window.openProjectCommandProject = async function (id) {
     const item = window.projectCommandCenterCache?.[id];
-    if (item) window.projectCache = { ...(window.projectCache || {}), [id]: { id, project_name: item.project_name, project_type: item.project_type, project_status: item.project_status, lifecycle_status: item.lifecycle_status, priority: item.priority, event_date: item.event_date, start_date: item.start_date, end_date: item.end_date, client_name: item.client_name, project_manager_id: item.responsible_employee?.id || null, assigned_people: item.responsible_employee?.id ? [item.responsible_employee.id] : [], progress_percent: item.progress_percent } };
+    if (item) window.projectCache = { ...(window.projectCache || {}), [id]: { id, project_name: item.project_name, project_type: item.project_type, project_status: item.project_status, lifecycle_status: item.lifecycle_status, health_status: item.health, reason_codes: item.reason_codes, priority: item.priority, event_date: item.event_date, start_date: item.start_date, end_date: item.end_date, client_name: item.client_name, project_manager_id: item.responsible_employee?.id || null, assigned_people: item.responsible_employee?.id ? [item.responsible_employee.id] : [], progress_percent: item.progress_percent } };
     await window.openProjectDetail(id);
 };
 
@@ -17586,8 +17625,8 @@ function projectFormPayload(prefix) {
         project_name: get('Name').value.trim(), project_type: get('Type').value,
         project_category: get('Category').value || null, description: get('Desc').value.trim(),
         assigned_people: team, project_manager_id: ownerId,
-        lifecycle_status: get('Status').value, health_status: get('Health').value,
-        priority: get('Priority').value, progress_percent: Number(get('Progress').value || 0),
+        lifecycle_status: get('Status').value,
+        priority: get('Priority').value,
         start_date: get('StartDate').value || null, end_date: get('EndDate').value || null, event_date: get('EventDate').value || null,
         client_name: get('Client').value.trim() || null,
         project_tags: get('Tags').value.split(',').map(item => item.trim()).filter(Boolean)
@@ -17596,7 +17635,6 @@ function projectFormPayload(prefix) {
         payload.budget_amount = Number(get('Budget').value || 0);
         payload.actual_cost = Number(get('ActualCost').value || 0);
     }
-    if (payload.lifecycle_status === 'COMPLETED') payload.progress_percent = 100;
     return payload;
 }
 
@@ -17611,7 +17649,7 @@ function validateProjectPayload(payload) {
 function renderProjectCard(project, canDeleteProject = false) {
     const status = normalizeProjectStatus(project);
     const health = effectiveProjectHealth(project);
-    const progress = Math.max(0, Math.min(100, Number(project.progress_percent || (status === 'COMPLETED' ? 100 : 0))));
+    const progress = projectProgressValue(project.progress_percent);
     const ownerId = project.project_manager_id || (project.assigned_people || [])[0];
     const team = (project.assigned_people || []).slice(0, 4);
     const tags = (project.project_tags || []).slice(0, 3).map(tag => `<span>${escapeHTML(tag)}</span>`).join('');
@@ -17625,7 +17663,7 @@ function renderProjectCard(project, canDeleteProject = false) {
     return `<article class="project-portfolio-card" data-project-id="${project.id}" data-status="${status}" data-health="${health}" data-owner="${ownerId || ''}" onclick="openProjectDetail('${project.id}')">
         <div class="project-card-top"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><h3>${escapeHTML(project.project_name || '')}</h3><p>${escapeHTML(client || project.project_type || '')}</p></div><div class="project-card-actions" style="display:flex;flex-direction:column;gap:0.5rem;align-items:center;">${editAction}${deleteAction}</div></div>
         <div class="project-card-meta"><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span><span class="project-priority priority-${String(project.priority || 'MEDIUM').toLowerCase()}">${projectPriorityLabel(project.priority)}</span></div>
-        <div class="project-progress-head"><span>${projectText('progress')}</span><strong>${progress}%</strong></div><div class="project-progress-track"><i style="width:${progress}%"></i></div>
+        <div class="project-progress-head"><span>${projectText('progress')}</span><strong>${escapeHTML(projectProgressLabel(progress))}</strong></div><div class="project-progress-track${progress === null ? ' is-unavailable' : ''}">${progress === null ? '' : `<i style="width:${progress}%"></i>`}</div>
         <div class="project-card-facts"><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div></div>
         <div class="project-card-footer"><div class="project-team-stack" aria-label="${projectText('team')}">${team.map(id => `<span title="${escapeHTML(projectProfileName(id))}">${escapeHTML(projectProfileName(id).split(/\s+/).slice(0, 2).map(word => word[0]).join(''))}</span>`).join('')}${(project.assigned_people || []).length > 4 ? `<span>+${project.assigned_people.length - 4}</span>` : ''}</div><div class="project-card-tags">${tags}</div><span class="project-open-link">${projectText('open')} <i data-lucide="arrow-up-right"></i></span></div>
     </article>`;
@@ -17695,7 +17733,6 @@ window.applyProjectPortfolioFilters = function () {
 };
 window.setProjectPortfolioStatus = value => { const field = document.getElementById('projectStatusFilter'); if (field) field.value = value; window.applyProjectPortfolioFilters(); };
 window.setProjectPortfolioHealth = value => { const field = document.getElementById('projectHealthFilter'); if (field) field.value = value; window.applyProjectPortfolioFilters(); };
-window.syncProjectProgressLabel = prefix => { const input = document.getElementById(`${prefix}ProjectProgress`); const output = document.getElementById(`${prefix}ProjectProgressOutput`); if (input && output) output.textContent = `${input.value}%`; };
 window.closeProjectEditor = id => document.getElementById(id)?.classList.remove('active');
 
 async function populateProjectPeople(prefix, project = null) {
@@ -17719,11 +17756,9 @@ async function populateProjectPeople(prefix, project = null) {
 window.openProjectModal = async function () {
     const form = document.querySelector('#projectModal form');
     form?.reset();
-    document.getElementById('newProjectProgress').value = '0';
     await populateProjectPeople('new');
     await ensureBusinessFinancialAccess();
     applyBusinessFinancialVisibility(document.getElementById('projectModal'));
-    syncProjectProgressLabel('new');
     document.getElementById('projectModal').classList.add('active');
     if (window.lucide) window.lucide.createIcons();
 };
@@ -17777,9 +17812,7 @@ window.openEditProjectModal = async function (id) {
     document.getElementById('editProjectDesc').value = project.description || '';
     document.getElementById('editProjectCategory').value = project.project_category || 'Startup';
     document.getElementById('editProjectStatus').value = normalizeProjectStatus(project);
-    document.getElementById('editProjectHealth').value = project.health_status || 'ON_TRACK';
     document.getElementById('editProjectPriority').value = project.priority || 'MEDIUM';
-    document.getElementById('editProjectProgress').value = project.progress_percent || 0;
     document.getElementById('editProjectStartDate').value = project.start_date || '';
     document.getElementById('editProjectEndDate').value = project.end_date || '';
     document.getElementById('editProjectEventDate').value = project.event_date || '';
@@ -17790,7 +17823,6 @@ window.openEditProjectModal = async function (id) {
     document.getElementById('editProjectTags').value = (project.project_tags || []).join(', ');
     await populateProjectPeople('edit', project);
     applyBusinessFinancialVisibility(document.getElementById('editProjectModal'));
-    syncProjectProgressLabel('edit');
 
     const canDelete = await canCurrentUserUseCRM();
     const deleteBtn = document.getElementById('editProjectDeleteBtn');
@@ -17809,6 +17841,7 @@ window.handleUpdateProject = async function (event) {
     showToast(t('toast_updating_project'), "info");
     const service = window.hrDomainServices?.projects;
     let success = true;
+    let statusResult = null;
     const status = payload.lifecycle_status;
     const managerId = payload.project_manager_id || null;
     const assigneeIds = Array.isArray(payload.assigned_people) ? payload.assigned_people : [];
@@ -17816,6 +17849,7 @@ window.handleUpdateProject = async function (event) {
         const result = service?.changeStatus
             ? await service.changeStatus(id, status)
             : await db.changeProjectStatus(id, status);
+        statusResult = result;
         success = result?.success === true;
     }
     if (success && (service?.assignTeam || db.assignProjectTeam)) {
@@ -17839,7 +17873,14 @@ window.handleUpdateProject = async function (event) {
         showToast(t('toast_project_updated_successfully'), "success");
         if (currentView === 'projects') renderView('projects');
     } else {
-        showToast(t('toast_failed_to_update_project'), "error");
+        const blockers = statusResult?.data?.completion_readiness?.reason_codes || [];
+        if (status === 'COMPLETED' && blockers.length) {
+            const labels = { NO_TASKS: 'noTasksReason', INCOMPLETE_TASKS: 'incompleteTasks', BLOCKED_TASKS: 'blockedTasksReason', WAITING_TASKS: 'waitingTasksReason', UNRESOLVED_DEPENDENCY_CHAIN: 'dependencyTasksReason' };
+            const summary = blockers.map(item => `${Number(item.count || 0)} ${projectText(labels[item.code] || item.code)}`).join(', ');
+            showToast(`${projectText('completionNotReady')} ${summary}`, 'warning');
+        } else {
+            showToast(t('toast_failed_to_update_project'), "error");
+        }
     }
 }
 
@@ -17954,9 +17995,16 @@ window.openProjectTodoNotification = async function (projectId, todoId, options 
 };
 
 window.openProjectDetail = async function (id) {
-    const project = window.projectCache[id];
+    let project = window.projectCache[id];
     if (!project) return openAssignedProjectTodoDetail(id);
     if (!canViewFullProjectCommandCenter(currentUserProfile, project)) return openAssignedProjectTodoDetail(id);
+    const detailResult = await db.fetchProjectDetails(id);
+    if (!detailResult?.success || !detailResult.data?.project || String(detailResult.data.project.id) !== String(id)) {
+        showToast(projectText('projectDetailUnavailable'), 'error');
+        return false;
+    }
+    project = detailResult.data.project;
+    window.projectCache = { ...(window.projectCache || {}), [id]: project };
     window.activeProjectDetailId = id;
     const [updates, todos, attachments, canDeleteProject, operationalSummaryResult] = await Promise.all([
         db.fetchProjectUpdates(id),
@@ -17965,7 +18013,9 @@ window.openProjectDetail = async function (id) {
         canCurrentUserUseCRM(),
         db.fetchProjectOperationalSummary(id)
     ]);
-    const operationalSummary = operationalSummaryResult?.success ? operationalSummaryResult.data : null;
+    const operationalSummary = operationalSummaryResult?.success && hasProjectOperationalSummary(operationalSummaryResult.data)
+        ? operationalSummaryResult.data
+        : null;
     const status = normalizeProjectStatus(project);
     const health = effectiveProjectHealth(project);
     const budget = Number(project.budget_amount ?? project.project_amount ?? 0);
@@ -17987,20 +18037,23 @@ window.openProjectDetail = async function (id) {
     const operationalCountLabels = { tasks: 'TASKS', completed_tasks: 'COMPLETED_TASKS', actionable_tasks: 'ACTIONABLE_TASKS', due_today_tasks: 'DUE_TODAY_TASKS', waiting_tasks: 'WAITING_TASKS', blocked_tasks: 'BLOCKED_TASKS', dependency_blocked_tasks: 'DEPENDENCY_RISK', overdue_tasks: 'OVERDUE_TASKS', open_todos: 'OPEN_TODOS', overdue_todos: 'OVERDUE_TODOS' };
     document.getElementById('projectDetailTitle').textContent = project.project_name || 'Project';
     document.getElementById('projectDetailBody').innerHTML = `<div class="project-command-summary"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span>${project.source === 'WON_DEAL' ? `<span class="project-source-badge"><i data-lucide="handshake"></i>${projectText('createdFromDeal')}</span>` : ''}</div><div class="project-command-actions" style="display:flex;gap:0.5rem;align-items:center;">${canEditProject ? `<button class="btn btn-secondary" onclick="closeProjectDetail();openEditProjectModal('${id}')"><i data-lucide="pencil"></i>${projectText('edit')}</button>` : ''}${canDeleteProject ? `<button class="btn btn-secondary" style="color:var(--color-danger);border-color:var(--color-danger);" onclick="closeProjectDetail();handleDeleteProject('${id}')"><i data-lucide="trash-2"></i>${projectText('delete') || 'Delete'}</button>` : ''}</div></div>
-        <div class="project-detail-kpis"><div><span>${projectText('progress')}</span><strong>${Number(project.progress_percent || 0)}%</strong></div><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div>${canViewFinancials ? `<div><span>${projectText('budget')}</span><strong>${projectMoney(budget)}</strong></div><div><span>${projectText('cost')}</span><strong>${projectMoney(cost)}</strong></div><div><span>${projectText('variance')}</span><strong class="${budget - cost < 0 ? 'is-negative' : ''}">${projectMoney(budget - cost)}</strong></div>` : ''}</div>${operationalSummary ? `<section class="project-operational-summary"><div class="project-todo-heading"><h3><i data-lucide="activity"></i>${projectText('operationalSummary')}</h3><span class="project-health project-health-${String(operationalSummary.health || 'ON_TRACK').toLowerCase().replace('_', '-')} ">${escapeHTML(projectHealthLabel(operationalSummary.health || 'ON_TRACK'))}</span></div><div class="project-operational-summary-grid">${operationalCountKeys.filter(key => Object.prototype.hasOwnProperty.call(operationalSummary.counts || {}, key)).map(key => `<div><span>${escapeHTML(projectCommandReasonLabel(operationalCountLabels[key]))}</span><strong>${Number(operationalSummary.counts[key] || 0)}</strong></div>`).join('')}</div></section>` : ''}
+        <div class="project-detail-kpis"><div><span>${projectText('progress')}</span><strong>${escapeHTML(projectProgressLabel(project.progress_percent))}</strong></div><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div>${canViewFinancials ? `<div><span>${projectText('budget')}</span><strong>${projectMoney(budget)}</strong></div><div><span>${projectText('cost')}</span><strong>${projectMoney(cost)}</strong></div><div><span>${projectText('variance')}</span><strong class="${budget - cost < 0 ? 'is-negative' : ''}">${projectMoney(budget - cost)}</strong></div>` : ''}</div>${operationalSummary ? `<section class="project-operational-summary"><div class="project-todo-heading"><h3><i data-lucide="activity"></i>${projectText('operationalSummary')}</h3><span class="project-health project-health-${effectiveProjectHealth(operationalSummary).toLowerCase().replace('_', '-')} ">${escapeHTML(projectHealthLabel(effectiveProjectHealth(operationalSummary)))}</span></div><div class="project-operational-summary-grid">${operationalCountKeys.filter(key => Object.prototype.hasOwnProperty.call(operationalSummary.counts || {}, key)).map(key => `<div><span>${escapeHTML(projectCommandReasonLabel(operationalCountLabels[key]))}</span><strong>${Number(operationalSummary.counts[key] || 0)}</strong></div>`).join('')}</div></section>` : ''}
         <div class="project-detail-layout"><section><h3><i data-lucide="file-text"></i>${projectText('overview')}</h3><dl class="project-overview-list"><div><dt>${projectText('description')}</dt><dd>${escapeHTML(project.description || '—')}</dd></div><div><dt>${projectText('client')}</dt><dd>${escapeHTML(project.client_name || project.crm_clients?.company || project.crm_clients?.name || '—')}</dd></div><div><dt>${projectText('team')}</dt><dd>${(project.assigned_people || []).map(id => escapeHTML(projectProfileName(id))).join(', ') || '—'}</dd></div></dl></section>
         <section><h3><i data-lucide="milestone"></i>${projectText('milestones')}</h3><div class="project-detail-list">${projectDetailList(milestones, 'milestone', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectMilestone(event,'${id}')"><input id="projectMilestoneTitle" class="form-control" placeholder="${projectText('milestoneHint')}" required><input id="projectMilestoneDate" type="date" class="form-control"><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addMilestone')}</button></form>` : ''}</section>
         <section><h3><i data-lucide="shield-alert"></i>${projectText('risks')}</h3><div class="project-detail-list">${projectDetailList(risks, 'risk', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectRisk(event,'${id}')"><input id="projectRiskTitle" class="form-control" placeholder="${projectText('riskHint')}" required><select id="projectRiskSeverity" class="form-control"><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option><option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option></select><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addRisk')}</button></form>` : ''}</section>
         <section><h3><i data-lucide="message-square-text"></i>${projectText('updates')}</h3><div class="project-update-feed">${updates.length ? updates.map(update => `<article><i></i><div><strong>${escapeHTML(projectProfileName(update.author_id))}</strong><p>${escapeHTML(update.summary || '')}</p><time>${new Date(update.created_at).toLocaleString()}</time></div></article>`).join('') : `<p class="project-detail-empty">${projectText('noUpdates')}</p>`}</div><form class="project-update-form" onsubmit="addProjectUpdate(event,'${id}')"><textarea id="projectUpdateSummary" class="form-control" rows="2" placeholder="${projectText('updateHint')}" required></textarea><button class="btn btn-primary" type="submit"><i data-lucide="send"></i>${projectText('postUpdate')}</button></form></section>
         <section class="project-attachments-section project-detail-span-2"><div class="project-todo-heading"><h3><i data-lucide="paperclip"></i>${taskDetailText('Project attachments', 'مرفقات المشروع')}</h3><span>${attachments.length}</span></div>${projectAttachmentList(attachments, canManageTodos)}</section>
         <section class="project-todo-section project-detail-span-2"><div class="project-todo-heading"><h3><i data-lucide="list-checks"></i>${projectText('todoList')}</h3><span>${todos.filter(todo => todo.status !== 'DONE').length}</span></div><div class="project-todo-list">${projectTodoList(todos, project, canManageTodos)}</div>${todoForm}</section></div>`;
+    if (!operationalSummary) {
+        document.getElementById('projectDetailBody').querySelector('.project-detail-kpis')?.insertAdjacentHTML('afterend', `<section class="project-operational-summary"><div class="project-todo-heading"><h3><i data-lucide="activity"></i>${projectText('operationalSummary')}</h3></div><p class="project-detail-empty">${projectText('operationalSummaryUnavailable')}</p></section>`);
+    }
     document.getElementById('projectDetailModal').classList.add('active');
     if (window.lucide) window.lucide.createIcons();
 };
 window.closeProjectDetail = () => { window.activeProjectDetailId = null; document.getElementById('projectDetailModal')?.classList.remove('active'); };
 window.addProjectMilestone = async function (event, id) { event.preventDefault(); const project = window.projectCache[id]; const items = [...(project.milestones || []), { title: document.getElementById('projectMilestoneTitle').value.trim(), due_date: document.getElementById('projectMilestoneDate').value || null, completed: false }]; const result = await db.updateProjectPortfolioItems(id, { milestones: items }); if (result.success) { project.milestones = items; openProjectDetail(id); } };
-window.addProjectRisk = async function (event, id) { event.preventDefault(); const project = window.projectCache[id]; const items = [...(project.risks || []), { title: document.getElementById('projectRiskTitle').value.trim(), severity: document.getElementById('projectRiskSeverity').value, resolved: false }]; const result = await db.updateProjectPortfolioItems(id, { risks: items, health_status: 'AT_RISK' }); if (result.success) { project.risks = items; project.health_status = 'AT_RISK'; openProjectDetail(id); } };
-window.toggleProjectListItem = async function (id, type, index) { const project = window.projectCache[id]; const key = type === 'milestone' ? 'milestones' : 'risks'; const flag = type === 'milestone' ? 'completed' : 'resolved'; const items = (project[key] || []).map((item, itemIndex) => itemIndex === index ? { ...item, [flag]: true } : item); const changes = { [key]: items }; if (type === 'risk' && items.every(item => item.resolved)) changes.health_status = 'ON_TRACK'; const result = await db.updateProjectPortfolioItems(id, changes); if (result.success) { project[key] = items; if (changes.health_status) project.health_status = changes.health_status; openProjectDetail(id); } };
+window.addProjectRisk = async function (event, id) { event.preventDefault(); const project = window.projectCache[id]; const items = [...(project.risks || []), { title: document.getElementById('projectRiskTitle').value.trim(), severity: document.getElementById('projectRiskSeverity').value, resolved: false }]; const result = await db.updateProjectPortfolioItems(id, { risks: items }); if (result.success) { project.risks = items; openProjectDetail(id); } };
+window.toggleProjectListItem = async function (id, type, index) { const project = window.projectCache[id]; const key = type === 'milestone' ? 'milestones' : 'risks'; const flag = type === 'milestone' ? 'completed' : 'resolved'; const items = (project[key] || []).map((item, itemIndex) => itemIndex === index ? { ...item, [flag]: true } : item); const result = await db.updateProjectPortfolioItems(id, { [key]: items }); if (result.success) { project[key] = items; openProjectDetail(id); } };
 window.addProjectUpdate = async function (event, id) { event.preventDefault(); const summary = document.getElementById('projectUpdateSummary').value.trim(); const service = window.hrDomainServices?.projects; const result = service?.addUpdate ? await service.addUpdate(id, summary, 'UPDATE') : await db.createProjectUpdateSecure(id, summary, 'UPDATE'); if (result.success) openProjectDetail(id); else showToast('Unable to save project update.', 'error'); };
 window.addProjectTodo = async function (event, projectId) {
     event.preventDefault();

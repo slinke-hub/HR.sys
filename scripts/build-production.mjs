@@ -1,8 +1,9 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { renderRuntimeDbBundle, resolveBuildOutput } from './runtime-db-bundle.mjs';
 
 const projectRoot = resolve(import.meta.dirname, '..');
-const outputRoot = resolve(projectRoot, 'www-production');
+const outputRoot = resolveBuildOutput(projectRoot, 'www-production');
 const productionRef = 'bbbetcdioiaozdjkvwxu';
 const stagingRef = 'jcfyyxsuspukcmybyhjj';
 const productionOrigin = `https://${productionRef}.supabase.co`;
@@ -41,14 +42,9 @@ const productionCsp = cspMatch[2]
 if (productionCsp.includes(stagingRef)) throw new Error('Staging project reference remains in the production CSP.');
 if (!productionCsp.includes(productionOrigin)) throw new Error('Production Supabase origin is missing from the production CSP.');
 const productionIndex = sourceIndex
-  .replace(cspMetaPattern, `$1${productionCsp}$3`)
-  .replace(/\s*<script\s+defer\s+src="runtime-config\.js"><\/script>\s*/gi, '\n');
+  .replace(cspMetaPattern, `$1${productionCsp}$3`);
 
-const dbMarker = 'const SUPABASE_REQUEST_TIMEOUT_MS = 10000;';
-const dbMarkerIndex = sourceDb.indexOf(dbMarker);
-if (dbMarkerIndex < 0) throw new Error('Database client logic marker was not found.');
-const productionDbPrefix = `/* eslint-disable no-redeclare, no-global-assign */\n/* exported db */\n// This file is generated for the explicit production browser build.\nconst PRODUCTION_PROJECT_REF = '${productionRef}';\nconst PRODUCTION_SUPABASE_URL = '${productionOrigin}';\nconst PRODUCTION_SUPABASE_ANON_KEY = '${productionAnonKey}';\nconst injectedRuntimeConfig = window.HR_RUNTIME_CONFIG;\nconst productionRuntimeValid = !injectedRuntimeConfig || (\n  String(injectedRuntimeConfig.mode || 'production').toLowerCase() === 'production'\n  && injectedRuntimeConfig.valid === true\n  && injectedRuntimeConfig.projectRef === PRODUCTION_PROJECT_REF\n  && injectedRuntimeConfig.supabaseUrl === PRODUCTION_SUPABASE_URL\n);\nif (!productionRuntimeValid) {\n  window.hrRuntimeMode = 'production';\n  window.hrRuntimeConfigError = 'Production runtime configuration mismatch.';\n  throw new Error(window.hrRuntimeConfigError);\n}\nconst SUPABASE_URL = PRODUCTION_SUPABASE_URL;\nconst SUPABASE_ANON_KEY = PRODUCTION_SUPABASE_ANON_KEY;\nconst runtimeMode = 'production';\nwindow.hrRuntimeMode = runtimeMode;\nwindow.hrRuntimeConfigError = null;\n`;
-const productionDb = `${productionDbPrefix}\n${sourceDb.slice(dbMarkerIndex)}`;
+const productionDb = renderRuntimeDbBundle(sourceDb, 'production');
 
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
@@ -60,13 +56,15 @@ for (const file of rootFiles) {
 }
 await writeFile(resolve(outputRoot, 'index.html'), productionIndex, 'utf8');
 await writeFile(resolve(outputRoot, 'js', 'db.js'), productionDb, 'utf8');
+await writeFile(resolve(outputRoot, 'runtime-config.js'), `window.HR_RUNTIME_CONFIG=${JSON.stringify({ mode: 'production', valid: true, projectRef: productionRef, supabaseUrl: productionOrigin })};\n`, 'utf8');
 
 const verifyIndex = await readFile(resolve(outputRoot, 'index.html'), 'utf8');
 const verifyDb = await readFile(resolve(outputRoot, 'js', 'db.js'), 'utf8');
-if (verifyIndex.includes(stagingRef) || verifyDb.includes(stagingRef)) {
+const verifyRuntimeConfig = await readFile(resolve(outputRoot, 'runtime-config.js'), 'utf8');
+if (verifyIndex.includes(stagingRef) || verifyDb.includes(stagingRef) || verifyRuntimeConfig.includes(stagingRef)) {
   throw new Error('Production browser configuration still contains the staging project reference.');
 }
-if (!verifyIndex.includes(productionOrigin) || !verifyDb.includes(productionRef)) {
+if (!verifyIndex.includes(productionOrigin) || !verifyDb.includes(productionRef) || !verifyRuntimeConfig.includes(productionRef)) {
   throw new Error('Production browser configuration is missing the production Supabase target.');
 }
 
