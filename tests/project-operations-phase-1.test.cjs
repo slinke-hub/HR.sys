@@ -81,7 +81,7 @@ assert.doesNotMatch(app, /health_status:\s*'AT_RISK'|health_status:\s*'ON_TRACK'
 assert.match(app, /UNKNOWN: projectText\('healthUnavailable'\)/);
 assert.match(app, /healthUnavailable: \['Health unavailable', 'حالة الصحة غير متاحة'\]/);
 assert.match(app, /noTasksReason: \['projects must have at least one Task before completion', 'يجب أن يحتوي المشروع على مهمة واحدة على الأقل قبل إكماله'\]/);
-assert.match(app, /const detailResult = await db\.fetchProjectDetails\(id\)/);
+assert.match(app, /const detailResult = usePreAuthorized[\s\S]*?: await db\.fetchProjectDetails\(id\)/);
 assert.match(app, /projectDetailUnavailable/);
 assert.doesNotMatch(app, /project\?\.health \|\| 'ON_TRACK'/);
 assert.match(app, /NO_TASKS: 'noTasksReason'/);

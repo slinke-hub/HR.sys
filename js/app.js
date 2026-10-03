@@ -2476,7 +2476,28 @@ async function canCurrentUserAccessView(viewId) {
                 if (window.viewHTMLCache) delete window.viewHTMLCache.projects;
                 return true;
             }
+            // Keep notification/deep-link access to assigned Project To-Dos
+            // narrower than general Project membership.
+            return false;
         }
+        if (projectId) {
+            // A specific Project route is authorized by the same secure RPC
+            // used to load its detail, not by client-side role/title rules.
+            const detail = await db.fetchProjectDetails(projectId);
+            if (detail?.success && String(detail.data?.project?.id || '') === String(projectId)) {
+                window.preAuthorizedProjectDetail = {
+                    userId: currentUser.id,
+                    projectId: String(projectId),
+                    data: detail.data,
+                    expiresAt: Date.now() + 10000
+                };
+                return true;
+            }
+        }
+        // The secure list RPC returns only Projects this user can access. Its
+        // result is the authority for whether an ordinary member can reach
+        // the scoped Projects portfolio.
+        if (await hasAccessibleProjectMembership()) return true;
     }
 
     if (viewId === 'projects' || viewId === 'crm' || viewId === 'clients') {
@@ -2508,6 +2529,17 @@ async function canCurrentUserAccessView(viewId) {
     if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
 
     return true;
+}
+
+async function hasAccessibleProjectMembership() {
+    if (!currentUser?.id || typeof db?.fetchProjects !== 'function') return false;
+    try {
+        const projects = await db.fetchProjects();
+        return Array.isArray(projects) && projects.some(project => !!project?.id);
+    } catch (error) {
+        console.warn('Accessible Project membership check failed; Projects remain hidden.', error?.message || error);
+        return false;
+    }
 }
 
 window.updateSidebarVisibility = async function () {
@@ -2578,7 +2610,10 @@ window.updateSidebarVisibility = async function () {
     // navigation path to a page they are already authorized to open.
     const managerProjectAccess = ['MANAGER', 'SUPERVISOR'].includes(normalizedRole)
         || /manager|supervisor|مدير|مشرف/i.test(String(currentUserProfile?.job_title || currentUserProfile?.job_title_ar || ''));
-    const canUseProjectPages = canUseMarketingPages || managerProjectAccess || canViewFullProjectCommandCenter();
+    const hasProjectMembership = !canUseMarketingPages && !managerProjectAccess && !canViewFullProjectCommandCenter()
+        ? await hasAccessibleProjectMembership()
+        : false;
+    const canUseProjectPages = canUseMarketingPages || managerProjectAccess || canViewFullProjectCommandCenter() || hasProjectMembership;
     projectsNav.forEach(item => { item.style.display = canUseProjectPages ? 'flex' : 'none'; });
     if (crmNav) crmNav.style.display = canUseMarketingPages ? 'flex' : 'none';
     if (clientsNav) clientsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
@@ -12646,6 +12681,11 @@ window.renderView = async function (viewId, isBack = false) {
         else stopCrmAnalyticsRealtime();
         if (viewId === 'projects') startProjectPortfolioRealtime();
         else stopProjectPortfolioRealtime();
+        if (viewId === 'projects') {
+            const route = new URLSearchParams(window.location.search);
+            const directProjectId = route.get('project');
+            if (directProjectId && !route.get('todo')) void window.openProjectDetail(directProjectId);
+        }
         console.log("renderView: done updating DOM.");
     } else {
         console.log("renderView: skipped DOM update because currentView changed.");
@@ -17995,15 +18035,24 @@ window.openProjectTodoNotification = async function (projectId, todoId, options 
 };
 
 window.openProjectDetail = async function (id) {
-    let project = window.projectCache[id];
-    if (!project) return openAssignedProjectTodoDetail(id);
-    if (!canViewFullProjectCommandCenter(currentUserProfile, project)) return openAssignedProjectTodoDetail(id);
-    const detailResult = await db.fetchProjectDetails(id);
+    if (!id) return false;
+    const preAuthorized = window.preAuthorizedProjectDetail;
+    const usePreAuthorized = preAuthorized?.userId === currentUser?.id
+        && preAuthorized?.projectId === String(id)
+        && preAuthorized?.expiresAt >= Date.now();
+    if (usePreAuthorized) window.preAuthorizedProjectDetail = null;
+    const detailResult = usePreAuthorized
+        ? { success: true, data: preAuthorized.data }
+        : await db.fetchProjectDetails(id);
     if (!detailResult?.success || !detailResult.data?.project || String(detailResult.data.project.id) !== String(id)) {
+        // Preserve the existing To-Do-only path for assignees who are not
+        // Project members. That helper performs its own secure assignment
+        // check and never exposes general Project details.
+        if (!canViewFullProjectCommandCenter()) return openAssignedProjectTodoDetail(id);
         showToast(projectText('projectDetailUnavailable'), 'error');
         return false;
     }
-    project = detailResult.data.project;
+    let project = detailResult.data.project;
     window.projectCache = { ...(window.projectCache || {}), [id]: project };
     window.activeProjectDetailId = id;
     const [updates, todos, attachments, canDeleteProject, operationalSummaryResult] = await Promise.all([

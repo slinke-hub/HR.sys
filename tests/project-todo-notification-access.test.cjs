@@ -44,7 +44,8 @@ assert.match(db, /async addProjectTodo\([\s\S]*?flushTaskNotificationEmails\(\)/
 assert.match(app, /window\.openProjectTodoNotification = async function/);
 assert.match(app, /openAssignedProjectTodoDetail/);
 assert.match(app, /project\?\.assigned_people\?\.includes\(currentUser\?\.id\)/);
-assert.match(app, /if \(!canViewFullProjectCommandCenter\(currentUserProfile, project\)\) return openAssignedProjectTodoDetail\(id\)/);
+assert.match(app, /window\.openProjectDetail = async function \(id\)[\s\S]*?await db\.fetchProjectDetails\(id\)/);
+assert.match(app, /if \(!canViewFullProjectCommandCenter\(\)\) return openAssignedProjectTodoDetail\(id\)/, 'Users denied Project detail retain only their separately authorized To-Do view');
 assert.match(app, /db\.fetchProjectAssignmentEmployees\(\)/);
 assert.match(app, /db\.fetchAccessibleProjectProfiles\(\)/);
 assert.match(app, /project-detail-layout--todo-only/);
