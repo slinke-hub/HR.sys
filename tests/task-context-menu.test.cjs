@@ -18,7 +18,7 @@ assert.match(menuSource, /window\.handleDeleteTask\(taskId\)/);
 assert.match(menuSource, /Math\.min\(event\.clientX, window\.innerWidth - menuRect\.width/);
 assert.match(menuSource, /Math\.min\(event\.clientY, window\.innerHeight - menuRect\.height/);
 assert.match(menuSource, /event\.key === 'Escape'/);
-assert.match(css, /\.custom-context-menu \{[\s\S]*background: #ffffff !important/);
+assert.match(css, /\.custom-context-menu \{[\s\S]*background: var\(--bg-surface\) !important/);
 assert.match(css, /\.custom-context-menu \{[\s\S]*opacity: 1 !important/);
 assert.match(css, /\[data-theme="dark"\] \.custom-context-menu/);
 

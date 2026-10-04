@@ -56,6 +56,90 @@ function escapeHTML(str) {
 }
 window.escapeHTML = escapeHTML;
 
+// Add a consistent Lucide cue to status labels without changing their text,
+// underlying values, or workflow behavior. Unknown labels remain untouched.
+function applySemanticStatusIcons(root = document) {
+    const states = [
+        { icon: 'octagon-alert', matches: /\bcritical\b|حرج|حرجة/i },
+        { icon: 'triangle-alert', matches: /\bneeds attention\b|needs_attention|بحاجة إلى انتباه|تحتاج إلى انتباه/i },
+        { icon: 'circle-check', matches: /\b(on track|on_track)\b|على المسار|ضمن المسار/i },
+        { icon: 'circle-check', matches: /\b(completed|complete|approved)\b|مكتمل|مكتملة|منجز|معتمد/i },
+        { icon: 'circle-play', matches: /\b(in progress|in_progress|started)\b|قيد التنفيذ|جارية/i },
+        { icon: 'clock', matches: /\b(waiting|pending)\b|انتظار|معلق|قيد الانتظار/i },
+        { icon: 'octagon-alert', matches: /\b(blocked|blocker)\b|محظور|متعطل/i },
+        { icon: 'triangle-alert', matches: /\b(at risk|at_risk|risk)\b|معرض للخطر|في خطر/i },
+        { icon: 'calendar-clock', matches: /\b(overdue|late)\b|متأخر/i },
+        { icon: 'archive', matches: /\b(archived|disabled)\b|مؤرشف|معطل/i },
+    ];
+    root.querySelectorAll?.('.status-badge, .task-v2-status, .project-health, .project-status, .semantic-status').forEach((badge) => {
+        if (badge.querySelector(':scope > svg, :scope > i[data-lucide]')) return;
+        const label = (badge.textContent || '').trim();
+        const state = states.find((candidate) => candidate.matches.test(label));
+        if (!state) return;
+        badge.querySelector(':scope > i:not([data-lucide])')?.remove();
+        const icon = document.createElement('i');
+        icon.dataset.lucide = state.icon;
+        icon.setAttribute('aria-hidden', 'true');
+        badge.prepend(icon);
+        badge.classList.add('has-semantic-icon');
+    });
+}
+
+// Give icon-only controls a localized accessible name and native tooltip when
+// the view markup has not already supplied more specific wording.
+function applyIconOnlyButtonNames(root = document) {
+    const labels = {
+        x: ['Close', 'إغلاق'],
+        'trash-2': ['Delete', 'حذف'],
+        trash: ['Delete', 'حذف'],
+        pencil: ['Edit', 'تعديل'],
+        'edit-2': ['Edit', 'تعديل'],
+        'edit-3': ['Edit', 'تعديل'],
+        'user-pen': ['Edit', 'تعديل'],
+        eye: ['View', 'عرض'],
+        search: ['Search', 'بحث'],
+        plus: ['Add', 'إضافة'],
+        download: ['Download', 'تنزيل'],
+        upload: ['Upload', 'رفع'],
+        'more-horizontal': ['More options', 'خيارات إضافية'],
+        ellipsis: ['More options', 'خيارات إضافية'],
+        'external-link': ['Open link', 'فتح الرابط'],
+        'arrow-up-right': ['Open details', 'فتح التفاصيل'],
+        'check-circle': ['Confirm', 'تأكيد'],
+        'circle-check': ['Completed', 'مكتمل'],
+        calendar: ['Calendar', 'التقويم'],
+        filter: ['Filter', 'تصفية'],
+        'rotate-ccw': ['Refresh', 'تحديث'],
+        settings: ['Settings', 'الإعدادات'],
+        bell: ['Notifications', 'الإشعارات'],
+        'file-text': ['Open file', 'فتح الملف'],
+        image: ['Open image', 'فتح الصورة'],
+        'map-pin': ['Open map', 'فتح الخريطة'],
+        copy: ['Copy', 'نسخ'],
+        printer: ['Print', 'طباعة'],
+        'chevron-left': ['Previous', 'السابق'],
+        'chevron-right': ['Next', 'التالي'],
+        'arrow-left': ['Go back', 'رجوع'],
+        'arrow-right': ['Continue', 'متابعة'],
+        'minus': ['Remove', 'إزالة'],
+        'user-round-plus': ['Add person', 'إضافة شخص'],
+        'user-round-minus': ['Remove person', 'إزالة شخص'],
+    };
+    root.querySelectorAll?.('button, [role="button"], a').forEach((control) => {
+        const icon = control.querySelector('[data-lucide]');
+        const iconName = icon?.getAttribute('data-lucide') || '';
+        const isManagedLabel = control.dataset.semanticIconLabel === iconName;
+        if (control.hasAttribute('aria-labelledby') || (control.hasAttribute('aria-label') && !isManagedLabel)) return;
+        if ((control.textContent || '').replace(/\s+/g, '').trim() && !isManagedLabel) return;
+        const wording = labels[iconName];
+        if (!wording) return;
+        const label = currentLang === 'ar' ? wording[1] : wording[0];
+        control.dataset.semanticIconLabel = iconName;
+        control.setAttribute('aria-label', label);
+        control.setAttribute('title', label);
+    });
+}
+
 // Only allow web URLs in dynamic links. HTML escaping alone does not block
 // executable schemes such as javascript:.
 function safeExternalUrl(value) {
@@ -386,7 +470,7 @@ window.openTaskDependencyModal = async function (taskId) {
     const context = taskDependencyContext(task);
     const modal = document.createElement('div');
     modal.className = 'my-day-modal-backdrop task-dependency-modal-backdrop';
-    modal.innerHTML = `<div class="my-day-modal task-dependency-modal" role="dialog" aria-modal="true" aria-labelledby="taskDependencyModalTitle"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}">&times;</button><h2 id="taskDependencyModalTitle">${taskDetailText('Add predecessor dependency', 'إضافة اعتمادية سابقة')}</h2><p class="task-dependency-modal-help">${taskDetailText('Choose the task that must be completed before this task can start.', 'اختر المهمة التي يجب إكمالها قبل بدء هذه المهمة.')}</p><label>${taskDetailText('Search Tasks...', 'البحث في المهام...')}<input id="taskDependencySearch" class="form-control" type="search" placeholder="${escapeHTML(taskDetailText('Search Tasks...', 'البحث في المهام...'))}"></label><div id="taskDependencyCandidates" class="task-dependency-candidates" role="listbox" aria-label="${escapeHTML(taskDetailText('Available tasks', 'المهام المتاحة'))}"></div><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary task-dependency-cancel">${taskDetailText('Cancel', 'إلغاء')}</button><button type="button" class="btn btn-primary task-dependency-save" disabled>${taskDetailText('Add dependency', 'إضافة اعتمادية')}</button></div></div>`;
+    modal.innerHTML = `<div class="my-day-modal task-dependency-modal" role="dialog" aria-modal="true" aria-labelledby="taskDependencyModalTitle"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" title="${escapeHTML(taskDetailText('Close', 'إغلاق'))}"><i data-lucide="x" aria-hidden="true"></i></button><h2 id="taskDependencyModalTitle">${taskDetailText('Add predecessor dependency', 'إضافة اعتمادية سابقة')}</h2><p class="task-dependency-modal-help">${taskDetailText('Choose the task that must be completed before this task can start.', 'اختر المهمة التي يجب إكمالها قبل بدء هذه المهمة.')}</p><label>${taskDetailText('Search Tasks...', 'البحث في المهام...')}<input id="taskDependencySearch" class="form-control" type="search" placeholder="${escapeHTML(taskDetailText('Search Tasks...', 'البحث في المهام...'))}"></label><div id="taskDependencyCandidates" class="task-dependency-candidates" role="listbox" aria-label="${escapeHTML(taskDetailText('Available tasks', 'المهام المتاحة'))}"></div><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary task-dependency-cancel">${taskDetailText('Cancel', 'إلغاء')}</button><button type="button" class="btn btn-primary task-dependency-save" disabled>${taskDetailText('Add dependency', 'إضافة اعتمادية')}</button></div></div>`;
     document.body.appendChild(modal);
     const candidatesHost = modal.querySelector('#taskDependencyCandidates');
     const search = modal.querySelector('#taskDependencySearch');
@@ -514,7 +598,7 @@ async function syncLegacyLocalProfilePhoto(profile) {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=2026092402', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100412', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -1119,47 +1203,175 @@ window.toggleLanguage = function () {
     }
 
     updateTranslations();
+    window.updateNavigationControlLabels?.();
     renderView(currentView); // Re-render view for updated strings inside
     const dropdown = document.getElementById('profileDropdown');
     if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
 }
 
-window.closeMobileNavigation = function () {
-    document.getElementById('mobileNavigationSheet')?.remove();
+window.closeMobileNavigation = function (options = {}) {
+    const drawerOverlay = document.getElementById('appNavigationDrawerOverlay');
+    if (!drawerOverlay) return;
+    drawerOverlay.classList.remove('is-open');
+    drawerOverlay.classList.add('is-closing');
+    if (window.navigationDrawerCloseTimer) clearTimeout(window.navigationDrawerCloseTimer);
+    window.navigationDrawerCloseTimer = setTimeout(() => {
+        drawerOverlay.remove();
+        window.navigationDrawerCloseTimer = null;
+    }, 240);
     document.body.classList.remove('mobile-navigation-open');
+    const app = document.querySelector('.app-container');
+    if (app) {
+        app.inert = false;
+        app.removeAttribute('aria-hidden');
+    }
+    document.getElementById('appNavigationToggle')?.setAttribute('aria-expanded', 'false');
+    document.getElementById('mobileMoreNav')?.setAttribute('aria-expanded', 'false');
+    const opener = window.navigationDrawerOpener;
+    window.navigationDrawerOpener = null;
+    if (options.restoreFocus !== false && opener?.isConnected) opener.focus();
 };
 
-window.openMobileNavigation = async function () {
-    window.closeMobileNavigation();
+window.openMobileNavigation = async function (opener = null) {
+    const existingDrawer = document.getElementById('appNavigationDrawerOverlay');
+    if (existingDrawer?.classList.contains('is-open')) {
+        window.closeMobileNavigation();
+        return;
+    }
+    if (existingDrawer) {
+        if (window.navigationDrawerCloseTimer) clearTimeout(window.navigationDrawerCloseTimer);
+        existingDrawer.remove();
+        window.navigationDrawerCloseTimer = null;
+    }
+    if (window.navigationDrawerOpening) return;
+    window.navigationDrawerOpening = true;
+    const activeOpener = opener || document.activeElement;
     const candidates = [...document.querySelectorAll('.sidebar-nav > .nav-item[data-view]')]
-        .filter(item => item.dataset.view && item.style.display !== 'none' && !['dashboard', 'tasks', 'requests', 'time'].includes(item.dataset.view));
-    const accessResults = await Promise.all(candidates.map(item => canCurrentUserAccessView(item.dataset.view)));
-    const sourceItems = candidates.filter((item, index) => accessResults[index]);
-    const sheet = document.createElement('div');
-    sheet.id = 'mobileNavigationSheet';
-    sheet.className = 'mobile-navigation-sheet';
-    const closeLabel = t('ui_close') || (currentLang === 'ar' ? 'إغلاق' : 'Close');
-    const moreLabel = t('nav_more') || (currentLang === 'ar' ? 'المزيد' : 'More');
-    sheet.innerHTML = `
-        <button type="button" class="mobile-navigation-backdrop" onclick="window.closeMobileNavigation()" aria-label="${escapeHTML(closeLabel)}"></button>
-        <section class="mobile-navigation-panel" role="dialog" aria-modal="true" aria-labelledby="mobile-navigation-title">
-            <div class="mobile-navigation-handle"></div>
-            <div class="mobile-navigation-header">
-                <h2 id="mobile-navigation-title">${escapeHTML(moreLabel)}</h2>
-                <button type="button" class="icon-btn" onclick="window.closeMobileNavigation()" aria-label="${escapeHTML(closeLabel)}"><i data-lucide="x"></i></button>
-            </div>
-            <div class="mobile-navigation-grid">
-                ${sourceItems.map(item => {
-                    const icon = item.querySelector('[data-lucide]')?.getAttribute('data-lucide') || 'circle';
-                    const label = item.querySelector('span')?.textContent?.trim() || item.dataset.view;
-                    return `<button type="button" class="mobile-navigation-item ${currentView === item.dataset.view ? 'active' : ''}" onclick="window.closeMobileNavigation(); renderView('${escapeHTML(item.dataset.view)}')"><i data-lucide="${escapeHTML(icon)}"></i><span>${escapeHTML(label)}</span></button>`;
-                }).join('')}
-            </div>
-        </section>`;
-    document.body.appendChild(sheet);
+        .filter(item => item.dataset.view && item.style.display !== 'none' && !item.hidden);
+    let sourceItems;
+    try {
+        const accessResults = await Promise.all(candidates.map(item => canCurrentUserAccessView(item.dataset.view)));
+        sourceItems = candidates.filter((item, index) => accessResults[index]);
+    } catch (error) {
+        console.warn('Navigation access check failed; drawer remains closed.', error?.message || error);
+        window.navigationDrawerOpening = false;
+        return;
+    }
+
+    const localized = (en, ar) => currentLang === 'ar' ? ar : en;
+    const closeLabel = t('ui_close') || localized('Close', 'إغلاق');
+    const title = localized('Navigation', 'التنقل');
+    const groups = [
+        { key: 'workspace', label: localized('Workspace', 'مساحة العمل'), views: new Set(['dashboard', 'my-day', 'tasks', 'projects', 'archived_tasks']) },
+        { key: 'people-hr', label: localized('People & HR', 'الأفراد والموارد البشرية'), views: new Set(['time', 'requests', 'departments', 'leave', 'leave_calculator']) },
+        { key: 'business', label: localized('Business', 'الأعمال'), views: new Set(['employees', 'clients', 'crm', 'documents', 'approvals', 'schedule', 'whatsapp_inbox', 'ats_beta', 'lms_beta', 'appraisals_beta', 'surveys_beta', 'shifts_beta', 'expenses_beta', 'payroll', 'performance', 'custody_handover', 'archived']) },
+        { key: 'administration', label: localized('Administration', 'الإدارة'), views: new Set(['admin', 'admin_page_access', 'users', 'translations', 'templates', 'integrations', 'hr_suite_beta']) },
+    ];
+    const groupForView = view => groups.find(group => group.views.has(view))?.key || 'other';
+    const grouped = new Map([...groups.map(group => [group.key, { ...group, items: [] }]), ['other', { key: 'other', label: localized('Business', 'الأعمال'), items: [] }]]);
+    for (const item of sourceItems) grouped.get(groupForView(item.dataset.view)).items.push(item);
+    const preferredOrder = ['dashboard', 'my-day', 'tasks', 'projects', 'time', 'requests', 'employees', 'clients', 'crm', 'documents', 'approvals'];
+    for (const group of grouped.values()) {
+        group.items.sort((a, b) => {
+            const aIndex = preferredOrder.indexOf(a.dataset.view);
+            const bIndex = preferredOrder.indexOf(b.dataset.view);
+            return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
+        });
+    }
+    const sections = [...grouped.values()].filter(group => group.items.length).map(group => `
+        <section class="navigation-drawer-group" aria-labelledby="navigation-group-${group.key}">
+            <h3 id="navigation-group-${group.key}">${escapeHTML(group.label)}</h3>
+            ${group.items.map(item => {
+                const icon = item.querySelector('[data-lucide]')?.getAttribute('data-lucide') || 'circle';
+                const label = item.querySelector('span')?.textContent?.trim() || item.dataset.view;
+                const active = currentView === item.dataset.view;
+                return `<button type="button" class="navigation-drawer-item${active ? ' active' : ''}" data-view="${escapeHTML(item.dataset.view)}"${active ? ' aria-current="page"' : ''}><i data-lucide="${escapeHTML(icon)}" aria-hidden="true"></i><span>${escapeHTML(label)}</span></button>`;
+            }).join('')}
+        </section>`).join('');
+
+    const drawerOverlay = document.createElement('div');
+    drawerOverlay.id = 'appNavigationDrawerOverlay';
+    drawerOverlay.className = 'app-navigation-drawer-overlay';
+    drawerOverlay.innerHTML = `
+        <button type="button" class="navigation-drawer-backdrop" data-drawer-close aria-label="${escapeHTML(closeLabel)}"></button>
+        <aside class="app-navigation-drawer" role="dialog" aria-modal="true" aria-labelledby="navigation-drawer-title" tabindex="-1" dir="${currentLang === 'ar' ? 'rtl' : 'ltr'}">
+            <header class="navigation-drawer-header">
+                <div class="navigation-drawer-brand-group">
+                    <div class="navigation-drawer-brand" aria-label="MUQAM HR">
+                        <img src="/images/logo.png" alt="MUQAM HR" class="navigation-drawer-brand-logo-light">
+                        <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR" class="navigation-drawer-brand-logo-dark">
+                    </div>
+                    <h2 id="navigation-drawer-title">${escapeHTML(title)}</h2>
+                </div>
+                <button type="button" class="navigation-drawer-close" data-drawer-close aria-label="${escapeHTML(closeLabel)}" title="${escapeHTML(closeLabel)}"><i data-lucide="x" aria-hidden="true"></i></button>
+            </header>
+            <nav class="navigation-drawer-list" aria-label="${escapeHTML(title)}">${sections}</nav>
+        </aside>`;
+    drawerOverlay.addEventListener('click', async event => {
+        if (event.target.closest('[data-drawer-close]')) {
+            window.closeMobileNavigation();
+            return;
+        }
+        const item = event.target.closest('.navigation-drawer-item[data-view]');
+        if (!item) return;
+        const destination = item.dataset.view;
+        await window.renderView(destination);
+        if (window.currentView === destination || currentView === destination) {
+            window.closeMobileNavigation({ restoreFocus: false });
+        }
+    });
+    drawerOverlay.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            window.closeMobileNavigation();
+            return;
+        }
+        if (event.key !== 'Tab') return;
+        const panel = drawerOverlay.querySelector('.app-navigation-drawer');
+        const focusable = [...panel.querySelectorAll('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+            .filter(element => element.getClientRects().length);
+        if (!focusable.length) {
+            event.preventDefault();
+            panel.focus();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    });
+    document.body.appendChild(drawerOverlay);
+    window.navigationDrawerOpener = activeOpener;
+    const app = document.querySelector('.app-container');
+    if (app) {
+        app.inert = true;
+        app.setAttribute('aria-hidden', 'true');
+    }
     document.body.classList.add('mobile-navigation-open');
+    document.getElementById('appNavigationToggle')?.setAttribute('aria-expanded', 'true');
+    document.getElementById('mobileMoreNav')?.setAttribute('aria-expanded', 'true');
     if (window.lucide) window.lucide.createIcons();
+    requestAnimationFrame(() => {
+        drawerOverlay.classList.add('is-open');
+        drawerOverlay.querySelector('.navigation-drawer-close')?.focus();
+    });
+    window.navigationDrawerOpening = false;
 };
+
+window.updateNavigationControlLabels = function () {
+    const label = currentLang === 'ar' ? 'فتح التنقل' : 'Open navigation';
+    const moreLabel = currentLang === 'ar' ? 'المزيد من عناصر التنقل' : 'More navigation';
+    const toggle = document.getElementById('appNavigationToggle');
+    const more = document.getElementById('mobileMoreNav');
+    if (toggle) { toggle.setAttribute('aria-label', label); toggle.setAttribute('title', label); }
+    if (more) { more.setAttribute('aria-label', moreLabel); more.setAttribute('title', moreLabel); }
+};
+window.updateNavigationControlLabels();
 
 function updateTranslations() {
 
@@ -1205,11 +1417,13 @@ function updateTranslations() {
 // --- NAVIGATION & VIEWS ---
 navItems.forEach(item => {
     item.addEventListener('click', (e) => {
+        const destination = item.getAttribute('data-view');
+        if (!destination) return;
         e.preventDefault();
         navItems.forEach(nav => nav.classList.remove('active'));
         item.classList.add('active');
 
-        currentView = item.getAttribute('data-view');
+        currentView = destination;
         renderView(currentView);
     });
 });
@@ -2161,23 +2375,20 @@ function showToast(message, type = 'info', detail = '') {
     }
 
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    const toastType = ['success', 'warning', 'danger'].includes(type) ? type : 'info';
+    toast.className = `toast toast-${toastType}`;
 
     let icon = 'info';
-    let color = 'var(--color-accent)';
     let duration = 4000;
 
     if (type === 'success') {
         icon = 'check-circle';
-        color = 'var(--color-success)';
         duration = 3500;
     } else if (type === 'warning') {
         icon = 'alert-triangle';
-        color = 'var(--color-warning)';
         duration = 5000;
     } else if (type === 'danger') {
         icon = 'x-circle';
-        color = '#ef4444';
         duration = 6000;
     }
 
@@ -2221,12 +2432,11 @@ function showToast(message, type = 'info', detail = '') {
         }
     }
 
-    toast.style.borderInlineStartColor = color;
     const safeDisplayMessage = escapeHTML(String(displayMessage || ''));
     const safeDisplayDetail = escapeHTML(String(displayDetail || ''));
     toast.innerHTML = `
         <div style="display:flex; align-items:flex-start; gap:0.75rem;">
-            <i data-lucide="${icon}" style="color: ${color}; flex-shrink:0; margin-top:2px;"></i>
+            <i data-lucide="${icon}" class="toast-icon" style="flex-shrink:0; margin-top:2px;"></i>
             <div>
                 <div style="font-weight:600; font-size:0.9rem;">${safeDisplayMessage}</div>
                 ${safeDisplayDetail ? `<div style="font-size:0.8rem; margin-top:0.25rem; opacity:0.85;">${safeDisplayDetail}</div>` : ''}
@@ -2256,14 +2466,13 @@ window.showFieldError = function (fieldId, message) {
     // Clear previous error on the field
     clearFieldError(fieldId);
 
-    el.style.borderColor = '#ef4444';
-    el.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.2)';
+    el.classList.add('field-invalid');
     el.style.transition = 'border-color 0.2s, box-shadow 0.2s';
 
     const err = document.createElement('div');
-    err.className = '__field-error';
+    err.className = '__field-error semantic-field-error';
     err.dataset.for = fieldId;
-    err.style.cssText = 'color:#ef4444; font-size:0.78rem; margin-top:0.3rem; display:flex; align-items:center; gap:0.3rem; animation: fadeIn 0.2s ease;';
+    err.classList.add('field-error-message');
     err.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${escapeHTML(String(localizeRuntimeText(message) || ''))}`;
 
     el.parentNode.insertBefore(err, el.nextSibling);
@@ -2277,8 +2486,7 @@ window.showFieldError = function (fieldId, message) {
 window.clearFieldError = function (fieldId) {
     const el = document.getElementById(fieldId);
     if (el) {
-        el.style.borderColor = '';
-        el.style.boxShadow = '';
+        el.classList.remove('field-invalid');
     }
     document.querySelectorAll(`.__field-error[data-for="${fieldId}"]`).forEach(e => e.remove());
 };
@@ -2296,10 +2504,10 @@ async function renderCommunity() {
             <div style="width:40px; height:40px; border-radius:50%; background:var(--color-surface-hover); flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
                 ${m.profiles.avatar_url ? `<img src="${m.profiles.avatar_url}" style="width:100%;height:100%;object-fit:cover;">` : `<i data-lucide="user"></i>`}
             </div>
-            <div style="max-width:70%; ${m.is_birthday_alert ? 'background: linear-gradient(135deg, #fce7f3, #fbcfe8); border: 1px solid #f9a8d4;' : (m.user_id === currentUser.id ? 'background:var(--color-primary); color:white;' : 'background:var(--color-surface); border:1px solid var(--color-border);')} padding:1rem; border-radius:8px;">
-                <div style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; ${m.user_id === currentUser.id ? 'color:rgba(255,255,255,0.9);' : 'color:var(--color-text-secondary);'}">${window.formatEmployeeName(m.profiles)}</div>
-                <div style="${m.is_birthday_alert ? 'font-weight:bold; font-size:1.1rem; color: #be185d;' : ''}">${m.message}</div>
-                <div style="font-size:0.75rem; margin-top:0.5rem; ${m.user_id === currentUser.id ? 'color:rgba(255,255,255,0.7);' : 'color:var(--color-text-tertiary);'}">${new Date(m.created_at).toLocaleString()}</div>
+            <div class="community-message${m.is_birthday_alert ? ' is-celebration' : ''}${m.user_id === currentUser.id ? ' is-own-message' : ''}">
+                <div class="community-message-author">${window.formatEmployeeName(m.profiles)}</div>
+                <div class="community-message-copy">${m.message}</div>
+                <div class="community-message-time">${new Date(m.created_at).toLocaleString()}</div>
             </div>
         </div>
     `).join('');
@@ -2812,7 +3020,7 @@ function renderLogin() {
                 <div class="form-group" style="margin-bottom: 1.5rem; position: relative;">
                     <label class="form-label">${t('new_password_label')}</label>
                     <input type="password" autocomplete="new-password" id="new-password" class="form-control" required style="padding-right: 40px;">
-                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-password')" style="color: white;">
+                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-password')" style="color: var(--text-primary);">
                         <i data-lucide="eye" id="new-password-eye-icon" style="width: 20px; height: 20px;"></i>
                     </button>
                 </div>
@@ -2836,12 +3044,12 @@ function renderLogin() {
                 <div class="form-group" style="margin-bottom: 0.5rem; position: relative;">
                     <label class="form-label">${t('password_label')}</label>
                     <input type="password" autocomplete="new-password" id="password" class="form-control" required style="padding-right: 40px;">
-                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('password')" style="color: white;">
+                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('password')">
                         <i data-lucide="eye" id="password-eye-icon" style="width: 20px; height: 20px;"></i>
                     </button>
                 </div>
                 <div style="text-align: right; margin-bottom: 1.5rem;">
-                    <a href="#" onclick="setLoginMode('forgot')" style="color: white; font-size: 0.85rem; text-decoration: none;">${t('forgot_password')}</a>
+                    <a href="#" onclick="setLoginMode('forgot')" class="login-forgot-link">${t('forgot_password')}</a>
                 </div>
                 <button type="submit" class="btn-primary" style="width: 100%; padding: 0.875rem; font-size: 1rem;">${t('sign_in')}</button>
             </form>
@@ -2849,21 +3057,12 @@ function renderLogin() {
     }
 
     return `
-        <style>
-            .login-card-wrapper,
-            .login-card-wrapper h2,
-            .login-card-wrapper p,
-            .login-card-wrapper label,
-            .login-card-wrapper a {
-                color: #FFFFFF !important;
-            }
-        </style>
-        <div style="display: flex; height: 100vh; align-items: center; justify-content: center; width: 100vw; position: fixed; top: 0; left: 0; background: radial-gradient(circle at 18% 12%, rgba(52, 211, 153, .18), transparent 35%), linear-gradient(135deg, #081b33 0%, #102d4d 52%, #192a52 100%); z-index: 9999;">
-            <div class="card login-card-wrapper" style="width: 100%; max-width: 400px; padding: 2.5rem 2rem; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 30px 60px rgba(0,0,0,0.3); color: white;">
+        <div class="login-screen-shell">
+            <div class="card login-card-wrapper">
                 ${formHTML}
             </div>
             
-            <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 10000;">
+            <div class="login-screen-actions">
                 <button class="icon-btn" onclick="toggleLanguage()">
                     <i data-lucide="globe"></i> <span id="langText" style="font-size: 0.875rem; font-weight: 600; margin-inline-start: 4px;">${currentLang === 'en' ? 'AR' : 'EN'}</span>
                 </button>
@@ -3026,7 +3225,7 @@ window.openHierarchyEmployeeInfo = function (userId) {
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'hierarchyEmployeeInfoTitle');
     modal.innerHTML = `<div class="modal-content hierarchy-employee-card">
-        <button type="button" class="close-modal" aria-label="Close employee information" onclick="closeHierarchyEmployeeInfo()">&times;</button>
+        <button type="button" class="close-modal" aria-label="Close employee information" title="Close employee information" onclick="closeHierarchyEmployeeInfo()"><i data-lucide="x" aria-hidden="true"></i></button>
         <div class="hierarchy-employee-card-header">
             ${avatar ? `<img src="${escapeHTML(avatar)}" alt="${escapeHTML(window.formatEmployeeName(employee) || 'Employee')}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;"><span class="hierarchy-employee-card-avatar hierarchy-avatar-placeholder" hidden><i data-lucide="user"></i></span>` : `<span class="hierarchy-employee-card-avatar hierarchy-avatar-placeholder"><i data-lucide="user"></i></span>`}
             <div><h2 id="hierarchyEmployeeInfoTitle">${escapeHTML(window.formatEmployeeName(employee) || 'Employee')}</h2><p>${escapeHTML(employee.job_title || 'No job title')}</p></div>
@@ -3123,7 +3322,7 @@ async function renderDashboard() {
 
     let announcementsHTML = announcementsList.map(a => `
         <div class="announcement-item">
-            <div class="announcement-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--color-success);">
+            <div class="announcement-icon announcement-icon-success">
                 <i data-lucide="megaphone"></i>
             </div>
             <div class="announcement-content">
@@ -3224,8 +3423,8 @@ async function renderDashboard() {
             const expiringContracts = contracts.filter(c => c.end_date && (new Date(c.end_date) - new Date()) / (1000 * 60 * 60 * 24) < 30);
             if (expiringContracts.length > 0) {
                 expirationAlerts += `
-                    <div style="background: rgba(245, 158, 11, 0.1); border-left: 4px solid var(--color-warning); padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
-                        <strong style="color: var(--color-warning);">${t('contract_expiring')}:</strong> ${expiringContracts.length}
+                    <div class="dashboard-alert dashboard-alert-warning">
+                        <strong>${t('contract_expiring')}:</strong> ${expiringContracts.length}
                     </div>
                 `;
             }
@@ -3263,17 +3462,17 @@ async function renderDashboard() {
                 <p class="page-subtitle">${t('welcome_sub')}</p>
             </div>
             ${isClockedIn
-            ? `<button id="attendanceClockButton" class="btn-primary" style="background: var(--color-danger);" onclick="handleClockOutPrompt('${todayAttendance.id}')">${t('attendance_clock_out')}</button>`
+            ? `<button id="attendanceClockButton" class="btn btn-danger" onclick="handleClockOutPrompt('${todayAttendance.id}')">${t('attendance_clock_out')}</button>`
             : `<button id="attendanceClockButton" class="btn-primary" onclick="handleClockIn()">${t('attendance_clock_in')}</button>`
         }
         </div>
 
         <div class="dashboard-grid">
             ${currentUserRole === 'ADMIN' ? `
-            <div class="card col-span-12 fade-in-up" style="background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, var(--color-bg-surface)), var(--color-bg-surface)); border: 1.5px solid var(--color-primary); padding: 1.25rem 1.5rem; border-radius: 12px; margin-bottom: 0.5rem;">
+            <div class="card col-span-12 fade-in-up dashboard-admin-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                     <div style="display: flex; align-items: center; gap: 1rem;">
-                        <div style="background: var(--color-primary); color: #fff; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <div class="admin-trust-icon" style="width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                             <i data-lucide="shield-check" style="width: 24px; height: 24px;"></i>
                         </div>
                         <div>
@@ -3342,7 +3541,7 @@ async function renderDashboard() {
             <div class="modal-content" style="max-width: 500px;">
                 <div class="modal-header">
                     <h3>${t('post_announcement')}</h3>
-                    <button class="close-modal" onclick="closeAnnouncementModal()">&times;</button>
+                    <button class="close-modal" onclick="closeAnnouncementModal()"><i data-lucide="x" aria-hidden="true"></i></button>
                 </div>
                 <form onsubmit="handlePostAnnouncement(event)">
                     <div class="form-group">
@@ -3365,7 +3564,7 @@ async function renderDashboard() {
             <div class="modal-content" style="max-width: 400px; text-align:center;">
                 <div class="modal-header">
                     <h3>${t('attendance_clock_out')}</h3>
-                    <button class="close-modal" onclick="closeClockOutModal()">&times;</button>
+                    <button class="close-modal" onclick="closeClockOutModal()"><i data-lucide="x" aria-hidden="true"></i></button>
                 </div>
                 <p style="margin-bottom: 1.5rem; color:var(--color-text-secondary);">Please select your logout location:</p>
                 <div style="display: flex; flex-direction:column; gap: 1rem;">
@@ -3379,7 +3578,7 @@ async function renderDashboard() {
             <div class="modal-content order-clockout-camera-modal">
                 <div class="modal-header">
                     <h3 id="orderClockOutCameraTitle">Order location photo</h3>
-                    <button type="button" class="close-modal" onclick="cancelOrderClockOutPhoto()" aria-label="Cancel photo capture">&times;</button>
+                    <button type="button" class="close-modal" onclick="cancelOrderClockOutPhoto()" aria-label="Cancel photo capture" title="Cancel photo capture"><i data-lucide="x" aria-hidden="true"></i></button>
                 </div>
                 <p class="order-clockout-camera-help">Take a current photo at the order location to complete clock out.</p>
                 <div class="order-clockout-camera-stage">
@@ -4313,7 +4512,7 @@ window.openTaskAssigneePicker = function (taskId) {
         modal.id = 'taskAssigneePickerModal';
         modal.className = 'modal';
         modal.style.zIndex = '2147483001';
-        modal.innerHTML = `<div class="modal-content task-assignee-picker-content"><div class="modal-header"><h2>Assign task</h2><button type="button" class="close-modal" data-assignee-cancel aria-label="Close">&times;</button></div><p class="task-assignee-picker-help">Select one or more employees.</p><div id="taskAssigneePickerOptions" class="task-assignee-picker-options" role="group" aria-label="Task assignees"></div><div class="modal-actions"><button type="button" class="btn btn-secondary" data-assignee-cancel>Cancel</button><button type="button" class="btn btn-primary" id="taskAssigneePickerSave">Save assignment</button></div></div>`;
+        modal.innerHTML = `<div class="modal-content task-assignee-picker-content"><div class="modal-header"><h2>Assign task</h2><button type="button" class="close-modal" data-assignee-cancel aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button></div><p class="task-assignee-picker-help">Select one or more employees.</p><div id="taskAssigneePickerOptions" class="task-assignee-picker-options" role="group" aria-label="Task assignees"></div><div class="modal-actions"><button type="button" class="btn btn-secondary" data-assignee-cancel>Cancel</button><button type="button" class="btn btn-primary" id="taskAssigneePickerSave">Save assignment</button></div></div>`;
         document.body.appendChild(modal);
         modal.querySelectorAll('[data-assignee-cancel]').forEach(button => button.onclick = () => modal.classList.remove('show'));
         modal.querySelector('#taskAssigneePickerSave').onclick = async () => {
@@ -4375,7 +4574,7 @@ async function prepareTeamworkTaskDetail(task) {
             actions.className = 'task-detail-actions';
             header.appendChild(actions);
         }
-        actions.innerHTML = `${canApproveCompletion ? `<button type="button" class="btn btn-primary" onclick="approveTaskCompletion('${task.id}')"><i data-lucide="check-circle"></i> ${taskDetailText('Approve', 'اعتماد')}</button>` : ''}${canCompleteAndHandOff ? `<button type="button" class="btn btn-primary task-detail-handoff" onclick="window.handleCompleteAndHandOffTask('${task.id}')"><i data-lucide="check-check"></i> ${taskDetailText('Complete & Hand Off', 'إنهاء وتسليم')}</button>` : ''}${canEdit ? `<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById('detailsTaskId').value)"><i data-lucide="pencil"></i> ${taskDetailText('Edit', 'تعديل')}</button>` : ''}<button type="button" class="task-detail-close" aria-label="${taskDetailText('Close task', 'إغلاق المهمة')}" onclick="window.closeTaskDetailsModal()">&times;</button>`;
+        actions.innerHTML = `${canApproveCompletion ? `<button type="button" class="btn btn-primary" onclick="approveTaskCompletion('${task.id}')"><i data-lucide="check-circle"></i> ${taskDetailText('Approve', 'اعتماد')}</button>` : ''}${canCompleteAndHandOff ? `<button type="button" class="btn btn-primary task-detail-handoff" onclick="window.handleCompleteAndHandOffTask('${task.id}')"><i data-lucide="check-check"></i> ${taskDetailText('Complete & Hand Off', 'إنهاء وتسليم')}</button>` : ''}${canEdit ? `<button type="button" class="btn btn-primary task-detail-edit" onclick="openEditTaskModal(document.getElementById('detailsTaskId').value)"><i data-lucide="pencil"></i> ${taskDetailText('Edit', 'تعديل')}</button>` : ''}<button type="button" class="task-detail-close" aria-label="${taskDetailText('Close task', 'إغلاق المهمة')}" title="${taskDetailText('Close task', 'إغلاق المهمة')}" onclick="window.closeTaskDetailsModal()"><i data-lucide="x" aria-hidden="true"></i></button>`;
         header.querySelector('.close-modal')?.remove();
     }
     const grid = panel.querySelector('.task-details-grid');
@@ -4826,7 +5025,7 @@ window.setTaskDetailInfoTab = function (tab) {
         panel.innerHTML = `<div class="task-detail-data-grid"><div><span>${taskDetailText('Status', 'الحالة')}</span><strong>${escapeHTML(taskDetailValue(task.status, 'status'))}</strong></div><div><span>${taskDetailText('Priority', 'الأولوية')}</span><strong>${escapeHTML(taskDetailValue(task.priority, 'priority'))}</strong></div><div><span>${taskDetailText('Content links', 'روابط المحتوى')}</span><strong>${contentLinks.length}</strong></div><div><span>${taskDetailText('Due date', 'تاريخ الاستحقاق')}</span><strong>${escapeHTML(task.due_date || taskDetailText('Not set', 'غير محدد'))}</strong></div></div>
             <section class="task-detail-inline-subtasks"><div class="task-detail-subtask-heading"><strong>${taskDetailText('Subtasks', 'المهام الفرعية')} <span>${subtasks.length}</span></strong>${canManageTask ? `<button type="button" onclick="openInlineSubtaskComposer()"><i data-lucide="plus"></i> ${taskDetailText('Add a subtask', 'إضافة مهمة فرعية')}</button>` : `<span class="task-private-badge"><i data-lucide="eye"></i>${taskDetailText('View only', 'عرض فقط')}</span>`}</div><div id="taskDetailSubtaskHost">${subtasks.length ? subtasks.map(subtask => {
                 const isDone = subtask.status === 'completed' || subtask.status === 'Approved';
-                const iconColor = isDone ? '#059669' : 'var(--color-text-secondary)';
+            const iconColor = isDone ? 'var(--success)' : 'var(--text-secondary)';
                 const iconName = isDone ? 'check-circle-2' : 'circle';
                 const titleStyle = isDone ? 'text-decoration:line-through;opacity:0.55;' : '';
                 const canChangeSubtask = canChangeTaskStageRecord(subtask);
@@ -5372,8 +5571,8 @@ function initCharts() {
                 datasets: [{
                     label: 'Employees',
                     data: [10, 15, 22, 28, 35, 42],
-                    borderColor: '#0f3a68',
-                    backgroundColor: 'rgba(15, 58, 104, 0.1)',
+                    borderColor: 'var(--chart-series-1)',
+                    backgroundColor: 'color-mix(in srgb, var(--chart-series-1) 10%, transparent)',
                     tension: 0.1,
                     fill: true
                 }]
@@ -5389,7 +5588,7 @@ function initCharts() {
                 datasets: [{
                     label: 'Leave Days',
                     data: [5, 8, 3, 12, 15, 10],
-                    backgroundColor: '#10b981'
+                    backgroundColor: 'var(--chart-series-5)'
                 }]
             }
         });
@@ -5435,12 +5634,12 @@ window.previewRole = function (role) {
         btn.style.right = '20px';
         btn.style.zIndex = '9999';
         btn.style.backgroundColor = 'var(--color-danger)';
-        btn.style.color = '#fff';
+        btn.style.color = 'var(--action-danger-text)';
         btn.style.padding = '10px 20px';
         btn.style.border = 'none';
         btn.style.borderRadius = '5px';
         btn.style.cursor = 'pointer';
-        btn.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+        btn.style.boxShadow = 'var(--shadow-sm)';
         btn.style.display = 'flex';
         btn.style.alignItems = 'center';
 
@@ -6514,12 +6713,15 @@ window.generatePerformanceReport = async function () {
     const targetScore = 85;
     const rows = employees.map((e, i) => {
         const { label, cls } = getRatingLabel(e.score);
-        const medal = e.score >= targetScore && i < 3
-            ? (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉')
-            : `#${i + 1}`;
+        const rank = `#${i + 1}`;
+        const targetAchiever = e.score >= targetScore && i < 3;
+        const achieverLabel = currentLang === 'ar' ? 'حقق الهدف' : 'Target achieved';
+        const rankLabel = targetAchiever
+            ? `<span class="performance-target-achiever" role="img" aria-label="${achieverLabel}" title="${achieverLabel}"><i data-lucide="trophy" aria-hidden="true"></i></span> `
+            : '';
         return `
         <tr>
-            <td style="font-weight:600;">${medal} ${escapeHTML(e.name)}</td>
+            <td style="font-weight:600;">${rankLabel}${rank} ${escapeHTML(e.name)}</td>
             <td style="color:var(--color-text-secondary); font-size:0.85rem;">${escapeHTML(e.job_title)}</td>
             <td>${e.total}</td>
             <td><span style="color:var(--color-success); font-weight:600;">${e.done}</span></td>
@@ -7506,9 +7708,9 @@ async function renderProfile() {
         </div>
         <div class="dashboard-grid fade-in-up">
             <!-- Profile Photo & Summary -->
-            <div class="card col-span-4" style="text-align: center;">
+            <div class="card col-span-4 profile-photo-summary" style="text-align: center;">
                 <div style="position: relative; display: inline-block;">
-                    <img src="${avatar}" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem; border: 4px solid var(--color-background); box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
+                    <img src="${avatar}" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem; border: 4px solid var(--border-default); box-shadow: var(--shadow-sm);" />
                 </div>
                 <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem;">${escapeHTML(displayName)}</h3>
                 <p style="color: var(--color-primary); font-weight: 500; margin-bottom: 1.5rem;">${t(`role_${String(currentUserRole || 'employee').toLowerCase()}`) || currentUserRole}</p>
@@ -7839,7 +8041,7 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
     } catch (_) {
         employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>`;
     }
-    modal.innerHTML = `<div class="my-day-modal" role="dialog" aria-modal="true"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}">&times;</button><h2>${escapeHTML(title)}</h2><label>${escapeHTML(taskDetailText('Reason', 'السبب'))}<select id="myDayWorkCategory">${categories.map(([value, label]) => `<option value="${value}">${escapeHTML(currentLang === 'ar' ? ({CLIENT:'العميل',SUPPLIER:'المورد',MANAGEMENT:'الإدارة',APPROVAL:'الموافقة',DESIGN:'التصميم',PRODUCTION:'الإنتاج',ANOTHER_EMPLOYEE:'موظف آخر',MISSING_INFORMATION:'معلومات ناقصة',TECHNICAL_PROBLEM:'مشكلة تقنية',OTHER:'أخرى'}[value] || label) : label)}</option>`).join('')}</select></label><label>${escapeHTML(taskDetailText('Waiting for (optional)', 'بانتظار (اختياري)'))}<select id="myDayRelatedUser">${employeeOptions}</select></label><label>${escapeHTML(taskDetailText('Note (optional)', 'ملاحظة (اختيارية)'))}<textarea id="myDayWorkNote" rows="3"></textarea></label><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary my-day-modal-cancel">${escapeHTML(taskDetailText('Cancel', 'إلغاء'))}</button><button type="button" class="btn btn-primary my-day-modal-submit">${escapeHTML(taskDetailText('Save', 'حفظ'))}</button></div></div>`;
+    modal.innerHTML = `<div class="my-day-modal" role="dialog" aria-modal="true"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" title="${escapeHTML(taskDetailText('Close', 'إغلاق'))}"><i data-lucide="x" aria-hidden="true"></i></button><h2>${escapeHTML(title)}</h2><label>${escapeHTML(taskDetailText('Reason', 'السبب'))}<select id="myDayWorkCategory">${categories.map(([value, label]) => `<option value="${value}">${escapeHTML(currentLang === 'ar' ? ({CLIENT:'العميل',SUPPLIER:'المورد',MANAGEMENT:'الإدارة',APPROVAL:'الموافقة',DESIGN:'التصميم',PRODUCTION:'الإنتاج',ANOTHER_EMPLOYEE:'موظف آخر',MISSING_INFORMATION:'معلومات ناقصة',TECHNICAL_PROBLEM:'مشكلة تقنية',OTHER:'أخرى'}[value] || label) : label)}</option>`).join('')}</select></label><label>${escapeHTML(taskDetailText('Waiting for (optional)', 'بانتظار (اختياري)'))}<select id="myDayRelatedUser">${employeeOptions}</select></label><label>${escapeHTML(taskDetailText('Note (optional)', 'ملاحظة (اختيارية)'))}<textarea id="myDayWorkNote" rows="3"></textarea></label><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary my-day-modal-cancel">${escapeHTML(taskDetailText('Cancel', 'إلغاء'))}</button><button type="button" class="btn btn-primary my-day-modal-submit">${escapeHTML(taskDetailText('Save', 'حفظ'))}</button></div></div>`;
     document.body.appendChild(modal);
     const close = () => modal.remove();
     modal.querySelector('.my-day-modal-close').onclick = close;
@@ -8336,12 +8538,12 @@ async function renderTasksV2() {
         const prioColor = task.priority === 'high' || task.priority === 'urgent' ? 'var(--color-warning)' : (task.priority === 'critical' ? 'var(--color-danger)' : 'var(--color-text-secondary)');
         const isCompleted = task.status === 'completed';
         const stageCheckColor = {
-            in_progress: '#f59e0b',
-            late: '#dc2626',
-            review: '#2563eb',
-            'Pending Approval': '#7c3aed',
-            completed: '#059669',
-            Approved: '#059669'
+            in_progress: 'var(--warning)',
+            late: 'var(--danger)',
+            review: 'var(--info)',
+            'Pending Approval': 'var(--warning)',
+            completed: 'var(--success)',
+            Approved: 'var(--success)'
         }[task.status] || 'var(--color-text-secondary)';
         
         const listName = taskList?.name || (task.project_id ? (projectsById.get(String(task.project_id))?.project_name || 'Project tasks') : 'Personal tasks');
@@ -8399,7 +8601,7 @@ async function renderTasksV2() {
                 <div class="task-v2-row-actions">
                     <button type="button" class="task-assignee task-row-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignee" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>${assigneeHTML}</button>
                     ${task.due_date ? `<span class="task-row-due${dueClass}" style="display:flex; align-items: center; gap:4px; font-size:0.8rem; color:var(--color-text-secondary); white-space:nowrap; flex-shrink:0;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date}</span>` : ''}
-                    ${task.category && task.category !== 'General' ? `<span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--color-primary); font-size: 0.75rem;">${escapeHTML(task.category)}</span>` : ''}
+                    ${task.category && task.category !== 'General' ? `<span class="task-category-chip">${escapeHTML(task.category)}</span>` : ''}
                     <button class="icon-btn ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.stopPropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator or an administrator can edit this task'}" style="color:var(--color-text-secondary);"><i data-lucide="pencil" style="width:16px;height:16px;"></i></button>
                     <button class="icon-btn task-pipeline-delete ${canDeleteTask ? '' : 'is-disabled'}" ${canDeleteTask ? `onclick="event.stopPropagation(); window.handleDeleteTask('${task.id}')"` : 'disabled'} title="${canDeleteTask ? 'Delete task' : 'Only the task creator or an administrator can delete this task'}" style="color:var(--color-danger);"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
                 </div>
@@ -9218,7 +9420,7 @@ window._applyTaskRowCompleteStyle = function (taskId, completed) {
         // Lucide replaces <i data-lucide> with <svg> at runtime, so target svg
         const icon = node.querySelector('.task-v2-check-btn svg');
         if (icon) {
-            icon.style.color = completed ? '#059669' : 'var(--color-text-secondary)';
+        icon.style.color = completed ? 'var(--success)' : 'var(--text-secondary)';
             icon.style.transition = 'color 0.2s ease';
         }
         // Task title
@@ -9287,7 +9489,7 @@ window.toggleSubtaskComplete = async function (subtaskId, iconEl) {
     // Optimistic DOM update on the icon and its sibling title span
     const row = iconEl.closest('.task-detail-subtask-row');
     if (row) {
-        iconEl.style.color = !isCurrentlyDone ? '#059669' : 'var(--color-text-secondary)';
+        iconEl.style.color = !isCurrentlyDone ? 'var(--success)' : 'var(--text-secondary)';
         iconEl.setAttribute('data-lucide', !isCurrentlyDone ? 'check-circle-2' : 'circle');
         if (window.lucide) window.lucide.createIcons({ elements: [iconEl] });
         const titleSpan = row.querySelector('span');
@@ -9303,7 +9505,7 @@ window.toggleSubtaskComplete = async function (subtaskId, iconEl) {
     // On failure, revert the optimistic changes and re-render
     if (result?.error) {
         if (row) {
-            iconEl.style.color = isCurrentlyDone ? '#059669' : 'var(--color-text-secondary)';
+        iconEl.style.color = isCurrentlyDone ? 'var(--success)' : 'var(--text-secondary)';
             iconEl.setAttribute('data-lucide', isCurrentlyDone ? 'check-circle-2' : 'circle');
             if (window.lucide) window.lucide.createIcons({ elements: [iconEl] });
             const titleSpan = row.querySelector('span');
@@ -10895,7 +11097,7 @@ window.navigateToContract = async function (employeeId, empName) {
         <div class="modal-content" style="max-width: 900px; width: 90%; background: var(--color-bg-surface); padding: 0; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header" style="position: sticky; top: 0; background: var(--color-bg-surface); z-index: 10; padding: 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;">
                 <h2 style="margin:0">${t('users_contract') || 'Contract'} - ${empName}</h2>
-                <button class="close-modal" onclick="document.getElementById('contractEditModal').style.display = 'none'">&times;</button>
+                <button class="close-modal" onclick="document.getElementById('contractEditModal').style.display = 'none'"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
             <div class="modal-body contract-modal-body" style="padding: 1.5rem; padding-top: 0.5rem;">
                 <style>
@@ -11531,7 +11733,7 @@ window.handlePrintContract = async (employeeId) => {
             const modalHTML = `
                 <div id="contractSelectModal" class="modal" style="display: flex;">
                     <div class="modal-content" style="max-width: 600px;">
-                        <span class="close" onclick="document.getElementById('contractSelectModal').remove()">&times;</span>
+                        <button type="button" class="close" onclick="document.getElementById('contractSelectModal').remove()"><i data-lucide="x" aria-hidden="true"></i></button>
                         <h2>Select Contract to Print</h2>
                         <div style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
                             ${optionsHTML}
@@ -11799,7 +12001,6 @@ async function renderTemplates() {
         {
             type: 'employees',
             icon: 'users',
-            gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             titleKey: 'ui_template_employees',
             titleFallback: 'Employees Template',
             desc: 'Import new employees and user accounts in bulk.',
@@ -11808,7 +12009,6 @@ async function renderTemplates() {
         {
             type: 'clients',
             icon: 'building-2',
-            gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
             titleKey: 'ui_template_clients',
             titleFallback: 'Clients Template',
             desc: 'Import CRM clients and deal pipelines.',
@@ -11817,7 +12017,6 @@ async function renderTemplates() {
         {
             type: 'projects',
             icon: 'folder-kanban',
-            gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
             titleKey: 'ui_template_projects',
             titleFallback: 'Projects Template',
             desc: 'Import projects and associate them with clients.',
@@ -11826,7 +12025,6 @@ async function renderTemplates() {
         {
             type: 'tasks',
             icon: 'list-checks',
-            gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
             titleKey: 'ui_template_tasks',
             titleFallback: 'Tasks Template',
             desc: 'Import tasks across multiple projects in bulk.',
@@ -11835,7 +12033,6 @@ async function renderTemplates() {
         {
             type: 'departments_jobtitles',
             icon: 'building',
-            gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
             titleKey: 'ui_template_dept_jobs',
             titleFallback: 'Departments & Job Titles',
             desc: 'Import translated Departments and Job Titles.',
@@ -11844,34 +12041,24 @@ async function renderTemplates() {
     ];
 
     const cards = templates.map(tmpl => `
-        <div class="template-card fade-in-up" style="
-            background: var(--color-surface);
-            border: 1px solid var(--color-border);
-            border-radius: 16px;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        " onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 32px rgba(0,0,0,0.12)'" onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'">
-            <!-- Gradient top banner with icon -->
-            <div style="background: ${tmpl.gradient}; padding: 2rem; display: flex; align-items: center; justify-content: center; min-height: 140px;">
-                <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.25); border-radius: 16px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
-                    <i data-lucide="${tmpl.icon}" style="width: 32px; height: 32px; color: #fff;"></i>
+        <div class="template-card fade-in-up">
+            <div class="template-card-icon">
+                <div class="template-card-icon-inner">
+                    <i data-lucide="${tmpl.icon}"></i>
                 </div>
             </div>
             <!-- Card body -->
-            <div style="padding: 1.5rem; display: flex; flex-direction: column; flex: 1; gap: 0.75rem;">
-                <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--color-text);">
+            <div class="template-card-body">
+                <h3>
                     <span data-i18n="${tmpl.titleKey}">${t(tmpl.titleKey) || tmpl.titleFallback}</span>
                 </h3>
-                <p style="margin: 0; color: var(--color-text-secondary); font-size: 0.825rem; line-height: 1.5; flex: 1;">${tmpl.desc}</p>
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                    <button class="btn btn-secondary" style="flex: 1; font-size: 0.75rem; padding: 0.6rem 0.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; line-height: 1.2;" onclick="downloadTemplate('${tmpl.type}')">
+                <p>${tmpl.desc}</p>
+                <div class="template-card-actions">
+                    <button class="btn btn-secondary" onclick="downloadTemplate('${tmpl.type}')">
                         <i data-lucide="download" style="width:16px;height:16px;"></i>
                         <span data-i18n="ui_download">${t('ui_download') || 'Download'}</span>
                     </button>
-                    <button class="btn btn-primary" style="flex: 1; font-size: 0.75rem; padding: 0.6rem 0.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; line-height: 1.2;" onclick="triggerBulkUpload('${tmpl.type}')">
+                    <button class="btn btn-primary" onclick="triggerBulkUpload('${tmpl.type}')">
                         <i data-lucide="upload" style="width:16px;height:16px;"></i>
                         <span data-i18n="ui_bulk_upload">${t('ui_bulk_upload') || 'Bulk Upload'}</span>
                     </button>
@@ -12272,10 +12459,10 @@ async function renderTranslationsPage() {
         const isMissing = !i18n.ar[key];
 
         return `
-            <tr class="trans-row" data-key="${keyAttr}" data-en="${enAttr}" data-ar="${arAttr}" style="${isMissing ? 'background: rgba(255,180,0,0.06);' : ''}">
+            <tr class="trans-row${isMissing ? ' is-missing-translation' : ''}" data-key="${keyAttr}" data-en="${enAttr}" data-ar="${arAttr}">
                 <td style="font-family: monospace; font-weight: 600; font-size: 0.85rem; color: var(--color-accent); word-break: break-all;">
                     ${keyEscaped}
-                    ${isMissing ? '<span style="background:#e67e22;color:#fff;border-radius:4px;padding:1px 5px;font-size:0.7rem;margin-inline-start:4px;">Missing AR</span>' : ''}
+                    ${isMissing ? '<span class="translation-missing-badge">Missing AR</span>' : ''}
                 </td>
                 <td>
                     <input type="text" id="trans_en_${keyEscaped}" class="form-control" style="font-size:0.85rem;" value="${enVal}" onchange="queueTranslationAutosave()">
@@ -12473,7 +12660,7 @@ async function renderTranslationsPage() {
             <div class="modal-content" style="max-width: 500px;">
                 <div class="modal-header">
                     <h3>${t('trans_add_key') || 'Add Translation Key'}</h3>
-                    <button class="close-modal" onclick="closeAddTranslationModal()">&times;</button>
+                    <button class="close-modal" onclick="closeAddTranslationModal()"><i data-lucide="x" aria-hidden="true"></i></button>
                 </div>
                 <form id="addTranslationForm" onsubmit="handleAddTranslationSubmit(event)">
                     <div class="form-group">
@@ -12537,7 +12724,6 @@ window.renderView = async function (viewId, isBack = false) {
         viewId = 'dashboard';
         currentView = 'dashboard';
     }
-
     // Give every in-app page a real browser history entry. Android's system
     // Back button and mobile browser Back controls can now traverse app views.
     if (!isBack) syncAppBrowserHistory(viewId, viewId === 'login');
@@ -12553,7 +12739,12 @@ window.renderView = async function (viewId, isBack = false) {
     if (viewId !== 'login') {
         localStorage.setItem('muqam_hr_last_view', viewId);
         if (currentUser?.id) localStorage.setItem(`muqam_hr_last_view_${currentUser.id}`, viewId);
-        navItems.forEach(nav => nav.classList.toggle('active', nav.getAttribute('data-view') === viewId));
+        document.querySelectorAll('.nav-item[data-view], .navigation-drawer-item[data-view]').forEach(nav => {
+            const isCurrent = nav.getAttribute('data-view') === viewId;
+            nav.classList.toggle('active', isCurrent);
+            if (isCurrent) nav.setAttribute('aria-current', 'page');
+            else nav.removeAttribute('aria-current');
+        });
     }
 
     if (!isBack && viewId !== 'login') {
@@ -12661,11 +12852,16 @@ window.renderView = async function (viewId, isBack = false) {
     console.log("renderView: finished switch for", viewId, "currentView:", currentView, "content length:", content.length);
 
     if (currentView === viewId || viewId === 'login') {
+        if (document.getElementById('appNavigationDrawerOverlay')) {
+            window.closeMobileNavigation({ restoreFocus: false });
+        }
         console.log("renderView: updating viewContainer.innerHTML for", viewId);
         window.viewHTMLCache[viewId] = content;
         // Always update the view with the fresh content!
         viewContainer.innerHTML = content;
         translateArabicInterface(viewContainer);
+        applySemanticStatusIcons(viewContainer);
+        applyIconOnlyButtonNames(document);
         try {
             lucide.createIcons();
         } catch (e) {
@@ -12692,10 +12888,14 @@ window.renderView = async function (viewId, isBack = false) {
         window.viewHTMLCache[viewId] = content;
     }
 
-    // Toggle global back button
+    // Show Back only when the app has an in-app parent or the current URL is
+    // a hierarchical Project detail deep link. Root screens remain uncluttered.
     const backBtn = document.getElementById('globalBackButton');
     if (backBtn) {
-        if (viewId !== 'login') {
+        const route = new URLSearchParams(window.location.search);
+        const hasHierarchicalProjectRoute = viewId === 'projects' && route.has('project');
+        const hasParentRoute = viewId !== 'login' && hasHierarchicalProjectRoute;
+        if (hasParentRoute) {
             backBtn.style.display = 'inline-flex';
             backBtn.setAttribute('aria-label', currentLang === 'ar' ? 'العودة إلى الصفحة السابقة' : 'Back to previous page');
             backBtn.setAttribute('title', currentLang === 'ar' ? 'العودة إلى الصفحة السابقة' : 'Back to previous page');
@@ -12744,7 +12944,7 @@ async function renderNotifications() {
 
     if (notifs && notifs.length > 0) {
         listHtml = notifs.map(n => `
-            <div class="card fade-in-up" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''} style="margin-bottom: 1rem; ${n.task_id ? 'cursor: pointer;' : ''} ${!n.is_read ? 'border-left: 4px solid var(--color-primary); background: rgba(37,99,235,0.02);' : ''}">
+            <div class="card fade-in-up notification-card${!n.is_read ? ' unread' : ''}${n.task_id ? ' is-task-link' : ''}" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''}>
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div style="display: flex; gap: 1rem; align-items: center;">
                         <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--color-surface); display: flex; align-items: center; justify-content: center; color: var(--color-primary);">
@@ -12757,7 +12957,7 @@ async function renderNotifications() {
                             ${n.event_type === 'task_approval_requested' && (isTaskAdmin() || n.metadata?.department_manager_id === currentUser.id) ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:.65rem" onclick="event.stopPropagation();approveTaskCompletion('${n.task_id}')"><i data-lucide="check-circle"></i> Approve</button>` : ''}
                         </div>
                     </div>
-                    ${!n.is_read ? `<span class="badge" style="background: var(--color-primary); color: white;">${t('notif_new')}</span>` : ''}
+                    ${!n.is_read ? `<span class="badge badge-brand">${t('notif_new')}</span>` : ''}
                 </div>
             </div>
         `).join('');
@@ -12907,7 +13107,7 @@ async function pollNotifications(options = {}) {
             dropdown.innerHTML = dropdownHeader + `<div style="padding: 1rem; text-align: center; color: var(--color-text-secondary);">${t('notif_no_dropdown')}</div>`;
         } else {
             dropdown.innerHTML = dropdownHeader + notifs.map(n => `
-                <div class="notification-item ${!n.is_read ? 'unread' : ''}" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''} style="padding: 10px; border-bottom: 1px solid var(--color-border); ${n.task_id ? 'cursor: pointer;' : ''} ${!n.is_read ? 'background: rgba(var(--color-primary-rgb), 0.05); font-weight: 500;' : ''}">
+                <div class="notification-item ${!n.is_read ? 'unread' : ''}${n.task_id ? ' is-task-link' : ''}" ${n.task_id ? `role="button" tabindex="0" onclick="openTaskNotification('${n.task_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTaskNotification('${n.task_id}')}"` : ''}>
                     <button type="button" class="notification-title-button compact" onclick="event.stopPropagation();openNotificationDestination('${escapeHTML(n.id)}')">${escapeHTML(localizeNotificationMessage(n.message))}</button>
                     ${renderNotificationDetails(n, true)}
                     <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px;">${new Date(n.created_at).toLocaleDateString()}</div>
@@ -13925,7 +14125,7 @@ async function renderOrders() {
                 <td>${escapeHTML(o.end_date || '-')}</td>
                 <td>${locationHtml}</td>
                 <td>${escapeHTML(o.invoice_amount || '0')} SAR</td>
-                <td><span class="status-badge" style="background: var(--color-${badgeColor}); color: white;">${escapeHTML(o.project_status || 'Unknown')}</span></td>
+                <td><span class="status-badge ${badgeColor === 'primary' ? 'info' : badgeColor === 'success' ? 'success' : 'neutral'}">${escapeHTML(o.project_status || 'Unknown')}</span></td>
                 <td>
                     <button class="btn btn-icon" style="padding: 4px;" onclick="showEditOrderModal('${o.id}')" title="Edit Order">
                         <i data-lucide="edit-2"></i>
@@ -14261,7 +14461,7 @@ function renderDealLifecycle(deal) {
         const active = entry.stage === currentStage;
         const complete = !isLost && currentStage !== 'LOST' && index < currentIndex;
         return `<div class="deal-lifecycle-step ${active ? 'active' : ''} ${complete ? 'complete' : ''} ${isLost ? 'lost' : ''}">
-            <span>${complete ? '✓' : index + 1}</span>
+            <span>${complete ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : index + 1}</span>
             <strong>${escapeHTML(t(entry.label) || entry.stage)}</strong>
         </div>`;
     }).join('');
@@ -14729,7 +14929,7 @@ function renderDealWorkflowContents(workflow) {
         const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
         const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
         return `<article class="deal-approval-step ${step.status.toLowerCase()}">
-            <div class="deal-approval-index">${step.status === 'APPROVED' ? '✓' : (step.status === 'REJECTED' ? '×' : step.step_order)}</div>
+            <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
             <div class="deal-approval-copy"><strong>${escapeHTML(label)}</strong><span>${escapeHTML(dealEmployeeName(step.profiles))}</span>${step.decision_note ? `<small>${escapeHTML(step.decision_note)}</small>` : ''}</div>
             ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideDealApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideDealApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${step.status === 'APPROVED' ? 'success' : (step.status === 'REJECTED' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + step.status.toLowerCase()) || step.status)}</span>`}
         </article>`;
@@ -14757,7 +14957,7 @@ function renderDealWorkflowContents(workflow) {
             const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
             const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
             return `<article class="deal-approval-step ${step.status.toLowerCase()}">
-                <div class="deal-approval-index">${step.status === 'APPROVED' ? '✓' : (step.status === 'REJECTED' ? '×' : step.step_order)}</div>
+                <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
                 <div class="deal-approval-copy"><strong>${escapeHTML(label)}</strong><span>${escapeHTML(dealEmployeeName(step.profiles))}</span>${step.decision_note ? `<small>${escapeHTML(step.decision_note)}</small>` : ''}</div>
                 ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideCrmDesignTaskApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideCrmDesignTaskApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${step.status === 'APPROVED' ? 'success' : (step.status === 'REJECTED' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + step.status.toLowerCase()) || step.status)}</span>`}
             </article>`;
@@ -16032,7 +16232,7 @@ window.showAppMessageModal = (message, title = t('ui_notice') || 'Notice') => {
         modal.id = 'appMessageModal';
         modal.className = 'modal';
         modal.style.zIndex = '100001';
-        modal.innerHTML = `<div class="modal-content" style="max-width:440px;text-align:center"><div class="modal-header"><h2 id="appMessageModalTitle"></h2><button type="button" class="close-modal" onclick="document.getElementById('appMessageModal').classList.remove('show')">&times;</button></div><p id="appMessageModalText" style="white-space:pre-line;color:var(--color-text-secondary);margin:1rem 0 1.5rem"></p><button type="button" class="btn btn-primary" onclick="document.getElementById('appMessageModal').classList.remove('show')">${t('btn_ok') || 'OK'}</button></div>`;
+        modal.innerHTML = `<div class="modal-content" style="max-width:440px;text-align:center"><div class="modal-header"><h2 id="appMessageModalTitle"></h2><button type="button" class="close-modal" onclick="document.getElementById('appMessageModal').classList.remove('show')"><i data-lucide="x" aria-hidden="true"></i></button></div><p id="appMessageModalText" style="white-space:pre-line;color:var(--color-text-secondary);margin:1rem 0 1.5rem"></p><button type="button" class="btn btn-primary" onclick="document.getElementById('appMessageModal').classList.remove('show')">${t('btn_ok') || 'OK'}</button></div>`;
         document.body.appendChild(modal);
     }
     document.getElementById('appMessageModalTitle').textContent = localizeRuntimeText(title);
@@ -16051,7 +16251,7 @@ window.showPromptModal = (message, title = t('ui_input_required') || 'Input requ
         // tags or estimated time). Keep them above the parent modal layer so
         // the prompt is always visible and interactive.
         modal.style.zIndex = '2147483000';
-        modal.innerHTML = `<div class="modal-content" style="max-width:500px"><div class="modal-header"><h2 id="appPromptModalTitle"></h2><button type="button" class="close-modal" data-prompt-cancel>&times;</button></div><form id="appPromptModalForm"><label class="form-label" id="appPromptModalMessage"></label><textarea id="appPromptModalInput" class="form-control" rows="3"></textarea><div class="modal-actions"><button type="button" class="btn btn-secondary" data-prompt-cancel>${t('btn_cancel')}</button><button type="submit" class="btn btn-primary">${t('html_confirm') || 'Confirm'}</button></div></form></div>`;
+        modal.innerHTML = `<div class="modal-content" style="max-width:500px"><div class="modal-header"><h2 id="appPromptModalTitle"></h2><button type="button" class="close-modal" data-prompt-cancel"><i data-lucide="x" aria-hidden="true"></i></button></div><form id="appPromptModalForm"><label class="form-label" id="appPromptModalMessage"></label><textarea id="appPromptModalInput" class="form-control" rows="3"></textarea><div class="modal-actions"><button type="button" class="btn btn-secondary" data-prompt-cancel>${t('btn_cancel')}</button><button type="submit" class="btn btn-primary">${t('html_confirm') || 'Confirm'}</button></div></form></div>`;
         document.body.appendChild(modal);
     }
     const input = document.getElementById('appPromptModalInput');
@@ -16097,7 +16297,7 @@ window.renderDepartmentJobTitlesList = () => {
     const list = document.getElementById('departmentJobTitlesList');
     if (!list) return;
     list.innerHTML = (window.currentDepartmentJobTitles || []).map((title, idx) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem; background:rgba(255,255,255,0.05); border-radius:4px; margin-bottom:0.25rem;">
+            <div class="department-job-title-draft-row">
             <span>${escapeHTML(title)}</span>
             <button type="button" class="btn btn-icon" style="color:var(--color-danger); width:24px; height:24px;" onclick="window.removeDepartmentJobTitleDraft(${idx})">
                 <i data-lucide="x" style="width:14px; height:14px;"></i>
@@ -16842,8 +17042,8 @@ async function initApp() {
                     if (row) {
                         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         row.style.transition = 'background-color 0.5s ease';
-                        row.style.backgroundColor = 'var(--color-primary-light, rgba(59, 130, 246, 0.15))';
-                        setTimeout(() => { row.style.backgroundColor = ''; }, 3500);
+                        row.classList.add('request-row-highlight');
+                        setTimeout(() => { row.classList.remove('request-row-highlight'); }, 3500);
                     }
                 } catch (e) {
                     console.warn('Could not highlight request row from URL:', e);
@@ -17552,7 +17752,7 @@ function renderProjectCommandCard(item) {
         ['open_todos', 'OPEN_TODOS', ''], ['overdue_todos', 'OVERDUE_TODOS', 'is-danger']
     ].map(([key, label, tone]) => `<span class="${tone}"><strong>${projectOperationalCount(counts[key])}</strong>${escapeHTML(projectCommandReasonLabel(label))}</span>`).join('');
     return `<article class="project-command-card project-command-health-${health}" data-project-id="${safeId}">
-        <div class="project-command-card-head"><div><span class="project-health project-health-${health}"><i></i>${escapeHTML(projectHealthLabel(healthState))}</span><h3>${escapeHTML(item.project_name || 'Project')}</h3><p>${escapeHTML(item.client_name || item.project_type || '')}</p></div><button type="button" class="btn btn-secondary btn-sm" onclick="openProjectCommandProject('${safeId}')">${projectText('openProject')} <i data-lucide="arrow-up-right"></i></button></div>
+<div class="project-command-card-head"><div><span class="project-health project-health-${health}">${escapeHTML(projectHealthLabel(healthState))}</span><h3>${escapeHTML(item.project_name || 'Project')}</h3><p>${escapeHTML(item.client_name || item.project_type || '')}</p></div><button type="button" class="btn btn-secondary btn-sm" onclick="openProjectCommandProject('${safeId}')">${projectText('openProject')} <i data-lucide="arrow-up-right"></i></button></div>
         <div class="project-command-event"><i data-lucide="calendar-days"></i><span>${escapeHTML(projectCommandEventLabel(item))}</span>${item.event_date ? `<time>${escapeHTML(projectDate(item.event_date))}</time>` : ''}</div>
         <div class="project-command-counts">${countItems}</div>
         ${reasons ? `<ul class="project-command-reasons">${reasons}</ul>` : healthState === 'ON_TRACK' ? `<p class="project-command-on-track"><i data-lucide="circle-check"></i>${projectText('allOnTrack')}</p>` : `<p class="project-command-on-track">${projectText(healthState === 'UNKNOWN' ? 'healthUnavailable' : 'healthReasonsUnavailable')}</p>`}
@@ -17695,13 +17895,13 @@ function renderProjectCard(project, canDeleteProject = false) {
     const tags = (project.project_tags || []).slice(0, 3).map(tag => `<span>${escapeHTML(tag)}</span>`).join('');
     const client = project.client_name || project.crm_clients?.company || project.crm_clients?.name;
     const editAction = canManageProjectTodos(project)
-        ? `<button class="btn btn-icon" onclick="event.stopPropagation(); openEditProjectModal('${project.id}')" title="${projectText('edit')}"><i data-lucide="pencil"></i></button>`
+        ? `<button class="btn btn-icon" onclick="event.stopPropagation(); openEditProjectModal('${project.id}')" title="${escapeHTML(projectText('edit'))}" aria-label="${escapeHTML(projectText('edit'))}"><i data-lucide="pencil"></i></button>`
         : '';
     const deleteAction = canDeleteProject
         ? `<button class="btn btn-icon" style="color:var(--color-danger);" onclick="event.stopPropagation(); handleDeleteProject('${project.id}')" title="${projectText('delete') || 'Delete'}"><i data-lucide="trash-2"></i></button>`
         : '';
     return `<article class="project-portfolio-card" data-project-id="${project.id}" data-status="${status}" data-health="${health}" data-owner="${ownerId || ''}" onclick="openProjectDetail('${project.id}')">
-        <div class="project-card-top"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><h3>${escapeHTML(project.project_name || '')}</h3><p>${escapeHTML(client || project.project_type || '')}</p></div><div class="project-card-actions" style="display:flex;flex-direction:column;gap:0.5rem;align-items:center;">${editAction}${deleteAction}</div></div>
+<div class="project-card-top"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}">${projectHealthLabel(health)}</span><h3>${escapeHTML(project.project_name || '')}</h3><p>${escapeHTML(client || project.project_type || '')}</p></div><div class="project-card-actions" style="display:flex;flex-direction:column;gap:0.5rem;align-items:center;">${editAction}${deleteAction}</div></div>
         <div class="project-card-meta"><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span><span class="project-priority priority-${String(project.priority || 'MEDIUM').toLowerCase()}">${projectPriorityLabel(project.priority)}</span></div>
         <div class="project-progress-head"><span>${projectText('progress')}</span><strong>${escapeHTML(projectProgressLabel(progress))}</strong></div><div class="project-progress-track${progress === null ? ' is-unavailable' : ''}">${progress === null ? '' : `<i style="width:${progress}%"></i>`}</div>
         <div class="project-card-facts"><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div></div>
@@ -18463,14 +18663,10 @@ initApp();
 window.switchEditTaskTab = function(tab) {
     document.querySelectorAll('.edit-task-tab').forEach(btn => {
         btn.classList.remove('active');
-        btn.style.background = 'transparent';
-        btn.style.color = 'var(--color-text-secondary)';
     });
     const activeBtn = document.querySelector(`.edit-task-tab[onclick="window.switchEditTaskTab('${tab}')"]`);
     if(activeBtn) {
         activeBtn.classList.add('active');
-        activeBtn.style.background = 'var(--color-bg)';
-        activeBtn.style.color = 'var(--color-text)';
     }
 
     document.querySelectorAll('.edit-task-tab-content').forEach(content => {
@@ -18512,10 +18708,8 @@ window.updateEditTaskPriorityUI = function(selectElem) {
         const span = container.querySelector('.priority-ui-value');
         if(span) {
             span.textContent = valText;
-            if(val === 'urgent') span.style.background = 'rgba(239, 68, 68, 0.15)', span.style.color = 'var(--color-danger)';
-            else if(val === 'high') span.style.background = 'rgba(245, 158, 11, 0.15)', span.style.color = 'var(--color-warning)';
-            else if(val === 'medium') span.style.background = 'rgba(59, 130, 246, 0.15)', span.style.color = 'var(--color-primary)';
-            else span.style.background = 'rgba(107, 114, 128, 0.15)', span.style.color = 'var(--color-text-secondary)';
+            span.classList.remove('priority-urgent', 'priority-high', 'priority-medium', 'priority-normal');
+            span.classList.add(`priority-${['urgent', 'high', 'medium'].includes(val) ? val : 'normal'}`);
         }
     }
 };
@@ -18707,7 +18901,7 @@ window.showTaskListContextMenu = function(e, listId, isAdmin) {
     if (!menu) {
         menu = document.createElement('div');
         menu.id = 'taskListContextMenu';
-        menu.style.cssText = 'display:none; position:fixed; z-index:10000; background:var(--color-surface); border:1px solid var(--color-border); border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.18); min-width:160px; padding:4px 0;';
+        menu.style.cssText = 'display:none; position:fixed; z-index:10000; background:var(--overlay-surface); border:1px solid var(--border-default); border-radius:var(--radius-md); box-shadow:var(--shadow-md); min-width:160px; padding:4px 0;';
         document.body.appendChild(menu);
         document.addEventListener('click', function(ev) {
             if (!ev.target.closest('#taskListContextMenu')) {

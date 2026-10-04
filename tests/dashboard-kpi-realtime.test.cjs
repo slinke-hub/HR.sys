@@ -28,6 +28,19 @@ const responses = {
     }
 };
 
+const stagingRef = 'jcfyyxsuspukcmybyhjj';
+const stagingAnonKey = `header.${Buffer.from(JSON.stringify({ ref: stagingRef, role: 'anon' })).toString('base64url')}.signature`;
+const windowObject = {
+    HR_RUNTIME_CONFIG: {
+        mode: 'staging',
+        valid: true,
+        projectRef: stagingRef,
+        supabaseUrl: `https://${stagingRef}.supabase.co`,
+        anonKey: stagingAnonKey
+    },
+    atob: value => Buffer.from(value, 'base64').toString('binary')
+};
+
 function queryFor(table) {
     const query = {
         select() { return query; },
@@ -39,7 +52,7 @@ function queryFor(table) {
 }
 
 const context = {
-    window: {},
+    window: windowObject,
     supabase: { createClient: () => ({ from: queryFor }) },
     console: { ...console, error() {} },
     Date,
@@ -50,6 +63,8 @@ const context = {
 };
 vm.createContext(context);
 const dbSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'db.js'), 'utf8');
+const resolverSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'runtime-config-resolver.js'), 'utf8');
+vm.runInContext(resolverSource, context);
 vm.runInContext(`${dbSource}\nglobalThis.__testDb = db;`, context);
 
 (async () => {

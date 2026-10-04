@@ -178,7 +178,7 @@ html[data-platform="android"] textarea {
     overflow: visible;
     border: 0;
     border-top: 1px solid var(--sidebar-border);
-    box-shadow: 0 -10px 30px rgba(3, 12, 27, .2);
+    box-shadow: var(--shadow-lg);
   }
 
   html[data-platform="android"] body.login-screen .sidebar {

@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const appSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
 const cssSource = fs.readFileSync(path.join(__dirname, '..', 'css', 'components.css'), 'utf8');
+const semanticCss = fs.readFileSync(path.join(__dirname, '..', 'css', 'component-semantic-migration.css'), 'utf8');
 
 assert.match(appSource, /const rowAssigneeNames = rowAssigneeProfiles\.map/);
 assert.match(appSource, /const rowCreator = usersById\.get\(String\(task\.created_by\)\) \|\| task\.creator/);
@@ -25,8 +26,8 @@ assert.match(appSource, /display_name_ar: assignee\.display_name_ar/);
 assert.match(cssSource, /\.task-focus-people \{/);
 assert.match(cssSource, /\.task-focus-people strong \{/);
 assert.match(cssSource, /#task-v2-rows-container \.task-v2-row-content h4 \{[\s\S]*font-weight: 700 !important/);
-assert.match(cssSource, /\.task-focus-assignee svg \{ color: #2563eb; \}/);
-assert.match(cssSource, /\.task-focus-creator svg \{ color: #7c3aed; \}/);
+assert.match(cssSource, /\.task-focus-assignee svg \{ color: var\(--brand-primary\); \}/);
+assert.match(semanticCss, /\.task-focus-creator svg \{ color: var\(--text-secondary\); \}/);
 assert.match(cssSource, /\.task-assignee \.task-assignee-full-name \{/);
 
 console.log('Task focus people tests passed.');

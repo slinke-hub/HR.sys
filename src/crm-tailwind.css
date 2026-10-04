@@ -101,3 +101,84 @@
   color: var(--color-text-secondary) !important;
   opacity: 1 !important;
 }
+
+/* CRM color utilities with status, timeline, or focus meaning remain utility
+   classes in JSX but resolve to the shared semantic theme at runtime. */
+#crm-react-root .mogam-crm-react :is(.tw-bg-slate-200, .before\:tw-bg-slate-200::before) {
+  background-color: var(--border-subtle) !important;
+}
+#crm-react-root .mogam-crm-react .tw-bg-slate-500 { background-color: var(--text-muted) !important; }
+#crm-react-root .mogam-crm-react .tw-bg-violet-500 { background-color: var(--brand-primary) !important; }
+#crm-react-root .mogam-crm-react .tw-border-emerald-400 { border-color: var(--success) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-ring-1, .tw-ring-2) { --tw-ring-color: var(--focus-ring) !important; }
+#crm-react-root .mogam-crm-react .tw-shadow-float { --tw-shadow: var(--shadow-md) !important; --tw-shadow-colored: var(--shadow-md) !important; }
+#crm-react-root .mogam-crm-react .tw-text-blue-400,
+#crm-react-root .mogam-crm-react .group-hover\:tw-text-blue-400 { color: var(--brand-primary) !important; }
+
+/* Stage D: remap the remaining CRM utility palette into shared semantics.
+   Utility names remain in the JSX, but their visible color no longer depends
+   on Tailwind's fixed Light palette. */
+#crm-react-root .mogam-crm-react :is(.tw-bg-white, .tw-bg-white\/50, .tw-bg-white\/95) {
+  background-color: var(--bg-surface) !important;
+}
+#crm-react-root .mogam-crm-react :is(.tw-bg-slate-50, .tw-bg-slate-50\/70, .tw-bg-slate-100) {
+  background-color: var(--bg-subtle) !important;
+}
+#crm-react-root .mogam-crm-react :is(.tw-bg-blue-50, .tw-bg-indigo-50, .tw-bg-violet-50) {
+  background-color: var(--brand-primary-soft) !important;
+}
+#crm-react-root .mogam-crm-react :is(.tw-bg-cyan-50, .tw-bg-sky-50) {
+  background-color: var(--info-soft) !important;
+}
+#crm-react-root .mogam-crm-react .tw-bg-emerald-50 { background-color: var(--success-soft) !important; }
+#crm-react-root .mogam-crm-react .tw-bg-amber-50 { background-color: var(--warning-soft) !important; }
+#crm-react-root .mogam-crm-react .tw-bg-rose-50 { background-color: var(--danger-soft) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-bg-blue-600, .tw-bg-indigo-600) {
+  background-color: var(--action-primary-bg) !important;
+  background-image: none !important;
+  color: var(--action-primary-text) !important;
+}
+#crm-react-root .mogam-crm-react :is(.tw-bg-cyan-500, .tw-bg-sky-500) { background-color: var(--info) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-bg-emerald-500) { background-color: var(--success) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-bg-amber-500) { background-color: var(--warning) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-bg-rose-500) { background-color: var(--danger) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-bg-indigo-500, .tw-bg-violet-500) { background-color: var(--brand-primary) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-text-ink, .tw-text-slate-950, .tw-text-slate-900, .tw-text-slate-800, .tw-text-slate-700) {
+  color: var(--text-primary) !important;
+}
+#crm-react-root .mogam-crm-react :is(.tw-text-slate-600, .tw-text-slate-500, .tw-text-slate-400, .tw-text-slate-300) {
+  color: var(--text-secondary) !important;
+}
+#crm-react-root .mogam-crm-react :is(.tw-text-blue-600, .tw-text-blue-700, .tw-text-indigo-700, .tw-text-violet-700) { color: var(--brand-primary) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-text-cyan-700) { color: var(--info) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-text-emerald-700) { color: var(--success) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-text-amber-700) { color: var(--warning) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-text-rose-600, .tw-text-rose-700) { color: var(--danger) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-border-slate-100, .tw-border-slate-200, .tw-border-slate-300,
+  .tw-border-blue-100, .tw-border-blue-200, .tw-border-cyan-200, .tw-border-indigo-200,
+  .tw-border-violet-200, .tw-border-amber-200, .tw-border-emerald-200, .tw-border-sky-200,
+  .tw-border-white) { border-color: var(--border-default) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-ring-amber-200, .tw-ring-emerald-200, .tw-ring-rose-200, .tw-ring-violet-200) {
+  --tw-ring-color: var(--focus-ring) !important;
+}
+#crm-react-root .mogam-crm-react :is(.tw-shadow-panel, .tw-shadow-sm, .tw-shadow-\[0_4px_16px_rgba\(15\,23\,42\,\.05\)\]) {
+  --tw-shadow: var(--shadow-sm) !important;
+  --tw-shadow-colored: var(--shadow-sm) !important;
+}
+#crm-react-root .mogam-crm-react :is(.hover\:tw-bg-blue-50:hover) { background-color: var(--hover-brand) !important; }
+#crm-react-root .mogam-crm-react :is(.hover\:tw-bg-rose-100:hover) { background-color: var(--danger-soft) !important; }
+#crm-react-root .mogam-crm-react :is(.hover\:tw-border-blue-200:hover) { border-color: var(--brand-primary) !important; }
+#crm-react-root .mogam-crm-react :is(.hover\:tw-text-blue-700:hover) { color: var(--brand-primary) !important; }
+#crm-react-root .mogam-crm-react :is(.hover\:tw-text-rose-700:hover) { color: var(--danger) !important; }
+#crm-react-root .mogam-crm-react :is(.group-hover\:tw-text-blue-400) { color: var(--brand-primary) !important; }
+#crm-react-root .mogam-crm-react :is(.focus\:tw-ring-blue-400:focus) { --tw-ring-color: var(--focus-ring) !important; }
+#crm-react-root .mogam-crm-react :is(.tw-bg-gradient-to-t) {
+  background-image: none !important;
+  background-color: var(--action-primary-bg) !important;
+  color: var(--action-primary-text) !important;
+}
+
+#crm-react-root .mogam-crm-react .crm-acquisition-chart-bar {
+  display: block;
+  background: linear-gradient(180deg, var(--chart-series-1), var(--chart-series-2));
+}

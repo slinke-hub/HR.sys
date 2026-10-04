@@ -5,19 +5,35 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 let rpcCall = null;
+let clientConfig = null;
+const stagingRef = 'jcfyyxsuspukcmybyhjj';
+const stagingAnonKey = `header.${Buffer.from(JSON.stringify({ ref: stagingRef, role: 'anon' })).toString('base64url')}.signature`;
+const windowObject = {
+    HR_RUNTIME_CONFIG: {
+        mode: 'staging',
+        valid: true,
+        projectRef: stagingRef,
+        supabaseUrl: `https://${stagingRef}.supabase.co`,
+        anonKey: stagingAnonKey
+    },
+    atob: value => Buffer.from(value, 'base64').toString('binary')
+};
 const radarRows = [
     { employee_id: '1', full_name: 'Clocked In User', clock_in_time: '2026-09-05T06:00:00Z', clock_out_time: null },
     { employee_id: '2', full_name: 'Clocked Out User', clock_in_time: '2026-09-05T05:00:00Z', clock_out_time: '2026-09-05T12:00:00Z' }
 ];
 const context = {
-    window: {},
+    window: windowObject,
     supabase: {
-        createClient: () => ({
+        createClient(url, key) {
+            clientConfig = { url, key };
+            return {
             rpc(name, params) {
                 rpcCall = { name, params };
                 return Promise.resolve({ data: radarRows, error: null });
             }
-        })
+            };
+        }
     },
     console: { ...console, error() {} },
     Date,
@@ -28,10 +44,14 @@ const context = {
 };
 vm.createContext(context);
 const dbSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'db.js'), 'utf8');
+const resolverSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'runtime-config-resolver.js'), 'utf8');
+vm.runInContext(resolverSource, context);
 vm.runInContext(`${dbSource}\nglobalThis.__testDb = db;`, context);
 
 (async () => {
     const result = await context.__testDb.fetchEmployeesRadarAttendance();
+    assert.equal(clientConfig.url, `https://${stagingRef}.supabase.co`);
+    assert.equal(clientConfig.key, stagingAnonKey);
     assert.equal(rpcCall.name, 'get_employees_radar');
     assert.match(rpcCall.params.p_date, /^\d{4}-\d{2}-\d{2}$/);
     assert.deepEqual(JSON.parse(JSON.stringify(result)), radarRows);
@@ -53,7 +73,7 @@ vm.runInContext(`${dbSource}\nglobalThis.__testDb = db;`, context);
     assert.match(dbSource, /changes\.onlyIfOpen/);
     assert.match(appSource, /window\.refreshEmployeesRadar/);
     assert.match(componentStyles, /\.employees-radar-clockout \{/);
-    assert.match(componentStyles, /\.employees-radar-card span,[\s\S]*\.employees-radar-card time \{ color:#fff !important; \}/);
+    assert.match(componentStyles, /\.employees-radar-card \.employees-radar-subtitle[\s\S]*?var\(--text-secondary\)/);
     assert.match(migrationSource, /CREATE POLICY employees_radar_company_attendance_select/);
     assert.match(migrationSource, /CREATE OR REPLACE FUNCTION public\.get_employees_radar/);
 

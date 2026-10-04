@@ -6,7 +6,8 @@ const css = fs.readFileSync(path.join(__dirname, '..', 'css', 'components.css'),
 
 assert.match(css, /Unified close control/);
 assert.match(css, /\.close-modal::before,\s*\.close-modal::after/);
-assert.match(css, /background-image: var\(--gradient-brand\) !important/);
+assert.match(css, /background-image: none !important/);
+assert.match(css, /background-color: var\(--action-secondary-bg\) !important/);
 assert.match(css, /transform: translateY\(-2px\) scale\(1\.04\)/);
 assert.match(css, /:active \{\s*transform: translateY\(0\) scale\(\.96\)/);
 assert.match(css, /:focus-visible \{\s*outline: 3px solid/);

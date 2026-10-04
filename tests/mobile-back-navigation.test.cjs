@@ -16,7 +16,7 @@ assert.match(app, /window\.history\.back\(\)/);
 assert.match(app, /if \(!isBack\) syncAppBrowserHistory\(viewId, viewId === 'login'\)/);
 assert.match(app, /closeTransientUiForHistoryNavigation\(\)/);
 assert.match(html, /js\/app\.js\?v=\d+/);
-assert.match(serviceWorker, /muqam-hr-mobile-v250/);
+assert.match(serviceWorker, /muqam-hr-mobile-v254/);
 assert.match(androidActivity, /getOnBackPressedDispatcher\(\)\.addCallback/);
 assert.match(androidActivity, /webView\.canGoBack\(\)/);
 assert.match(androidActivity, /webView\.goBack\(\)/);

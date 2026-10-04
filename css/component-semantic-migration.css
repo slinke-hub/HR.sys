@@ -1,0 +1,840 @@
+/* Stage D: migrate shared and module component presentation to Stage C tokens. */
+html[data-theme] body,
+html[data-theme] .app-container {
+  color: var(--text-primary);
+  background-color: var(--bg-app);
+  background-image: none !important;
+}
+
+html[data-theme] :is(.card, .hr-beta-metric, .hr-beta-capabilities article,
+  .hr-beta-tabs, .task-v2-workspace, .task-v2-list-pane, .task-v2-toolbar,
+  .task-v2-lists, .project-card, .project-detail-card, .command-center-card,
+  .dashboard-widget, .request-card, .document-card, .notification-card) {
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  background-image: none !important;
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme] :is(.card, .project-card)::before {
+  content: none !important;
+  display: none !important;
+}
+
+html[data-theme] :is(.card, .project-card, .dashboard-widget):hover {
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-md);
+}
+
+html[data-theme] .dashboard-admin-card {
+  border: 1px solid var(--border-default);
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-lg);
+  margin-bottom: .5rem;
+}
+
+html[data-theme] .dashboard-alert-warning {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-inline-start: 4px solid var(--warning);
+  border-radius: var(--radius-sm);
+}
+
+html[data-theme] .announcement-icon-success {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+html[data-theme] .task-category-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: .2rem .5rem;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 28%, var(--border-default));
+  border-radius: var(--radius-full);
+  color: var(--brand-primary);
+  background: var(--brand-primary-soft);
+  font-size: .75rem;
+}
+
+html[data-theme] .toast.toast-success { border-inline-start-color: var(--success); }
+html[data-theme] .toast.toast-warning { border-inline-start-color: var(--warning); }
+html[data-theme] .toast.toast-danger { border-inline-start-color: var(--danger); }
+html[data-theme] .toast.toast-info { border-inline-start-color: var(--info); }
+html[data-theme] .toast.toast-success .toast-icon { color: var(--success); }
+html[data-theme] .toast.toast-warning .toast-icon { color: var(--warning); }
+html[data-theme] .toast.toast-danger .toast-icon { color: var(--danger); }
+html[data-theme] .toast.toast-info .toast-icon { color: var(--info); }
+
+html[data-theme] .notification-card.is-task-link,
+html[data-theme] .notification-item.is-task-link { cursor: pointer; }
+
+html[data-theme] .notification-card.unread,
+html[data-theme] .notification-item.unread {
+  border-inline-start: 4px solid var(--brand-primary);
+  background-color: color-mix(in srgb, var(--brand-primary) 5%, var(--bg-surface));
+}
+
+html[data-theme] .notification-item {
+  padding: .65rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+html[data-theme] .notification-item.unread { font-weight: 500; }
+html[data-theme] .badge-brand {
+  color: var(--action-primary-text);
+  background: var(--action-primary-bg);
+}
+
+html[data-theme] .status-badge.neutral {
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+}
+
+html[data-theme] #editTaskModal .edit-task-tabs {
+  background: var(--bg-subtle);
+  border-color: var(--border-default) !important;
+}
+html[data-theme] #editTaskModal .edit-task-tab { color: var(--text-secondary); }
+html[data-theme] #editTaskModal .edit-task-tab.active {
+  color: var(--selected-text);
+  background: var(--selected-surface);
+  border-color: var(--border-default) !important;
+}
+
+html[data-theme] #editTaskModal .priority-ui-value.priority-urgent {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+html[data-theme] #editTaskModal .priority-ui-value.priority-high {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+html[data-theme] #editTaskModal .priority-ui-value.priority-medium {
+  color: var(--info);
+  background: var(--info-soft);
+}
+html[data-theme] #editTaskModal .priority-ui-value.priority-normal {
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+}
+
+html[data-theme] .department-job-title-draft-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .5rem;
+  margin-bottom: .25rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+html[data-theme] .trans-row.is-missing-translation { background: var(--warning-soft); }
+html[data-theme] .request-row-highlight { background: var(--selected-surface) !important; transition: background-color .5s ease; }
+
+.performance-target-achiever {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-inline-end: .2rem;
+  color: var(--warning);
+}
+.performance-target-achiever [data-lucide] { width: 1rem; height: 1rem; }
+
+/* Shared modal, popover, dropdown, and menu surfaces. */
+html[data-theme] :is(.modal .modal-content, .mobile-navigation-panel,
+  .profile-dropdown-menu, .notifications-dropdown, .header-search-dialog,
+  .dropdown-menu, .popover, .context-menu, .search-results-panel) {
+  color: var(--text-primary);
+  background-color: var(--overlay-surface) !important;
+  background-image: none !important;
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-lg);
+}
+
+html[data-theme] :is(.modal .modal-header, .modal .modal-footer,
+  .dropdown-menu .dropdown-header, .search-results-panel > header) {
+  color: var(--text-primary);
+  background-color: var(--bg-subtle) !important;
+  background-image: none !important;
+  border-color: var(--border-subtle);
+}
+
+/* Shared tables and table-like data surfaces. */
+html[data-theme] :is(.data-table, .hr-beta-table, .employee-documents-table,
+  .crm-client-directory-table, .task-v2-table) {
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  border-color: var(--border-default);
+}
+
+html[data-theme] :is(.data-table th, .hr-beta-table th,
+  .employee-documents-table th, .crm-client-directory-table th,
+  .task-v2-table-header) {
+  color: var(--text-primary);
+  background-color: var(--bg-subtle) !important;
+  border-color: var(--border-default);
+}
+
+html[data-theme] :is(.data-table td, .hr-beta-table td,
+  .employee-documents-table td, .crm-client-directory-table td,
+  .task-v2-table td) {
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+}
+
+html[data-theme] :is(.data-table tbody tr:hover td,
+  .employee-documents-table tbody tr:hover td,
+  .crm-client-directory-table tbody tr:hover td) {
+  background-color: var(--hover-surface);
+}
+
+/* Semantic icon and action treatments. Module identity is not encoded by hue. */
+html[data-theme] :is(.nav-item, .header-nav-item, .action-btn) > :is(i, svg) {
+  color: currentColor !important;
+  stroke: currentColor;
+  background: transparent !important;
+  background-image: none !important;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+html[data-theme] .action-btn {
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-bg) !important;
+  background-image: none !important;
+  border-color: var(--action-secondary-border);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme] .action-btn:hover:not(:disabled) {
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-hover) !important;
+  border-color: var(--border-default);
+}
+
+html[data-theme] :is(.btn-primary, .btn.btn-primary):not(:disabled),
+html[data-theme] :is(.btn-primary, .btn.btn-primary):hover:not(:disabled) {
+  color: var(--action-primary-text) !important;
+  background: var(--action-primary-bg) !important;
+  background-image: none !important;
+  border-color: var(--action-primary-bg) !important;
+  box-shadow: var(--shadow-sm);
+  filter: none;
+}
+
+html[data-theme] :is(.btn-secondary, .btn.btn-secondary, .btn-ghost, .icon-btn) {
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-bg) !important;
+  background-image: none !important;
+  border-color: var(--action-secondary-border);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme] :is(.btn-danger, .btn-destructive, .btn.btn-danger,
+  .btn.btn-destructive) {
+  color: var(--action-danger-text) !important;
+  background: var(--action-danger-bg) !important;
+  background-image: none !important;
+  border-color: var(--action-danger-bg) !important;
+}
+
+/* Task creation follows the same themed dialog, form and action primitives. */
+html[data-theme] #createTaskModal :is(.create-task-modal-content, .modal-header,
+  .create-task-section, .create-task-footer, .create-task-upload-zone,
+  .create-task-email-option) {
+  color: var(--text-primary);
+  background: var(--bg-surface-elevated) !important;
+  background-image: none !important;
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme] #createTaskModal .create-task-heading-icon,
+html[data-theme] .hr-beta-icon {
+  color: var(--action-primary-text);
+  background: var(--action-primary-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme] #createTaskModal .create-task-footer .btn-primary {
+  color: var(--action-primary-text);
+  background: var(--action-primary-bg);
+  background-image: none;
+  border-color: var(--action-primary-bg);
+  box-shadow: var(--shadow-sm);
+  transform: none;
+}
+
+/* Task and general statuses keep their existing state labels/values while
+   using one accessible semantic foreground/background vocabulary. */
+html[data-theme] :is(.status-badge.success, .task-v2-status-completed,
+  .semantic-status[data-status="completed"]) {
+  color: var(--success) !important;
+  background: var(--success-soft) !important;
+  border-color: color-mix(in srgb, var(--success) 34%, var(--border-default)) !important;
+}
+
+html[data-theme] :is(.status-badge.warning, .task-v2-status-in-progress,
+  .task-v2-status-pending-approval, .task-v2-status-waiting,
+  .semantic-status[data-status="waiting"], .semantic-status[data-status="at-risk"]) {
+  color: var(--warning) !important;
+  background: var(--warning-soft) !important;
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--border-default)) !important;
+}
+
+html[data-theme] :is(.status-badge.danger, .task-v2-status-late,
+  .task-v2-status-blocked, .task-v2-status-overdue,
+  .semantic-status[data-status="blocked"], .semantic-status[data-status="overdue"]) {
+  color: var(--danger) !important;
+  background: var(--danger-soft) !important;
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border-default)) !important;
+}
+
+html[data-theme] :is(.status-badge.info, .task-v2-status,
+  .semantic-status[data-status="information"]) {
+  color: var(--info) !important;
+  background: var(--info-soft) !important;
+  border-color: color-mix(in srgb, var(--info) 34%, var(--border-default)) !important;
+}
+
+html[data-theme] :is(.task-v2-status-canceled, .semantic-status[data-status="archived"],
+  .semantic-status[data-status="disabled"]) {
+  color: var(--text-secondary) !important;
+  background: var(--bg-subtle) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* Beta/secondary modules share the primary brand instead of purple/pink
+   module identities; metric states retain semantic meaning. */
+html[data-theme] :is(.hr-beta-icon, .hr-beta-empty > svg,
+  .hr-beta-capabilities svg, .hr-beta-notice svg, .hr-beta-category,
+  .category-recruitment, .category-onboarding, .category-leave,
+  .category-payroll, .category-compliance, .category-offboarding) {
+  color: var(--brand-primary);
+}
+
+html[data-theme] .hr-beta-badge {
+  color: var(--brand-primary);
+  background: var(--brand-primary-soft);
+}
+
+html[data-theme] .hr-beta-metric > span,
+html[data-theme] :is(.hr-beta-metric.blue, .hr-beta-metric.green,
+  .hr-beta-metric.amber, .hr-beta-metric.purple) > span {
+  color: var(--brand-primary);
+  background: var(--brand-primary-soft);
+}
+
+html[data-theme] .hr-beta-tabs button.active {
+  color: var(--action-primary-text);
+  background: var(--action-primary-bg);
+}
+
+html[data-theme] :is(.hr-beta-status, .project-filter-bar input,
+  .project-filter-bar select, .search-input, .search-field input) {
+  color: var(--input-text);
+  background: var(--input-bg);
+  border-color: var(--input-border);
+}
+
+html[data-theme] .nav-beta-badge {
+  color: var(--brand-primary) !important;
+  background: var(--brand-primary-soft) !important;
+  background-image: none !important;
+}
+
+html[data-theme] #editTaskDeleteBtn {
+  color: var(--action-danger-text) !important;
+  background: var(--action-danger-bg) !important;
+  background-image: none !important;
+  border-color: var(--action-danger-bg) !important;
+}
+
+html[data-theme] :is(.empty-state, .loading-state, .error-state) {
+  color: var(--text-secondary);
+  background-color: var(--bg-surface);
+  border-color: var(--border-subtle);
+}
+
+/* Dynamically generated views use these shared semantic details as well. */
+html[data-theme] :is(.status-badge, .task-v2-status, .project-health,
+  .project-status, .semantic-status) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  line-height: 1.25;
+}
+
+html[data-theme] .has-semantic-icon > :is(i, svg) {
+  flex: 0 0 var(--icon-size-inline);
+  width: var(--icon-size-inline);
+  height: var(--icon-size-inline);
+  stroke-width: var(--icon-stroke-width);
+}
+
+html[data-theme] .field-invalid {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px var(--danger-soft) !important;
+}
+
+html[data-theme] .field-error-message { color: var(--danger); }
+
+html[data-theme] .community-message {
+  max-width: 70%;
+  padding: 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+html[data-theme] .community-message.is-own-message {
+  color: var(--action-primary-text);
+  background: var(--action-primary-bg);
+  border-color: var(--action-primary-bg);
+}
+
+html[data-theme] .community-message.is-celebration {
+  color: var(--text-primary);
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border-default));
+}
+
+.community-message-author { margin-bottom: .25rem; font-size: .85rem; font-weight: 650; }
+.community-message-copy { color: inherit; }
+.community-message.is-own-message .community-message-author,
+.community-message.is-own-message .community-message-time { color: color-mix(in srgb, var(--action-primary-text) 90%, transparent); }
+.community-message-time { margin-top: .5rem; color: var(--text-muted); font-size: .75rem; }
+
+html[data-theme] .template-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+html[data-theme] .template-card:hover {
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-md);
+}
+
+.template-card-icon {
+  display: grid;
+  min-height: 140px;
+  padding: 2rem;
+  place-items: center;
+  color: var(--brand-primary);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.template-card-icon-inner {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  color: var(--brand-primary);
+  background: var(--brand-primary-soft);
+  border-radius: var(--radius-md);
+}
+
+.template-card-icon-inner svg { width: 32px; height: 32px; }
+.template-card-body { display: flex; flex: 1; flex-direction: column; gap: .75rem; padding: 1.5rem; }
+.template-card-body h3 { margin: 0; color: var(--text-primary); font-size: 1rem; font-weight: 700; }
+.template-card-body p { flex: 1; margin: 0; color: var(--text-secondary); font-size: .825rem; line-height: 1.5; }
+.template-card-actions { display: flex; gap: .5rem; margin-top: .5rem; }
+.template-card-actions > button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25rem; font-size: .75rem; line-height: 1.2; }
+
+html[data-theme] :is(.dashboard-widget, .request-card, .document-card,
+  .notification-card, .attendance-card, .leave-report-card, .admin-hub-card,
+  .hr-beta-capabilities article, .project-detail-layout > section) {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+}
+
+html[data-theme] :is(.filter-bar, .filter-group, .search-field, .search-input,
+  .project-filter-bar, .task-v2-toolbar, .task-v2-search) {
+  border-color: var(--border-subtle);
+}
+
+html[data-theme] :is(.project-card, .project-detail-card, .command-center-card,
+  .project-portfolio-card, .project-operational-summary) {
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  border-color: var(--border-default);
+  background-image: none !important;
+}
+
+html[data-theme] :is(.project-health, .project-status) {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+html[data-theme] .project-health-on-track { color: var(--success) !important; background: var(--success-soft) !important; }
+html[data-theme] .project-health-needs-attention { color: var(--info) !important; background: var(--info-soft) !important; }
+html[data-theme] .project-health-at-risk { color: var(--warning) !important; background: var(--warning-soft) !important; }
+html[data-theme] :is(.project-health-critical, .project-health-off-track) { color: var(--danger) !important; background: var(--danger-soft) !important; }
+
+html[data-theme] :is(.task-v2-kanban-column, .pipeline-column, .project-todo-section,
+  .project-operational-summary, .my-day-section, .my-day-modal) {
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  border-color: var(--border-default);
+}
+
+html[data-theme] .login-screen-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  color: var(--text-primary);
+  background: var(--bg-app);
+}
+
+html[data-theme] .login-card-wrapper {
+  width: min(100%, 400px);
+  padding: 2.5rem 2rem;
+  color: var(--text-primary) !important;
+  background: var(--bg-surface-elevated) !important;
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-lg);
+}
+
+html[data-theme] .login-card-wrapper :is(h2, p, label, a) { color: var(--text-primary) !important; }
+html[data-theme] .login-card-wrapper .login-forgot-link { color: var(--brand-primary) !important; font-size: .85rem; text-decoration: none; }
+html[data-theme] .login-card-wrapper .password-toggle-btn { color: var(--text-secondary); }
+
+html[data-theme] .login-screen-actions {
+  position: absolute;
+  inset-block-start: 20px;
+  inset-inline-end: 20px;
+  z-index: 10000;
+  display: flex;
+  gap: 10px;
+}
+
+html[data-theme] .modal :is(h1, h2, h3, h4, p, label, small) {
+  color: var(--text-primary);
+}
+
+html[data-theme] .modal .modal-content[style*="rgba(30, 41, 59"] {
+  color: var(--text-primary) !important;
+  background: var(--overlay-surface) !important;
+  background-image: none !important;
+  border: 1px solid var(--border-default) !important;
+  box-shadow: var(--shadow-lg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-theme] .modal [style*="color:"] {
+  color: var(--text-primary) !important;
+}
+
+html[data-theme] .modal .btn-primary[data-i18n="html_confirm"] {
+  color: var(--action-danger-text) !important;
+  background: var(--action-danger-bg) !important;
+  border-color: var(--action-danger-bg) !important;
+}
+
+html[data-theme] :is(.filter-bar, .filter-group, .search-field, .search-input,
+  .project-filter-bar, .task-v2-toolbar, .task-v2-search) :is(input, select, button) {
+  box-shadow: none;
+  border-color: var(--input-border);
+}
+
+html[data-theme] :is(.filter-bar, .filter-group, .search-field, .search-input,
+  .project-filter-bar, .task-v2-toolbar, .task-v2-search) :is(input, select, button):hover:not(:disabled) {
+  border-color: var(--input-border-hover);
+}
+
+html[data-theme] .page-title::after { background: var(--brand-primary-soft); box-shadow: none; }
+html[data-theme] .admin-trust-icon { color: var(--action-primary-text); background: var(--action-primary-bg); }
+html[data-theme] .translation-missing-badge { padding: 1px 5px; margin-inline-start: 4px; border-radius: 4px; color: var(--warning); background: var(--warning-soft); font-size: .7rem; }
+
+/* Module completion: semantic surfaces for attendance radar, approvals, teams,
+   and project health; only the radar's plotted series use chart tokens. */
+html[data-theme] .employees-radar-card,
+html[data-theme] .employees-radar-card :is(.card-title, p, span, small, strong, time) {
+  color: var(--text-primary);
+  background-color: transparent;
+  border-color: var(--border-subtle);
+  box-shadow: none;
+}
+
+html[data-theme] .employees-radar-card {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme] .employees-radar-visual {
+  background: radial-gradient(circle, color-mix(in srgb, var(--chart-series-1) 14%, var(--bg-surface)) 0 8%, transparent 9% 100%), repeating-radial-gradient(circle, color-mix(in srgb, var(--chart-series-1) 22%, transparent) 0 1px, transparent 2px 38px);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme] .employees-radar-ring { border-color: color-mix(in srgb, var(--chart-series-1) 30%, var(--border-default)); }
+html[data-theme] .employees-radar-sweep { background: linear-gradient(90deg, var(--chart-series-1), transparent); }
+html[data-theme] .employees-radar-visual strong { color: var(--text-primary) !important; }
+html[data-theme] .employees-radar-visual small,
+html[data-theme] .employees-radar-out-count,
+html[data-theme] .employees-radar-list time,
+html[data-theme] .employees-radar-empty { color: var(--text-secondary) !important; }
+html[data-theme] .employees-radar-list li { background: var(--bg-subtle); border-color: var(--border-subtle); }
+html[data-theme] .employees-radar-status { color: var(--success) !important; }
+html[data-theme] .employees-radar-clockout { color: var(--action-danger-text); background: var(--action-danger-bg); border-color: var(--action-danger-bg); }
+html[data-theme] .employees-radar-clockout:hover { background: var(--action-danger-hover); box-shadow: var(--shadow-sm); }
+
+html[data-theme] .project-command-card.project-command-health-critical {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border-default));
+  box-shadow: var(--shadow-sm);
+}
+html[data-theme] .project-command-card.project-command-health-at-risk,
+html[data-theme] .project-command-card.project-command-health-needs-attention {
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border-default));
+}
+html[data-theme] .project-command-counts .is-warning strong { color: var(--warning); }
+html[data-theme] .project-command-counts .is-danger strong { color: var(--danger); }
+html[data-theme] .project-command-on-track svg,
+html[data-theme] .project-command-empty svg { color: var(--success); }
+
+html[data-theme] .department-manager-card,
+html[data-theme] .department-manager-stats > div,
+html[data-theme] .department-manager-toolbar {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+html[data-theme] .department-manager-card-head { background: var(--bg-subtle); border-color: var(--border-subtle); }
+html[data-theme] .department-manager-icon { color: var(--brand-primary); background: var(--brand-primary-soft); box-shadow: none; }
+
+html[data-theme] .request-workflow-progress-track > span {
+  background: var(--action-primary-bg);
+  box-shadow: none;
+  animation: none;
+}
+html[data-theme] .request-workflow-progress-track > span::after { display: none; animation: none; }
+html[data-theme] .request-workflow-progress.is-rejected .request-workflow-progress-track > span {
+  background: var(--danger);
+  box-shadow: none;
+}
+html[data-theme] .request-workflow-progress .request-workflow-step { background: var(--bg-subtle); }
+html[data-theme] .request-workflow-progress .request-workflow-step.active { border-color: var(--input-border-focus); box-shadow: var(--focus-ring-shadow); }
+html[data-theme] .request-workflow-progress .request-workflow-step.completed { border-color: var(--success); color: var(--success); }
+html[data-theme] .request-workflow-progress .request-workflow-step.rejected { border-color: var(--danger); color: var(--danger); }
+
+html[data-theme] .task-focus-assignee svg,
+html[data-theme] .task-v2-row-creator svg { color: var(--brand-primary); }
+html[data-theme] .task-focus-creator svg { color: var(--text-secondary); }
+html[data-theme] .task-handoff-context,
+html[data-theme] .task-relation-badge.is-dependency-blocked {
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--border-default));
+}
+
+/* Final shared-shell and high-traffic module cleanup. */
+html[data-theme] .text-secondary,
+html[data-theme] #confirmModalMessage,
+html[data-theme] #payrollProcessingMessage { color: var(--text-secondary) !important; }
+html[data-theme] .status-icon-shell-danger { color: var(--danger); background: var(--danger-soft); }
+
+html[data-theme] :is(.status-badge.success, .status-badge.warning, .status-badge.danger, .status-badge.info) {
+  border: 1px solid currentColor;
+}
+html[data-theme] .status-badge.success { color: var(--success); background: var(--success-soft); }
+html[data-theme] .status-badge.warning { color: var(--warning); background: var(--warning-soft); }
+html[data-theme] .status-badge.danger { color: var(--danger); background: var(--danger-soft); }
+html[data-theme] .status-badge.info { color: var(--info); background: var(--info-soft); }
+
+html[data-theme] :is(.project-separation-note, .project-list-icon) {
+  color: var(--brand-primary);
+  background: var(--brand-primary-soft);
+}
+html[data-theme] .project-update-feed article > i {
+  background: var(--brand-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 14%, transparent);
+}
+html[data-theme] :is(.project-kpi-grid > *, .project-portfolio-card, .project-command-card,
+  .department-manager-card, .department-manager-stats > div) {
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+html[data-theme] :is(.project-kpi-grid button:hover, .project-portfolio-card:hover) {
+  border-color: var(--brand-primary);
+  box-shadow: var(--shadow-md);
+}
+html[data-theme] .project-command-card.project-command-health-critical {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border-default));
+}
+html[data-theme] .project-command-card.project-command-health-at-risk {
+  border-color: color-mix(in srgb, var(--warning) 50%, var(--border-default));
+}
+html[data-theme] .project-command-card.project-command-health-needs-attention {
+  border-color: color-mix(in srgb, var(--info) 50%, var(--border-default));
+}
+html[data-theme] :is(.task-pipeline-card, .task-dependency-item, .task-stage-panel) {
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+html[data-theme] .task-pipeline-card:hover { box-shadow: var(--shadow-md); }
+html[data-theme] .task-pipeline-card.is-overdue {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 25%, transparent), var(--shadow-sm);
+}
+html[data-theme] .task-stage-panel { background-color: var(--bg-surface-elevated); }
+html[data-theme] .project-update-feed time,
+html[data-theme] .project-list-item span { color: var(--text-secondary); }
+
+/* Stage D: retire remaining legacy component color/shadow treatments while
+   preserving chart, print and image-media color roles. */
+html[data-theme] :is(.task-v2-view-toggles, .task-v2-lists, .task-board-column,
+  .task-v2-list-heading > div span, .task-v2-status, .task-v2-list-heading,
+  .task-v2-list-link.active, .task-v2-list-link:hover, .task-v2-row:hover,
+  .task-v2-workspace, .task-v2-toolbar, .task-v2-list-pane, .task-details-grid,
+  .task-detail-tabs, .task-v2-tabs, .task-comment-tabs) {
+  border-color: var(--border-subtle);
+}
+html[data-theme] :is(.task-v2-view-toggles, .task-v2-lists, .task-board-column,
+  .task-v2-list-heading > div span, .task-v2-status) { background-color: var(--bg-subtle); }
+html[data-theme] :is(.task-v2-list-link.active, .view-toggle-btn.active,
+  [aria-selected="true"], [aria-current="page"]) {
+  color: var(--nav-item-selected-text);
+  background-color: var(--nav-item-selected);
+}
+html[data-theme] :is(.task-v2-list-link:hover, .task-v2-row:hover,
+  .task-list-row:hover, .dropdown-item:hover, .task-watcher-option:hover) {
+  background-color: var(--hover-surface);
+}
+html[data-theme] :is(.task-v2-workspace, .task-item-card, .task-list-row,
+  .task-details-grid, .inline-subtask-form, .task-pipeline-card,
+  .my-day-section, .my-day-manager-panel, .request-directory-card .request-row,
+  .custom-multi-select-dropdown, .task-watcher-dropdown, .custom-context-menu) {
+  box-shadow: var(--shadow-sm);
+}
+html[data-theme] :is(.task-v2-workspace:hover, .task-item-card:hover,
+  .task-list-row:hover, .task-pipeline-card:hover, .custom-context-menu) {
+  box-shadow: var(--shadow-md);
+}
+html[data-theme] :is(.modal .modal-content, .side-panel, .employee-details-card,
+  .header-search-dialog, .task-watcher-dropdown, .custom-multi-select-dropdown,
+  .custom-context-menu, .inline-subtask-form) {
+  color: var(--text-primary);
+  background-color: var(--overlay-surface);
+  border-color: var(--border-default);
+}
+html[data-theme] :is(.side-panel, .modal.slide-panel.teamwork-edit-task .modal-content) {
+  box-shadow: var(--shadow-lg);
+}
+html[data-theme] :is(.task-watcher-option:hover, .multi-select-modal-options,
+  .task-watcher-options.multi-select-modal-options, #taskListModal .custom-multi-select-header,
+  #taskListModal .custom-multi-select-dropdown, #editTaskModal .edit-task-v2 .property-cell,
+  #editTaskModal .edit-task-v2 .floating-input-group,
+  #editTaskModal .edit-task-v2 .edit-task-tab-content > .form-group,
+  #editTaskModal .edit-task-v2 .edit-task-assignee-options) {
+  color: var(--text-primary);
+  background-color: var(--bg-surface-elevated);
+  border-color: var(--border-default);
+}
+html[data-theme] :is(.workflow-progress, .workflow-progress[data-theme="dark"]) {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+}
+html[data-theme] .workflow-step:not(:last-child)::after { background: var(--border-default); }
+html[data-theme] .workflow-step-indicator {
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border-color: var(--border-default);
+}
+html[data-theme] .workflow-step-active .workflow-step-indicator {
+  color: var(--action-primary-text);
+  background: var(--action-primary-bg);
+  border-color: var(--action-primary-bg);
+  box-shadow: var(--focus-ring-shadow);
+}
+html[data-theme] .workflow-step-complete .workflow-step-indicator {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: var(--success);
+}
+html[data-theme] :is(.project-command-card.project-command-health-critical,
+  .project-command-card.project-command-health-at-risk,
+  .project-command-card.project-command-health-needs-attention) { box-shadow: var(--shadow-sm); }
+html[data-theme] .document-expiry-summary--expired { color: var(--danger); background: var(--danger-soft); }
+html[data-theme] .document-expiry-summary--expiring { color: var(--warning); background: var(--warning-soft); }
+html[data-theme] .leave-remaining-badge { color: var(--success); background: var(--success-soft); }
+html[data-theme] .my-day-modal-backdrop { background: var(--overlay-scrim); }
+html[data-theme] .task-dependency-item { color: var(--text-primary); background: var(--bg-surface); border-color: var(--border-subtle); }
+html[data-theme] .task-dependency-item.is-blocking { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 38%, var(--border-default)); }
+html[data-theme] .task-dependency-item.is-satisfied { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 38%, var(--border-default)); }
+html[data-theme] .task-dependency-item.is-blocking .task-dependency-state { color: var(--warning); }
+html[data-theme] .task-dependency-item.is-satisfied .task-dependency-state { color: var(--success); }
+html[data-theme] .announcement-icon { color: var(--brand-primary); background: var(--brand-primary-soft); }
+html[data-theme] .task-v2-eyebrow span { color: var(--brand-primary); background: var(--brand-primary-soft); }
+html[data-theme] .task-v2-stats .is-alert { border-color: color-mix(in srgb, var(--danger) 42%, var(--border-default)); }
+html[data-theme] :is(.task-view-toggler, .task-v2-view-toggles) { background: var(--bg-subtle); border-color: var(--border-subtle); box-shadow: var(--shadow-sm); }
+html[data-theme] .task-view-toggler button.active { color: var(--selected-text); background: var(--selected-surface); box-shadow: var(--shadow-sm); }
+html[data-theme] :is(.task-list-row:hover, .task-v2-row:hover) { background: var(--hover-surface); }
+html[data-theme] .task-board-column { background: var(--bg-subtle); border-color: var(--border-subtle); }
+html[data-theme] :is(.create-task-upload-zone:hover, .create-task-upload-zone.dragover) { background: var(--hover-brand); border-color: var(--brand-primary); }
+html[data-theme] :is(.spinner, .spinner-sm) { border-color: var(--border-subtle); border-top-color: var(--brand-primary); }
+html[data-theme] :is(.view-toggle-btn.active, .task-view-toggler button.active) { color: var(--selected-text); }
+html[data-theme] :is(.edit-task-assignee-options label:has(input:checked), .task-relation-badge.is-parent) {
+  color: var(--selected-text);
+  background: var(--selected-surface);
+  border-color: var(--border-default);
+}
+html[data-theme] :is(.crm-lost-deal-delete.btn-danger:hover, .crm-lost-deal-delete.btn-danger:active) {
+  box-shadow: var(--shadow-sm);
+  filter: none;
+}
+html[data-theme] .task-v2-toolbar :is(input, select, button) { border-color: var(--input-border); }
+html[data-theme] :is(input, textarea)::selection { background: var(--input-selection-bg); color: var(--input-text); }
+html[data-theme] :is(.task-v2-list-link, .task-view-toggler button, .view-toggle-btn) { transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast); }
+
+/* CRM's generated Tailwind color utilities are remapped in crm-tailwind.css;
+   these guards keep explicit old utility inline styles from reintroducing
+   module-specific saturated surfaces. */
+html[data-theme] #crm-react-root .mogam-crm-react :is(.tw-bg-blue-600, .tw-bg-indigo-600, .tw-bg-gradient-to-t) {
+  background-color: var(--action-primary-bg) !important;
+  background-image: none !important;
+  color: var(--action-primary-text) !important;
+}
+html[data-theme] #crm-react-root .mogam-crm-react :is(.tw-shadow-panel, .tw-shadow-sm) {
+  box-shadow: var(--shadow-sm) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme] .request-workflow-progress-track > span,
+  html[data-theme] .employees-radar-live svg { animation: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme] :is(.card, .action-btn, .btn, .nav-item > :is(i, svg)) {
+    transition: none !important;
+    transform: none !important;
+  }
+}

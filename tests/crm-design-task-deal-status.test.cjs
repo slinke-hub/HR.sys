@@ -37,8 +37,8 @@ assert.match(css, /\.task-crm-design-status-select/);
 assert.match(css, /\.deal-workflow-design-status-actions/);
 assert.match(html, /css\/components\.css\?v=\d+/);
 assert.match(html, /js\/db\.js\?v=\d+/);
-assert.match(html, /js\/crm-dashboard\.bundle\.js\?v=2026091505/);
+assert.match(html, /js\/crm-dashboard\.bundle\.js\?v=2026100408/);
 assert.match(html, /js\/app\.js\?v=\d+/);
-assert.match(worker, /muqam-hr-mobile-v250/);
+assert.match(worker, /muqam-hr-mobile-v254/);
 
 console.log('MQ-08 CRM Design task deal-status selector tests passed.');

@@ -24,7 +24,7 @@ assert.match(appSource, /openNotificationDestination/);
 assert.match(appSource, /actionView = 'requests'/);
 assert.match(appSource, /openTaskNotification\(actionTaskId\)/);
 
-assert.match(cssSource, /\.notification-badge[\s\S]*background: #dc2626/);
+assert.match(cssSource, /\.notification-badge[\s\S]*background: var\(--action-danger-bg\)/);
 assert.match(cssSource, /\.notifications-dropdown\.show \{ display: block; \}/);
 assert.match(cssSource, /\.notification-title-button:hover/);
 assert.match(migrationSource, /ALTER PUBLICATION supabase_realtime ADD TABLE public\.notifications/);

@@ -1,0 +1,434 @@
+/* Stage C shared semantic component foundation. Module-specific styles remain in place. */
+
+html,
+body {
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+}
+
+body,
+[data-theme] body,
+.app-container {
+  background-image: none !important;
+}
+
+body {
+  color: var(--text-primary);
+}
+
+/* Shared typography and surfaces. */
+html[data-theme] :is(h1, h2, h3, h4, .page-title, .card-title) {
+  color: var(--text-primary);
+}
+
+.card {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  background-image: none !important;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.modal .modal-content,
+.side-panel,
+.profile-dropdown-menu,
+.notifications-dropdown,
+.header-search-dialog {
+  color: var(--text-primary);
+  background: var(--overlay-surface);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Older shared-shell dialogs carry a dark inline glass surface. Keep their sizing,
+   but let the active theme own the surface, border, shadow and text color. */
+.modal .modal-content[style*="rgba(30, 41, 59"] {
+  color: var(--text-primary) !important;
+  background: var(--bg-surface-elevated) !important;
+  border: 1px solid var(--border-default) !important;
+  box-shadow: var(--shadow-lg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Shared action hierarchy. Explicitly remove legacy gradient button treatments. */
+.btn.btn-primary,
+button.btn-primary {
+  min-height: var(--control-target-min);
+  color: var(--action-primary-text) !important;
+  background-color: var(--action-primary-bg) !important;
+  background-image: none !important;
+  border: 1px solid var(--action-primary-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn.btn-primary:hover:not(:disabled),
+button.btn-primary:hover:not(:disabled) {
+  color: var(--action-primary-text) !important;
+  background-color: var(--action-primary-hover) !important;
+  border-color: var(--action-primary-hover);
+  box-shadow: var(--shadow-md);
+  filter: none;
+}
+
+.btn.btn-secondary,
+button.btn-secondary,
+.btn.btn-ghost,
+button.btn-ghost {
+  min-height: var(--control-target-min);
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-bg);
+  background-image: none !important;
+  border: 1px solid var(--action-secondary-border);
+  box-shadow: none;
+}
+
+.btn.btn-secondary:hover:not(:disabled),
+button.btn-secondary:hover:not(:disabled),
+.btn.btn-ghost:hover:not(:disabled),
+button.btn-ghost:hover:not(:disabled) {
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-hover);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+  filter: none;
+}
+
+.btn.btn-destructive,
+button.btn-destructive,
+.btn.btn-danger,
+button.btn-danger {
+  min-height: var(--control-target-min);
+  color: var(--action-danger-text) !important;
+  background: var(--action-danger-bg) !important;
+  background-image: none !important;
+  border: 1px solid var(--action-danger-bg);
+  box-shadow: none;
+}
+
+.btn.btn-destructive:hover:not(:disabled),
+button.btn-destructive:hover:not(:disabled),
+.btn.btn-danger:hover:not(:disabled),
+button.btn-danger:hover:not(:disabled) {
+  background: var(--action-danger-hover) !important;
+  border-color: var(--action-danger-hover);
+}
+
+:is(button, input[type="button"], input[type="submit"], select, textarea, .form-control):disabled,
+[aria-disabled="true"] {
+  color: var(--disabled-text) !important;
+  background-color: var(--disabled-surface) !important;
+  border-color: var(--disabled-border) !important;
+  opacity: var(--disabled-opacity);
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
+
+/* Shared form control foundation. */
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea, select, .form-control) {
+  min-height: var(--control-target-min);
+  color: var(--input-text) !important;
+  -webkit-text-fill-color: var(--input-text);
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color-scheme: inherit;
+}
+
+html[data-theme] :is(input, textarea, select, .form-control)::placeholder {
+  color: var(--input-placeholder) !important;
+  -webkit-text-fill-color: var(--input-placeholder);
+  opacity: 1;
+}
+
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea, select, .form-control):hover:not(:disabled) {
+  border-color: var(--input-border-hover) !important;
+}
+
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea, select, .form-control):focus {
+  border-color: var(--input-border-focus) !important;
+  box-shadow: var(--focus-ring-shadow) !important;
+  outline: none;
+}
+
+/* One visible keyboard focus treatment, including controls with legacy outline:none. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--focus-ring) !important;
+  outline-offset: 2px !important;
+  box-shadow: var(--focus-ring-shadow) !important;
+}
+
+/* Consistent selected-navigation treatment across desktop and mobile primitives. */
+.sidebar-nav .nav-item::before {
+  left: auto;
+  right: auto;
+  inset-inline-start: 0;
+  width: 3px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--nav-indicator);
+}
+
+.sidebar-nav .nav-item,
+.header-navigation .header-nav-item,
+.mobile-navigation-item {
+  color: var(--nav-text);
+  border-color: transparent;
+  transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.sidebar-nav .nav-item:hover,
+.header-navigation .header-nav-item:hover,
+.mobile-navigation-item:hover {
+  color: var(--nav-text);
+  background: var(--nav-item-hover);
+  border-color: var(--border-subtle);
+  transform: none;
+}
+
+.sidebar-nav .nav-item.active,
+.header-navigation .header-nav-item.active,
+.mobile-navigation-item.active,
+.sidebar-nav .nav-item[aria-current="page"],
+.header-navigation .header-nav-item[aria-current="page"],
+.mobile-navigation-item[aria-current="page"] {
+  color: var(--nav-item-selected-text) !important;
+  background: var(--nav-item-selected) !important;
+  border-color: var(--border-subtle);
+  border-inline-start-color: var(--nav-indicator);
+  box-shadow: none !important;
+  font-weight: 700;
+}
+
+.sidebar-nav .nav-item > :is(i, svg),
+.header-navigation .header-nav-item > :is(i, svg),
+.mobile-navigation-item > :is(i, svg) {
+  flex: 0 0 var(--icon-size-nav) !important;
+  width: var(--icon-size-nav) !important;
+  height: var(--icon-size-nav) !important;
+  padding: 0 !important;
+  color: var(--nav-text-muted) !important;
+  stroke: currentColor !important;
+  stroke-width: var(--icon-stroke-width) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+.sidebar-nav .nav-item.active > :is(i, svg),
+.header-navigation .header-nav-item.active > :is(i, svg),
+.mobile-navigation-item.active > :is(i, svg),
+.sidebar-nav .nav-item[aria-current="page"] > :is(i, svg),
+.header-navigation .header-nav-item[aria-current="page"] > :is(i, svg),
+.mobile-navigation-item[aria-current="page"] > :is(i, svg) {
+  color: var(--brand-primary) !important;
+}
+
+.sidebar-nav .nav-item:not(.active):not([aria-current="page"]),
+.header-navigation .header-nav-item:not(.active):not([aria-current="page"]),
+.mobile-navigation-item:not(.active):not([aria-current="page"]) {
+  color: var(--nav-text-muted);
+}
+
+/* The More sheet shares one quiet surface and brand-icon language in both themes. */
+.mobile-navigation-panel {
+  background: var(--overlay-surface);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+.mobile-navigation-item {
+  color: var(--nav-text);
+  background: var(--bg-surface);
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-sm);
+  transform: none;
+}
+
+.mobile-navigation-item::before {
+  content: none !important;
+  display: none !important;
+}
+
+.mobile-navigation-item > :is(i, svg) {
+  color: var(--nav-text-muted) !important;
+  stroke: currentColor !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+.mobile-navigation-item:hover,
+.mobile-navigation-item:focus-visible {
+  color: var(--nav-text);
+  background: var(--nav-item-hover);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+  transform: none;
+}
+
+.mobile-navigation-item.active,
+.mobile-navigation-item[aria-current="page"] {
+  color: var(--nav-item-selected-text) !important;
+  background: var(--nav-item-selected) !important;
+  border-color: var(--border-subtle);
+  border-inline-start-color: var(--nav-indicator);
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.mobile-navigation-item.active::before,
+.mobile-navigation-item[aria-current="page"]::before {
+  content: "" !important;
+  position: absolute;
+  inset-block: 12px;
+  inset-inline-start: 0;
+  display: block !important;
+  width: 3px;
+  border-radius: var(--radius-full);
+  background: var(--nav-indicator);
+  pointer-events: none;
+}
+
+.mobile-navigation-item.active > :is(i, svg),
+.mobile-navigation-item[aria-current="page"] > :is(i, svg) {
+  color: var(--brand-primary) !important;
+}
+
+.sidebar-nav .nav-item,
+.header-navigation .header-nav-item,
+.mobile-navigation-item {
+  gap: var(--icon-gap);
+}
+
+.sidebar-nav .nav-item,
+.header-navigation .header-nav-item {
+  min-height: var(--control-target-min);
+}
+
+:is(.btn-icon, .icon-btn, .header-search-trigger, .header-language-switcher, .header-notification-button) {
+  min-width: var(--control-target-min);
+  min-height: var(--control-target-min);
+}
+
+.btn.btn-icon,
+button.btn-icon,
+.icon-btn {
+  min-width: var(--control-target-min);
+  min-height: var(--control-target-min);
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-bg);
+  background-image: none !important;
+  border: 1px solid var(--action-secondary-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn.btn-icon:hover:not(:disabled),
+button.btn-icon:hover:not(:disabled),
+.icon-btn:hover:not(:disabled) {
+  color: var(--brand-primary);
+  background: var(--action-secondary-hover);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+  transform: none;
+}
+
+/* Search and filter controls keep a quiet resting border and shared focus state. */
+.project-filter-bar input,
+.project-filter-bar select,
+.search-input,
+.search-field input {
+  border-color: var(--input-border) !important;
+  background-color: var(--input-bg) !important;
+}
+
+.project-filter-bar input:hover:not(:disabled),
+.project-filter-bar select:hover:not(:disabled),
+.search-input:hover:not(:disabled),
+.search-field input:hover:not(:disabled) {
+  border-color: var(--input-border-hover) !important;
+}
+
+.project-filter-bar input:focus,
+.project-filter-bar select:focus,
+.search-input:focus,
+.search-field input:focus {
+  border-color: var(--input-border-focus) !important;
+  box-shadow: var(--focus-ring-shadow) !important;
+}
+
+/* Lucide sizing and alignment primitives. */
+svg.lucide,
+i[data-lucide] {
+  flex: 0 0 var(--icon-size-inline);
+  width: var(--icon-size-inline);
+  height: var(--icon-size-inline);
+  stroke-width: var(--icon-stroke-width);
+  vertical-align: middle;
+}
+
+:is(.btn, button, .nav-item, .header-nav-item) > svg.lucide,
+:is(.btn, button, .nav-item, .header-nav-item) > i[data-lucide] {
+  flex-basis: var(--icon-size-action);
+  width: var(--icon-size-action);
+  height: var(--icon-size-action);
+}
+
+:is(.btn, button, .nav-item, .header-nav-item, .mobile-navigation-item) > :is(svg.lucide, i[data-lucide]) + span {
+  margin-inline-start: 0;
+}
+
+/* Status icon contract: completed=circle-check; in-progress=circle-play; waiting=clock;
+   blocked=octagon-alert; at-risk=triangle-alert; overdue=calendar-clock;
+   information=info; archived/disabled=archive.
+   Consumers provide the Lucide icon and visible label; color is never the sole cue. */
+.semantic-status {
+  --status-fg: var(--info);
+  --status-bg: var(--info-soft);
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  color: var(--status-fg);
+  background: var(--status-bg);
+  border: 1px solid color-mix(in srgb, var(--status-fg) 28%, transparent);
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.semantic-status > :is(svg.lucide, i[data-lucide]) {
+  width: var(--icon-size-inline);
+  height: var(--icon-size-inline);
+  flex-basis: var(--icon-size-inline);
+}
+
+.semantic-status[data-status="completed"] { --status-fg: var(--success); --status-bg: var(--success-soft); }
+.semantic-status[data-status="in-progress"] { --status-fg: var(--info); --status-bg: var(--info-soft); }
+.semantic-status[data-status="waiting"] { --status-fg: var(--warning); --status-bg: var(--warning-soft); }
+.semantic-status[data-status="blocked"] { --status-fg: var(--danger); --status-bg: var(--danger-soft); }
+.semantic-status[data-status="at-risk"] { --status-fg: var(--warning); --status-bg: var(--warning-soft); }
+.semantic-status[data-status="overdue"] { --status-fg: var(--danger); --status-bg: var(--danger-soft); }
+.semantic-status[data-status="information"] { --status-fg: var(--info); --status-bg: var(--info-soft); }
+.semantic-status[data-status="archived"],
+.semantic-status[data-status="disabled"] { --status-fg: var(--text-secondary); --status-bg: var(--bg-subtle); }
+
+@media (hover: none) and (pointer: coarse) {
+  :is(.btn-icon, .icon-btn, .header-search-trigger, .header-language-switcher, .header-notification-button,
+      .sidebar-nav .nav-item, .header-navigation .header-nav-item, .mobile-navigation-item) {
+    min-width: var(--control-target-touch);
+    min-height: var(--control-target-touch);
+  }
+}

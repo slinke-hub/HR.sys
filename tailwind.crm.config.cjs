@@ -13,8 +13,8 @@ module.exports = {
         mint: 'var(--color-success)'
       },
       boxShadow: {
-        panel: '0 10px 35px rgba(15, 23, 42, 0.06)',
-        float: '0 14px 35px rgba(15, 23, 42, 0.12)'
+        panel: 'var(--shadow-sm)',
+        float: 'var(--shadow-md)'
       }
     }
   },
