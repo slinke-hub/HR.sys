@@ -15,7 +15,7 @@ assert.ok(html.indexOf('id="appNavigationToggle"') < html.indexOf('class="header
 assert.doesNotMatch(html, /<nav class="header-navigation"/, 'The duplicated horizontal module row is removed');
 assert.match(html, /id="mobileMoreNav"[^>]+onclick="window\.openMobileNavigation\(this\)"/, 'Mobile More opens the same drawer and supplies its focus-restoration target');
 assert.match(html, /js\/app\.js\?v=2026100412/, 'Application script cache key is bumped for the dedicated drawer');
-assert.match(html, /css\/layout\.css\?v=2026100414/, 'Header and drawer style changes receive a fresh layout stylesheet cache key');
+assert.match(html, /css\/layout\.css\?v=2026100415/, 'Header and drawer style changes receive a fresh layout stylesheet cache key');
 assert.match(html, /css\/components\.css\?v=2026100410/, 'The late component header override receives a fresh stylesheet cache key');
 
 assert.match(app, /window\.openMobileNavigation\s*=\s*async function/, 'One shared permission-filtered drawer opener exists');
@@ -48,16 +48,16 @@ assert.match(app, /hasParentRoute = viewId !== 'login' && hasHierarchicalProject
 assert.match(app, /sw\.js\?v=2026100412/, 'Service worker registration forces an update check');
 assert.match(serviceWorker, /muqam-hr-mobile-v254/, 'New service-worker cache retires stale shell/app bundles');
 
-assert.match(layout, /\.app-navigation-drawer\s*\{[\s\S]*?position: fixed;[\s\S]*?top: 0;[\s\S]*?bottom: 0;[\s\S]*?left: 0;[\s\S]*?right: auto;[\s\S]*?width: 320px;[\s\S]*?height: 100dvh;[\s\S]*?border-radius: 0 24px 24px 0;/, 'Dedicated drawer has literal full-height fixed LTR geometry');
+assert.match(layout, /\.app-navigation-drawer\s*\{[\s\S]*?position: fixed;[\s\S]*?top: 0;[\s\S]*?bottom: 0;[\s\S]*?inset-inline-start: auto;[\s\S]*?inset-inline-end: 0;[\s\S]*?width: 320px;[\s\S]*?height: 100dvh;[\s\S]*?border-start-start-radius: 24px;[\s\S]*?border-end-start-radius: 24px;[\s\S]*?transform: translateX\(calc\(100% \+ 1px\)\)/, 'Drawer attaches to header brand/hamburger inline-end with matching LTR entry direction');
 assert.match(layout, /@media \(max-width: 767px\)[\s\S]*?\.app-navigation-drawer \{ width: min\(86vw, 340px\); \}/, 'Mobile drawer uses the specified viewport-relative width');
-assert.match(layout, /html\[dir="rtl"\] \.app-navigation-drawer\s*\{[\s\S]*?left: auto;[\s\S]*?right: 0;[\s\S]*?border-radius: 24px 0 0 24px;/, 'RTL drawer attaches to the right viewport edge');
+assert.match(layout, /html\[dir="rtl"\] \.app-navigation-drawer\s*\{\s*transform: translateX\(calc\(-100% - 1px\)\);\s*\}/, 'RTL drawer enters from the left edge, matching the header hamburger');
 assert.match(layout, /\.navigation-drawer-item\s*\{[\s\S]*?display: flex;[\s\S]*?min-height: 46px/, 'Drawer navigation is a vertical row list, not a tile grid');
 assert.match(layout, /\.navigation-drawer-brand img[\s\S]*?max-height: 36px/, 'Drawer brand mark has compact, bounded sizing');
 assert.match(layout, /\.header-logo \.app-logo \{ max-height: 52px/, 'Desktop logo size is visibly increased without setting a fixed width');
 assert.match(layout, /\.header-logo \.app-logo \{ max-height: 44px/, 'Mobile logo remains within the approved visual size');
 assert.match(layout, /\.header-logo \.app-logo \{[^}]*width: auto;[^}]*max-width:/, 'Logo keeps its native aspect ratio and is not cropped');
 assert.match(layout, /\.app-navigation-drawer-overlay\s*\{[\s\S]*?position: fixed;[\s\S]*?inset: 0;/, 'Dedicated drawer overlay spans the viewport');
-assert.match(layout, /html\[dir="rtl"\] \.app-navigation-drawer \{[\s\S]*?transform: translateX\(calc\(100% \+ 1px\)\)/, 'RTL drawer enters from the right');
+assert.match(layout, /\.app-navigation-drawer-overlay\.is-open \.app-navigation-drawer \{ transform: translateX\(0\); \}/, 'Open drawer settles without an opposite-edge flash');
 assert.match(layout, /backdrop-filter: blur\(18px\) saturate\(130%\)/, 'Drawer uses restrained glassmorphism');
 assert.match(layout, /background: var\(--nav-bg\)[\s\S]*?@supports[\s\S]*?background: var\(--nav-drawer-glass\)/, 'Solid semantic fallback is provided without backdrop-filter');
 assert.match(variables, /--nav-drawer-glass:\s*rgba\(255, 255, 255, 0\.9\)/, 'Light theme has a translucent elevated drawer surface');

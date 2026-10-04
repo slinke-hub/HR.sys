@@ -1714,23 +1714,26 @@ body { background: var(--bg-app); }
   position: fixed;
   top: 0;
   bottom: 0;
-  left: 0;
-  right: auto;
+  inset-inline-start: auto;
+  inset-inline-end: 0;
   display: flex;
   width: 320px;
   height: 100dvh;
   box-sizing: border-box;
   flex-direction: column;
   padding: max(1.15rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
-  border-inline-end: 1px solid color-mix(in srgb, var(--border-default) 75%, transparent);
+  border-inline-start: 1px solid color-mix(in srgb, var(--border-default) 75%, transparent);
   background: var(--nav-bg);
   color: var(--text-primary);
   box-shadow: var(--shadow-lg);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   overflow: hidden;
-  border-radius: 0 24px 24px 0;
-  transform: translateX(calc(-100% - 1px));
+  border-start-start-radius: 24px;
+  border-end-start-radius: 24px;
+  /* The header hamburger is in the brand group at inline-end. Keep this
+     drawer on that same physical edge in both interface directions. */
+  transform: translateX(calc(100% + 1px));
   transition: transform .22s cubic-bezier(.2,.75,.25,1);
   will-change: transform;
 }
@@ -1742,13 +1745,9 @@ body { background: var(--bg-app); }
   }
 }
 html[dir="rtl"] .app-navigation-drawer {
-  left: auto;
-  right: 0;
-  border-radius: 24px 0 0 24px;
-  transform: translateX(calc(100% + 1px));
+  transform: translateX(calc(-100% - 1px));
 }
-.app-navigation-drawer-overlay.is-open .app-navigation-drawer,
-html[dir="rtl"] .app-navigation-drawer-overlay.is-open .app-navigation-drawer { transform: translateX(0); }
+.app-navigation-drawer-overlay.is-open .app-navigation-drawer { transform: translateX(0); }
 .navigation-drawer-header {
   display: flex;
   flex: 0 0 auto;
