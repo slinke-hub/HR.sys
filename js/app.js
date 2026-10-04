@@ -3462,7 +3462,7 @@ async function renderDashboard() {
                 <p class="page-subtitle">${t('welcome_sub')}</p>
             </div>
             ${isClockedIn
-            ? `<button id="attendanceClockButton" class="btn btn-danger" onclick="handleClockOutPrompt('${todayAttendance.id}')">${t('attendance_clock_out')}</button>`
+            ? `<button id="attendanceClockButton" class="employees-radar-clockout dashboard-attendance-clockout" onclick="handleClockOutPrompt('${todayAttendance.id}')" aria-label="${escapeHTML(t('attendance_clock_out'))}">${currentLang === 'ar' ? `<span class="dashboard-clock-button-label">${escapeHTML(t('attendance_clock_out'))}</span><i data-lucide="log-out" aria-hidden="true"></i>` : `<i data-lucide="log-out" aria-hidden="true"></i><span class="dashboard-clock-button-label">${escapeHTML(t('attendance_clock_out'))}</span>`}</button>`
             : `<button id="attendanceClockButton" class="btn-primary" onclick="handleClockIn()">${t('attendance_clock_in')}</button>`
         }
         </div>
@@ -4009,17 +4009,47 @@ async function requestRequiredAttendanceLocation(action = 'record attendance') {
     };
 }
 
+const setDashboardClockButtonLabel = (button, label) => {
+    if (!button) return;
+    const labelElement = button.querySelector('.dashboard-clock-button-label');
+    if (labelElement) labelElement.textContent = label;
+    else button.textContent = label;
+};
+
+const setDashboardClockOutAction = (button, attendanceId) => {
+    if (!button) return;
+    button.classList.remove('btn-primary', 'btn', 'btn-danger');
+    button.classList.add('employees-radar-clockout', 'dashboard-attendance-clockout');
+    button.innerHTML = currentLang === 'ar'
+        ? `<span class="dashboard-clock-button-label">${escapeHTML(t('attendance_clock_out'))}</span><i data-lucide="log-out" aria-hidden="true"></i>`
+        : `<i data-lucide="log-out" aria-hidden="true"></i><span class="dashboard-clock-button-label">${escapeHTML(t('attendance_clock_out'))}</span>`;
+    button.style.background = '';
+    button.setAttribute('onclick', `handleClockOutPrompt('${attendanceId}')`);
+    button.setAttribute('aria-label', t('attendance_clock_out'));
+    if (window.lucide) window.lucide.createIcons({ root: button });
+};
+
+const setDashboardClockInAction = (button) => {
+    if (!button) return;
+    button.classList.remove('employees-radar-clockout', 'dashboard-attendance-clockout', 'btn', 'btn-danger');
+    button.classList.add('btn-primary');
+    button.textContent = t('attendance_clock_in');
+    button.style.background = '';
+    button.setAttribute('onclick', 'handleClockIn()');
+    button.setAttribute('aria-label', t('attendance_clock_in'));
+};
+
 window.handleClockIn = async () => {
     const button = document.getElementById('attendanceClockButton');
     if (button?.disabled) return;
     if (button) {
         button.disabled = true;
         button.dataset.originalText = button.textContent;
-        button.textContent = currentLang === 'ar' ? 'بانتظار إذن الموقع...' : 'Waiting for location permission...';
+        setDashboardClockButtonLabel(button, currentLang === 'ar' ? 'بانتظار إذن الموقع...' : 'Waiting for location permission...');
     }
     try {
         const location = await requestRequiredAttendanceLocation(currentLang === 'ar' ? 'تسجيل الحضور' : 'clock in');
-        if (button) button.textContent = currentLang === 'ar' ? 'جارٍ تسجيل الحضور...' : 'Clocking in...';
+        if (button) setDashboardClockButtonLabel(button, currentLang === 'ar' ? 'جارٍ تسجيل الحضور...' : 'Clocking in...');
         const result = await db.clockIn(currentUser.id, location.label);
         if (!result.success || !result.data) throw result.error || new Error('Clock in was not saved.');
         showToast(t('toast_clocked_in_successfully'), 'success');
@@ -4027,17 +4057,14 @@ window.handleClockIn = async () => {
         window.currentTodayAttendance = result.data;
         if (button) {
             button.disabled = false;
-            button.textContent = t('attendance_clock_out');
-            button.style.background = 'var(--color-danger)';
-            button.setAttribute('onclick', `handleClockOutPrompt('${result.data.id}')`);
-            button.setAttribute('aria-label', t('attendance_clock_out'));
+            setDashboardClockOutAction(button, result.data.id);
         }
     } catch (error) {
         console.warn('Clock-in location verification failed:', error);
         showToast(getAttendanceLocationErrorMessage(error, currentLang === 'ar' ? 'تسجيل الحضور' : 'clock in'), 'danger');
         if (button) {
             button.disabled = false;
-            button.textContent = button.dataset.originalText || t('attendance_clock_in');
+            setDashboardClockButtonLabel(button, button.dataset.originalText || t('attendance_clock_in'));
         }
     }
 };
@@ -4112,10 +4139,7 @@ window.executeClockOut = async (type) => {
     closeClockOutModal();
     if (button) {
         button.disabled = false;
-        button.textContent = t('attendance_clock_in');
-        button.style.background = '';
-        button.setAttribute('onclick', 'handleClockIn()');
-        button.setAttribute('aria-label', t('attendance_clock_in'));
+        setDashboardClockInAction(button);
     }
     currentAttendanceId = null;
     window.currentTodayAttendance = {
@@ -4140,10 +4164,7 @@ window.executeClockOut = async (type) => {
     window.currentTodayAttendance = attendance;
     currentAttendanceId = attendanceId;
     if (button) {
-        button.textContent = t('attendance_clock_out');
-        button.style.background = 'var(--color-danger)';
-        button.setAttribute('onclick', `handleClockOutPrompt('${attendanceId}')`);
-        button.setAttribute('aria-label', t('attendance_clock_out'));
+        setDashboardClockOutAction(button, attendanceId);
     }
     showToast(result.error?.message || t('toast_error_clocking_out'), 'danger');
 };
