@@ -9587,12 +9587,12 @@ html[dir="ltr"] .watchers-ui-value {
   margin-inline: 0;
 }
 
-/* Loaded after the legacy component rules: reserve a dedicated center column
-   for navigation so it never overlaps profile actions at desktop zoom levels. */
+/* The shared navigation now lives in the drawer, so the header has exactly two
+   edge groups. Do not restore the old three-column centered-navigation grid. */
 @media (min-width: 901px) {
   .topbar {
-    display: grid !important;
-    grid-template-columns: minmax(150px, 1fr) minmax(0, auto) minmax(220px, 1fr) !important;
+    display: flex !important;
+    justify-content: space-between;
     column-gap: clamp(.5rem, 1.5vw, 1.5rem);
   }
   .header-logo { justify-self: start; }

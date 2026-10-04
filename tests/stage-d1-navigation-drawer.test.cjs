@@ -15,7 +15,8 @@ assert.ok(html.indexOf('id="appNavigationToggle"') < html.indexOf('class="header
 assert.doesNotMatch(html, /<nav class="header-navigation"/, 'The duplicated horizontal module row is removed');
 assert.match(html, /id="mobileMoreNav"[^>]+onclick="window\.openMobileNavigation\(this\)"/, 'Mobile More opens the same drawer and supplies its focus-restoration target');
 assert.match(html, /js\/app\.js\?v=2026100412/, 'Application script cache key is bumped for the dedicated drawer');
-assert.match(html, /css\/layout\.css\?v=2026100413/, 'Header and drawer style changes receive a fresh stylesheet cache key');
+assert.match(html, /css\/layout\.css\?v=2026100414/, 'Header and drawer style changes receive a fresh layout stylesheet cache key');
+assert.match(html, /css\/components\.css\?v=2026100410/, 'The late component header override receives a fresh stylesheet cache key');
 
 assert.match(app, /window\.openMobileNavigation\s*=\s*async function/, 'One shared permission-filtered drawer opener exists');
 assert.match(app, /\.sidebar-nav > \.nav-item\[data-view\]/, 'Drawer entries come from the existing permission-managed navigation source');
@@ -65,5 +66,11 @@ assert.match(layout, /prefers-reduced-motion: reduce/, 'Motion respects reduced-
 assert.match(layout, /\.sidebar-nav > \.nav-item\[data-view="dashboard"\][\s\S]*?#mobileMoreNav\s*\{\s*display: flex !important;/, 'Existing mobile bottom-nav destinations remain preserved');
 assert.match(layout, /\.navigation-drawer-item\.active::before[\s\S]*?inset-inline-start/, 'Selected state uses a semantic logical-edge indicator');
 assert.match(layout, /navigation-drawer-item\.active > svg[\s\S]*?var\(--brand-primary\)/, 'Selected route icon uses the brand accent');
+
+const components = read('css/components.css');
+assert.match(components, /@media \(min-width: 901px\)[\s\S]*?\.topbar\s*\{\s*display: flex !important;\s*justify-content: space-between;/,
+  'Late component styles preserve the two-group flex header instead of restoring a centered grid');
+assert.doesNotMatch(components, /\.topbar\s*\{[^}]*display:\s*grid\s*!important;/,
+  'No later important three-column grid can recenter header groups');
 
 console.log('Stage D.1 navigation drawer checks passed.');

@@ -1837,14 +1837,23 @@ body.mobile-navigation-open .app-container { pointer-events: none; }
   .navigation-drawer-close, .navigation-drawer-item { transition-duration: .01ms !important; }
 }
 
-/* Mirror the two intact header groups with document direction. Keeping the
-   groups themselves untouched preserves their internal control order/spacing. */
+/* Anchor the two header groups to opposite logical edges. The action group is
+   first in the flex order, so flex row follows inline-start (left in LTR,
+   right in RTL); space-between leaves the center as flexible empty space. */
 .topbar {
   display: flex;
-  flex-direction: row-reverse;
+  flex-direction: row;
   justify-content: space-between;
 }
-.topbar-actions { margin-inline-start: 0; }
+.topbar > .header-brand-group { order: 2; }
+.topbar > .topbar-actions {
+  order: 1;
+  flex: 0 0 auto !important;
+  justify-content: flex-start !important;
+  margin-inline: 0 !important;
+  max-width: none;
+  min-width: 0;
+}
 @media (max-width: 1024px) {
-  .topbar-actions { flex: 0 1 auto !important; justify-content: initial !important; }
+  .topbar > .topbar-actions { flex: 0 0 auto !important; }
 }

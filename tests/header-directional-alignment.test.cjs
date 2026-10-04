@@ -15,12 +15,13 @@ assert.ok(toggleStart >= 0 && toggleEnd > toggleStart, 'Application language tog
 assert.match(app.slice(toggleStart, toggleEnd), /htmlElement\.setAttribute\('dir', currentLang === 'ar' \? 'rtl' : 'ltr'\)/,
   'Language switch updates the document direction that controls header placement');
 
-const css = [
-  read('css/variables.css'),
-  read('css/layout.css'),
-  read('css/theme-foundation.css'),
-  read('css/component-semantic-migration.css'),
-].join('\n');
+// Load stylesheets in index.html order so late cascade overrides are tested
+// exactly as they are in the rendered application.
+const css = [...html.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+)"/g)]
+  .map(([, href]) => href.split('?')[0])
+  .filter((href) => href.startsWith('css/'))
+  .map(read)
+  .join('\n');
 const testHeader = header
   .replace(/<img src="\/images\/logo\.png"[^>]*>/, '<img src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="MUQAM HR Logo" class="app-logo app-logo-light" width="120" height="36">')
   .replace(/<img src="\/images\/logo-dark\.png[^"]*"[^>]*>/, '<img src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="MUQAM HR Logo" class="app-logo app-logo-dark" width="120" height="36">');
@@ -42,10 +43,16 @@ async function positions(page) {
       barScrollWidth: topbar.scrollWidth,
       barClientWidth: topbar.clientWidth,
       barHeight: bar.height,
+      barLeft: bar.left,
+      barRight: bar.right,
+      barPaddingLeft: parseFloat(getComputedStyle(topbar).paddingLeft),
+      barPaddingRight: parseFloat(getComputedStyle(topbar).paddingRight),
       brandLeft: brand.left,
       brandRight: brand.right,
+      brandWidth: brand.width,
       actionsLeft: actions.left,
       actionsRight: actions.right,
+      actionsWidth: actions.width,
       logoHeight: document.querySelector('.header-logo .app-logo').getBoundingClientRect().height,
       userInfoDisplay: getComputedStyle(document.querySelector('.user-info')).display,
       profileChevronDisplay: getComputedStyle(document.querySelector('.user-profile > svg, .user-profile > i')).display,
@@ -59,12 +66,27 @@ function assertDirection(layout, direction, width) {
   assert.equal(layout.clientWidth, width, `${width}px CSS viewport is preserved`);
   assert.ok(layout.pageScrollWidth <= width + 1, `page has no horizontal overflow at ${width}px`);
   assert.ok(layout.barScrollWidth <= layout.barClientWidth + 1, `header groups fit without clipping at ${width}px`);
+  const edgeTolerance = width <= 560 ? 14 : 10;
+  const leftPaddingEdge = layout.barLeft + layout.barPaddingLeft;
+  const rightPaddingEdge = layout.barRight - layout.barPaddingRight;
   if (direction === 'ltr') {
-    assert.ok(layout.actionsLeft < layout.brandLeft, `LTR utilities are left of branding at ${width}px`);
-    assert.ok(layout.brandRight >= width - 60, `LTR branding is at the right header edge at ${width}px`);
+    assert.ok(Math.abs(layout.actionsLeft - leftPaddingEdge) <= edgeTolerance,
+      `LTR utilities anchor to the header left padding at ${width}px (edge delta=${layout.actionsLeft - leftPaddingEdge})`);
+    assert.ok(Math.abs(rightPaddingEdge - layout.brandRight) <= edgeTolerance,
+      `LTR branding anchors to the header right padding at ${width}px (edge delta=${rightPaddingEdge - layout.brandRight})`);
+    assert.ok(layout.actionsRight <= layout.brandLeft,
+      `LTR groups do not overlap at ${width}px (actions=${layout.actionsLeft}-${layout.actionsRight}, brand=${layout.brandLeft}-${layout.brandRight})`);
+    if (width >= 768) assert.ok(layout.brandLeft - layout.actionsRight >= width * .1,
+      `LTR leaves a flexible center gap at ${width}px`);
   } else {
-    assert.ok(layout.brandRight < layout.actionsLeft, `RTL branding is left of utilities at ${width}px (brand=${layout.brandLeft}-${layout.brandRight}, actions=${layout.actionsLeft}-${layout.actionsRight})`);
-    assert.ok(layout.actionsRight <= width && layout.actionsRight >= width - 60, `RTL utilities are at the right header edge at ${width}px (right=${layout.actionsRight})`);
+    assert.ok(Math.abs(rightPaddingEdge - layout.actionsRight) <= edgeTolerance,
+      `RTL utilities anchor to the header right padding at ${width}px (edge delta=${rightPaddingEdge - layout.actionsRight})`);
+    assert.ok(Math.abs(layout.brandLeft - leftPaddingEdge) <= edgeTolerance,
+      `RTL branding anchors to the header left padding at ${width}px (edge delta=${layout.brandLeft - leftPaddingEdge})`);
+    assert.ok(layout.brandRight <= layout.actionsLeft,
+      `RTL groups do not overlap at ${width}px (brand=${layout.brandLeft}-${layout.brandRight}, actions=${layout.actionsLeft}-${layout.actionsRight})`);
+    if (width >= 768) assert.ok(layout.actionsLeft - layout.brandRight >= width * .1,
+      `RTL leaves a flexible center gap at ${width}px`);
   }
   if (width <= 560) {
     assert.ok(layout.barHeight <= 70, 'compact mobile header is not made taller');
@@ -83,21 +105,13 @@ function assertDirection(layout, direction, width) {
   const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
   try {
     const page = await browser.newPage();
-    for (const width of [1440, 1024, 768]) {
+    for (const width of [1440, 1024, 768, 430, 390]) {
       for (const theme of ['light', 'dark']) {
         for (const direction of ['ltr', 'rtl']) {
-          await page.setViewport({ width, height: 900 });
+          await page.setViewport({ width, height: width <= 430 ? (width === 430 ? 932 : 844) : 900 });
           await page.setContent(pageMarkup(direction, theme));
           assertDirection(await positions(page), direction, width);
         }
-      }
-    }
-
-    for (const [width, height, direction] of [[430, 932, 'ltr'], [390, 844, 'rtl']]) {
-      for (const theme of ['light', 'dark']) {
-        await page.setViewport({ width, height });
-        await page.setContent(pageMarkup(direction, theme));
-        assertDirection(await positions(page), direction, width);
       }
     }
 
