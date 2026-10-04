@@ -15,7 +15,7 @@ assert.ok(html.indexOf('id="appNavigationToggle"') < html.indexOf('class="header
 assert.doesNotMatch(html, /<nav class="header-navigation"/, 'The duplicated horizontal module row is removed');
 assert.match(html, /id="mobileMoreNav"[^>]+onclick="window\.openMobileNavigation\(this\)"/, 'Mobile More opens the same drawer and supplies its focus-restoration target');
 assert.match(html, /js\/app\.js\?v=2026100412/, 'Application script cache key is bumped for the dedicated drawer');
-assert.match(html, /css\/layout\.css\?v=2026100412/, 'Drawer style changes receive a fresh stylesheet cache key');
+assert.match(html, /css\/layout\.css\?v=2026100413/, 'Header and drawer style changes receive a fresh stylesheet cache key');
 
 assert.match(app, /window\.openMobileNavigation\s*=\s*async function/, 'One shared permission-filtered drawer opener exists');
 assert.match(app, /\.sidebar-nav > \.nav-item\[data-view\]/, 'Drawer entries come from the existing permission-managed navigation source');

@@ -1836,3 +1836,15 @@ body.mobile-navigation-open .app-container { pointer-events: none; }
   .app-navigation-drawer, .navigation-drawer-backdrop, .header-navigation-toggle,
   .navigation-drawer-close, .navigation-drawer-item { transition-duration: .01ms !important; }
 }
+
+/* Mirror the two intact header groups with document direction. Keeping the
+   groups themselves untouched preserves their internal control order/spacing. */
+.topbar {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+}
+.topbar-actions { margin-inline-start: 0; }
+@media (max-width: 1024px) {
+  .topbar-actions { flex: 0 1 auto !important; justify-content: initial !important; }
+}
