@@ -731,30 +731,9 @@ const db = {
         }
     },
 
-    // Login Lockout API
-    async checkLoginLockout(email) {
-        if (!supabaseClient) return null;
-        try {
-            const { data, error } = await supabaseClient.from('login_attempts').select('*').eq('email', email).maybeSingle();
-            if (error) throw error;
-            return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
-        } catch (error) {
-            console.error("Error checking login lockout:", error);
-            return null;
-        }
-    },
-    async recordFailedLogin(email) {
-        if (!supabaseClient) return null;
-        try {
-            await withSupabaseTimeout(
-                supabaseClient.rpc('record_failed_login', { user_email: email }),
-                { data: null, error: createSupabaseNetworkError() },
-                4000
-            );
-        } catch (error) {
-            if (!error?.isNetworkError) console.error("Error recording failed login:", error);
-        }
-    },
+    // Login attempts and lockout state are handled by the trusted secure-login
+    // function. Never read login_attempts or invoke record_failed_login from a
+    // browser session (S3 intentionally denies those client privileges).
     async resetLoginLockout(email) {
         if (!supabaseClient) return null;
         try {
@@ -763,9 +742,7 @@ const db = {
                 { data: null, error: createSupabaseNetworkError() },
                 4000
             );
-        } catch (error) {
-            if (!error?.isNetworkError) console.error("Error resetting login lockout:", error);
-        }
+        } catch (_) { /* Best effort; do not log authentication/security errors. */ }
     },
 
 
@@ -841,19 +818,43 @@ const db = {
             return { session: null, user: null, dto: toAuthSessionDto(null), error: createSupabaseNetworkError('Unable to reach the sign-in service. Please try again.') };
         }
         try {
-            const { data, error } = await withSupabaseTimeout(
-                supabaseClient.auth.signInWithPassword({ email: String(email || '').trim(), password: String(password || '') }),
-                { data: null, error: createSupabaseNetworkError('Unable to reach the sign-in service. Please try again.') },
-                10000
-            );
-            const normalizedError = isSupabaseNetworkError(error)
-                ? createSupabaseNetworkError('Unable to reach the sign-in service. Please try again.')
-                : error;
-            return { session: data?.session || null, user: data?.user || null, dto: toAuthSessionDto(data?.session), error: normalizedError || null };
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            let response;
+            try {
+                response = await fetch(`${SUPABASE_URL}/functions/v1/secure-login`, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: String(email || '').trim(), password: String(password || '') }),
+                    signal: controller.signal
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+
+            let payload = null;
+            try { payload = await response.json(); } catch (_) { payload = null; }
+            if (!response.ok || !payload?.session?.access_token || !payload?.session?.refresh_token) {
+                const error = new Error(response.status === 401
+                    ? 'Invalid login credentials.'
+                    : 'Unable to reach the sign-in service. Please try again.');
+                error.status = response.status;
+                return { session: null, user: null, dto: toAuthSessionDto(null), error };
+            }
+
+            const { data, error } = await supabaseClient.auth.setSession({
+                access_token: payload.session.access_token,
+                refresh_token: payload.session.refresh_token
+            });
+            if (error || !data?.session) {
+                return { session: null, user: null, dto: toAuthSessionDto(null), error: new Error('Unable to establish a secure session. Please try again.') };
+            }
+            return { session: data.session, user: data.user || data.session.user, dto: toAuthSessionDto(data.session), error: null };
         } catch (error) {
             return { session: null, user: null, dto: toAuthSessionDto(null), error: isSupabaseNetworkError(error)
                 ? createSupabaseNetworkError('Unable to reach the sign-in service. Please try again.')
-                : error };
+                : new Error('Unable to reach the sign-in service. Please try again.') };
         }
     },
 
@@ -871,9 +872,8 @@ const db = {
             );
             if (error) throw error;
             return { success: true };
-        } catch (error) {
-            console.error('Sign out failed:', authErrorMessage(error));
-            return { success: false, error };
+        } catch (_) {
+            return { success: false, error: createSupabaseNetworkError('Unable to reach the authentication service.') };
         }
     },
 

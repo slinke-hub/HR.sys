@@ -155,6 +155,16 @@ function safeExternalUrl(value) {
 }
 window.safeExternalUrl = safeExternalUrl;
 
+// Expense receipts are stored as base64 data URLs. Accept only the file types
+// allowed by the receipt upload flow; ordinary remote links still use the
+// shared HTTP(S) URL allowlist.
+function safeReceiptUrl(value) {
+    const raw = String(value || '').trim();
+    if (/^data:(?:image\/(?:png|jpeg|webp)|application\/pdf);base64,[a-z0-9+/=\r\n]+$/i.test(raw)) return raw;
+    return safeExternalUrl(raw);
+}
+window.safeReceiptUrl = safeReceiptUrl;
+
 function formatEmployeeId(value, fallback = '-') {
     const raw = String(value ?? '').trim().replace(/^MQ[-\s]*/i, '');
     if (!raw) return `MQ-${fallback}`;
@@ -651,7 +661,7 @@ window.showEditUserModal = async (userId) => {
     mgrSelect.innerHTML = '<option value="">No Manager</option>';
     const users = await db.fetchUsers();
     users.filter(m => m.role === 'MANAGER' || m.role === 'ADMIN').forEach(m => {
-        mgrSelect.innerHTML += `<option value="${m.id}" ${user.manager_id === m.id ? 'selected' : ''}>${window.formatEmployeeName(m) || 'Mgr'}</option>`;
+        mgrSelect.innerHTML += `<option value="${escapeHTML(m.id)}" ${user.manager_id === m.id ? 'selected' : ''}>${escapeHTML(window.formatEmployeeName(m) || 'Mgr')}</option>`;
     });
 
     document.getElementById('editUserModal').classList.add('active');
@@ -880,10 +890,10 @@ window.renderRequests = async () => {
 
                 return `
                     <div class="workflow-step ${stateClass}">
-                        <div class="workflow-step-indicator" title="${stageName}">
+                        <div class="workflow-step-indicator" title="${escapeHTML(stageName)}">
                             ${isPassed ? '<i data-lucide="check" style="width:12px; height:12px;"></i>' : (isRejected ? '<i data-lucide="x" style="width:12px; height:12px;"></i>' : idx + 1)}
                         </div>
-                        <div class="workflow-step-label">${stageName}</div>
+                        <div class="workflow-step-label">${escapeHTML(stageName)}</div>
                     </div>
                 `;
             }).join('');
@@ -901,14 +911,14 @@ window.renderRequests = async () => {
         return `
         <tr>
             <td>${new Date(r.created_at).toLocaleDateString()}</td>
-            <td>${window.formatEmployeeName(r.profiles) || 'Unknown'}</td>
+            <td>${escapeHTML(window.formatEmployeeName(r.profiles) || 'Unknown')}</td>
             <td>
-                ${r.request_type}
-                ${r.loan_amount ? `<br><small style="color:var(--color-text-secondary)">SAR ${r.loan_amount}</small>` : ''}
+                ${escapeHTML(r.request_type || '')}
+                ${r.loan_amount ? `<br><small style="color:var(--color-text-secondary)">SAR ${escapeHTML(String(r.loan_amount))}</small>` : ''}
                 ${workflowHTML}
             </td>
-            <td>${r.leave_type || '-'}</td>
-            <td><span class="status-badge ${r.status === 'Approved' || r.status === 'APPROVED' ? 'success' : (r.status === 'Rejected' || r.status === 'REJECTED' ? 'danger' : 'info')}">${r.status}</span></td>
+            <td>${escapeHTML(r.leave_type || '-')}</td>
+            <td><span class="status-badge ${r.status === 'Approved' || r.status === 'APPROVED' ? 'success' : (r.status === 'Rejected' || r.status === 'REJECTED' ? 'danger' : 'info')}">${escapeHTML(r.status || '')}</span></td>
             <td>
                 ${canApprove ? `
                     <button class="btn-primary" style="padding: 0.2rem 0.5rem; font-size:0.8rem" onclick="updateRequestStatus('${r.id}', 'Approved')">${t('ui_approve')}</button>
@@ -962,7 +972,7 @@ window.showNewRequestModal = async () => {
     const users = await db.fetchUsers();
     
     const empSelect = document.getElementById('requestEmployeeId');
-    empSelect.innerHTML = users.map(u => `<option value="${u.id}" ${u.id === currentUser.id ? 'selected' : ''}>${window.formatEmployeeName(u) || u.email}</option>`).join('');
+    empSelect.innerHTML = users.map(u => `<option value="${escapeHTML(u.id)}" ${u.id === currentUser.id ? 'selected' : ''}>${escapeHTML(window.formatEmployeeName(u) || u.email || '')}</option>`).join('');
     
     if (!canEdit) {
         empSelect.value = currentUser.id;
@@ -2502,11 +2512,11 @@ async function renderCommunity() {
     let chatHTML = messages.map(m => `
         <div style="display:flex; gap:1rem; margin-bottom:1.5rem; ${m.user_id === currentUser.id ? 'flex-direction:row-reverse;' : ''}">
             <div style="width:40px; height:40px; border-radius:50%; background:var(--color-surface-hover); flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
-                ${m.profiles.avatar_url ? `<img src="${m.profiles.avatar_url}" style="width:100%;height:100%;object-fit:cover;">` : `<i data-lucide="user"></i>`}
+                ${safeExternalUrl(m.profiles?.avatar_url) ? `<img src="${escapeHTML(safeExternalUrl(m.profiles.avatar_url))}" alt="" style="width:100%;height:100%;object-fit:cover;">` : `<i data-lucide="user"></i>`}
             </div>
             <div class="community-message${m.is_birthday_alert ? ' is-celebration' : ''}${m.user_id === currentUser.id ? ' is-own-message' : ''}">
-                <div class="community-message-author">${window.formatEmployeeName(m.profiles)}</div>
-                <div class="community-message-copy">${m.message}</div>
+                <div class="community-message-author">${escapeHTML(window.formatEmployeeName(m.profiles) || '')}</div>
+                <div class="community-message-copy">${escapeHTML(m.message || '')}</div>
                 <div class="community-message-time">${new Date(m.created_at).toLocaleString()}</div>
             </div>
         </div>
@@ -2838,10 +2848,8 @@ window.handleLoginSubmit = async function (e) {
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
 
-    // Do not block a sign-in based solely on the shared login_attempts row.
-    // That counter is account-wide and can be stale on one device after a
-    // successful login elsewhere. Supabase Auth remains the source of truth;
-    // failed attempts are still recorded and successful sign-ins reset them.
+    // The secure-login backend checks lockout state and records genuine Auth
+    // credential failures using its trusted server-side database context.
 
     const loginBtn = e.target.querySelector('button[type="submit"]');
     const originalBtnText = loginBtn.innerHTML;
@@ -2855,9 +2863,8 @@ window.handleLoginSubmit = async function (e) {
     loginBtn.disabled = false;
 
     if (error || !user) {
-        console.error("Login Error:", error);
-        await db.recordFailedLogin(email);
-        showToast(error?.message || t('invalid_credentials'), 'danger');
+        // Never expose raw Auth/Edge/database errors or echo submitted data.
+        showToast(error?.status === 401 ? t('invalid_credentials') : t('auth_service_unavailable'), 'danger');
         return;
     }
 
@@ -3149,10 +3156,10 @@ async function renderTeamHierarchyWidget() {
         else if (user.role === 'MANAGER') roleBadgeClass = 'primary';
         else if (user.role === 'SUPERVISOR') roleBadgeClass = 'warning';
 
-        const userAvatar = user.avatar_url || localStorage.getItem('user_avatar_' + user.id) || '';
-        const hasCustomAvatar = userAvatar && typeof userAvatar === 'string' && userAvatar.trim().length > 0;
+        const userAvatar = safeExternalUrl(user.avatar_url || localStorage.getItem('user_avatar_' + user.id) || '');
+        const hasCustomAvatar = Boolean(userAvatar);
         const avatarContent = hasCustomAvatar
-            ? `<img src="${escapeHTML(userAvatar.trim())}" class="hierarchy-square-avatar" alt="${escapeHTML(window.formatEmployeeName(user) || 'Employee')}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
+            ? `<img src="${escapeHTML(userAvatar)}" class="hierarchy-square-avatar" alt="${escapeHTML(window.formatEmployeeName(user) || 'Employee')}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
                <span class="hierarchy-square-avatar hierarchy-avatar-placeholder" hidden aria-label="Profile photo unavailable"><i data-lucide="user"></i></span>`
             : `<span class="hierarchy-square-avatar hierarchy-avatar-placeholder" aria-label="No profile photo"><i data-lucide="user"></i></span>`;
         const avatarMarkup = canViewEmployeeInfo
@@ -3168,7 +3175,7 @@ async function renderTeamHierarchyWidget() {
                         <div class="hierarchy-square-title" title="${escapeHTML(user.job_title || 'Team Member')}">${escapeHTML(user.job_title || 'Team Member')}</div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.3rem; margin-top: auto;">
-                        <span class="status-badge ${roleBadgeClass}" style="font-size:0.65rem; text-transform: uppercase;">${user.role}</span>
+                        <span class="status-badge ${roleBadgeClass}" style="font-size:0.65rem; text-transform: uppercase;">${escapeHTML(user.role || '')}</span>
                         ${isSelf ? '<span class="status-badge success" style="font-size:0.65rem; padding:1px 5px;">You</span>' : ''}
                     </div>
                 </div>
@@ -3217,7 +3224,7 @@ window.openHierarchyEmployeeInfo = function (userId) {
     const employee = window.hierarchyProfilesById?.[userId];
     if (!employee) return showToast(window.t('msg_toast_3') || 'Employee information is unavailable.', 'danger');
     document.getElementById('hierarchyEmployeeInfoModal')?.remove();
-    const avatar = employee.avatar_url || localStorage.getItem('user_avatar_' + employee.id) || '';
+    const avatar = safeExternalUrl(employee.avatar_url || localStorage.getItem('user_avatar_' + employee.id) || '');
     const modal = document.createElement('div');
     modal.id = 'hierarchyEmployeeInfoModal';
     modal.className = 'modal active hierarchy-employee-modal';
@@ -3344,12 +3351,16 @@ async function renderDashboard() {
             if (newsData.status === 'ok') {
                 const approvedSaudiItems = newsData.items.slice(0, 5);
                 const localizedTitles = await Promise.all(approvedSaudiItems.map(item => translateSaudiNewsTitle(item.title)));
-                newsHTML = approvedSaudiItems.map((item, index) => `
+                newsHTML = approvedSaudiItems.map((item, index) => {
+                    const safeLink = safeExternalUrl(item.link);
+                    const titleHtml = escapeHTML(localizedTitles[index] || item.title || '');
+                    return `
                     <div style="margin-bottom: 1rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem;">
-                        <a href="${escapeHTML(item.link)}" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">${escapeHTML(localizedTitles[index])}</a>
+                        ${safeLink ? `<a href="${escapeHTML(safeLink)}" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">${titleHtml}</a>` : `<span>${titleHtml}</span>`}
                         <div style="font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(item.pubDate).toLocaleDateString()}</div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
             }
         }
     } catch (e) { }
@@ -5306,9 +5317,9 @@ async function renderLeave() {
         return `
             <tr>
                 ${employeeNameCell}
-                <td><strong>${r.leave_type}</strong></td>
+                <td><strong>${escapeHTML(r.leave_type || '')}</strong></td>
                 <td>${new Date(r.start_date).toLocaleDateString()} to ${new Date(r.end_date).toLocaleDateString()}</td>
-                <td><span class="status-badge ${badgeClass}">${r.status.replace('_ARCHIVED', '')}</span></td>
+                <td><span class="status-badge ${badgeClass}">${escapeHTML(r.status.replace('_ARCHIVED', ''))}</span></td>
                 ${actionsCell}
             </tr>
         `;
@@ -5516,10 +5527,10 @@ async function renderExpenses() {
                         <tbody>
                             ${myExpenses.length === 0 ? `<tr><td colspan="4" style="text-align: center;">${t('exp_no_exp')}</td></tr>` : myExpenses.map(e => `
                                 <tr>
-                                    <td>${e.description}</td>
+                                    <td>${escapeHTML(e.description || '')}</td>
                                     <td>$${e.amount.toFixed(2)}</td>
-                                    <td><span class="status-badge ${e.status.startsWith('APPROVED') ? 'success' : (e.status.startsWith('REJECTED') ? 'danger' : 'warning')}">${e.status.replace('_ARCHIVED', '')}</span></td>
-                                    <td><a href="${e.receipt_base64}" download="receipt_${e.id}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">${t('exp_download')}</a></td>
+                                    <td><span class="status-badge ${e.status.startsWith('APPROVED') ? 'success' : (e.status.startsWith('REJECTED') ? 'danger' : 'warning')}">${escapeHTML(e.status.replace('_ARCHIVED', ''))}</span></td>
+                                    <td>${safeReceiptUrl(e.receipt_base64) ? `<a href="${escapeHTML(safeReceiptUrl(e.receipt_base64))}" download="receipt_${escapeHTML(e.id)}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">${t('exp_download')}</a>` : '—'}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -5537,9 +5548,9 @@ async function renderExpenses() {
                             ${pendingExpenses.length === 0 ? `<tr><td colspan="5" style="text-align: center;">${t('exp_no_pending')}</td></tr>` : pendingExpenses.map(e => `
                                 <tr>
                                     <td><span style="font-size: 0.75rem;">${e.employee_id.substring(0, 8)}...</span></td>
-                                    <td>${e.description}</td>
+                                    <td>${escapeHTML(e.description || '')}</td>
                                     <td>$${e.amount.toFixed(2)}</td>
-                                    <td><a href="${e.receipt_base64}" download="receipt_${e.id}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">${t('exp_download')}</a></td>
+                                    <td>${safeReceiptUrl(e.receipt_base64) ? `<a href="${escapeHTML(safeReceiptUrl(e.receipt_base64))}" download="receipt_${escapeHTML(e.id)}" class="btn-secondary" style="padding: 0.25rem 0.5rem; text-decoration: none; font-size: 0.75rem;">${t('exp_download')}</a>` : '—'}</td>
                                     <td>
                                         <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="handleExpenseAction('${e.id}', 'APPROVED', '${e.employee_id}')">${t('leave_approve')}</button>
                                         <button class="btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--color-danger);" onclick="handleExpenseAction('${e.id}', 'REJECTED', '${e.employee_id}')">${t('leave_reject')}</button>
@@ -5794,7 +5805,7 @@ async function renderAdmin() {
                 <div class="directory-actions">
                     <button type="button" class="btn-secondary btn-sm" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View details"><i data-lucide="eye"></i><span>View</span></button>
                     <button type="button" class="btn-primary btn-sm" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>
-                    <button type="button" class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="${t('users_contract')}"><i data-lucide="file-signature"></i></button>
+                    <button type="button" class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}')" title="${t('users_contract')}"><i data-lucide="file-signature"></i></button>
                     <button type="button" class="btn-secondary btn-sm" style="color: var(--color-warning);" onclick="showAdminPasswordResetModal('${u.id}')" title="${t('password_reset_button')}"><i data-lucide="key"></i></button>
                     <button type="button" class="btn-secondary btn-sm" style="color:${u.is_active === false ? 'var(--color-success)' : 'var(--color-warning)'};" onclick="window.toggleUserLock('${u.id}', ${u.is_active !== false})" title="${u.is_active === false ? 'Unlock user' : 'Lock user'}"><i data-lucide="${u.is_active === false ? 'unlock' : 'lock'}"></i></button>
                     <button type="button" class="btn-secondary btn-sm" style="color: var(--color-danger);" onclick="handleDeleteUser('${u.id}')" title="Remove User"><i data-lucide="trash-2"></i></button>
@@ -6497,7 +6508,7 @@ async function renderUsers() {
                                         <div class="directory-actions">
                                             <button type="button" class="btn-secondary btn-sm directory-view-button" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View employee details"><i data-lucide="eye"></i><span>View</span></button>
                                             <button type="button" class="btn-primary btn-sm directory-edit-button" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>
-                                            <button class="btn-secondary" style="padding: 0.4rem;" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="${t('users_contract')}">
+                                            <button class="btn-secondary" style="padding: 0.4rem;" onclick="navigateToContract('${u.id}')" title="${t('users_contract')}">
                                                 <i data-lucide="file-signature" style="width:14px;height:14px;"></i>
                                             </button>
                                             <button class="btn-secondary" style="padding: 0.4rem; font-size: 0.8rem; color: var(--color-warning);" onclick="showAdminPasswordResetModal('${u.id}')" title="${t('password_reset_button')}">
@@ -6641,10 +6652,10 @@ async function renderPerformance() {
                     <tbody>
                         ${goals.length === 0 ? `<tr><td colspan="4">${t('perf_no_goals')}</td></tr>` : goals.map(g => `
                             <tr>
-                                <td>${g.title}</td>
+                                <td>${escapeHTML(g.title || '')}</td>
                                 <td>${new Date(g.due_date).toLocaleDateString()}</td>
-                                <td><span class="status-badge ${g.status === 'DONE' ? 'success' : 'warning'}">${g.status}</span></td>
-                                <td>${g.rating || '-'} / 5</td>
+                                <td><span class="status-badge ${g.status === 'DONE' ? 'success' : 'warning'}">${escapeHTML(g.status || '')}</span></td>
+                                <td>${escapeHTML(String(g.rating ?? '-'))} / 5</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -7718,7 +7729,7 @@ async function renderProfile() {
     const companyEmployeeId = employeeNumberSource !== null && employeeNumberSource !== undefined && String(employeeNumberSource).trim()
         ? formatEmployeeId(employeeNumberSource)
         : t('emp_na');
-    const userAvatar = profile.avatar_url || localStorage.getItem('user_avatar_' + currentUser.id);
+    const userAvatar = safeExternalUrl(profile.avatar_url || localStorage.getItem('user_avatar_' + currentUser.id) || '');
     const avatar = userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=007AFF&color=fff`;
     return `
         <div class="page-header">
@@ -7731,7 +7742,7 @@ async function renderProfile() {
             <!-- Profile Photo & Summary -->
             <div class="card col-span-4 profile-photo-summary" style="text-align: center;">
                 <div style="position: relative; display: inline-block;">
-                    <img src="${avatar}" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem; border: 4px solid var(--border-default); box-shadow: var(--shadow-sm);" />
+                    <img src="${escapeHTML(avatar)}" alt="" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem; border: 4px solid var(--border-default); box-shadow: var(--shadow-sm);" />
                 </div>
                 <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem;">${escapeHTML(displayName)}</h3>
                 <p style="color: var(--color-primary); font-weight: 500; margin-bottom: 1.5rem;">${t(`role_${String(currentUserRole || 'employee').toLowerCase()}`) || currentUserRole}</p>
@@ -7760,7 +7771,7 @@ async function renderProfile() {
                             
                             <div class="form-group col-span-6">
                                 <label class="form-label">${t('prof_email')}</label>
-                                <input type="email" class="form-control" value="${currentUser.email}" disabled style="background-color: var(--color-surface); opacity: 0.7; cursor: not-allowed;">
+                                <input type="email" class="form-control" value="${escapeHTML(currentUser.email || '')}" disabled style="background-color: var(--color-surface); opacity: 0.7; cursor: not-allowed;">
                             </div>
                             <div class="form-group col-span-6">
                                 <label class="form-label">${t('ui_employee_id')}</label>
@@ -7768,11 +7779,11 @@ async function renderProfile() {
                             </div>
                             <div class="form-group col-span-6">
                                 <label class="form-label">${t('prof_iqama')}</label>
-                                <input type="text" id="profileIqama" class="form-control" value="${profile.iqama_number || ''}" placeholder="${t('users_iqama_ph')}">
+                                <input type="text" id="profileIqama" class="form-control" value="${escapeHTML(profile.iqama_number || '')}" placeholder="${t('users_iqama_ph')}">
                             </div>
                             <div class="form-group col-span-6">
                                 <label class="form-label">${t('prof_phone')}</label>
-                                <input type="text" id="profilePhone" class="form-control" value="${profile.phone_number || ''}" placeholder="${t('users_phone_ph')}">
+                                <input type="text" id="profilePhone" class="form-control" value="${escapeHTML(profile.phone_number || '')}" placeholder="${t('users_phone_ph')}">
                             </div>
                         </div>
                         <button type="submit" class="btn-primary" style="transition: all 0.2s;">${t('prof_save')}</button>
@@ -11101,6 +11112,10 @@ window.navigateToContract = async function (employeeId, empName) {
         }
         return;
     }
+    if (!empName) {
+        const employeeProfile = await db.getUserProfile(employeeId);
+        empName = window.formatEmployeeName(employeeProfile || {}) || 'Employee';
+    }
     currentContractEmployeeId = employeeId;
     currentContractEmployeeName = empName;
     
@@ -11117,7 +11132,7 @@ window.navigateToContract = async function (employeeId, empName) {
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 900px; width: 90%; background: var(--color-bg-surface); padding: 0; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header" style="position: sticky; top: 0; background: var(--color-bg-surface); z-index: 10; padding: 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin:0">${t('users_contract') || 'Contract'} - ${empName}</h2>
+                <h2 style="margin:0">${escapeHTML(t('users_contract') || 'Contract')} - ${escapeHTML(empName)}</h2>
                 <button class="close-modal" onclick="document.getElementById('contractEditModal').style.display = 'none'"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
             <div class="modal-body contract-modal-body" style="padding: 1.5rem; padding-top: 0.5rem;">
@@ -11321,10 +11336,11 @@ async function renderContractPage() {
     const workplace = contract?.primary_workplace || contract?.workplace_location || '';
     const restDays = contract?.weekly_rest_day || contract?.rest_days || 'Friday, Saturday';
     const confidentialityPolicyReference = contract?.confidentiality_policy_url || '';
-    const confidentialityPolicyUrl = await db.resolveStorageReference(confidentialityPolicyReference);
+    const confidentialityPolicyUrl = safeExternalUrl(await db.resolveStorageReference(confidentialityPolicyReference));
     const storedContractDocuments = contract?.id ? await db.fetchContractDocuments(contract.id) : [];
     const contractDocuments = [];
     const addContractDocument = (url, label) => {
+        url = safeExternalUrl(url);
         if (!url || contractDocuments.some(document => document.url === url)) return;
         let fileName = label;
         try { fileName = decodeURIComponent(new URL(url).pathname.split('/').pop() || label).replace(/^\d+-/, ''); } catch (_) { }
@@ -11345,7 +11361,7 @@ async function renderContractPage() {
         <div class="page-header fade-in-up">
             <div>
                 <h1 class="page-title">${t('users_contract') || 'Contract'}</h1>
-                <p class="page-subtitle">${currentContractEmployeeName}</p>
+                <p class="page-subtitle">${escapeHTML(currentContractEmployeeName || '')}</p>
             </div>
             <button class="btn-secondary" onclick="currentView='${returnView}'; renderView('${returnView}');">
                 <i data-lucide="arrow-left" style="width:16px;height:16px;margin-right:4px;"></i> ${returnLabel}
@@ -11586,7 +11602,7 @@ async function renderEmployeesDirectory() {
                                         <div class="directory-actions">
                                             <button type="button" class="btn-secondary btn-sm directory-view-button" onclick="window.showEmployeeDetailsCard('${u.id}')" title="View employee details"><i data-lucide="eye"></i><span>View</span></button>
                                             ${canCurrentUserManageUsers() ? `<button type="button" class="btn-primary btn-sm directory-edit-button" onclick="window.showEditUserModal('${u.id}')" title="Edit user"><i data-lucide="user-pen"></i><span>Edit</span></button>` : ''}
-                                            <button type="button" class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}', '${(window.formatEmployeeName(u) || 'Employee').replace(/'/g, "\\'")}')" title="${canEditContracts ? 'Edit Contract' : 'View Contract'}"><i data-lucide="file-signature"></i><span>${canEditContracts ? 'Edit Contract' : 'View Contract'}</span></button>
+                                            <button type="button" class="btn-secondary btn-sm" onclick="navigateToContract('${u.id}')" title="${canEditContracts ? 'Edit Contract' : 'View Contract'}"><i data-lucide="file-signature"></i><span>${canEditContracts ? 'Edit Contract' : 'View Contract'}</span></button>
                                             ${canEditContracts ? `<button type="button" class="btn-secondary btn-sm" style="color:var(--color-danger)" onclick="handleDeleteContract('${u.id}')" title="Delete Contract"><i data-lucide="trash-2"></i><span>Delete Contract</span></button>` : ''}
                                         </div>
                                     </td>
@@ -13447,9 +13463,9 @@ async function renderDepartments() {
             roles: roles.filter(role => role.level === level)
         })).filter(group => group.roles.length);
         const searchText = `${department.name} ${roles.map(role => role.title).join(' ')}`.toLowerCase();
-        const editAction = department.id
-            ? `editDepartment('${department.id}')`
-            : `showDepartmentCatalogModal('${department.name.replace(/'/g, "\\'")}')`;
+        const editButton = department.id
+            ? `<button class="btn btn-icon" aria-label="Edit department" title="Edit department" onclick="editDepartment('${escapeHTML(department.id)}')"><i data-lucide="edit-3"></i></button>`
+            : `<button class="btn btn-icon" data-catalog-department="${escapeHTML(department.name)}" aria-label="Edit department" title="Edit department" onclick="showDepartmentCatalogModal(this.dataset.catalogDepartment)"><i data-lucide="edit-3"></i></button>`;
         return `
             <article class="department-manager-card" data-department-card data-search="${escapeHTML(searchText)}" data-levels="${escapeHTML(grouped.map(group => group.level).join('|'))}">
                 <div class="department-manager-card-head">
@@ -13462,7 +13478,7 @@ async function renderDepartments() {
                         <p>${currentLang === 'ar' ? `${roles.length} مسمى وظيفي · ${employees.length} موظف` : `${roles.length} job titles · ${employees.length} employees`}</p>
                     </div>
                     <div class="department-manager-actions">
-                        <button class="btn btn-icon" aria-label="Edit department" title="Edit department" onclick="${editAction}"><i data-lucide="edit-3"></i></button>
+                        ${editButton}
                         ${department.id ? `<button class="btn btn-icon department-delete-button" aria-label="Delete department" title="Delete department" onclick="deleteDepartment('${department.id}')"><i data-lucide="trash-2"></i></button>` : ''}
                     </div>
                 </div>
@@ -14075,10 +14091,10 @@ async function renderClients() {
 
     let tableRows = clients.length ? clients.map(c => `
         <tr id="client-row-${c.id}">
-            <td>${c.name}</td>
-            <td>${c.company || '-'}</td>
-            <td>${c.email || '-'}</td>
-            <td>${c.phone || '-'}</td>
+            <td>${escapeHTML(c.name || '')}</td>
+            <td>${escapeHTML(c.company || '-')}</td>
+            <td>${escapeHTML(c.email || '-')}</td>
+            <td>${escapeHTML(c.phone || '-')}</td>
             <td>
                 ${!isMq25 ? `
                 <button class="btn btn-icon" onclick="editClient('${c.id}')"><i data-lucide="edit-2"></i></button>
@@ -14299,15 +14315,15 @@ async function renderCRM() {
                                 <i data-lucide="edit-2" style="width: 14px; height: 14px; color: var(--color-text-secondary);"></i>
                             </button>
                         </div>
-                        <div style="font-weight: 500; margin-bottom: 0.5rem; padding-right: 45px;">${d.title}</div>
+                        <div style="font-weight: 500; margin-bottom: 0.5rem; padding-right: 45px;">${escapeHTML(d.title || '')}</div>
                         <div style="color: var(--color-text-secondary); font-size: 0.875rem; margin-bottom: 0.5rem;">
                             <i data-lucide="building-2" style="width: 14px; height: 14px;"></i> 
-                            ${d.crm_clients ? d.crm_clients.name : 'Unknown Client'}
+                            ${escapeHTML(d.crm_clients ? d.crm_clients.name : 'Unknown Client')}
                         </div>
-                        ${d.closing_date ? `<div style="font-size: 0.75rem; color: var(--color-danger); margin-bottom: 0.5rem;"><i data-lucide="calendar" style="width: 12px; height: 12px;"></i> Close: ${d.closing_date}</div>` : ''}
-                        ${d.assigned_to ? `<div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;"><i data-lucide="user" style="width: 12px; height: 12px;"></i> ${window.formatEmployeeName(users.find(u => u.id === d.assigned_to) || {}) || 'User'}</div>` : ''}
-                        ${d.workflow_status && d.workflow_status !== 'NOT_STARTED' ? `<div class="status-badge ${d.workflow_status === 'APPROVED' ? 'success' : (d.workflow_status === 'REJECTED' ? 'danger' : 'warning')}" style="margin-bottom:.5rem;">${t('crm_workflow_' + String(d.workflow_status).toLowerCase()) || String(d.workflow_status).replace(/_/g, ' ')}</div>` : ''}
-                        <div class="status-badge success" style="margin-top: auto;">SAR ${d.amount}</div>
+                        ${d.closing_date ? `<div style="font-size: 0.75rem; color: var(--color-danger); margin-bottom: 0.5rem;"><i data-lucide="calendar" style="width: 12px; height: 12px;"></i> Close: ${escapeHTML(d.closing_date)}</div>` : ''}
+                        ${d.assigned_to ? `<div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;"><i data-lucide="user" style="width: 12px; height: 12px;"></i> ${escapeHTML(window.formatEmployeeName(users.find(u => u.id === d.assigned_to) || {}) || 'User')}</div>` : ''}
+                        ${d.workflow_status && d.workflow_status !== 'NOT_STARTED' ? `<div class="status-badge ${d.workflow_status === 'APPROVED' ? 'success' : (d.workflow_status === 'REJECTED' ? 'danger' : 'warning')}" style="margin-bottom:.5rem;">${escapeHTML(t('crm_workflow_' + String(d.workflow_status).toLowerCase()) || String(d.workflow_status).replace(/_/g, ' '))}</div>` : ''}
+                        <div class="status-badge success" style="margin-top: auto;">SAR ${escapeHTML(String(d.amount ?? ''))}</div>
                         <button type="button" class="btn btn-secondary btn-sm deal-workflow-button" onclick="openDealWorkflowModal('${d.id}')"><i data-lucide="git-branch"></i> ${t('crm_workflow') || 'Workflow'}</button>
                     </div>
                 `).join('')}
@@ -14358,11 +14374,11 @@ async function renderCRM() {
                         <tbody>
                             ${clients.map(c => `
                                 <tr>
-                                    <td>${c.name}</td>
-                                    <td>${c.company || '-'}</td>
-                                    <td>${c.email || '-'}</td>
-                                    <td>${c.phone || '-'}</td>
-                                    <td><span class="status-badge ${c.status === 'ACTIVE' ? 'success' : 'danger'}">${c.status}</span></td>
+                                    <td>${escapeHTML(c.name || '')}</td>
+                                    <td>${escapeHTML(c.company || '-')}</td>
+                                    <td>${escapeHTML(c.email || '-')}</td>
+                                    <td>${escapeHTML(c.phone || '-')}</td>
+                                    <td><span class="status-badge ${c.status === 'ACTIVE' ? 'success' : 'danger'}">${escapeHTML(c.status || '')}</span></td>
                                 </tr>
                             `).join('')}
                             ${clients.length === 0 ? `<tr><td colspan="5" class="text-center">${t('ui_no_clients_yet') || 'No clients yet'}</td></tr>` : ''}
@@ -14816,39 +14832,49 @@ function renderDealPresentationAssets(attachments) {
     }
     const quoteSection = quotes.length ? `<section class="deal-presentation-group deal-presentation-quote-section">
         <h4><i data-lucide="file-text"></i>${escapeHTML(t('crm_uploaded_quote_documents') || 'Quote document')}</h4>
-        <div class="deal-presentation-quote-list">${quotes.map(file => `<article class="deal-presentation-quote">
+        <div class="deal-presentation-quote-list">${quotes.map(file => {
+            const fileUrl = safeExternalUrl(file.file_url);
+            if (!fileUrl) return '';
+            return `<article class="deal-presentation-quote">
             <i data-lucide="file-text"></i>
             <span><strong>${escapeHTML(file.file_name || (t('crm_quotation') || 'Quotation'))}</strong>${file.description ? `<small>${escapeHTML(file.description)}</small>` : ''}</span>
-            <a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(t('crm_open_file') || 'Open file')}</a>
-        </article>`).join('')}</div>
+            <a class="btn btn-secondary btn-sm" href="${escapeHTML(fileUrl)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(t('crm_open_file') || 'Open file')}</a>
+        </article>`;
+        }).join('')}</div>
     </section>` : '';
     const identitySection = clientIdentities.length ? `<section class="deal-presentation-group deal-presentation-identity-section">
         <h4><i data-lucide="badge-check"></i>${escapeHTML(t('crm_client_identity_files') || 'Client identity files')}</h4>
         <div class="deal-presentation-quote-list">${clientIdentities.map(file => {
-            const isImage = /\.(png|jpe?g|webp|gif|bmp)(?:\?|$)/i.test(String(file.file_url || '')) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(file.file_name || ''));
+            const fileUrl = safeExternalUrl(file.file_url);
+            if (!fileUrl) return '';
+            const isImage = /\.(png|jpe?g|webp|gif|bmp)(?:\?|$)/i.test(fileUrl) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(file.file_name || ''));
             return `<article class="deal-presentation-quote">
                 <i data-lucide="${isImage ? 'image' : 'file-text'}"></i>
                 <span><strong>${escapeHTML(file.file_name || (t('crm_client_identity') || 'Client identity'))}</strong><small>${escapeHTML(isImage ? (t('crm_image') || 'Image') : 'PDF')}</small></span>
                 <div class="deal-presentation-file-actions">
                     ${isImage
-                        ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" onclick="openDealImagePreview(this)"><i data-lucide="expand"></i>${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
-                        : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
-                    <button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(file.file_url)}" data-file-name="${escapeHTML(file.file_name || (t('crm_client_identity') || 'Client identity'))}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${escapeHTML(taskDetailText('Download', 'تنزيل'))}</button>
+                        ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(fileUrl)}" data-image-name="${escapeHTML(file.file_name || '')}" onclick="openDealImagePreview(this)"><i data-lucide="expand"></i>${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
+                        : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(fileUrl)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
+                    <button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(fileUrl)}" data-file-name="${escapeHTML(file.file_name || (t('crm_client_identity') || 'Client identity'))}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${escapeHTML(taskDetailText('Download', 'تنزيل'))}</button>
                 </div>
             </article>`;
         }).join('')}</div>
     </section>` : '';
     const proposalSection = proposalImages.length ? `<section class="deal-presentation-group deal-presentation-proposal-section">
         <h4><i data-lucide="images"></i>${escapeHTML(t('crm_uploaded_proposal_images') || 'Proposal images')}</h4>
-        <div class="deal-presentation-gallery">${proposalImages.map(file => `<figure class="deal-presentation-image-card">
-            <button type="button" class="deal-presentation-image-link" data-image-url="${escapeHTML(file.file_url)}" data-image-description="${escapeHTML(file.description || '')}" data-image-name="${escapeHTML(file.file_name || '')}" onclick="openDealImagePreview(this)" aria-label="${escapeHTML(t('crm_open_image') || 'Open image preview')}">
-                <img src="${escapeHTML(file.file_url)}" alt="${escapeHTML(file.description || file.file_name || (t('crm_proposal_image') || 'Proposal image'))}" loading="lazy">
+        <div class="deal-presentation-gallery">${proposalImages.map(file => {
+            const fileUrl = safeExternalUrl(file.file_url);
+            if (!fileUrl) return '';
+            return `<figure class="deal-presentation-image-card">
+            <button type="button" class="deal-presentation-image-link" data-image-url="${escapeHTML(fileUrl)}" data-image-description="${escapeHTML(file.description || '')}" data-image-name="${escapeHTML(file.file_name || '')}" onclick="openDealImagePreview(this)" aria-label="${escapeHTML(t('crm_open_image') || 'Open image preview')}">
+                <img src="${escapeHTML(fileUrl)}" alt="${escapeHTML(file.description || file.file_name || (t('crm_proposal_image') || 'Proposal image'))}" loading="lazy">
             </button>
             <figcaption>
                 <p>${escapeHTML(file.description || (t('crm_no_image_description') || 'No description provided.'))}</p>
                 <small>${escapeHTML(file.file_name || '')}</small>
             </figcaption>
-        </figure>`).join('')}</div>
+        </figure>`;
+        }).join('')}</div>
     </section>` : '';
     container.innerHTML = quoteSection + identitySection + proposalSection;
 }
@@ -14948,11 +14974,12 @@ function renderDealWorkflowContents(workflow) {
     const approvalsEl = document.getElementById('dealApprovalSteps');
     approvalsEl.innerHTML = workflow.approvals.length ? workflow.approvals.map(step => {
         const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
-        const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
-        return `<article class="deal-approval-step ${step.status.toLowerCase()}">
+        const label = t(dealApprovalStageLabels[step.stage_key]) || String(step.stage_key || '').replace(/_/g, ' ');
+        const approvalClass = step.status === 'APPROVED' ? 'approved' : (step.status === 'REJECTED' ? 'rejected' : 'pending');
+        return `<article class="deal-approval-step ${approvalClass}">
             <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
             <div class="deal-approval-copy"><strong>${escapeHTML(label)}</strong><span>${escapeHTML(dealEmployeeName(step.profiles))}</span>${step.decision_note ? `<small>${escapeHTML(step.decision_note)}</small>` : ''}</div>
-            ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideDealApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideDealApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${step.status === 'APPROVED' ? 'success' : (step.status === 'REJECTED' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + step.status.toLowerCase()) || step.status)}</span>`}
+            ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideDealApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideDealApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${approvalClass === 'approved' ? 'success' : (approvalClass === 'rejected' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + String(step.status || '').toLowerCase()) || step.status || '')}</span>`}
         </article>`;
     }).join('') : `<p class="empty-state-inline">${t('crm_approval_not_started') || 'Approval has not started.'}</p>`;
     const designFiles = Array.isArray(workflow.designFiles) ? workflow.designFiles : [];
@@ -14976,30 +15003,33 @@ function renderDealWorkflowContents(workflow) {
     if (workflow.designApprovals?.length) {
         approvalsEl.innerHTML += `<h4 class="deal-design-approval-title">${escapeHTML(t('crm_design_approval') || 'Design task approval')}</h4>` + workflow.designApprovals.map(step => {
             const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
-            const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
-            return `<article class="deal-approval-step ${step.status.toLowerCase()}">
+            const label = t(dealApprovalStageLabels[step.stage_key]) || String(step.stage_key || '').replace(/_/g, ' ');
+            const approvalClass = step.status === 'APPROVED' ? 'approved' : (step.status === 'REJECTED' ? 'rejected' : 'pending');
+            return `<article class="deal-approval-step ${approvalClass}">
                 <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
                 <div class="deal-approval-copy"><strong>${escapeHTML(label)}</strong><span>${escapeHTML(dealEmployeeName(step.profiles))}</span>${step.decision_note ? `<small>${escapeHTML(step.decision_note)}</small>` : ''}</div>
-                ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideCrmDesignTaskApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideCrmDesignTaskApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${step.status === 'APPROVED' ? 'success' : (step.status === 'REJECTED' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + step.status.toLowerCase()) || step.status)}</span>`}
+                ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideCrmDesignTaskApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideCrmDesignTaskApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${approvalClass === 'approved' ? 'success' : (approvalClass === 'rejected' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + String(step.status || '').toLowerCase()) || step.status || '')}</span>`}
             </article>`;
         }).join('');
     }
 
     const renderAttachmentItems = files => files.map(file => {
-        const isImage = /\.(png|jpe?g|webp|gif|bmp|svg)(?:\?|$)/i.test(String(file.file_url || '')) || ['PROPOSAL', 'PHOTO'].includes(String(file.category || '').toUpperCase());
+        const fileUrl = safeExternalUrl(file.file_url);
+        if (!fileUrl) return '';
+        const isImage = /\.(png|jpe?g|webp|gif|bmp|svg)(?:\?|$)/i.test(fileUrl) || ['PROPOSAL', 'PHOTO'].includes(String(file.category || '').toUpperCase());
         const isClientIdentity = String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY';
         const shareControl = !isMq08Viewer ? `<label class="attachment-sharing-toggle" title="${escapeHTML(taskDetailText('Control project assignee access', 'التحكم في وصول المكلّف بالمشروع'))}">
             <input type="checkbox" ${file.visible_to_project_assignee ? 'checked' : ''} onchange="setProjectAttachmentVisibility(this,'DEAL','${escapeHTML(file.id)}')">
             <span>${escapeHTML(taskDetailText('Share with project assignee', 'مشاركة مع المكلّف بالمشروع'))}</span>
         </label>` : '';
         return `<article class="deal-attachment-item ${isImage ? 'deal-attachment-image' : ''}">
-            ${isImage ? `<img src="${escapeHTML(file.file_url)}" alt="${escapeHTML(file.description || file.file_name)}" loading="lazy">` : '<i data-lucide="paperclip"></i>'}
+            ${isImage ? `<img src="${escapeHTML(fileUrl)}" alt="${escapeHTML(file.description || file.file_name)}" loading="lazy">` : '<i data-lucide="paperclip"></i>'}
             <span><strong>${escapeHTML(file.file_name)}</strong><small>${escapeHTML(file.description || file.category.replace(/_/g, ' '))}</small></span>
             <div class="deal-attachment-actions">
                 ${isImage
-                    ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)">${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
-                    : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener">${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
-                ${isClientIdentity ? `<button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(file.file_url)}" data-file-name="${escapeHTML(file.file_name || 'client-identity')}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${escapeHTML(taskDetailText('Download', 'تنزيل'))}</button>` : ''}
+                    ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(fileUrl)}" data-image-name="${escapeHTML(file.file_name || '')}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)">${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
+                    : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(fileUrl)}" target="_blank" rel="noopener">${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
+                ${isClientIdentity ? `<button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(fileUrl)}" data-file-name="${escapeHTML(file.file_name || 'client-identity')}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${escapeHTML(taskDetailText('Download', 'تنزيل'))}</button>` : ''}
                 ${shareControl}
             </div>
         </article>`;
@@ -16631,13 +16661,13 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     const clients = await db.fetchClients();
     const select = document.getElementById('crmDealClient');
     select.innerHTML = `<option value="">${t('crm_select_client')}</option>` +
-        clients.map(c => `<option value="${c.id}">${c.name} (${c.company})</option>`).join('');
+        clients.map(c => `<option value="${escapeHTML(c.id)}">${escapeHTML(c.name || '')} (${escapeHTML(c.company || '')})</option>`).join('');
 
     const users = await db.fetchUsers();
     const assigneeSelect = document.getElementById('crmDealAssignee');
     if (assigneeSelect) {
         assigneeSelect.innerHTML = `<option value="">${t('crm_select_assignee')}</option>` +
-            users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
+            users.map(u => `<option value="${escapeHTML(u.id)}">${escapeHTML(window.formatEmployeeName(u) || '')} (${escapeHTML(u.role || '')})</option>`).join('');
     }
 
     document.getElementById('crmDealId').value = id || '';
@@ -16820,9 +16850,9 @@ async function renderIntegrations() {
                         <tbody>
                             ${webhooks.map(w => `
                                 <tr id="webhook-row-${w.id}">
-                                    <td style="font-weight:500;">${w.name}</td>
-                                    <td><span class="status-badge info">${w.event_type}</span></td>
-                                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${w.url}</td>
+                                    <td style="font-weight:500;">${escapeHTML(w.name || '')}</td>
+                                    <td><span class="status-badge info">${escapeHTML(w.event_type || '')}</span></td>
+                                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHTML(w.url || '')}</td>
                                     <td><span class="status-badge ${w.is_active ? 'success' : 'danger'}">${w.is_active ? 'Active' : 'Inactive'}</span></td>
                                     <td>
                                         <button class="btn btn-danger btn-sm" onclick="handleDeleteWebhook('${w.id}')">
@@ -17546,10 +17576,10 @@ async function renderArchivedRequests() {
         return `
             <tr>
                 <td>${new Date(r.created_at).toLocaleDateString()}</td>
-                <td>${employeeName}</td>
-                <td><strong>${r.type}</strong></td>
+                <td>${escapeHTML(employeeName)}</td>
+                <td><strong>${escapeHTML(r.type)}</strong></td>
                 <td>${escapeHTML(r.details)}${r.rejection_reason ? `<br><strong>${t('ui_rejection_reason')}:</strong> ${escapeHTML(r.rejection_reason)}` : ''}</td>
-                <td><span class="status-badge ${badgeClass}">${r.status}</span> <span style="font-size: 0.7rem; color: var(--color-text-secondary);">${t('req_archived_badge')}</span></td>
+                <td><span class="status-badge ${badgeClass}">${escapeHTML(r.status || '')}</span> <span style="font-size: 0.7rem; color: var(--color-text-secondary);">${t('req_archived_badge')}</span></td>
                 ${isAdmin ? `<td><button class="btn btn-icon request-delete-button" type="button" title="${escapeHTML(t('req_delete') || 'Delete request')}" onclick="handleDeleteEmployeeRequest('${r.source_table}', '${r.id}')"><i data-lucide="trash-2"></i></button></td>` : ''}
             </tr>
         `;

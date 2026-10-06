@@ -73,8 +73,9 @@ const dateLabel = (value, locale) => value
 
 function EmployeeName({ profile, lang }) {
   const name = localizedEmployeeName(profile, lang) || COPY[lang].unassigned;
+  const avatarUrl = profile?.avatar_url ? window.safeExternalUrl?.(profile.avatar_url) || '' : '';
   return <span className="tw-inline-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-[11px] tw-font-semibold tw-text-slate-700" title={name}>
-    {profile?.avatar_url ? <img className="tw-h-6 tw-w-6 tw-flex-none tw-rounded-full tw-object-cover" src={profile.avatar_url} alt="" /> : <Users size={14} className="tw-flex-none tw-text-blue-600" />}
+    {avatarUrl ? <img className="tw-h-6 tw-w-6 tw-flex-none tw-rounded-full tw-object-cover" src={avatarUrl} alt="" /> : <Users size={14} className="tw-flex-none tw-text-blue-600" />}
     <span className="tw-break-words tw-text-start tw-leading-4">{name}</span>
   </span>;
 }

@@ -15,3 +15,7 @@ entrypoint = "./functions/push-notification-dispatcher/index.ts"
 [functions.file-signed-url]
 verify_jwt = false
 entrypoint = "./functions/file-signed-url/index.ts"
+
+[functions.secure-login]
+verify_jwt = false
+entrypoint = "./functions/secure-login/index.ts"
