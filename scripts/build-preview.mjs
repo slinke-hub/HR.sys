@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { renderRuntimeDbBundle, resolveBuildOutput } from './runtime-db-bundle.mjs';
 
 const stagingRef = 'jcfyyxsuspukcmybyhjj';
@@ -10,12 +10,33 @@ const projectRoot = resolve(import.meta.dirname, '..');
 const outputRoot = resolveBuildOutput(projectRoot, 'www');
 
 function readStagingAnonKey() {
-  return String(
-    process.env.VERCEL_STAGING_ANON_KEY
-      || process.env.HR_SYS_STAGING_ANON_KEY
-      || process.env.MUQAM_SUPABASE_ANON_KEY
-      || '',
-  ).trim();
+  const candidates = [
+    ['VERCEL_STAGING_ANON_KEY', process.env.VERCEL_STAGING_ANON_KEY],
+    ['HR_SYS_STAGING_ANON_KEY', process.env.HR_SYS_STAGING_ANON_KEY],
+    ['MUQAM_SUPABASE_ANON_KEY', process.env.MUQAM_SUPABASE_ANON_KEY],
+  ];
+  const selected = candidates.find(([, value]) => Boolean(value));
+  return {
+    value: String(selected?.[1] || '').trim(),
+    sourceName: selected?.[0] || 'NONE',
+  };
+}
+
+function keyFormat(value) {
+  if (value.startsWith('sb_publishable_')) return 'sb_publishable';
+  if (value.split('.').length === 3) return 'legacy-jwt';
+  return 'other';
+}
+
+function logPreviewBuildDiagnostic({ sourceName, value, stagingProjectRefValid, runtimeConfigGenerated }) {
+  console.log(JSON.stringify({
+    diagnostic: 'preview-build-runtime-config',
+    selectedEnvVariableName: sourceName,
+    selectedKeyFormat: keyFormat(value),
+    stagingProjectRefValid,
+    runtimeConfigGenerated,
+    runtimeConfigPath: relative(projectRoot, resolve(outputRoot, 'runtime-config.js')).replaceAll('\\', '/'),
+  }));
 }
 
 function isStagingAnonKey(value) {
@@ -29,8 +50,10 @@ function isStagingAnonKey(value) {
   }
 }
 
-const anonKey = readStagingAnonKey();
-if (!isStagingAnonKey(anonKey)) {
+const { value: anonKey, sourceName } = readStagingAnonKey();
+const stagingProjectRefValid = isStagingAnonKey(anonKey);
+if (!stagingProjectRefValid) {
+  logPreviewBuildDiagnostic({ sourceName, value: anonKey, stagingProjectRefValid, runtimeConfigGenerated: false });
   throw new Error('Preview build requires a valid staging public anon key; production fallback is disabled.');
 }
 
@@ -61,7 +84,8 @@ await writeFile(
   'utf8',
 );
 
-const generated = await readFile(resolve(outputRoot, 'runtime-config.js'), 'utf8');
+const runtimeConfigPath = resolve(outputRoot, 'runtime-config.js');
+const generated = await readFile(runtimeConfigPath, 'utf8');
 if (!generated.includes(stagingRef) || generated.includes('bbbetcdioiaozdjkvwxu')) {
   throw new Error('Preview runtime configuration failed the staging-only target check.');
 }
@@ -70,4 +94,5 @@ const generatedDb = await readFile(resolve(outputRoot, 'js', 'db.js'), 'utf8');
 if (generatedIndex.includes(productionRef) || generatedDb.includes(productionRef) || generatedDb.includes(productionOrigin)) {
   throw new Error('Preview browser artifact contains production Supabase configuration.');
 }
+logPreviewBuildDiagnostic({ sourceName, value: anonKey, stagingProjectRefValid, runtimeConfigGenerated: true });
 console.log(`Preview web bundle created in ${outputRoot} with a staging-only runtime configuration.`);
