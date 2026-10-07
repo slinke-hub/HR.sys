@@ -1,6 +1,6 @@
 // Bump whenever the shell or versioned scripts change so already-open clients
 // activate a fresh worker and do not keep executing a stale application bundle.
-const CACHE_NAME = 'muqam-hr-mobile-v254';
+const CACHE_NAME = 'muqam-hr-mobile-v255';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.json', '/offline.html',
   '/css/variables.css', '/css/layout.css', '/css/components.css', '/css/hr-suite-beta.css', '/css/android.css', '/css/crm-tailwind.css',
@@ -30,6 +30,13 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  // Runtime configuration contains the environment-bound public API key and
+  // must always come from the current deployment, never an older SW cache.
+  if (url.pathname === '/runtime-config.js') {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(

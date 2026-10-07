@@ -32,5 +32,10 @@ export const config = {
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
       continue: true,
     },
+    {
+      src: '/runtime-config.js',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+      continue: true,
+    },
   ],
 };
