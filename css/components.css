@@ -1324,14 +1324,18 @@ textarea.form-control {
 .notification-badge[hidden] { display: none !important; }
 
 .notifications-dropdown {
-  position: absolute;
-  z-index: 320;
-  inset-block-start: calc(100% + .65rem);
-  inset-inline-end: 0;
+  position: fixed;
+  z-index: 10000;
+  top: var(--notification-dropdown-top, calc(var(--topbar-height, 64px) + .5rem));
+  left: var(--notification-dropdown-left, .5rem);
+  right: auto;
   display: none;
-  width: min(380px, calc(100vw - 1rem));
-  max-height: min(520px, calc(100dvh - 80px));
+  width: var(--notification-dropdown-width, min(380px, calc(100vw - 1rem)));
+  max-width: calc(100vw - 1rem);
+  max-height: var(--notification-dropdown-max-height, min(520px, calc(100dvh - 80px)));
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--color-border);
   border-radius: 14px;
   background: var(--color-bg-elevated);
@@ -1486,10 +1490,7 @@ textarea.form-control {
 
 @media (max-width: 480px) {
   .notifications-dropdown {
-    position: fixed;
-    inset-block-start: calc(var(--topbar-height, 64px) + .35rem);
-    inset-inline: .5rem;
-    width: auto;
+    max-width: calc(100vw - 1rem);
   }
 }
 

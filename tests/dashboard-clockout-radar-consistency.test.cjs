@@ -24,7 +24,7 @@ assert.match(components, /\.employees-radar-clockout svg \{ width:14px; height:1
 assert.match(components, /\.dashboard-attendance-clockout \{ flex:0 0 auto; white-space:nowrap; \}/, 'Main action remains compact and does not stretch');
 assert.match(components, /\.employees-radar-clockout:not\(\.dashboard-attendance-clockout\) span \{ display:none; \}/, 'Mobile-only Radar icon treatment does not hide the main action label');
 assert.match(components, /\.employees-radar-clockout:disabled \{ opacity:\.55; cursor:wait; transform:none; box-shadow:none; \}/, 'Shared disabled state remains legible and stable');
-assert.match(html, /css\/components\.css\?v=2026100411/, 'Component styling receives a fresh cache key');
-assert.match(html, /js\/app\.js\?v=2026100601/, 'Dashboard/app markup receives the current security-fix cache key');
+assert.match(html, /css\/components\.css\?v=2026100701/, 'Component styling receives a fresh cache key');
+assert.match(html, /js\/app\.js\?v=2026100701/, 'Dashboard/app markup receives the current security-fix cache key');
 
 console.log('Dashboard Clock Out / Employees Radar consistency checks passed.');
