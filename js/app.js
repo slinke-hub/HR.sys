@@ -13341,6 +13341,55 @@ window.openTaskNotification = async function (taskId) {
     }
 };
 
+window.positionNotificationsDropdown = function () {
+    const dropdown = document.getElementById('notificationsDropdown');
+    const button = document.getElementById('headerNotificationsButton');
+    if (!dropdown?.classList.contains('show') || !button) return;
+
+    const visualViewport = window.visualViewport;
+    const viewportLeft = visualViewport?.offsetLeft || 0;
+    const viewportTop = visualViewport?.offsetTop || 0;
+    const viewportWidth = visualViewport?.width || window.innerWidth;
+    const viewportHeight = visualViewport?.height || window.innerHeight;
+    const viewportRight = viewportLeft + viewportWidth;
+    const viewportBottom = viewportTop + viewportHeight;
+    const margin = 8;
+    const gap = 10;
+    const triggerRect = button.getBoundingClientRect();
+    const dropdownWidth = Math.max(0, Math.min(380, viewportWidth - (margin * 2)));
+    const isRtl = getComputedStyle(document.documentElement).direction === 'rtl';
+    const preferredLeft = isRtl ? triggerRect.left : triggerRect.right - dropdownWidth;
+    const dropdownLeft = Math.min(
+        Math.max(preferredLeft, viewportLeft + margin),
+        viewportRight - dropdownWidth - margin
+    );
+
+    const belowTop = triggerRect.bottom + gap;
+    const belowSpace = viewportBottom - belowTop - margin;
+    const aboveSpace = triggerRect.top - viewportTop - gap - margin;
+    const placeAbove = belowSpace < 180 && aboveSpace > belowSpace;
+    let dropdownTop = placeAbove
+        ? Math.max(viewportTop + margin, triggerRect.top - gap - Math.min(520, aboveSpace))
+        : Math.max(viewportTop + margin, belowTop);
+    let maxHeight = placeAbove
+        ? triggerRect.top - gap - dropdownTop
+        : viewportBottom - dropdownTop - margin;
+
+    if (maxHeight < 120) {
+        dropdownTop = viewportTop + margin;
+        maxHeight = viewportHeight - (margin * 2);
+    }
+
+    dropdown.style.setProperty('--notification-dropdown-left', `${Math.round(dropdownLeft)}px`);
+    dropdown.style.setProperty('--notification-dropdown-top', `${Math.round(dropdownTop)}px`);
+    dropdown.style.setProperty('--notification-dropdown-width', `${Math.round(dropdownWidth)}px`);
+    dropdown.style.setProperty('--notification-dropdown-max-height', `${Math.max(0, Math.round(Math.min(520, maxHeight)))}px`);
+};
+
+window.addEventListener('resize', window.positionNotificationsDropdown);
+window.visualViewport?.addEventListener('resize', window.positionNotificationsDropdown);
+window.visualViewport?.addEventListener('scroll', window.positionNotificationsDropdown);
+
 window.toggleNotifications = async function (forceOpen) {
     const dropdown = document.getElementById('notificationsDropdown');
     if (!dropdown) return;
@@ -13355,6 +13404,7 @@ window.toggleNotifications = async function (forceOpen) {
     }
 
     if (willOpen) {
+        window.positionNotificationsDropdown();
         await db.markNotificationsRead(currentUser.id);
         updateNotificationBadge(0);
 
