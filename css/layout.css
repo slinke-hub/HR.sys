@@ -1154,17 +1154,9 @@ textarea,
   margin-inline: auto;
 }
 
-.login-logo-filter {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
 .login-logo-light-mode {
   width: min(320px, 100%);
-  filter: url(#login-light-logo-alpha);
+  background: #000;
 }
 
 .login-logo-dark-mode {

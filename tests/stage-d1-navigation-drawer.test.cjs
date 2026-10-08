@@ -14,8 +14,8 @@ assert.match(html, /id="appNavigationToggle"[^>]+onclick="window\.openMobileNavi
 assert.ok(html.indexOf('id="appNavigationToggle"') < html.indexOf('class="header-logo"'), 'Hamburger is adjacent before the logo in the leading header group');
 assert.doesNotMatch(html, /<nav class="header-navigation"/, 'The duplicated horizontal module row is removed');
 assert.match(html, /id="mobileMoreNav"[^>]+onclick="window\.openMobileNavigation\(this\)"/, 'Mobile More opens the same drawer and supplies its focus-restoration target');
-assert.match(html, /js\/app\.js\?v=2026100803/, 'Application script cache key remains current');
-assert.match(html, /css\/layout\.css\?v=2026100803/, 'Header and login layout changes receive a fresh stylesheet cache key');
+assert.match(html, /js\/app\.js\?v=2026100802/, 'Application script cache key remains current');
+assert.match(html, /css\/layout\.css\?v=2026100802/, 'Header and login layout changes receive a fresh stylesheet cache key');
 assert.match(html, /css\/components\.css\?v=2026100801/, 'The late component header override retains its current stylesheet cache key');
 
 assert.match(app, /window\.openMobileNavigation\s*=\s*async function/, 'One shared permission-filtered drawer opener exists');
@@ -45,8 +45,8 @@ assert.match(app, /navigation-drawer-item\$\{active \? ' active' : ''\}/, 'Curre
 assert.match(app, /const active = currentView === item\.dataset\.view/, 'Active route is calculated from the current view');
 assert.doesNotMatch(app.slice(app.indexOf('window.openMobileNavigation ='), app.indexOf('window.updateNavigationControlLabels')), /mobile-navigation-sheet|mobile-navigation-panel|mobile-navigation-grid/, 'Active drawer path no longer creates the legacy More sheet');
 assert.match(app, /hasParentRoute = viewId !== 'login' && hasHierarchicalProjectRoute/, 'Back is shown only for a hierarchical Project detail route, not root-level view history');
-assert.match(app, /sw\.js\?v=2026100803/, 'Service worker registration forces an update check');
-assert.match(serviceWorker, /muqam-hr-mobile-v257/, 'New service-worker cache retires stale shell/app bundles');
+assert.match(app, /sw\.js\?v=2026100802/, 'Service worker registration forces an update check');
+assert.match(serviceWorker, /muqam-hr-mobile-v256/, 'New service-worker cache retires stale shell/app bundles');
 
 assert.match(layout, /\.app-navigation-drawer\s*\{[\s\S]*?position: fixed;[\s\S]*?top: 0;[\s\S]*?bottom: 0;[\s\S]*?inset-inline-start: auto;[\s\S]*?inset-inline-end: 0;[\s\S]*?width: 320px;[\s\S]*?height: 100dvh;[\s\S]*?border-start-start-radius: 24px;[\s\S]*?border-end-start-radius: 24px;[\s\S]*?transform: translateX\(calc\(100% \+ 1px\)\)/, 'Drawer attaches to header brand/hamburger inline-end with matching LTR entry direction');
 assert.match(layout, /@media \(max-width: 767px\)[\s\S]*?\.app-navigation-drawer \{ width: min\(86vw, 340px\); \}/, 'Mobile drawer uses the specified viewport-relative width');
