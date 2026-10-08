@@ -598,7 +598,7 @@ async function syncLegacyLocalProfilePhoto(profile) {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100412', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100801', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -2987,13 +2987,17 @@ function renderLogin() {
     if (topbar) topbar.style.display = 'none';
 
     let formHTML = '';
+    const loginLogoHTML = `
+        <div class="logo login-logo-container">
+            <img src="/images/login-logo-light.jpg?v=2026100801" alt="MUQAM HR Logo" class="login-logo login-logo-light-mode">
+            <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="login-logo login-logo-dark-mode">
+        </div>
+    `;
 
     if (loginMode === 'forgot') {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
-                </div>
+                ${loginLogoHTML}
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('reset_password')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('reset_email_instruction')}</p>
             </div>
@@ -3011,9 +3015,7 @@ function renderLogin() {
     } else if (loginMode === 'reset') {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
-                </div>
+                ${loginLogoHTML}
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('set_new_password')}</h2>
             </div>
             <form autocomplete="off" onsubmit="handleResetPasswordSubmit(event)">
@@ -3030,9 +3032,7 @@ function renderLogin() {
     } else {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
-                </div>
+                ${loginLogoHTML}
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>
             </div>

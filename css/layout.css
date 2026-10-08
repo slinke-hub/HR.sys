@@ -1138,12 +1138,38 @@ textarea,
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(calc(72px + env(safe-area-inset-bottom)), 1rem) max(1rem, env(safe-area-inset-left));
 }
 
+.login-logo-container {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
 .login-logo {
-  width: min(250px, 72vw);
+  display: block;
+  max-width: 100%;
   height: auto;
   object-fit: contain;
-  display: block;
   margin-inline: auto;
+}
+
+.login-logo-light-mode {
+  width: min(320px, 100%);
+}
+
+.login-logo-dark-mode {
+  display: none;
+  width: min(250px, 72vw);
+  max-height: 90px;
+}
+
+html[data-theme="dark"] .login-logo-light-mode {
+  display: none;
+}
+
+html[data-theme="dark"] .login-logo-dark-mode {
+  display: block;
 }
 
 .mobile-navigation-backdrop {
@@ -1467,6 +1493,10 @@ body.modal-open {
 
   .login-card-wrapper .logo {
     margin-bottom: .75rem !important;
+  }
+
+  .login-logo-light-mode {
+    width: min(280px, 100%);
   }
 
   .login-card-wrapper form button[type="submit"] {
