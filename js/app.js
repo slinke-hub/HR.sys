@@ -598,7 +598,7 @@ async function syncLegacyLocalProfilePhoto(profile) {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100802', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100803', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -2989,7 +2989,14 @@ function renderLogin() {
     let formHTML = '';
     const loginLogoHTML = `
         <div class="logo login-logo-container">
-            <img src="/images/logo-dark.png?v=2026100802" alt="MUQAM HR Logo" class="login-logo login-logo-light-mode">
+            <svg class="login-logo-filter" aria-hidden="true" focusable="false">
+                <filter id="login-light-logo-alpha" color-interpolation-filters="sRGB">
+                    <feComponentTransfer>
+                        <feFuncA type="linear" slope="16"></feFuncA>
+                    </feComponentTransfer>
+                </filter>
+            </svg>
+            <img src="/images/login-logo-light.png?v=2026100803" alt="MUQAM HR Logo" class="login-logo login-logo-light-mode">
             <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="login-logo login-logo-dark-mode">
         </div>
     `;
