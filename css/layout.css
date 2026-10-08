@@ -1156,6 +1156,7 @@ textarea,
 
 .login-logo-light-mode {
   width: min(320px, 100%);
+  background: #000;
 }
 
 .login-logo-dark-mode {
