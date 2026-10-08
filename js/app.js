@@ -598,7 +598,7 @@ async function syncLegacyLocalProfilePhoto(profile) {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100802', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100803', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -13416,6 +13416,35 @@ window.toggleNotifications = async function (forceOpen) {
     }
 }
 
+window.positionProfileDropdown = function () {
+    const dropdown = document.getElementById('profileDropdown');
+    const trigger = document.querySelector('.profile-dropdown-wrapper');
+    if (!dropdown || !trigger || dropdown.style.display !== 'block') return;
+
+    const margin = 8;
+    const gap = 8;
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+    const triggerRect = trigger.getBoundingClientRect();
+    const dropdownWidth = Math.max(0, Math.min(250, viewportWidth - (margin * 2)));
+    const isRtl = getComputedStyle(document.documentElement).direction === 'rtl';
+    const preferredLeft = isRtl ? triggerRect.right - dropdownWidth : triggerRect.left;
+    const dropdownLeft = Math.min(
+        Math.max(preferredLeft, margin),
+        Math.max(margin, viewportWidth - dropdownWidth - margin)
+    );
+    const dropdownTop = triggerRect.bottom + gap;
+
+    dropdown.style.setProperty('--profile-dropdown-left', `${Math.round(dropdownLeft)}px`);
+    dropdown.style.setProperty('--profile-dropdown-top', `${Math.round(dropdownTop)}px`);
+    dropdown.style.setProperty('--profile-dropdown-width', `${Math.round(dropdownWidth)}px`);
+    dropdown.style.setProperty('--profile-dropdown-max-height', `${Math.max(120, Math.round(viewportHeight - dropdownTop - margin))}px`);
+};
+
+window.addEventListener('resize', window.positionProfileDropdown);
+window.visualViewport?.addEventListener('resize', window.positionProfileDropdown);
+window.visualViewport?.addEventListener('scroll', window.positionProfileDropdown);
+
 window.toggleProfileDropdown = function () {
     const dropdown = document.getElementById('profileDropdown');
     const notifDropdown = document.getElementById('notificationsDropdown');
@@ -13424,6 +13453,7 @@ window.toggleProfileDropdown = function () {
         const isShowing = dropdown.style.display === 'block';
         dropdown.style.display = isShowing ? 'none' : 'block';
         dropdown.setAttribute('aria-hidden', isShowing ? 'true' : 'false');
+        if (!isShowing) window.positionProfileDropdown();
 
         // Keep the two header menus mutually exclusive.
         if (notifDropdown) {

@@ -38,7 +38,7 @@ assert.match(layout, /html\[data-theme="dark"\] \.login-logo-dark-mode\s*\{\s*di
 assert.doesNotMatch(worker, /login-logo-light\.jpg/,
   'The replaced light JPEG is removed from the offline application shell');
 assert.match(html, /css\/layout\.css\?v=2026100802/, 'Layout cache key is refreshed');
-assert.match(html, /js\/app\.js\?v=2026100802/, 'Application cache key is refreshed');
+assert.match(html, /js\/app\.js\?v=2026100803/, 'Application cache key is refreshed');
 
 const css = [...html.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+)"/g)]
   .map(([, href]) => href.split('?')[0])

@@ -9837,6 +9837,19 @@ html[dir="rtl"] select.form-control[multiple]:not([hidden]) { background-positio
   .header-logo .app-logo { max-width: 88px; max-height: 28px; }
 }
 
+/* Keep the avatar menu beneath its profile trigger while allowing the runtime
+   positioner to clamp it inside narrow viewports. */
+.profile-dropdown-wrapper .profile-dropdown-menu {
+  position: fixed !important;
+  top: var(--profile-dropdown-top, calc(var(--topbar-height, 64px) + .5rem)) !important;
+  left: var(--profile-dropdown-left, .5rem) !important;
+  right: auto !important;
+  width: var(--profile-dropdown-width, min(250px, calc(100vw - 1rem))) !important;
+  max-width: calc(100vw - 1rem) !important;
+  max-height: var(--profile-dropdown-max-height, calc(100dvh - var(--topbar-height, 64px) - 1rem));
+  overflow-y: auto;
+}
+
 /* Archived task history */
 .archived-tasks-header .page-title { display:flex; align-items:center; gap:.65rem; }
 .archived-tasks-header .page-title svg { width:28px; height:28px; color:var(--color-primary); }
