@@ -129,14 +129,17 @@ button.btn-danger:hover:not(:disabled) {
   cursor: not-allowed;
 }
 
-/* Shared form control foundation. */
-html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea, select, .form-control) {
+/* Shared form-control foundation. This is the single theme-aware source for
+   editable fields in pages, cards, modals, drawers, and dialogs. */
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="hidden"]), textarea, select, .form-control) {
   min-height: var(--control-target-min);
   color: var(--input-text) !important;
   -webkit-text-fill-color: var(--input-text);
   background-color: var(--input-bg) !important;
   border-color: var(--input-border) !important;
+  caret-color: var(--input-text);
   color-scheme: inherit;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 html[data-theme] :is(input, textarea, select, .form-control)::placeholder {
@@ -145,14 +148,84 @@ html[data-theme] :is(input, textarea, select, .form-control)::placeholder {
   opacity: 1;
 }
 
-html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea, select, .form-control):hover:not(:disabled) {
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="hidden"]), textarea, select, .form-control):hover:not(:disabled):not([readonly]) {
   border-color: var(--input-border-hover) !important;
 }
 
-html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea, select, .form-control):focus {
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="hidden"]), textarea, select, .form-control):focus {
+  color: var(--input-text) !important;
+  -webkit-text-fill-color: var(--input-text);
+  background-color: var(--input-bg) !important;
   border-color: var(--input-border-focus) !important;
   box-shadow: var(--focus-ring-shadow) !important;
   outline: none;
+}
+
+html[data-theme] :is(input, textarea)::selection {
+  color: var(--input-text);
+  background: var(--input-selection-bg);
+}
+
+html[data-theme] select option {
+  color: var(--input-text);
+  background: var(--bg-surface);
+}
+
+/* Chromium paints autofill above authored backgrounds, so an inset fill is
+   required here. These are the only vendor-state overrides in the foundation. */
+html[data-theme] input:-webkit-autofill,
+html[data-theme] input:-webkit-autofill:hover,
+html[data-theme] input:-webkit-autofill:focus,
+html[data-theme] input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--input-text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset !important;
+  caret-color: var(--input-text);
+}
+
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="hidden"]), textarea, select, .form-control):disabled {
+  color: var(--disabled-text) !important;
+  -webkit-text-fill-color: var(--disabled-text);
+  background-color: var(--disabled-surface) !important;
+  border-color: var(--disabled-border) !important;
+  opacity: var(--disabled-opacity);
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
+
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="hidden"]), textarea)[readonly] {
+  color: var(--text-secondary) !important;
+  -webkit-text-fill-color: var(--text-secondary);
+  background-color: var(--bg-subtle) !important;
+  border-color: var(--input-border) !important;
+  box-shadow: none !important;
+  cursor: default;
+}
+
+html[data-theme] input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-theme] input[type="number"]::-webkit-inner-spin-button,
+html[data-theme] input[type="number"]::-webkit-outer-spin-button,
+html[data-theme] :is(input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"], input[type="week"])::-webkit-calendar-picker-indicator,
+html[data-theme] input[type="search"]::-webkit-search-cancel-button {
+  opacity: .78;
+  cursor: pointer;
+}
+
+html[data-theme] input::file-selector-button {
+  min-height: 32px;
+  margin-inline-end: .65rem;
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+html[data-theme] input::file-selector-button:hover {
+  background: var(--action-secondary-hover);
+  border-color: var(--input-border-hover);
 }
 
 /* One visible keyboard focus treatment, including controls with legacy outline:none. */

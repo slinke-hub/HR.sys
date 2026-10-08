@@ -6148,87 +6148,10 @@ textarea::placeholder {
   color: var(--text-primary);
 }
 
-[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
-[data-theme="light"] textarea,
-[data-theme="light"] select {
-  color: var(--text-primary) !important;
-  -webkit-text-fill-color: var(--text-primary);
-  background-color: var(--action-primary-text) !important;
-  border-color: var(--input-border);
-  color-scheme: light;
-}
-
 [data-theme="dark"] .nav-item.active i,
 [data-theme="dark"] .nav-item.active svg,
 [data-theme="dark"] .icon-btn {
   color: var(--action-primary-text);
-}
-
-[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
-[data-theme="dark"] textarea,
-[data-theme="dark"] select {
-  color: var(--action-primary-text) !important;
-  -webkit-text-fill-color: var(--action-primary-text);
-  background-color: var(--text-primary) !important;
-  border-color: var(--input-border);
-  color-scheme: dark;
-}
-
-[data-theme="dark"] input:-webkit-autofill,
-[data-theme="dark"] input:-webkit-autofill:hover,
-[data-theme="dark"] input:-webkit-autofill:focus {
-  -webkit-text-fill-color: var(--action-primary-text);
-  -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset;
-  caret-color: var(--action-primary-text);
-}
-
-[data-theme="light"] input:-webkit-autofill,
-[data-theme="light"] input:-webkit-autofill:hover,
-[data-theme="light"] input:-webkit-autofill:focus {
-  -webkit-text-fill-color: var(--text-primary);
-  -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset;
-  caret-color: var(--text-primary);
-}
-
-[data-theme="dark"] select option {
-  background: var(--bg-app);
-  color: var(--action-primary-text);
-}
-
-[data-theme="light"] select option {
-  background: var(--bg-surface);
-  color: var(--text-primary);
-}
-
-/* Keep every editable field readable in all interaction states. */
-[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):is(:hover, :focus, :focus-visible, :active, :disabled, :read-only),
-[data-theme="dark"] textarea:is(:hover, :focus, :focus-visible, :active, :disabled, :read-only),
-[data-theme="dark"] select:is(:hover, :focus, :focus-visible, :active, :disabled) {
-  background-color: var(--text-primary) !important;
-  color: var(--action-primary-text) !important;
-  -webkit-text-fill-color: var(--action-primary-text) !important;
-  caret-color: var(--action-primary-text);
-}
-
-[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):is(:hover, :focus, :focus-visible, :active, :disabled, :read-only),
-[data-theme="light"] textarea:is(:hover, :focus, :focus-visible, :active, :disabled, :read-only),
-[data-theme="light"] select:is(:hover, :focus, :focus-visible, :active, :disabled) {
-  background-color: var(--action-primary-text) !important;
-  color: var(--text-primary) !important;
-  -webkit-text-fill-color: var(--text-primary) !important;
-  caret-color: var(--text-primary);
-}
-
-[data-theme="dark"] input::selection,
-[data-theme="dark"] textarea::selection {
-  background: var(--input-selection-bg);
-  color: var(--action-primary-text);
-}
-
-[data-theme="light"] input::selection,
-[data-theme="light"] textarea::selection {
-  background: var(--input-selection-bg);
-  color: var(--text-primary);
 }
 
 .task-relation-badge {
@@ -9842,66 +9765,76 @@ html[dir="rtl"] select.form-control[multiple]:not([hidden]) { background-positio
 }
 @keyframes multiSelectSheetIn { from { opacity:0; transform:translateY(100%); } to { opacity:1; transform:none; } }
 
-/* Final compact header rules.  Keep the navigation usable at reduced desktop
-   zoom and on narrow devices without allowing icon controls to disappear. */
+/* Final header proportions. Keep the navigation balanced and touch-friendly
+   without changing the existing visual identity or logical-edge layout. */
 .topbar {
-  min-height: 52px;
-  padding-inline: clamp(.45rem, 1.25vw, 1rem) !important;
-  gap: .35rem;
+  min-height: 64px;
+  padding-inline: clamp(.75rem, 2vw, 1.5rem) !important;
+  gap: .75rem;
 }
+.header-brand-group { gap: .55rem; }
 .header-logo { min-width: 0; }
-.header-logo .app-logo { max-width: 132px; max-height: 38px; object-fit: contain; }
-.header-navigation { gap: .12rem !important; }
+.header-logo .app-logo { max-width: 156px; max-height: 45px; width: auto; object-fit: contain; }
+.header-navigation { gap: .25rem !important; }
 .header-navigation .header-nav-item {
-  min-height: 32px !important;
-  padding: .28rem .5rem !important;
-  gap: .28rem !important;
-  font-size: .7rem !important;
+  min-height: 38px !important;
+  padding: .42rem .68rem !important;
+  gap: .38rem !important;
+  font-size: .76rem !important;
 }
-.header-navigation .header-nav-item svg { width: 14px !important; height: 14px !important; flex-basis: 14px !important; }
-.topbar-actions { gap: .25rem !important; min-width: 0; }
+.header-navigation .header-nav-item svg { width: 16px !important; height: 16px !important; flex-basis: 16px !important; }
+.topbar-actions { gap: .4rem !important; min-width: 0; }
 .topbar-actions .header-search-trigger,
 .topbar-actions .header-language-switcher,
-.topbar-actions .icon-btn { width: 34px !important; height: 34px !important; min-width: 34px; min-height: 34px; }
+.topbar-actions .icon-btn { width: 38px !important; height: 38px !important; min-width: 38px; min-height: 38px; }
 .topbar-actions .header-search-trigger svg,
 .topbar-actions .header-language-switcher svg,
-.topbar-actions .icon-btn svg { width: 15px !important; height: 15px !important; }
-.user-profile { gap: .35rem !important; padding: .2rem .35rem !important; }
-.user-profile .avatar { width: 30px !important; height: 30px !important; }
-.user-profile .user-name { font-size: .78rem !important; }
-.user-profile .user-role { font-size: .66rem !important; }
-.user-profile > svg { width: 13px !important; height: 13px !important; margin-inline: .15rem !important; }
+.topbar-actions .icon-btn svg { width: 17px !important; height: 17px !important; }
+.user-profile { gap: .45rem !important; padding: .25rem .4rem !important; }
+.user-profile .avatar { width: 34px !important; height: 34px !important; }
+.user-profile .user-name { font-size: .82rem !important; }
+.user-profile .user-role { font-size: .7rem !important; }
+.user-profile > svg { width: 14px !important; height: 14px !important; margin-inline: .15rem !important; }
 
 @media (max-width: 1100px) {
-  .header-navigation .header-nav-item { padding-inline: .38rem !important; font-size: .66rem !important; }
-  .header-navigation .header-nav-item svg { width: 13px !important; height: 13px !important; }
+  .topbar { padding-inline: clamp(.65rem, 1.5vw, 1rem) !important; gap: .55rem; }
+  .header-navigation .header-nav-item { padding-inline: .5rem !important; font-size: .7rem !important; }
+  .header-navigation .header-nav-item svg { width: 14px !important; height: 14px !important; }
   .user-profile .user-info { display: none !important; }
-  .header-logo .app-logo { max-width: 112px; max-height: 34px; }
+  .header-logo .app-logo { max-width: 132px; max-height: 40px; }
 }
 @media (max-width: 760px) {
-  .topbar { min-height: 48px; }
-  .header-navigation { margin-inline: .1rem !important; }
-  .header-navigation .header-nav-item { min-width: 30px; padding: .28rem !important; }
+  .topbar { min-height: 58px; padding-block: .35rem; }
+  .header-brand-group { gap: .4rem; }
+  .header-navigation { margin-inline: .15rem !important; }
+  .header-navigation .header-nav-item { min-width: 34px; padding: .38rem !important; }
   .header-navigation .header-nav-item span { display: none; }
+  .topbar-actions .header-search-trigger,
+  .topbar-actions .header-language-switcher,
+  .topbar-actions .icon-btn { width: 34px !important; height: 34px !important; min-width: 34px; min-height: 34px; }
+  .topbar-actions .header-search-trigger svg,
+  .topbar-actions .header-language-switcher svg,
+  .topbar-actions .icon-btn svg { width: 15px !important; height: 15px !important; }
+  .user-profile .avatar { width: 31px !important; height: 31px !important; }
+}
+@media (max-width: 380px) {
+  .topbar { min-height: 54px; padding-inline: .4rem !important; padding-block: .25rem !important; gap: .3rem; }
+  .header-brand-group { gap: .25rem; }
+  .header-logo .app-logo { max-width: 104px; max-height: 34px; }
+  .header-navigation .header-nav-item { min-height: 30px !important; min-width: 30px; }
+  .header-navigation .header-nav-item svg { width: 13px !important; height: 13px !important; }
   .topbar-actions .header-search-trigger,
   .topbar-actions .header-language-switcher,
   .topbar-actions .icon-btn { width: 30px !important; height: 30px !important; min-width: 30px; min-height: 30px; }
   .topbar-actions .header-search-trigger svg,
   .topbar-actions .header-language-switcher svg,
-  .topbar-actions .icon-btn svg { width: 14px !important; height: 14px !important; }
-  .user-profile .avatar { width: 27px !important; height: 27px !important; }
+  .topbar-actions .icon-btn svg { width: 13px !important; height: 13px !important; }
+  .user-profile { padding-inline: .2rem !important; }
+  .user-profile .avatar { width: 28px !important; height: 28px !important; }
 }
-@media (max-width: 380px), (max-height: 240px) {
+@media (max-height: 240px) {
   .topbar { min-height: 42px; padding-block: .15rem !important; }
   .header-logo .app-logo { max-width: 88px; max-height: 28px; }
-  .header-navigation .header-nav-item { min-height: 27px !important; min-width: 27px; }
-  .header-navigation .header-nav-item svg { width: 12px !important; height: 12px !important; }
-  .topbar-actions .header-search-trigger,
-  .topbar-actions .header-language-switcher,
-  .topbar-actions .icon-btn { width: 27px !important; height: 27px !important; min-width: 27px; min-height: 27px; }
-  .topbar-actions .header-search-trigger svg,
-  .topbar-actions .header-language-switcher svg,
-  .topbar-actions .icon-btn svg { width: 12px !important; height: 12px !important; }
 }
 
 /* Archived task history */
