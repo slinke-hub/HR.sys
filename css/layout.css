@@ -1619,8 +1619,8 @@ body { background: var(--bg-app); }
 .profile-dropdown-menu {
   position: fixed !important;
   top: calc(var(--topbar-height, 64px) + .5rem) !important;
-  inset-inline-end: max(.5rem, env(safe-area-inset-right)) !important;
-  inset-inline-start: auto !important;
+  left: var(--profile-dropdown-left, .5rem) !important;
+  right: auto !important;
   width: min(250px, calc(100vw - 1rem)) !important;
   max-width: calc(100vw - 1rem) !important;
   z-index: 2147482000 !important;

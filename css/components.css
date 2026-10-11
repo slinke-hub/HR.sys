@@ -6092,19 +6092,23 @@ a:visited,
 }
 
 button,
-input,
-textarea,
-select,
 .btn,
-.icon-btn,
-.form-control {
+.icon-btn {
   color: var(--color-theme-highlight) !important;
 }
 
-input::placeholder,
-textarea::placeholder {
-  color: var(--color-text-primary);
-  opacity: .68;
+/* Keep the broad foreground contract from recoloring editable fields. The
+   shared theme foundation owns field text, fills, borders, and placeholders. */
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="hidden"]), textarea, select, .form-control) {
+  color: var(--input-text) !important;
+  -webkit-text-fill-color: var(--input-text);
+  background-color: var(--input-bg) !important;
+}
+
+html[data-theme] :is(input, textarea, select, .form-control)::placeholder {
+  color: var(--input-placeholder) !important;
+  -webkit-text-fill-color: var(--input-placeholder);
+  opacity: 1;
 }
 
 .active,

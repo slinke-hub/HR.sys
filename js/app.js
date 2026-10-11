@@ -1173,7 +1173,7 @@ window.toggleTheme = function () {
     if (themeIcon) themeIcon.setAttribute('data-lucide', currentTheme === 'light' ? 'moon' : 'sun');
     lucide.createIcons();
     const dropdown = document.getElementById('profileDropdown');
-    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
+    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); document.querySelector('.profile-dropdown-wrapper .user-profile')?.setAttribute('aria-expanded', 'false'); }
 }
 
 // --- LANGUAGE MANAGEMENT ---
@@ -1206,7 +1206,7 @@ window.toggleLanguage = function () {
     window.updateNavigationControlLabels?.();
     renderView(currentView); // Re-render view for updated strings inside
     const dropdown = document.getElementById('profileDropdown');
-    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
+    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); document.querySelector('.profile-dropdown-wrapper .user-profile')?.setAttribute('aria-expanded', 'false'); }
 }
 
 window.closeMobileNavigation = function (options = {}) {
@@ -1446,6 +1446,25 @@ function t(key) {
 const arabicRuntimeUiText = Object.freeze({
     'Close': 'إغلاق',
     'More': 'المزيد',
+    'WhatsApp Inbox': 'صندوق واتساب',
+    'Recruitment (ATS)': 'التوظيف (نظام تتبع المتقدمين)',
+    'Training (LMS)': 'التدريب (نظام إدارة التعلم)',
+    'Appraisals': 'تقييمات الأداء',
+    'Surveys': 'الاستبيانات',
+    'Shift Planner': 'مخطط المناوبات',
+    'Iqaman': 'الإقامة',
+    'CR File': 'ملف السجل التجاري',
+    'License': 'الترخيص',
+    "Employee's Working License": 'رخصة عمل الموظف',
+    'Subscription': 'الاشتراك',
+    'Project (optional)': 'المشروع (اختياري)',
+    'Visible to department': 'مرئية للقسم',
+    'None (Private List)': 'لا شيء (قائمة خاصة)',
+    'Leave blank for a private list. Otherwise, employees in the selected department can see it.': 'اتركه فارغًا لقائمة خاصة. وإلا سيتمكن الموظفون في القسم المحدد من رؤيته.',
+    'WhatsApp Beta': 'واتساب التجريبي',
+    'EXPERIMENTAL': 'تجريبي',
+    'Enable the WhatsApp Inbox Beta feature to allow authorized administrators to view and manage demo conversations.': 'فعّل ميزة صندوق واتساب التجريبية للسماح للمسؤولين المصرح لهم بعرض المحادثات التجريبية وإدارتها.',
+    'Enable WhatsApp Inbox (Beta)': 'تفعيل صندوق واتساب (تجريبي)',
     'Confirm': 'تأكيد',
     'Confirming...': 'جارٍ التأكيد...',
     'Cancel': 'إلغاء',
@@ -13401,6 +13420,7 @@ window.toggleNotifications = async function (forceOpen) {
     if (willOpen && profileDropdown) {
         profileDropdown.style.display = 'none';
         profileDropdown.setAttribute('aria-hidden', 'true');
+        document.querySelector('.profile-dropdown-wrapper .user-profile')?.setAttribute('aria-expanded', 'false');
     }
 
     if (willOpen) {
@@ -13427,7 +13447,7 @@ window.positionProfileDropdown = function () {
     const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
     const triggerRect = trigger.getBoundingClientRect();
     const dropdownWidth = Math.max(0, Math.min(250, viewportWidth - (margin * 2)));
-    const isRtl = getComputedStyle(document.documentElement).direction === 'rtl';
+    const isRtl = (document.documentElement.getAttribute('dir') || getComputedStyle(document.documentElement).direction) === 'rtl';
     const preferredLeft = isRtl ? triggerRect.right - dropdownWidth : triggerRect.left;
     const dropdownLeft = Math.min(
         Math.max(preferredLeft, margin),
@@ -13448,11 +13468,13 @@ window.visualViewport?.addEventListener('scroll', window.positionProfileDropdown
 window.toggleProfileDropdown = function () {
     const dropdown = document.getElementById('profileDropdown');
     const notifDropdown = document.getElementById('notificationsDropdown');
+    const trigger = document.querySelector('.profile-dropdown-wrapper .user-profile');
 
     if (dropdown) {
         const isShowing = dropdown.style.display === 'block';
         dropdown.style.display = isShowing ? 'none' : 'block';
         dropdown.setAttribute('aria-hidden', isShowing ? 'true' : 'false');
+        trigger?.setAttribute('aria-expanded', isShowing ? 'false' : 'true');
         if (!isShowing) window.positionProfileDropdown();
 
         // Keep the two header menus mutually exclusive.
@@ -13463,6 +13485,13 @@ window.toggleProfileDropdown = function () {
         }
     }
 }
+
+window.addEventListener('keydown', function (event) {
+    const trigger = event.target.closest?.('.profile-dropdown-wrapper .user-profile');
+    if (!trigger || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    window.toggleProfileDropdown();
+});
 
 // Close dropdowns and modals when clicking outside
 window.addEventListener('click', function (e) {
@@ -13480,6 +13509,7 @@ window.addEventListener('click', function (e) {
             dropdown.style.display = 'none';
             dropdown.classList.remove('show');
             dropdown.setAttribute('aria-hidden', 'true');
+            document.querySelector('.profile-dropdown-wrapper .user-profile')?.setAttribute('aria-expanded', 'false');
         }
 
     }
