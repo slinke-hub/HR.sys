@@ -608,7 +608,7 @@ async function syncLegacyLocalProfilePhoto(profile) {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100701', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100803', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -1183,7 +1183,7 @@ window.toggleTheme = function () {
     if (themeIcon) themeIcon.setAttribute('data-lucide', currentTheme === 'light' ? 'moon' : 'sun');
     lucide.createIcons();
     const dropdown = document.getElementById('profileDropdown');
-    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
+    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); document.querySelector('.profile-dropdown-wrapper .user-profile')?.setAttribute('aria-expanded', 'false'); }
 }
 
 // --- LANGUAGE MANAGEMENT ---
@@ -1216,7 +1216,7 @@ window.toggleLanguage = function () {
     window.updateNavigationControlLabels?.();
     renderView(currentView); // Re-render view for updated strings inside
     const dropdown = document.getElementById('profileDropdown');
-    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); }
+    if (dropdown) { if (dropdown.contains(document.activeElement)) document.activeElement.blur(); dropdown.style.display = 'none'; dropdown.classList.remove('show'); dropdown.setAttribute('aria-hidden', 'true'); document.querySelector('.profile-dropdown-wrapper .user-profile')?.setAttribute('aria-expanded', 'false'); }
 }
 
 window.closeMobileNavigation = function (options = {}) {
@@ -1456,6 +1456,25 @@ function t(key) {
 const arabicRuntimeUiText = Object.freeze({
     'Close': 'إغلاق',
     'More': 'المزيد',
+    'WhatsApp Inbox': 'صندوق واتساب',
+    'Recruitment (ATS)': 'التوظيف (نظام تتبع المتقدمين)',
+    'Training (LMS)': 'التدريب (نظام إدارة التعلم)',
+    'Appraisals': 'تقييمات الأداء',
+    'Surveys': 'الاستبيانات',
+    'Shift Planner': 'مخطط المناوبات',
+    'Iqaman': 'الإقامة',
+    'CR File': 'ملف السجل التجاري',
+    'License': 'الترخيص',
+    "Employee's Working License": 'رخصة عمل الموظف',
+    'Subscription': 'الاشتراك',
+    'Project (optional)': 'المشروع (اختياري)',
+    'Visible to department': 'مرئية للقسم',
+    'None (Private List)': 'لا شيء (قائمة خاصة)',
+    'Leave blank for a private list. Otherwise, employees in the selected department can see it.': 'اتركه فارغًا لقائمة خاصة. وإلا سيتمكن الموظفون في القسم المحدد من رؤيته.',
+    'WhatsApp Beta': 'واتساب التجريبي',
+    'EXPERIMENTAL': 'تجريبي',
+    'Enable the WhatsApp Inbox Beta feature to allow authorized administrators to view and manage demo conversations.': 'فعّل ميزة صندوق واتساب التجريبية للسماح للمسؤولين المصرح لهم بعرض المحادثات التجريبية وإدارتها.',
+    'Enable WhatsApp Inbox (Beta)': 'تفعيل صندوق واتساب (تجريبي)',
     'Confirm': 'تأكيد',
     'Confirming...': 'جارٍ التأكيد...',
     'Cancel': 'إلغاء',
@@ -2994,13 +3013,17 @@ function renderLogin() {
     if (topbar) topbar.style.display = 'none';
 
     let formHTML = '';
+    const loginLogoHTML = `
+        <div class="logo login-logo-container">
+            <img src="/images/logo-dark.png?v=2026100802" alt="MUQAM HR Logo" class="login-logo login-logo-light-mode">
+            <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="login-logo login-logo-dark-mode">
+        </div>
+    `;
 
     if (loginMode === 'forgot') {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
-                </div>
+                ${loginLogoHTML}
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('reset_password')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('reset_email_instruction')}</p>
             </div>
@@ -3018,9 +3041,7 @@ function renderLogin() {
     } else if (loginMode === 'reset') {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
-                </div>
+                ${loginLogoHTML}
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('set_new_password')}</h2>
             </div>
             <form autocomplete="off" onsubmit="handleResetPasswordSubmit(event)">
@@ -3037,9 +3058,7 @@ function renderLogin() {
     } else {
         formHTML = `
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
-                    <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo login-logo" style="max-height: 90px;">
-                </div>
+                ${loginLogoHTML}
                 <h2 style="margin-top: 1rem; font-size: 1.25rem;">${t('login_title')}</h2>
                 <p style="color: var(--color-text-secondary); font-size: 0.875rem;">${t('login_subtitle')}</p>
             </div>
@@ -13417,6 +13436,7 @@ window.toggleNotifications = async function (forceOpen) {
     if (willOpen && profileDropdown) {
         profileDropdown.style.display = 'none';
         profileDropdown.setAttribute('aria-hidden', 'true');
+        document.querySelector('.profile-dropdown-wrapper .user-profile')?.setAttribute('aria-expanded', 'false');
     }
 
     if (willOpen) {
@@ -13432,14 +13452,46 @@ window.toggleNotifications = async function (forceOpen) {
     }
 }
 
+window.positionProfileDropdown = function () {
+    const dropdown = document.getElementById('profileDropdown');
+    const trigger = document.querySelector('.profile-dropdown-wrapper');
+    if (!dropdown || !trigger || dropdown.style.display !== 'block') return;
+
+    const margin = 8;
+    const gap = 8;
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+    const triggerRect = trigger.getBoundingClientRect();
+    const dropdownWidth = Math.max(0, Math.min(250, viewportWidth - (margin * 2)));
+    const isRtl = (document.documentElement.getAttribute('dir') || getComputedStyle(document.documentElement).direction) === 'rtl';
+    const preferredLeft = isRtl ? triggerRect.right - dropdownWidth : triggerRect.left;
+    const dropdownLeft = Math.min(
+        Math.max(preferredLeft, margin),
+        Math.max(margin, viewportWidth - dropdownWidth - margin)
+    );
+    const dropdownTop = triggerRect.bottom + gap;
+
+    dropdown.style.setProperty('--profile-dropdown-left', `${Math.round(dropdownLeft)}px`);
+    dropdown.style.setProperty('--profile-dropdown-top', `${Math.round(dropdownTop)}px`);
+    dropdown.style.setProperty('--profile-dropdown-width', `${Math.round(dropdownWidth)}px`);
+    dropdown.style.setProperty('--profile-dropdown-max-height', `${Math.max(120, Math.round(viewportHeight - dropdownTop - margin))}px`);
+};
+
+window.addEventListener('resize', window.positionProfileDropdown);
+window.visualViewport?.addEventListener('resize', window.positionProfileDropdown);
+window.visualViewport?.addEventListener('scroll', window.positionProfileDropdown);
+
 window.toggleProfileDropdown = function () {
     const dropdown = document.getElementById('profileDropdown');
     const notifDropdown = document.getElementById('notificationsDropdown');
+    const trigger = document.querySelector('.profile-dropdown-wrapper .user-profile');
 
     if (dropdown) {
         const isShowing = dropdown.style.display === 'block';
         dropdown.style.display = isShowing ? 'none' : 'block';
         dropdown.setAttribute('aria-hidden', isShowing ? 'true' : 'false');
+        trigger?.setAttribute('aria-expanded', isShowing ? 'false' : 'true');
+        if (!isShowing) window.positionProfileDropdown();
 
         // Keep the two header menus mutually exclusive.
         if (notifDropdown) {
@@ -13449,6 +13501,13 @@ window.toggleProfileDropdown = function () {
         }
     }
 }
+
+window.addEventListener('keydown', function (event) {
+    const trigger = event.target.closest?.('.profile-dropdown-wrapper .user-profile');
+    if (!trigger || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    window.toggleProfileDropdown();
+});
 
 // Close dropdowns and modals when clicking outside
 window.addEventListener('click', function (e) {
@@ -13466,6 +13525,7 @@ window.addEventListener('click', function (e) {
             dropdown.style.display = 'none';
             dropdown.classList.remove('show');
             dropdown.setAttribute('aria-hidden', 'true');
+            document.querySelector('.profile-dropdown-wrapper .user-profile')?.setAttribute('aria-expanded', 'false');
         }
 
     }

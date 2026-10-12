@@ -7,9 +7,9 @@ const worker = fs.readFileSync('sw.js', 'utf8');
 const vercel = fs.readFileSync('vercel.mjs', 'utf8');
 
 assert.match(html, /runtime-config\.js/);
-assert.match(html, /js\/app\.js\?v=2026100702/);
-assert.match(app, /sw\.js\?v=2026100701/);
-assert.match(worker, /const CACHE_NAME = 'muqam-hr-mobile-v255'/);
+assert.match(html, /js\/app\.js\?v=2026100803/);
+assert.match(app, /sw\.js\?v=2026100803/);
+assert.match(worker, /const CACHE_NAME = 'muqam-hr-mobile-v257'/);
 assert.doesNotMatch(worker.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || '', /runtime-config\.js/);
 assert.match(
   worker,

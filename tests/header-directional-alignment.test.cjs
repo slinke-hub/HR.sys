@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const html = read('index.html');
 const app = read('js/app.js');
+const components = read('css/components.css');
 const header = html.match(/<header class="topbar"[\s\S]*?<\/header>/)?.[0];
 assert.ok(header, 'Use the actual shared header markup from index.html');
 const toggleStart = app.indexOf('window.toggleLanguage = function ()');
@@ -14,6 +15,12 @@ const toggleEnd = app.indexOf('\n};', toggleStart);
 assert.ok(toggleStart >= 0 && toggleEnd > toggleStart, 'Application language toggle must be present');
 assert.match(app.slice(toggleStart, toggleEnd), /htmlElement\.setAttribute\('dir', currentLang === 'ar' \? 'rtl' : 'ltr'\)/,
   'Language switch updates the document direction that controls header placement');
+assert.match(components, /\.header-logo \.app-logo \{[^}]*max-width:\s*156px;[^}]*max-height:\s*45px;[^}]*width:\s*auto;[^}]*object-fit:\s*contain;/,
+  'Desktop logo grows by about 18% while preserving its aspect ratio');
+assert.match(components, /@media \(max-width:\s*1100px\)[\s\S]*?\.header-logo \.app-logo \{[^}]*max-width:\s*132px;[^}]*max-height:\s*40px;/,
+  'Tablet logo keeps the same moderate proportional increase');
+assert.match(components, /@media \(max-width:\s*380px\)[\s\S]*?\.header-logo \.app-logo \{[^}]*max-width:\s*104px;[^}]*max-height:\s*34px;/,
+  'Small-phone logo remains balanced within the available header width');
 
 // Load stylesheets in index.html order so late cascade overrides are tested
 // exactly as they are in the rendered application.
@@ -36,6 +43,9 @@ async function positions(page) {
     const actions = document.querySelector('.topbar-actions').getBoundingClientRect();
     const topbar = document.querySelector('.topbar');
     const bar = topbar.getBoundingClientRect();
+    const logoNode = [...document.querySelectorAll('.header-logo .app-logo')]
+      .find((node) => getComputedStyle(node).display !== 'none');
+    const logoStyle = getComputedStyle(logoNode);
     return {
       width: window.innerWidth,
       clientWidth: document.documentElement.clientWidth,
@@ -53,7 +63,12 @@ async function positions(page) {
       actionsLeft: actions.left,
       actionsRight: actions.right,
       actionsWidth: actions.width,
-      logoHeight: document.querySelector('.header-logo .app-logo').getBoundingClientRect().height,
+      brandCenterY: brand.top + brand.height / 2,
+      actionsCenterY: actions.top + actions.height / 2,
+      barCenterY: bar.top + bar.height / 2,
+      logoHeight: logoNode.getBoundingClientRect().height,
+      logoMaxHeight: parseFloat(logoStyle.maxHeight),
+      logoObjectFit: logoStyle.objectFit,
       userInfoDisplay: getComputedStyle(document.querySelector('.user-info')).display,
       profileChevronDisplay: getComputedStyle(document.querySelector('.user-profile > svg, .user-profile > i')).display,
       actionChildren: [...document.querySelector('.topbar-actions').children].map((node) => node.className),
@@ -93,6 +108,14 @@ function assertDirection(layout, direction, width) {
     assert.ok(layout.logoHeight <= 44, 'mobile logo retains its existing compact height');
     assert.equal(layout.userInfoDisplay, 'none', 'mobile profile text remains compact');
   }
+  assert.ok(Math.abs(layout.brandCenterY - layout.barCenterY) <= 1,
+    `branding is vertically centered at ${width}px`);
+  assert.ok(Math.abs(layout.actionsCenterY - layout.barCenterY) <= 1,
+    `header actions are vertically centered at ${width}px`);
+  assert.equal(layout.logoObjectFit, 'contain', 'logo preserves its aspect ratio without cropping');
+  const expectedLogoMaxHeight = width > 1100 ? 45 : width <= 380 ? 34 : 40;
+  assert.equal(layout.logoMaxHeight, expectedLogoMaxHeight,
+    `logo uses the responsive ${expectedLogoMaxHeight}px size cap at ${width}px`);
   assert.deepEqual(layout.actionChildren, [
     'header-search-trigger',
     'header-language-switcher',
@@ -105,7 +128,7 @@ function assertDirection(layout, direction, width) {
   const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
   try {
     const page = await browser.newPage();
-    for (const width of [1440, 1024, 768, 430, 390]) {
+    for (const width of [1440, 1024, 768, 430, 390, 375]) {
       for (const theme of ['light', 'dark']) {
         for (const direction of ['ltr', 'rtl']) {
           await page.setViewport({ width, height: width <= 430 ? (width === 430 ? 932 : 844) : 900 });
