@@ -53,6 +53,8 @@ test('browser delegates authentication to secure-login and receives no privilege
   assert.match(edge, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(edge, /trustedClient\.rpc\("record_failed_login"/);
   assert.match(edge, /trustedClient[\s\S]*?from\("login_attempts"\)[\s\S]*?locked_until/);
-  assert.doesNotMatch(edge, /console\.(?:log|info|warn|error)\s*\(/);
+  assert.match(edge, /SUPABASE_PUBLISHABLE_KEYS/);
+  assert.match(edge, /if \(supabaseUrl === "https:\/\/jcfyyxsuspukcmybyhjj\.supabase\.co"\)\s*\{\s*console\.warn\("secure-login public-key rejection"/);
+  assert.doesNotMatch(edge, /console\.(?:log|info|error)\s*\(/, 'secure-login has no unguarded or raw log path');
   assert.doesNotMatch(edge, /Access-Control-Allow-Origin['"]\s*:\s*['"]\*['"]/i);
 });

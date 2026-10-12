@@ -27,6 +27,9 @@ assert.equal(resolveHrSupabaseRuntimeConfig(config('unknown', stagingRef, key(st
 
 const sourceDb = fs.readFileSync(path.join(root, 'js/db.js'), 'utf8');
 const resolverSource = fs.readFileSync(path.join(root, 'js/runtime-config-resolver.js'), 'utf8');
+const serviceWorkerSource = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+const appSource = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
+const vercelSource = fs.readFileSync(path.join(root, 'vercel.mjs'), 'utf8');
 const marker = 'const SUPABASE_REQUEST_TIMEOUT_MS = 10000;';
 function evaluateGeneratedClient(dbBundle, runtimeConfig) {
   const windowObject = { atob: value => Buffer.from(value, 'base64').toString('binary'), HR_RUNTIME_CONFIG: runtimeConfig };
@@ -64,6 +67,27 @@ function artifactFiles(directory) {
 try {
   const preview = runBuild('build-preview.mjs', previewOutput, { HR_SYS_STAGING_ANON_KEY: fakeStagingKey });
   assert.equal(preview.status, 0, `Preview artifact build failed: ${preview.stderr || preview.stdout}`);
+  assert.match(preview.stdout, /"selectedEnvVariableName":"HR_SYS_STAGING_ANON_KEY"/);
+  assert.match(preview.stdout, /"selectedKeyFormat":"legacy-jwt"/);
+  assert.match(preview.stdout, /"stagingProjectRefValid":true/);
+  assert.match(preview.stdout, /"runtimeConfigGenerated":true/);
+  assert.match(preview.stdout, /"runtimeConfigPath":"node_modules\/\.hrsys-phase1-artifacts-[A-Za-z0-9-]+\/preview\/runtime-config\.js"/);
+  assert.doesNotMatch(preview.stdout, new RegExp(fakeStagingKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'build diagnostic never prints the selected key');
+  const higherPriorityPreviewKey = key(stagingRef, 'anon');
+  const lowerPriorityPreviewKey = `header.${Buffer.from(JSON.stringify({ ref: stagingRef, role: 'anon', testKey: 'lower-priority' })).toString('base64url')}.signature`;
+  const vercelEnvPreviewOutput = path.join(temporaryRoot, 'vercel-env-preview');
+  const vercelEnvPreview = runBuild('build-preview.mjs', vercelEnvPreviewOutput, {
+    VERCEL_STAGING_ANON_KEY: higherPriorityPreviewKey,
+    HR_SYS_STAGING_ANON_KEY: lowerPriorityPreviewKey,
+  });
+  assert.equal(vercelEnvPreview.status, 0, `Vercel Preview-key artifact build failed: ${vercelEnvPreview.stderr || vercelEnvPreview.stdout}`);
+  assert.match(vercelEnvPreview.stdout, /"selectedEnvVariableName":"VERCEL_STAGING_ANON_KEY"/);
+  assert.doesNotMatch(vercelEnvPreview.stdout, new RegExp(higherPriorityPreviewKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'Vercel-key diagnostic never prints the selected key');
+  const generatedRuntimeConfig = fs.readFileSync(path.join(vercelEnvPreviewOutput, 'runtime-config.js'), 'utf8');
+  const generatedKeyMatch = generatedRuntimeConfig.match(/"anonKey":"([^"]+)"/);
+  assert.ok(generatedKeyMatch, 'Preview build emits a runtime anon key');
+  assert.equal(generatedKeyMatch[1], higherPriorityPreviewKey, 'Vercel branch-scoped key takes precedence and is embedded unchanged');
+  assert.match(fs.readFileSync(path.join(vercelEnvPreviewOutput, 'index.html'), 'utf8'), /runtime-config\.js/);
   const productionBuild = runBuild('build-production.mjs', productionOutput);
   assert.equal(productionBuild.status, 0, `Production artifact build failed: ${productionBuild.stderr || productionBuild.stdout}`);
 
@@ -99,6 +123,10 @@ try {
   });
   assert.notEqual(missingPreviewKey.status, 0, 'Preview build fails closed without staging public key');
   assert.match(missingPreviewKey.stderr, /requires a valid staging public anon key/);
+  assert.match(missingPreviewKey.stdout, /"selectedEnvVariableName":"NONE"/);
+  assert.match(missingPreviewKey.stdout, /"selectedKeyFormat":"other"/);
+  assert.match(missingPreviewKey.stdout, /"stagingProjectRefValid":false/);
+  assert.match(missingPreviewKey.stdout, /"runtimeConfigGenerated":false/);
 
   const dbBeforeUnsafeOutput = fs.readFileSync(path.join(root, 'js', 'db.js'), 'utf8');
   const unsafeOutput = runBuild('build-preview.mjs', path.join(root, 'js'));
@@ -114,6 +142,11 @@ try {
   const dbSource = fs.readFileSync(path.join(root, 'js/db.js'), 'utf8');
   const server = fs.readFileSync(path.join(root, 'scripts/serve-local.mjs'), 'utf8');
   assert.match(dbSource, /hrResolveSupabaseRuntimeConfig\(runtimeConfig/);
+  assert.match(dbSource, /headers:\s*\{\s*apikey:\s*SUPABASE_ANON_KEY,\s*'Content-Type':\s*'application\/json'/);
+  assert.match(serviceWorkerSource, /url\.pathname === '\/runtime-config\.js'[\s\S]*?fetch\(request, \{ cache: 'no-store' \}\)/);
+  assert.match(serviceWorkerSource, /muqam-hr-mobile-v257/);
+  assert.match(appSource, /sw\.js\?v=2026100803/);
+  assert.match(vercelSource, /src: '\/runtime-config\.js'[\s\S]*?'Cache-Control': 'no-cache, no-store, must-revalidate'/);
   assert.match(server, /const mode = String\(process\.env\.HR_SYS_RUNTIME \|\| ''\)\.trim\(\)/);
   assert.match(server, /Explicit local runtime environment is required/);
   assert.match(server, /renderRuntimeDbBundle\(sourceDb, targetMode\)/);

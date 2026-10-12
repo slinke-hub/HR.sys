@@ -8,6 +8,7 @@ const migration = fs.readFileSync(path.join(root, 'supabase/migrations/202610051
 const appDb = fs.readFileSync(path.join(root, 'js/db.js'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
 const secureLogin = fs.readFileSync(path.join(root, 'supabase/functions/secure-login/index.ts'), 'utf8');
+const publicKeyHelper = fs.readFileSync(path.join(root, 'supabase/functions/_shared/secure-login-public-key.mjs'), 'utf8');
 const config = fs.readFileSync(path.join(root, 'supabase/config.toml'), 'utf8');
 
 function methodBody(source, startMarker, endMarker) {
@@ -41,7 +42,8 @@ test('pre-auth failed-login RPC is removed from ordinary clients and reserved fo
   assert.match(appDb, /functions\/v1\/secure-login/);
   assert.match(secureLogin, /trustedClient\.rpc\("record_failed_login"/);
   assert.match(secureLogin, /serviceRoleKey/);
-  assert.doesNotMatch(secureLogin, /console\.(?:log|info|warn|error)\s*\(/);
+  assert.match(secureLogin, /SUPABASE_PUBLISHABLE_KEYS/);
+  assert.match(secureLogin, /inspectSecureLoginPublicKey\(candidate/);
   assert.match(config, /\[functions\.secure-login\][\s\S]*?verify_jwt = false/);
   assert.doesNotMatch(appDb, /SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY/);
   assert.doesNotMatch(app, /SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY/);
@@ -55,7 +57,10 @@ test('secure login enforces lockout server-side before Auth and counts only genu
   assert.match(secureLogin, /error\?\.status === 400[\s\S]*?record_failed_login/);
   assert.match(secureLogin, /access_token: session\.access_token, refresh_token: session\.refresh_token/);
   assert.doesNotMatch(secureLogin, /serviceRoleKey[^\n]*JSON\.stringify/);
-  assert.doesNotMatch(secureLogin, /console\.(?:log|info|warn|error)\s*\(/);
+  assert.match(secureLogin, /request\.headers\.has\("Origin"\) && !origin[\s\S]*?REQUEST_REJECTED/);
+  assert.match(secureLogin, /inspectPublicKey\(request\.headers\.get\("apikey"\)\)[\s\S]*?if \(!publicKeyCheck\.allowed\)[\s\S]*?REQUEST_REJECTED/);
+  assert.match(secureLogin, /if \(supabaseUrl === "https:\/\/jcfyyxsuspukcmybyhjj\.supabase\.co"\)\s*\{\s*console\.warn\("secure-login public-key rejection"/);
+  assert.doesNotMatch(secureLogin, /console\.(?:log|info|error)\s*\(/, 'secure-login has no unguarded or raw log path');
   assert.match(appDb, /auth\.setSession\(/);
   assert.doesNotMatch(appDb, /auth\.signInWithPassword\(/);
 });

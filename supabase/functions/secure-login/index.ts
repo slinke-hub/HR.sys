@@ -1,11 +1,21 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { isAllowedSecureLoginOrigin } from "../_shared/secure-login-origin.mjs";
+import { inspectSecureLoginPublicKey } from "../_shared/secure-login-public-key.mjs";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+const publishableKeysJson = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const genericFailure = (origin: string | null) => jsonResponse({ error: "INVALID_CREDENTIALS" }, 401, origin);
 const serviceUnavailable = (origin: string | null) => jsonResponse({ error: "AUTH_SERVICE_UNAVAILABLE" }, 503, origin);
+
+function inspectPublicKey(candidate: string | null) {
+  return inspectSecureLoginPublicKey(candidate, {
+    legacyAnonKey: anonKey,
+    publishableKeysJson,
+    serviceRoleKey,
+  });
+}
 
 function allowedOrigin(request: Request): string | null {
   const origin = request.headers.get("Origin");
@@ -28,17 +38,32 @@ function jsonResponse(body: unknown, status: number, origin: string | null): Res
 
 Deno.serve(async (request: Request) => {
   const origin = allowedOrigin(request);
-  if (request.headers.has("Origin") && !origin) return jsonResponse({ error: "REQUEST_REJECTED" }, 403, null);
+  if (request.headers.has("Origin") && !origin) {
+    return jsonResponse({ error: "REQUEST_REJECTED" }, 403, null);
+  }
   if (request.method === "OPTIONS") {
-    return origin
-      ? new Response(null, { status: 204, headers: responseHeaders(origin) })
-      : jsonResponse({ error: "REQUEST_REJECTED" }, 403, null);
+    if (origin) return new Response(null, { status: 204, headers: responseHeaders(origin) });
+    return jsonResponse({ error: "REQUEST_REJECTED" }, 403, null);
   }
   if (request.method !== "POST" || !supabaseUrl || !anonKey || !serviceRoleKey) return serviceUnavailable(origin);
 
   // verify_jwt is disabled only because this endpoint precedes authentication.
   // The project anon key is public and required; privileged work stays server-side.
-  if (request.headers.get("apikey") !== anonKey) return jsonResponse({ error: "REQUEST_REJECTED" }, 403, origin);
+  const publicKeyCheck = inspectPublicKey(request.headers.get("apikey"));
+  if (!publicKeyCheck.allowed) {
+    if (supabaseUrl === "https://jcfyyxsuspukcmybyhjj.supabase.co") {
+      console.warn("secure-login public-key rejection", {
+        rejectionCategory: publicKeyCheck.rejectionCategory,
+        hasLegacyAnon: publicKeyCheck.hasLegacyAnon,
+        hasPublishableKeys: publicKeyCheck.hasPublishableKeys,
+        runtimeValueShape: publicKeyCheck.runtimeValueShape,
+        parsedPublicKeyCount: publicKeyCheck.parsedPublicKeyCount,
+        requestMatchesRuntimeLegacyAnon: publicKeyCheck.requestMatchesRuntimeLegacyAnon,
+        requestMatchesRuntimePublishableKey: publicKeyCheck.requestMatchesRuntimePublishableKey,
+      });
+    }
+    return jsonResponse({ error: "REQUEST_REJECTED" }, 403, origin);
+  }
 
   let input: { email?: unknown; password?: unknown };
   try {
