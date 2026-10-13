@@ -6,6 +6,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
 const db = fs.readFileSync(path.join(root, 'js/db.js'), 'utf8');
+const data = fs.readFileSync(path.join(root, 'js/data.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'css/components.css'), 'utf8');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const vercel = fs.readFileSync(path.join(root, 'vercel.mjs'), 'utf8');
@@ -26,6 +27,9 @@ assert.match(pageAccessSource, /window\.filterAdminPageAccess = function/);
 assert.match(pageAccessSource, /window\.handleBulkPageAccess = async function/);
 assert.match(pageAccessSource, /currentPages\.filter\(page => !managedPages\.includes\(page\)\)/);
 assert.match(pageAccessSource, /التحكم في صلاحيات الصفحات/);
+assert.match(pageAccessSource, /id: 'schedule', label: t\('nav_schedule'\), icon: 'calendar-clock', group: 'workforce'/);
+assert.match(data, /nav_schedule: "Schedule & Reminders"/);
+assert.match(data, /nav_schedule: "الجدول والتذكيرات"/);
 assert.doesNotMatch(pageAccessSource, /<table class="data-table">/);
 
 assert.match(css, /\.page-access-grid[\s\S]*repeat\(auto-fit/);
@@ -36,6 +40,6 @@ assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.page-access-toolbar \{ gr
 assert.match(db, /from\('user_permissions'\)[\s\S]*\.eq\('user_id', userId\)[\s\S]*\.maybeSingle\(\)/);
 assert.match(html, /frame-src 'self' blob: https:\/\/vercel\.live/);
 assert.match(vercel, /frame-src 'self' blob: https:\/\/vercel\.live/);
-assert.match(serviceWorker, /muqam-hr-mobile-v257/);
+assert.match(serviceWorker, /muqam-hr-mobile-v258-schedule-auth/);
 
 console.log('Admin page access layout and interaction checks passed.');

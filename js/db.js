@@ -5162,7 +5162,7 @@ const db = {
         }
     },
     async fetchAllRolePermissions() {
-        if (!supabaseClient) return [];
+        if (!supabaseClient) throw new Error('Supabase client is unavailable while loading role permissions.');
         try {
             const { data, error } = await supabaseClient
                 .from('role_permissions')
@@ -5172,7 +5172,7 @@ const db = {
             return data || [];
         } catch (error) {
             console.error("fetchAllRolePermissions Error:", error);
-            return [];
+            throw error;
         }
     },
     async updateRolePermissions(role, allowedPages) {
@@ -5189,7 +5189,8 @@ const db = {
         }
     },
     async fetchUserPermissions(userId) {
-        if (!supabaseClient || !userId) return null;
+        if (!userId) return null;
+        if (!supabaseClient) throw new Error('Supabase client is unavailable while loading user permissions.');
         try {
             const { data, error } = await supabaseClient
                 .from('user_permissions')
@@ -5200,11 +5201,11 @@ const db = {
             return data ? data.allowed_pages : null;
         } catch (error) {
             console.error("fetchUserPermissions Error:", error);
-            return null;
+            throw error;
         }
     },
     async fetchAllUserPermissions() {
-        if (!supabaseClient) return [];
+        if (!supabaseClient) throw new Error('Supabase client is unavailable while loading employee permissions.');
         try {
             const { data, error } = await supabaseClient
                 .from('user_permissions')
@@ -5216,7 +5217,20 @@ const db = {
             return data || [];
         } catch (error) {
             console.error("fetchAllUserPermissions Error:", error);
-            return [];
+            throw error;
+        }
+    },
+    async fetchEffectivePageAccess(pageId) {
+        if (!supabaseClient || !pageId) {
+            return { success: false, allowed: false, error: new Error('Page access cannot be verified.') };
+        }
+        try {
+            const { data, error } = await supabaseClient.rpc('has_my_page_access', { p_page: pageId });
+            if (error) throw error;
+            return { success: true, allowed: data === true };
+        } catch (error) {
+            console.error("fetchEffectivePageAccess Error:", error);
+            return { success: false, allowed: false, error };
         }
     },
     async updateUserPermissions(userId, allowedPages) {

@@ -95,6 +95,17 @@ Deno.serve(async (request) => {
       }
       return delivered;
     };
+    const hasScheduleAccess = async (userId: string) => {
+      const { data, error } = await admin.rpc("has_effective_page_access_internal", {
+        p_user_id: userId,
+        p_page: "schedule",
+      });
+      if (error) {
+        console.error("Schedule authorization check failed", error);
+        return false;
+      }
+      return data === true;
+    };
 
     const { data: notifications } = await admin.from("notifications")
       .select("id,user_id,message,created_at").is("push_sent_at", null).order("created_at").limit(100);
@@ -104,16 +115,19 @@ Deno.serve(async (request) => {
       }
     }
 
-    const now = new Date().toISOString();
-    const { data: reminders } = await admin.from("reminders").select("*")
-      .eq("status", "pending").lte("due_date", now).is("last_notified_at", null).limit(100);
+    const { data: reminders, error: remindersError } = await admin.rpc("list_due_schedule_reminders_for_dispatch", { p_limit: 100 });
+    if (remindersError) throw remindersError;
     for (const reminder of reminders || []) {
+      // Revalidate immediately before delivery so a recent revocation fails closed.
+      if (!(await hasScheduleAccess(reminder.user_id))) continue;
       const delivered = await sendToUser(reminder.user_id, { title: reminder.title, body: reminder.description || "Reminder due now", url: "/?view=schedule", tag: `reminder-${reminder.id}` });
       if (!delivered) continue;
+      // Service-role updates remain tied to the same authorization decision.
+      if (!(await hasScheduleAccess(reminder.user_id))) continue;
       if (reminder.recurrence_type && reminder.recurrence_type !== "NONE") {
-        await admin.from("reminders").update({ due_date: nextOccurrence(reminder.due_date, reminder.recurrence_type, reminder.recurrence_interval), last_notified_at: null }).eq("id", reminder.id);
+        await admin.from("reminders").update({ due_date: nextOccurrence(reminder.due_date, reminder.recurrence_type, reminder.recurrence_interval), last_notified_at: null }).eq("id", reminder.id).eq("user_id", reminder.user_id);
       } else {
-        await admin.from("reminders").update({ last_notified_at: new Date().toISOString() }).eq("id", reminder.id);
+        await admin.from("reminders").update({ last_notified_at: new Date().toISOString() }).eq("id", reminder.id).eq("user_id", reminder.user_id);
       }
     }
     return response({ success: true, sent });

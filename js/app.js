@@ -608,7 +608,7 @@ async function syncLegacyLocalProfilePhoto(profile) {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100803', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026101310-schedule-auth', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -2610,6 +2610,7 @@ window.handleLogout = async function () {
     currentUser = null;
     currentUserRole = null;
     currentUserProfile = null;
+    window.resetPageAccessPermissions();
     window.businessFinancialAccess = { userId: null, allowed: false };
     currentView = 'login';
     viewHistory = [];
@@ -2664,33 +2665,101 @@ async function getCurrentDepartmentName() {
     return window.sidebarDepartmentsCache.find(department => department.id === profile.department_id)?.name || '';
 }
 
+const EXPLICIT_PAGE_ACCESS_VIEWS = new Set(['schedule']);
 window.appRolePermissionsCache = [];
 window.appUserPermissions = [];
+window.appPagePermissionsReady = false;
+window.appPagePermissionsFailed = false;
+window.appPagePermissionsUserId = null;
+window.schedulePageAccessVerification = { userId: null, allowed: false, resolved: false, requestId: 0 };
+
+window.resetSchedulePageAccessVerification = function () {
+    const previousRequestId = Number(window.schedulePageAccessVerification?.requestId || 0);
+    window.schedulePageAccessVerification = { userId: null, allowed: false, resolved: false, requestId: previousRequestId + 1 };
+};
+
+window.resetPageAccessPermissions = function () {
+    window.appRolePermissionsCache = [];
+    window.appUserPermissions = [];
+    window.appPagePermissionsReady = false;
+    window.appPagePermissionsFailed = false;
+    window.appPagePermissionsUserId = null;
+    window.resetSchedulePageAccessVerification();
+};
 
 window.loadRolePermissions = async function() {
     try {
         const perms = await db.fetchAllRolePermissions();
         window.appRolePermissionsCache = perms || [];
+        return Array.isArray(perms) && perms.length > 0;
     } catch (e) {
         console.error("Failed to load role permissions", e);
         window.appRolePermissionsCache = [];
+        return false;
     }
 };
 
 window.loadUserPermissions = async function(userId) {
-    if (!userId) return;
+    if (!userId) {
+        window.appUserPermissions = [];
+        return false;
+    }
     try {
         const userPerms = await db.fetchUserPermissions(userId);
         window.appUserPermissions = userPerms || [];
+        return Array.isArray(window.appUserPermissions);
     } catch (e) {
         console.error("Failed to load user permissions", e);
         window.appUserPermissions = [];
+        return false;
     }
+};
+
+window.loadPageAccessPermissions = async function(userId) {
+    window.resetPageAccessPermissions();
+    const [rolePermissionsLoaded, userPermissionsLoaded] = await Promise.all([
+        window.loadRolePermissions(),
+        window.loadUserPermissions(userId)
+    ]);
+    const sameUser = String(currentUser?.id || '') === String(userId || '');
+    window.appPagePermissionsFailed = !rolePermissionsLoaded || !userPermissionsLoaded || !sameUser;
+    window.appPagePermissionsUserId = sameUser ? userId : null;
+    window.appPagePermissionsReady = true;
+    return !window.appPagePermissionsFailed;
+};
+
+window.verifyCurrentSchedulePageAccess = async function () {
+    const userId = String(currentUser?.id || '');
+    if (!userId) {
+        window.resetSchedulePageAccessVerification();
+        return false;
+    }
+
+    const requestId = Number(window.schedulePageAccessVerification?.requestId || 0) + 1;
+    window.schedulePageAccessVerification = { userId, allowed: false, resolved: false, requestId };
+    const result = await db.fetchEffectivePageAccess('schedule');
+    if (
+        requestId !== Number(window.schedulePageAccessVerification?.requestId || 0)
+        || userId !== String(currentUser?.id || '')
+    ) return false;
+
+    const allowed = result?.success === true && result?.allowed === true;
+    window.schedulePageAccessVerification = { userId, allowed, resolved: true, requestId };
+    return allowed;
 };
 
 async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const isAdmin = isAdminRole(normalizedRole);
+    const requiresExplicitPageGrant = EXPLICIT_PAGE_ACCESS_VIEWS.has(viewId);
+    if (requiresExplicitPageGrant) {
+        if (!isAdmin && (
+            !window.appPagePermissionsReady ||
+            window.appPagePermissionsFailed ||
+            String(window.appPagePermissionsUserId || '') !== String(currentUser?.id || '')
+        )) return false;
+        return window.verifyCurrentSchedulePageAccess();
+    }
     if (isAdmin) return true;
     if (viewId === 'my-day') return true;
     if (viewId === 'project-command-center') return canViewFullProjectCommandCenter();
@@ -2768,6 +2837,34 @@ async function canCurrentUserAccessView(viewId) {
     return true;
 }
 
+window.ensureCurrentScheduleAccess = async function (options = {}) {
+    const allowed = await canCurrentUserAccessView('schedule');
+    if (allowed) return true;
+
+    document.querySelectorAll('.nav-item[data-view="schedule"], .navigation-drawer-item[data-view="schedule"]').forEach(item => {
+        item.style.display = 'none';
+    });
+    if (options.notify !== false) showToast(window.t('msg_toast_41') || 'You do not have access to this page.', 'warning');
+    if (options.redirect !== false && currentView === 'schedule') await renderView('dashboard');
+    return false;
+};
+
+let scheduleAccessResumeCheckInFlight = false;
+async function revalidateOpenScheduleAccess() {
+    if (scheduleAccessResumeCheckInFlight || currentView !== 'schedule' || !currentUser?.id) return;
+    scheduleAccessResumeCheckInFlight = true;
+    try {
+        await window.loadPageAccessPermissions(currentUser.id);
+        await window.ensureCurrentScheduleAccess();
+    } finally {
+        scheduleAccessResumeCheckInFlight = false;
+    }
+}
+window.addEventListener('focus', () => { void revalidateOpenScheduleAccess(); });
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void revalidateOpenScheduleAccess();
+});
+
 async function hasAccessibleProjectMembership() {
     if (!currentUser?.id || typeof db?.fetchProjects !== 'function') return false;
     try {
@@ -2800,11 +2897,14 @@ window.updateSidebarVisibility = async function () {
     const isAdmin = isAdminRole(normalizedRole);
     const canManageUsers = canCurrentUserManageUsers();
     const isHrManager = normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
+    const canAccessSchedule = await canCurrentUserAccessView('schedule');
     
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
         const viewId = item.dataset.view;
         if (viewId === 'my-day') {
             item.style.display = 'flex';
+        } else if (viewId === 'schedule') {
+            item.style.display = canAccessSchedule ? 'flex' : 'none';
         } else if (isAdmin) {
             item.style.display = 'flex';
         } else if (window.appUserPermissions && window.appUserPermissions.includes(viewId)) {
@@ -2934,12 +3034,13 @@ window.handleLoginSubmit = async function (e) {
         }
     }
 
-    // Show sidebar and topbar again
+    // Resolve page grants before protected navigation becomes visible.
+    await window.loadPageAccessPermissions(user.id);
+    await window.updateSidebarVisibility();
+
+    // Show sidebar and topbar again only after access decisions are ready.
     document.querySelector('.sidebar').style.display = '';
     document.querySelector('.topbar').style.display = 'flex';
-
-    // Hide/Show Role-Specific Nav Items
-    window.updateSidebarVisibility();
 
     // Route based on role - restore last view or fallback to dashboard
     const _loginRestorableViews = new Set([
@@ -6167,20 +6268,43 @@ async function renderAdmin() {
 async function renderAdminPageAccess() {
     if (currentUserRole !== 'ADMIN') return `<div class="page-header"><h1 class="page-title">${t('analy_unauth') || 'Unauthorized'}</h1></div>`;
 
-    const [perms, allUserPerms, allProfiles, depts] = await Promise.all([
-        db.fetchAllRolePermissions(),
-        db.fetchAllUserPermissions(),
-        db.fetchAllProfiles(),
-        db.fetchDepartments(false)
-    ]);
-
     const localize = (english, arabic) => currentLang === 'ar' ? arabic : english;
+    window.adminPageAccessDataReady = false;
+    let perms;
+    let allUserPerms;
+    let allProfiles;
+    let depts;
+    try {
+        [perms, allUserPerms, allProfiles, depts] = await Promise.all([
+            db.fetchAllRolePermissions(),
+            db.fetchAllUserPermissions(),
+            db.fetchAllProfiles(),
+            db.fetchDepartments(false)
+        ]);
+        if (!Array.isArray(perms) || perms.length === 0 || !Array.isArray(allUserPerms)) {
+            throw new Error('Page permission records could not be verified.');
+        }
+    } catch (error) {
+        console.error('Unable to load Pages Access Controls:', error);
+        window.allUserPermsData = [];
+        window.adminPageAccessRoleData = [];
+        window.adminPageAccessViewIds = [];
+        return `<div class="page-access-workspace fade-in-up">
+            <header class="page-access-hero">
+                <button class="btn btn-secondary btn-sm page-access-back" onclick="renderView('admin')"><i data-lucide="arrow-left"></i>${escapeHTML(localize('Back to Admin', 'العودة إلى الإدارة'))}</button>
+                <div class="page-access-title"><span><i data-lucide="shield-alert"></i></span><div><p>${escapeHTML(localize('Administration', 'الإدارة'))}</p><h1>${escapeHTML(localize('Page Access Controls', 'التحكم في صلاحيات الصفحات'))}</h1></div></div>
+            </header>
+            <section class="card" role="alert"><h2>${escapeHTML(localize('Permission data could not be loaded', 'تعذر تحميل بيانات الصلاحيات'))}</h2><p>${escapeHTML(localize('No grants were changed. Retry after the permission service is available.', 'لم يتم تغيير أي صلاحيات. أعد المحاولة بعد توفر خدمة الصلاحيات.'))}</p><button class="btn btn-primary" onclick="renderView('admin_page_access')"><i data-lucide="refresh-cw"></i>${escapeHTML(localize('Retry', 'إعادة المحاولة'))}</button></section>
+        </div>`;
+    }
+
     const availableViews = [
         { id: 'dashboard', label: localize('Dashboard', 'لوحة التحكم'), icon: 'layout-dashboard', group: 'core' },
         { id: 'requests', label: localize('My Requests', 'طلباتي'), icon: 'inbox', group: 'core' },
         { id: 'profile', label: localize('My Profile', 'ملفي الشخصي'), icon: 'circle-user-round', group: 'core' },
         { id: 'time', label: localize('Time & Attendance', 'الوقت والحضور'), icon: 'clock-3', group: 'workforce' },
         { id: 'tasks', label: localize('Task Manager', 'إدارة المهام'), icon: 'list-checks', group: 'workforce' },
+        { id: 'schedule', label: t('nav_schedule'), icon: 'calendar-clock', group: 'workforce' },
         { id: 'employees', label: localize('Employee Directory', 'دليل الموظفين'), icon: 'users', group: 'workforce' },
         { id: 'approvals', label: localize('Approvals', 'الموافقات'), icon: 'badge-check', group: 'workforce' },
         { id: 'leave', label: localize('Leave', 'الإجازات'), icon: 'calendar-days', group: 'workforce' },
@@ -6248,6 +6372,7 @@ async function renderAdminPageAccess() {
     window.allUserPermsData = allUserPerms;
     window.adminPageAccessRoleData = perms;
     window.adminPageAccessViewIds = availableViews.map(view => view.id);
+    window.adminPageAccessDataReady = true;
     return `
         <div class="page-access-workspace fade-in-up">
             <header class="page-access-hero">
@@ -6300,6 +6425,7 @@ window.filterAdminPageAccess = function () {
 };
 
 window.handleBulkPageAccess = async function (action) {
+    if (window.adminPageAccessDataReady !== true) return showToast(currentLang === 'ar' ? 'بيانات الصلاحيات غير متاحة. أعد تحميل الصفحة أولاً.' : 'Permission data is unavailable. Refresh the page first.', 'danger');
     const principal = document.getElementById('pageAccessBulkPrincipal')?.value || '';
     if (!principal) return showToast(currentLang === 'ar' ? 'اختر دوراً أو قسماً أو موظفاً أولاً.' : 'Choose a role, department, or employee first.', 'warning');
     const [type, id] = principal.split(':');
@@ -6325,6 +6451,7 @@ window.handleBulkPageAccess = async function (action) {
 };
 
 window.handleGrantAccess = async function(selectElement, viewId) {
+    if (window.adminPageAccessDataReady !== true) return showToast(currentLang === 'ar' ? 'بيانات الصلاحيات غير متاحة. أعد تحميل الصفحة أولاً.' : 'Permission data is unavailable. Refresh the page first.', 'danger');
     const value = selectElement.value;
     selectElement.value = ''; // reset dropdown
     if (!value) return;
@@ -6339,6 +6466,7 @@ window.handleGrantAccess = async function(selectElement, viewId) {
 };
 
 window.handleRevokeAccess = async function(type, id, viewId) {
+    if (window.adminPageAccessDataReady !== true) return showToast(currentLang === 'ar' ? 'بيانات الصلاحيات غير متاحة. أعد تحميل الصفحة أولاً.' : 'Permission data is unavailable. Refresh the page first.', 'danger');
     if (type === 'USER') {
         await window.toggleUserPermission(id, viewId, false);
     } else {
@@ -6347,6 +6475,7 @@ window.handleRevokeAccess = async function(type, id, viewId) {
 };
 
 window.toggleUserPermission = async function(userId, viewId, isGranted) {
+    if (window.adminPageAccessDataReady !== true) return showToast(currentLang === 'ar' ? 'بيانات الصلاحيات غير متاحة. أعد تحميل الصفحة أولاً.' : 'Permission data is unavailable. Refresh the page first.', 'danger');
     let up = window.allUserPermsData.find(x => x.user_id === userId);
     let allowedPages = [];
     if (up && up.allowed_pages) allowedPages = [...up.allowed_pages];
@@ -6370,6 +6499,7 @@ window.toggleUserPermission = async function(userId, viewId, isGranted) {
 };
 
 window.toggleRolePermission = async function(role, viewId, isAllowed) {
+    if (window.adminPageAccessDataReady !== true) return showToast(currentLang === 'ar' ? 'بيانات الصلاحيات غير متاحة. أعد تحميل الصفحة أولاً.' : 'Permission data is unavailable. Refresh the page first.', 'danger');
     let perm = (window.adminPageAccessRoleData || window.appRolePermissionsCache || []).find(p => p.role === role);
     let allowedPages = perm && perm.allowed_pages ? [...perm.allowed_pages] : [];
     if (isAllowed) {
@@ -7662,6 +7792,7 @@ function urlBase64ToUint8Array(value) {
 }
 
 window.enablePushNotifications = async () => {
+    if (!(await window.ensureCurrentScheduleAccess())) return;
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
         return showToast(t('schedule_push_unsupported'), 'warning');
     }
@@ -7685,6 +7816,7 @@ window.enablePushNotifications = async () => {
 
 window.handleCreateReminder = async (e) => {
     e.preventDefault();
+    if (!(await window.ensureCurrentScheduleAccess())) return;
     const title = document.getElementById('reminderTitle').value.trim();
     const description = document.getElementById('reminderDescription').value.trim();
     const dueDate = document.getElementById('reminderDueDate').value;
@@ -7716,6 +7848,7 @@ window.handleCreateReminder = async (e) => {
 };
 
 window.toggleReminderStatus = async (id, status) => {
+    if (!(await window.ensureCurrentScheduleAccess())) return;
     const { success, error } = await db.updateReminderStatus(id, status);
     if (success) {
         renderView('schedule');
@@ -7725,7 +7858,9 @@ window.toggleReminderStatus = async (id, status) => {
 };
 
 window.deleteReminder = async (id) => {
+    if (!(await window.ensureCurrentScheduleAccess())) return;
     window.showConfirmModal(t('html_confirm_action'), t('html_are_you_sure') || 'Are you sure you want to delete this reminder?', async () => {
+        if (!(await window.ensureCurrentScheduleAccess())) return;
         const { success, error } = await db.deleteReminder(id);
         if (success) renderView('schedule');
         else showToast(error?.message || 'Error deleting reminder.', 'danger');
@@ -17087,6 +17222,7 @@ async function initApp() {
         if (event === 'SIGNED_OUT' || !session) {
             stopNotificationsRealtime();
             stopTasksRealtime();
+            window.resetPageAccessPermissions();
             currentUser = null;
             currentUserRole = null;
             currentUserProfile = null;
@@ -17124,10 +17260,6 @@ async function initApp() {
 
         updateTopbarProfile(profile);
 
-        // Show navigation
-        document.querySelector('.sidebar').style.display = '';
-        document.querySelector('.topbar').style.display = 'flex';
-
         // Hide/Show Role-Specific Nav Items
         const adminNav = document.querySelector('.nav-item[data-view="admin"]');
         const usersNav = document.querySelector('.nav-item[data-view="users"]');
@@ -17143,9 +17275,12 @@ async function initApp() {
         const canUseApprovals = currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile?.job_title || '');
         if (approvalsNav) approvalsNav.style.display = canUseApprovals ? 'flex' : 'none';
         
-        await window.loadRolePermissions();
-        await window.loadUserPermissions(currentUser.id);
+        await window.loadPageAccessPermissions(currentUser.id);
         await window.updateSidebarVisibility();
+
+        // Show navigation only after protected-page permissions are resolved.
+        document.querySelector('.sidebar').style.display = '';
+        document.querySelector('.topbar').style.display = 'flex';
 
         const restorableViews = new Set([
             'dashboard', 'time', 'leave', 'requests', 'archived',
