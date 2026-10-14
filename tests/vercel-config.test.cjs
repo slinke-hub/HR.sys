@@ -4,6 +4,15 @@ const { pathToFileURL } = require('node:url');
 (async () => {
   const moduleUrl = new URL('../vercel.mjs?static=1', pathToFileURL(__filename));
   const config = (await import(moduleUrl.href)).config;
+  assert.deepEqual(config.git, {
+    deploymentEnabled: {
+      'codex/schedule-task-fixes-integration': false,
+    },
+  });
+  assert.deepEqual(Object.keys(config.git.deploymentEnabled), ['codex/schedule-task-fixes-integration']);
+  for (const branch of ['main', 's3-staging-auth-preview', 'design/ui-improvements']) {
+    assert.equal(config.git.deploymentEnabled[branch] ?? true, true, `${branch} must retain Vercel's default deployment-enabled behavior`);
+  }
   assert.equal(config.buildCommand, 'node scripts/build-vercel.mjs');
   assert.equal(config.outputDirectory, 'www-vercel');
   assert.ok(Array.isArray(config.routes), 'Vercel response-header rules must use the route schema');

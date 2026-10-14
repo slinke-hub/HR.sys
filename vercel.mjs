@@ -14,6 +14,11 @@ const securityHeaders = {
 };
 
 export const config = {
+  git: {
+    deploymentEnabled: {
+      'codex/schedule-task-fixes-integration': false,
+    },
+  },
   buildCommand: 'node scripts/build-vercel.mjs',
   outputDirectory: 'www-vercel',
   routes: [
