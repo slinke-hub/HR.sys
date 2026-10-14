@@ -1,14 +1,25 @@
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory = $true)]
+  [ValidateNotNullOrEmpty()]
+  [string]$StagingProjectRef
+)
+
 $ErrorActionPreference = 'Stop'
 $env:SUPABASE_TELEMETRY_DISABLED = '1'
 
 # This script is intentionally staging-only. It is prepared for a separately
 # approved integration run and must never be used against Production.
-$TargetRef = 'jcfyyxsuspukcmybyhjj'
+$ExpectedStagingRef = 'jcfyyxsuspukcmybyhjj'
 $ProductionRef = 'bbbetcdioiaozdjkvwxu'
+$TargetRef = $StagingProjectRef.Trim()
+if ($TargetRef -ceq $ProductionRef -or $TargetRef -cne $ExpectedStagingRef) {
+  throw 'Refusing a project reference that is not the explicitly approved staging project.'
+}
 $refPath = Join-Path $PSScriptRoot '..\.temp\project-ref'
 if (-not (Test-Path -LiteralPath $refPath)) { throw 'Missing linked Supabase project reference.' }
 $linked = (Get-Content -Raw -LiteralPath $refPath).Trim()
-if ($linked -cne $TargetRef -or $linked -ceq $ProductionRef) { throw "Refusing non-staging target: $linked" }
+if ($linked -cne $TargetRef -or $linked -ceq $ProductionRef) { throw 'The linked project is not the explicitly approved staging project.' }
 $base = "https://$TargetRef.supabase.co"
 
 function Invoke-SupabaseCliJson([string[]]$Arguments) {
@@ -62,13 +73,21 @@ function Rpc($name, $payload, $token = $null) { Raw POST "$base/rest/v1/rpc/$nam
 function ServiceRpc($name, $payload) { Raw POST "$base/rest/v1/rpc/$name" (Headers $service) $payload }
 function Denied($response) { return $response.status -in 400,401,403,404 }
 function Mark($name, $value) { $script:results[$name] = [bool]$value }
-function New-Password {
-  $bytes = New-Object byte[] 24
-  $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
-  try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
-  return ([Convert]::ToBase64String($bytes) + 'Aa9!')
+function Require-Success($response, [string]$operation) {
+  if ($response.status -notin 200..299) { throw "$operation failed in staging." }
 }
-function SignIn($email, $password) { Json (Raw POST "$base/auth/v1/token?grant_type=password" (Headers $anon) @{email=$email;password=$password}) }
+function Require-SyntheticAccessToken($profile, [string]$environmentVariable) {
+  $token = [Environment]::GetEnvironmentVariable($environmentVariable, 'Process')
+  if ([string]::IsNullOrWhiteSpace($token)) {
+    throw "Missing ephemeral access token for dedicated synthetic identity $($profile.employee_id)."
+  }
+  $identityResponse = Raw GET "$base/auth/v1/user" (Headers $anon $token.Trim())
+  $identity = Json $identityResponse
+  if ($identityResponse.status -notin 200..299 -or [string]$identity.id -cne [string]$profile.id) {
+    throw "Access token identity verification failed for dedicated synthetic identity $($profile.employee_id)."
+  }
+  return $token.Trim()
+}
 function Without-Schedule($pages) { return @($pages | Where-Object { $_ -ne 'schedule' }) }
 function With-Schedule($pages) { return @((Without-Schedule $pages) + 'schedule' | Select-Object -Unique) }
 
@@ -87,24 +106,37 @@ $cleanupFailed = $false
 $marker = "SCHEDULE AUTH TEST $([guid]::NewGuid())"
 
 try {
-  $profiles = @(Json (Raw GET "$base/rest/v1/profiles?employee_id=in.(TEST-EMPLOYEE,TEST-OUTSIDER)&select=id,employee_id,role,department_id,is_active" $serviceHeaders))
-  $subject = $profiles | Where-Object employee_id -eq 'TEST-EMPLOYEE' | Select-Object -First 1
-  $outsider = $profiles | Where-Object employee_id -eq 'TEST-OUTSIDER' | Select-Object -First 1
-  $adminProfile = @(Json (Raw GET "$base/rest/v1/profiles?role=eq.ADMIN&is_active=is.true&select=id,employee_id,role,department_id,is_active&limit=1" $serviceHeaders))[0]
-  if (-not $subject -or -not $outsider -or -not $adminProfile) { throw 'Required staging employee, outsider, or administrator profile is missing.' }
+  $requiredEmployeeIds = @('TEST-ADMIN', 'TEST-EMPLOYEE', 'TEST-OUTSIDER')
+  $profiles = @(Json (Raw GET "$base/rest/v1/profiles?employee_id=in.(TEST-ADMIN,TEST-EMPLOYEE,TEST-OUTSIDER)&select=id,employee_id,role,department_id,is_active" $serviceHeaders))
+  if ($profiles.Count -ne $requiredEmployeeIds.Count) { throw 'Dedicated synthetic staging profiles are missing or duplicated.' }
+  $profilesByEmployeeId = @{}
+  foreach ($profile in $profiles) {
+    $employeeId = [string]$profile.employee_id
+    if ($employeeId -notin $requiredEmployeeIds -or $profilesByEmployeeId.ContainsKey($employeeId)) {
+      throw 'Dedicated synthetic staging profile identity verification failed.'
+    }
+    $profilesByEmployeeId[$employeeId] = $profile
+  }
+  foreach ($employeeId in $requiredEmployeeIds) {
+    if (-not $profilesByEmployeeId.ContainsKey($employeeId)) { throw 'A required dedicated synthetic staging profile is unavailable.' }
+  }
+
+  $adminProfile = $profilesByEmployeeId['TEST-ADMIN']
+  $subject = $profilesByEmployeeId['TEST-EMPLOYEE']
+  $outsider = $profilesByEmployeeId['TEST-OUTSIDER']
+  if ([string]$adminProfile.role -cne 'ADMIN' -or [string]$subject.role -cne 'EMPLOYEE' -or [string]$outsider.role -cne 'EMPLOYEE') {
+    throw 'Dedicated synthetic staging profile roles do not match the required security matrix.'
+  }
+  if (@($profiles | Where-Object { $_.is_active -eq $false }).Count -gt 0) { throw 'All dedicated synthetic staging profiles must be active before the test.' }
   if (-not $subject.department_id) { throw 'TEST-EMPLOYEE requires a department for department-grant validation.' }
 
-  $authList = Json (Raw GET "$base/auth/v1/admin/users?per_page=1000" $serviceHeaders)
   $tokens = @{}
-  foreach ($profile in @($subject, $outsider, $adminProfile)) {
-    $user = @($authList.users) | Where-Object id -eq $profile.id | Select-Object -First 1
-    if (-not $user) { throw "Missing Auth identity for $($profile.id)" }
-    $password = New-Password
-    $reset = Raw PUT "$base/auth/v1/admin/users/$($profile.id)" $serviceHeaders @{password=$password;email_confirm=$true}
-    if ($reset.status -notin 200..299) { throw "Unable to prepare Auth identity $($profile.id)" }
-    $session = SignIn ([string]$user.email) $password
-    if (-not $session.access_token) { throw "Unable to authenticate $($profile.id)" }
-    $tokens[[string]$profile.id] = $session.access_token
+  foreach ($requirement in @(
+    @{ profile=$adminProfile; variable='HR_SYS_STAGING_TEST_ADMIN_TOKEN' },
+    @{ profile=$subject; variable='HR_SYS_STAGING_TEST_EMPLOYEE_TOKEN' },
+    @{ profile=$outsider; variable='HR_SYS_STAGING_TEST_OUTSIDER_TOKEN' }
+  )) {
+    $tokens[[string]$requirement.profile.id] = Require-SyntheticAccessToken $requirement.profile $requirement.variable
   }
   Mark identities_ready ($tokens.Count -eq 3)
 
@@ -123,9 +155,9 @@ try {
   $baselineUserPages = if ($permissionSnapshots.user.Count) { @($permissionSnapshots.user[0].allowed_pages) } else { @() }
   $baselineRolePages = if ($permissionSnapshots.role.Count) { @($permissionSnapshots.role[0].allowed_pages) } else { @() }
   $baselineDepartmentPages = if ($permissionSnapshots.department.Count) { @($permissionSnapshots.department[0].allowed_pages) } else { @() }
-  $null = Raw POST "$base/rest/v1/user_permissions?on_conflict=user_id" $serviceUpsertHeaders @{user_id=$subjectId;allowed_pages=(Without-Schedule $baselineUserPages)}
-  $null = Raw POST "$base/rest/v1/role_permissions?on_conflict=role" $serviceUpsertHeaders @{role=$roleKey;allowed_pages=(Without-Schedule $baselineRolePages)}
-  $null = Raw POST "$base/rest/v1/role_permissions?on_conflict=role" $serviceUpsertHeaders @{role=$departmentKey;allowed_pages=(Without-Schedule $baselineDepartmentPages)}
+  Require-Success (Raw POST "$base/rest/v1/user_permissions?on_conflict=user_id" $serviceUpsertHeaders @{user_id=$subjectId;allowed_pages=(Without-Schedule $baselineUserPages)}) 'Preparing the synthetic employee permission fixture'
+  Require-Success (Raw POST "$base/rest/v1/role_permissions?on_conflict=role" $serviceUpsertHeaders @{role=$roleKey;allowed_pages=(Without-Schedule $baselineRolePages)}) 'Preparing the synthetic role permission fixture'
+  Require-Success (Raw POST "$base/rest/v1/role_permissions?on_conflict=role" $serviceUpsertHeaders @{role=$departmentKey;allowed_pages=(Without-Schedule $baselineDepartmentPages)}) 'Preparing the synthetic department permission fixture'
 
   $subjectToken = $tokens[$subjectId]
   $outsiderToken = $tokens[$outsiderId]
@@ -144,7 +176,7 @@ try {
   $deniedDispatchRows = @(Json (ServiceRpc list_due_schedule_reminders_for_dispatch @{p_limit=500}))
   Mark denied_reminder_not_dispatchable (@($deniedDispatchRows | Where-Object id -eq $deniedFixture.id).Count -eq 0)
 
-  $null = Raw PATCH $userPermissionUrl $serviceHeaders @{allowed_pages=(With-Schedule $baselineUserPages)}
+  Require-Success (Raw PATCH $userPermissionUrl $serviceHeaders @{allowed_pages=(With-Schedule $baselineUserPages)}) 'Granting the synthetic employee Schedule access'
   Mark individual_grant ((Json (Rpc has_my_page_access @{p_page='schedule'} $subjectToken)) -eq $true)
   $authorizedDispatchRows = @(Json (ServiceRpc list_due_schedule_reminders_for_dispatch @{p_limit=500}))
   Mark authorized_reminder_dispatchable (@($authorizedDispatchRows | Where-Object id -eq $deniedFixture.id).Count -eq 1)
@@ -164,13 +196,13 @@ try {
   $crossDelete = Raw DELETE "$base/rest/v1/reminders?id=eq.$($created.id)" (Headers $anon $outsiderToken $true)
   Mark cross_employee_denied ($crossRead.Count -eq 0 -and @((Json $crossUpdate)).Count -eq 0 -and @((Json $crossDelete)).Count -eq 0)
 
-  $null = Raw PATCH $userPermissionUrl $serviceHeaders @{allowed_pages=(Without-Schedule $baselineUserPages)}
-  $null = Raw PATCH $rolePermissionUrl $serviceHeaders @{allowed_pages=(With-Schedule $baselineRolePages)}
+  Require-Success (Raw PATCH $userPermissionUrl $serviceHeaders @{allowed_pages=(Without-Schedule $baselineUserPages)}) 'Removing the synthetic employee Schedule grant'
+  Require-Success (Raw PATCH $rolePermissionUrl $serviceHeaders @{allowed_pages=(With-Schedule $baselineRolePages)}) 'Granting the synthetic role Schedule access'
   Mark role_grant ((Json (Rpc has_my_page_access @{p_page='schedule'} $subjectToken)) -eq $true)
-  $null = Raw PATCH $rolePermissionUrl $serviceHeaders @{allowed_pages=(Without-Schedule $baselineRolePages)}
-  $null = Raw PATCH $departmentPermissionUrl $serviceHeaders @{allowed_pages=(With-Schedule $baselineDepartmentPages)}
+  Require-Success (Raw PATCH $rolePermissionUrl $serviceHeaders @{allowed_pages=(Without-Schedule $baselineRolePages)}) 'Removing the synthetic role Schedule grant'
+  Require-Success (Raw PATCH $departmentPermissionUrl $serviceHeaders @{allowed_pages=(With-Schedule $baselineDepartmentPages)}) 'Granting the synthetic department Schedule access'
   Mark department_grant ((Json (Rpc has_my_page_access @{p_page='schedule'} $subjectToken)) -eq $true)
-  $null = Raw PATCH $departmentPermissionUrl $serviceHeaders @{allowed_pages=(Without-Schedule $baselineDepartmentPages)}
+  Require-Success (Raw PATCH $departmentPermissionUrl $serviceHeaders @{allowed_pages=(Without-Schedule $baselineDepartmentPages)}) 'Removing the synthetic department Schedule grant'
 
   Mark revoked_same_session ((Json (Rpc has_my_page_access @{p_page='schedule'} $subjectToken)) -eq $false)
   $revokedDispatchRows = @(Json (ServiceRpc list_due_schedule_reminders_for_dispatch @{p_limit=500}))
@@ -180,10 +212,10 @@ try {
   $revokedDelete = Raw DELETE "$base/rest/v1/reminders?id=eq.$($created.id)" (Headers $anon $subjectToken $true)
   Mark revoked_crud_denied ($revokedRead.Count -eq 0 -and @((Json $revokedUpdate)).Count -eq 0 -and @((Json $revokedDelete)).Count -eq 0)
 
-  $null = Raw PATCH "$base/rest/v1/profiles?id=eq.$subjectId" $serviceHeaders @{is_active=$false}
-  $null = Raw PATCH $userPermissionUrl $serviceHeaders @{allowed_pages=(With-Schedule $baselineUserPages)}
+  Require-Success (Raw PATCH "$base/rest/v1/profiles?id=eq.$subjectId" $serviceHeaders @{is_active=$false}) 'Deactivating the synthetic employee fixture'
+  Require-Success (Raw PATCH $userPermissionUrl $serviceHeaders @{allowed_pages=(With-Schedule $baselineUserPages)}) 'Granting the inactive synthetic employee fixture Schedule access'
   Mark inactive_profile_denied ((Json (Rpc has_my_page_access @{p_page='schedule'} $subjectToken)) -eq $false)
-  $null = Raw PATCH "$base/rest/v1/profiles?id=eq.$subjectId" $serviceHeaders @{is_active=[bool]$subject.is_active}
+  Require-Success (Raw PATCH "$base/rest/v1/profiles?id=eq.$subjectId" $serviceHeaders @{is_active=[bool]$subject.is_active}) 'Restoring the synthetic employee activity state'
 } finally {
   if ($subject) {
     $subjectId = [string]$subject.id
