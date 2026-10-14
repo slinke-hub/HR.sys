@@ -168,7 +168,28 @@ const ALLOWED_STORAGE_MIME_TYPES = new Set([
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ]);
+const SIGNED_STORAGE_NEGATIVE_TTL_MS = 30000;
 const signedStorageUrlCache = new Map();
+const failedSignedStorageUrlCache = new Map();
+const signedStorageUrlRequests = new Map();
+let signedStorageCacheUserId = null;
+let signedStorageCacheGeneration = 0;
+
+function clearSignedStorageUrlCaches(nextUserId = null) {
+    signedStorageUrlCache.clear();
+    failedSignedStorageUrlCache.clear();
+    signedStorageUrlRequests.clear();
+    signedStorageCacheUserId = nextUserId ? String(nextUserId) : null;
+    signedStorageCacheGeneration += 1;
+}
+
+function setSignedStorageCacheUser(userId) {
+    const normalizedUserId = userId ? String(userId) : null;
+    if (normalizedUserId !== signedStorageCacheUserId) {
+        clearSignedStorageUrlCaches(normalizedUserId);
+    }
+    return normalizedUserId;
+}
 const isMissingRpcError = error => {
     const code = String(error?.code || '');
     const message = String(error?.message || error || '').toLowerCase();
@@ -222,6 +243,9 @@ if (window.hrRuntimeConfigError) {
         global: { fetch: fetchSupabaseWithTimeout },
         db: { timeout: SUPABASE_REQUEST_TIMEOUT_MS, retry: false },
         realtime: { params: { eventsPerSecond: 10 } }
+    });
+    supabaseClient.auth.onAuthStateChange((_event, session) => {
+        clearSignedStorageUrlCaches(session?.user?.id || null);
     });
     window.supabaseClient = supabaseClient;
     console.log("Supabase client initialized successfully.");
@@ -280,23 +304,47 @@ const db = {
         if (!supabaseClient || !value) return value || '';
         const reference = parseStorageReference(value);
         if (!reference || !PRIVATE_STORAGE_BUCKETS.has(reference.bucket)) return value;
+        const { data: { session } = {} } = await supabaseClient.auth.getSession();
+        const userId = setSignedStorageCacheUser(session?.user?.id || null);
+        if (!userId) return '';
         const safeExpiresIn = Math.min(Math.max(Number(expiresIn) || 300, 60), 300);
-        const cacheKey = `${reference.bucket}/${reference.path}`;
+        const cacheKey = `${userId}:${reference.bucket}/${reference.path}`;
         const cached = signedStorageUrlCache.get(cacheKey);
         if (cached?.expiresAt > Date.now() + 60000) return cached.url;
-        const { data, error } = await supabaseClient.functions.invoke('file-signed-url', {
-            body: { bucket: reference.bucket, path: reference.path, expiresIn: safeExpiresIn }
-        });
-        if (error || !data?.signedUrl) {
-            console.warn(`Unable to create a signed URL for ${reference.bucket}.`, error?.message || error || 'Unknown error');
-            return '';
+        if (cached) signedStorageUrlCache.delete(cacheKey);
+        const failed = failedSignedStorageUrlCache.get(cacheKey);
+        if (failed?.expiresAt > Date.now()) return '';
+        if (failed) failedSignedStorageUrlCache.delete(cacheKey);
+        const pending = signedStorageUrlRequests.get(cacheKey);
+        if (pending) return pending;
+
+        const requestGeneration = signedStorageCacheGeneration;
+        const request = (async () => {
+            const { data, error } = await supabaseClient.functions.invoke('file-signed-url', {
+                body: { bucket: reference.bucket, path: reference.path, expiresIn: safeExpiresIn }
+            });
+            const sessionIsCurrent = signedStorageCacheGeneration === requestGeneration
+                && signedStorageCacheUserId === userId;
+            if (!sessionIsCurrent) return '';
+            if (error || !data?.signedUrl) {
+                failedSignedStorageUrlCache.set(cacheKey, { expiresAt: Date.now() + SIGNED_STORAGE_NEGATIVE_TTL_MS });
+                console.warn(`Unable to create a signed URL for ${reference.bucket}.`, error?.message || error || 'Unknown error');
+                return '';
+            }
+            const signedUrl = data.signedUrl;
+            failedSignedStorageUrlCache.delete(cacheKey);
+            signedStorageUrlCache.set(cacheKey, {
+                url: signedUrl,
+                expiresAt: Date.now() + Math.max(60, Math.min(Number(data.expiresIn) || safeExpiresIn, 300) - 60) * 1000
+            });
+            return signedUrl;
+        })();
+        signedStorageUrlRequests.set(cacheKey, request);
+        try {
+            return await request;
+        } finally {
+            if (signedStorageUrlRequests.get(cacheKey) === request) signedStorageUrlRequests.delete(cacheKey);
         }
-        const signedUrl = data.signedUrl;
-        signedStorageUrlCache.set(cacheKey, {
-            url: signedUrl,
-            expiresAt: Date.now() + Math.max(60, Math.min(Number(data.expiresIn) || safeExpiresIn, 300) - 60) * 1000
-        });
-        return signedUrl;
     },
 
     async resolveStorageReferences(values, expiresIn = 300) {
@@ -2739,6 +2787,9 @@ const db = {
         if (!supabaseClient) return { success: false };
         try {
             const normalizedContent = String(content || '').trim();
+            if (!normalizedContent) {
+                return { success: false, error: new Error('Comment text is required.') };
+            }
             const secure = await supabaseClient.rpc('add_task_comment', {
                 p_task_id: taskId,
                 p_content: normalizedContent,

@@ -144,8 +144,8 @@ try {
   assert.match(dbSource, /hrResolveSupabaseRuntimeConfig\(runtimeConfig/);
   assert.match(dbSource, /headers:\s*\{\s*apikey:\s*SUPABASE_ANON_KEY,\s*'Content-Type':\s*'application\/json'/);
   assert.match(serviceWorkerSource, /url\.pathname === '\/runtime-config\.js'[\s\S]*?fetch\(request, \{ cache: 'no-store' \}\)/);
-  assert.match(serviceWorkerSource, /muqam-hr-mobile-v258-schedule-auth/);
-  assert.match(appSource, /sw\.js\?v=2026101310-schedule-auth/);
+  assert.match(serviceWorkerSource, /muqam-hr-mobile-v259-schedule-task-fixes/);
+  assert.match(appSource, /sw\.js\?v=2026101401-schedule-task-fixes/);
   assert.match(vercelSource, /src: '\/runtime-config\.js'[\s\S]*?'Cache-Control': 'no-cache, no-store, must-revalidate'/);
   assert.match(server, /const mode = String\(process\.env\.HR_SYS_RUNTIME \|\| ''\)\.trim\(\)/);
   assert.match(server, /Explicit local runtime environment is required/);

@@ -7,10 +7,10 @@ const worker = fs.readFileSync('sw.js', 'utf8');
 const vercel = fs.readFileSync('vercel.mjs', 'utf8');
 
 assert.match(html, /runtime-config\.js/);
-assert.match(html, /js\/db\.js\?v=2026101310-schedule-auth/);
-assert.match(html, /js\/app\.js\?v=2026101310-schedule-auth/);
-assert.match(app, /sw\.js\?v=2026101310-schedule-auth/);
-assert.match(worker, /const CACHE_NAME = 'muqam-hr-mobile-v258-schedule-auth'/);
+assert.match(html, /js\/db\.js\?v=2026101401-schedule-task-fixes/);
+assert.match(html, /js\/app\.js\?v=2026101401-schedule-task-fixes/);
+assert.match(app, /sw\.js\?v=2026101401-schedule-task-fixes/);
+assert.match(worker, /const CACHE_NAME = 'muqam-hr-mobile-v259-schedule-task-fixes'/);
 assert.doesNotMatch(worker.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || '', /runtime-config\.js/);
 assert.match(
   worker,

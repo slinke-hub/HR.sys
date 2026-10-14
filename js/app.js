@@ -608,7 +608,7 @@ async function syncLegacyLocalProfilePhoto(profile) {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=2026101310-schedule-auth', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026101401-schedule-task-fixes', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -5259,7 +5259,12 @@ window.handleTaskCommentSubmit = async function (e) {
     const attachButton = document.getElementById('taskCommentAttachButton');
     const content = input.value.trim();
     const files = Array.from(fileInput?.files || []);
-    if ((!content && !files.length) || !id) return;
+    if (!id) return;
+    if (!content) {
+        showToast(taskDetailText('Comment text is required.', 'نص التعليق مطلوب.'), 'warning');
+        input.focus();
+        return;
+    }
     if (!canInteractWithTask(window.activeTaskDetail) || String(window.activeTaskDetail?.id) !== String(id)) {
         showToast(window.t('msg_toast_9') || 'You do not have access to this task.', 'warning');
         return;
