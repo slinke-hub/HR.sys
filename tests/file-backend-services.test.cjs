@@ -38,6 +38,16 @@ assert.doesNotMatch(db, /if\s*\(isMissingRpcError\(attachmentError\)\)[\s\S]{0,8
 assert.doesNotMatch(db, /if\s*\(isMissingRpcError\(error\)\)[\s\S]{0,600}from\(['"]task_attachments['"]\)\.select/i);
 assert.match(db, /resolveStorageReference\(value, expiresIn = 300\)/);
 assert.match(db, /functions\.invoke\('file-signed-url'/);
+assert.match(db, /SIGNED_STORAGE_NEGATIVE_TTL_MS = 30000/);
+assert.match(db, /failedSignedStorageUrlCache = new Map\(\)/);
+assert.match(db, /signedStorageUrlRequests = new Map\(\)/);
+assert.match(db, /signedStorageCacheGeneration \+= 1/);
+assert.match(db, /const cacheKey = `\$\{userId\}:\$\{reference\.bucket\}\/\$\{reference\.path\}`/);
+assert.match(db, /const pending = signedStorageUrlRequests\.get\(cacheKey\)/);
+assert.match(db, /signedStorageCacheGeneration === requestGeneration/);
+assert.match(db, /signedStorageCacheUserId === userId/);
+assert.match(db, /auth\.onAuthStateChange\(\(_event, session\) => \{/);
+assert.match(db, /clearSignedStorageUrlCaches\(session\?\.user\?\.id \|\| null\)/);
 assert.doesNotMatch(db, /storage\s*\.from\(reference\.bucket\)\s*\.createSignedUrl/);
 assert.match(signedUrlFunction, /MAX_SIGNED_URL_TTL_SECONDS = 300/);
 assert.match(signedUrlFunction, /Math\.min\(/);
