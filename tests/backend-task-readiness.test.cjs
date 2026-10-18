@@ -40,7 +40,8 @@ for (const op of ['completeTask','reopenTask','updateTaskComment','deleteTaskCom
 assert.match(app, /db\.fetchTaskActivity/);
 assert.match(app, /task-v2-inline-status/);
 assert.match(app, /handleTaskCardStageChange\('\$\{task\.id\}', this\.value\)/);
-assert.match(app, /\['canceled', taskDetailText\('Canceled', 'ملغاة'\)\]/);
+assert.match(app, /\['canceled', taskDetailText\('Canceled — temporarily unavailable', 'ملغاة — الإلغاء غير متاح مؤقتًا'\)\][\s\S]*?\? 'disabled'/,
+  'Canceled remains displayable but disabled in the editable status selector');
 assert.match(app, /status-\$\{taskStatusClass\(task\.status\)\}/);
 assert.match(app, /updateTaskStatusControlClass\(select, actualStatus\)/);
 assert.match(app, /task-v2-table-header/);

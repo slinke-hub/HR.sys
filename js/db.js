@@ -168,7 +168,28 @@ const ALLOWED_STORAGE_MIME_TYPES = new Set([
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ]);
+const SIGNED_STORAGE_NEGATIVE_TTL_MS = 30000;
 const signedStorageUrlCache = new Map();
+const failedSignedStorageUrlCache = new Map();
+const signedStorageUrlRequests = new Map();
+let signedStorageCacheUserId = null;
+let signedStorageCacheGeneration = 0;
+
+function clearSignedStorageUrlCaches(nextUserId = null) {
+    signedStorageUrlCache.clear();
+    failedSignedStorageUrlCache.clear();
+    signedStorageUrlRequests.clear();
+    signedStorageCacheUserId = nextUserId ? String(nextUserId) : null;
+    signedStorageCacheGeneration += 1;
+}
+
+function setSignedStorageCacheUser(userId) {
+    const normalizedUserId = userId ? String(userId) : null;
+    if (normalizedUserId !== signedStorageCacheUserId) {
+        clearSignedStorageUrlCaches(normalizedUserId);
+    }
+    return normalizedUserId;
+}
 const isMissingRpcError = error => {
     const code = String(error?.code || '');
     const message = String(error?.message || error || '').toLowerCase();
@@ -223,6 +244,9 @@ if (window.hrRuntimeConfigError) {
         db: { timeout: SUPABASE_REQUEST_TIMEOUT_MS, retry: false },
         realtime: { params: { eventsPerSecond: 10 } }
     });
+    supabaseClient.auth.onAuthStateChange((_event, session) => {
+        clearSignedStorageUrlCaches(session?.user?.id || null);
+    });
     window.supabaseClient = supabaseClient;
     console.log("Supabase client initialized successfully.");
 } else {
@@ -274,29 +298,58 @@ let appCache = {
     jobTitles: { data: null, time: 0 }
 };
 const CACHE_TTL = 60000; // 60 seconds
+function failedDataLoadArray() {
+    const rows = [];
+    Object.defineProperty(rows, 'loadFailed', { value: true, enumerable: false });
+    return rows;
+}
 const db = {
 
     async resolveStorageReference(value, expiresIn = 300) {
         if (!supabaseClient || !value) return value || '';
         const reference = parseStorageReference(value);
         if (!reference || !PRIVATE_STORAGE_BUCKETS.has(reference.bucket)) return value;
+        const { data: { session } = {} } = await supabaseClient.auth.getSession();
+        const userId = setSignedStorageCacheUser(session?.user?.id || null);
+        if (!userId) return '';
         const safeExpiresIn = Math.min(Math.max(Number(expiresIn) || 300, 60), 300);
-        const cacheKey = `${reference.bucket}/${reference.path}`;
+        const cacheKey = `${userId}:${reference.bucket}/${reference.path}`;
         const cached = signedStorageUrlCache.get(cacheKey);
         if (cached?.expiresAt > Date.now() + 60000) return cached.url;
-        const { data, error } = await supabaseClient.functions.invoke('file-signed-url', {
-            body: { bucket: reference.bucket, path: reference.path, expiresIn: safeExpiresIn }
-        });
-        if (error || !data?.signedUrl) {
-            console.warn(`Unable to create a signed URL for ${reference.bucket}.`, error?.message || error || 'Unknown error');
-            return '';
+        if (cached) signedStorageUrlCache.delete(cacheKey);
+        const failed = failedSignedStorageUrlCache.get(cacheKey);
+        if (failed?.expiresAt > Date.now()) return '';
+        if (failed) failedSignedStorageUrlCache.delete(cacheKey);
+        const pending = signedStorageUrlRequests.get(cacheKey);
+        if (pending) return pending;
+
+        const requestGeneration = signedStorageCacheGeneration;
+        const request = (async () => {
+            const { data, error } = await supabaseClient.functions.invoke('file-signed-url', {
+                body: { bucket: reference.bucket, path: reference.path, expiresIn: safeExpiresIn }
+            });
+            const sessionIsCurrent = signedStorageCacheGeneration === requestGeneration
+                && signedStorageCacheUserId === userId;
+            if (!sessionIsCurrent) return '';
+            if (error || !data?.signedUrl) {
+                failedSignedStorageUrlCache.set(cacheKey, { expiresAt: Date.now() + SIGNED_STORAGE_NEGATIVE_TTL_MS });
+                console.warn(`Unable to create a signed URL for ${reference.bucket}.`, error?.message || error || 'Unknown error');
+                return '';
+            }
+            const signedUrl = data.signedUrl;
+            failedSignedStorageUrlCache.delete(cacheKey);
+            signedStorageUrlCache.set(cacheKey, {
+                url: signedUrl,
+                expiresAt: Date.now() + Math.max(60, Math.min(Number(data.expiresIn) || safeExpiresIn, 300) - 60) * 1000
+            });
+            return signedUrl;
+        })();
+        signedStorageUrlRequests.set(cacheKey, request);
+        try {
+            return await request;
+        } finally {
+            if (signedStorageUrlRequests.get(cacheKey) === request) signedStorageUrlRequests.delete(cacheKey);
         }
-        const signedUrl = data.signedUrl;
-        signedStorageUrlCache.set(cacheKey, {
-            url: signedUrl,
-            expiresAt: Date.now() + Math.max(60, Math.min(Number(data.expiresIn) || safeExpiresIn, 300) - 60) * 1000
-        });
-        return signedUrl;
     },
 
     async resolveStorageReferences(values, expiresIn = 300) {
@@ -1047,7 +1100,7 @@ const db = {
     // USER MANAGEMENT (ADMIN)
     // ==========================================
     async fetchUsers(includeInactive = false) {
-        if (!supabaseClient) return [];
+        if (!supabaseClient) return failedDataLoadArray();
         try {
             const columns = 'id, emp_index, full_name, display_name_ar, nationality, iqama_number, phone_number, role, created_at, manager_id, base_salary, department_id, job_title, job_title_ar, avatar_url, last_login, is_active';
             let query = supabaseClient.from('profiles').select(columns);
@@ -1066,7 +1119,7 @@ const db = {
             return (Array.isArray(data) ? data.map(applyI18nGetters) : applyI18nGetters(data));
         } catch (error) {
             console.error("fetchUsers Error:", error);
-            return [];
+            return failedDataLoadArray();
         }
     },
     async fetchProjectAssignmentEmployees() {
@@ -3160,7 +3213,7 @@ const db = {
     // Messaging (New)
     // ==========================================
     async fetchAllProfiles(forceRefresh = false) {
-        if (!supabaseClient) return [];
+        if (!supabaseClient) return failedDataLoadArray();
         if (!forceRefresh && appCache.profiles.data && (Date.now() - appCache.profiles.time < CACHE_TTL)) {
             return appCache.profiles.data;
         }
@@ -3175,7 +3228,7 @@ const db = {
             return mapped;
         } catch (error) {
             console.error("fetchAllProfiles Error:", error);
-            return [];
+            return failedDataLoadArray();
         }
     },
     async fetchReminders(userId) {
@@ -3612,7 +3665,7 @@ const db = {
     },
     
     async fetchDepartments(forceRefresh = false) {
-        if (!supabaseClient) return [];
+        if (!supabaseClient) return failedDataLoadArray();
         if (!forceRefresh && appCache.departments.data && (Date.now() - appCache.departments.time < CACHE_TTL)) {
             return appCache.departments.data;
         }
@@ -3627,7 +3680,7 @@ const db = {
             return mapped;
         } catch (error) {
             console.error("fetchDepartments Error:", error);
-            return [];
+            return failedDataLoadArray();
         }
     },
     async fetchJobTitles(forceRefresh = false) {

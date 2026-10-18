@@ -598,7 +598,7 @@ async function syncLegacyLocalProfilePhoto(profile) {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js?v=2026100801', { scope: '/' });
+            const registration = await navigator.serviceWorker.register('/sw.js?v=2026101802-production-task-manager-hotfix', { scope: '/' });
             registration.update().catch(() => {});
             console.log('MUQAM HR background service registered.');
         } catch (error) {
@@ -8081,7 +8081,72 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
     };
 };
 
+let taskDirectoryRenderGeneration = 0;
+let taskDirectoryCacheUserId = null;
+let taskDirectoryAuthUserId = null;
+let taskDirectoryAuthSessionKnown = false;
+
+function clearTaskDirectorySessionCaches() {
+    window.taskManagerDirectoryStatus = { departmentsFailed: false, profilesFailed: false };
+    window.taskAllUsersCache = [];
+    window.taskDepartmentsCache = [];
+    window.taskDepartmentSupervisors = [];
+    window.taskWatcherDirectoryCache = [];
+    window.taskListsCache = [];
+    window.taskEmployeeAccessGrants = [];
+    window.taskDepartmentManagerByName = {};
+    window.taskCache = {};
+    window.visibleTaskIds = [];
+    window.taskAssigneeOptionsCache = '';
+    window.taskWatcherOptionsCache = '';
+    window.taskPeopleFilterOptionsCache = '';
+    if (window.viewHTMLCache) window.viewHTMLCache.tasks = '';
+
+    ['taskDepartmentManagerName', 'editTaskDepartmentManagerName', 'taskSupervisorId', 'editTaskSupervisorId']
+        .forEach(id => {
+            const field = document.getElementById(id);
+            if (!field) return;
+            field.value = '';
+            if (field.dataset) delete field.dataset.managerState;
+        });
+}
+
+function invalidateTaskDirectoryLoads(nextUserId = null, force = false) {
+    const normalizedUserId = normalizeTaskManagerIdentifier(nextUserId) || null;
+    if (!force && normalizedUserId === taskDirectoryCacheUserId) return;
+    taskDirectoryRenderGeneration += 1;
+    taskDirectoryCacheUserId = normalizedUserId;
+    clearTaskDirectorySessionCaches();
+}
+
+function updateTaskDirectoryAuthIdentity(sessionUserId, force = false) {
+    const normalizedUserId = normalizeTaskManagerIdentifier(sessionUserId) || null;
+    const changed = !taskDirectoryAuthSessionKnown || normalizedUserId !== taskDirectoryAuthUserId;
+    taskDirectoryAuthSessionKnown = true;
+    taskDirectoryAuthUserId = normalizedUserId;
+    if (changed || force) invalidateTaskDirectoryLoads(normalizedUserId, true);
+}
+
+function beginTaskDirectoryLoad() {
+    const userId = normalizeTaskManagerIdentifier(currentUser?.id);
+    if (!taskDirectoryAuthSessionKnown) updateTaskDirectoryAuthIdentity(userId);
+    if (!userId || userId !== taskDirectoryAuthUserId) return null;
+    if (userId !== taskDirectoryCacheUserId) invalidateTaskDirectoryLoads(userId);
+    taskDirectoryRenderGeneration += 1;
+    return { generation: taskDirectoryRenderGeneration, userId };
+}
+
+function isCurrentTaskDirectoryLoad(context) {
+    return !!context
+        && context.generation === taskDirectoryRenderGeneration
+        && context.userId === normalizeTaskManagerIdentifier(currentUser?.id)
+        && context.userId === taskDirectoryCacheUserId
+        && isTaskWorkspaceActive();
+}
+
 async function renderTasks() {
+    const taskDirectoryContext = beginTaskDirectoryLoad();
+    if (!isCurrentTaskDirectoryLoad(taskDirectoryContext)) return null;
     const tasksPromise = db.fetchTasks();
     const taskUsersPromise = canAssignTasksCompanyWide() ? db.fetchAllProfiles(true) : db.fetchUsers();
     const [fetchedUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists, watcherDirectory, taskListDirectory, projects, employeeAccessGrants] = await Promise.all([
@@ -8095,11 +8160,16 @@ async function renderTasks() {
         db.fetchProjects(currentUser.id),
         db.fetchTaskEmployeeAccessGrants()
     ]);
+    if (!isCurrentTaskDirectoryLoad(taskDirectoryContext)) return null;
     const allUsers = canAssignTasksCompanyWide()
         ? [...new Map([...(window.companyEmployeeNameDirectory || []), ...(fetchedUsers || [])]
             .filter(user => user?.id && user.is_active !== false)
             .map(user => [String(user.id), user])).values()]
         : (fetchedUsers || []);
+    window.taskManagerDirectoryStatus = {
+        departmentsFailed: allDepartments?.loadFailed === true,
+        profilesFailed: fetchedUsers?.loadFailed === true
+    };
     
     window.taskDepartmentSupervisors = departmentSupervisors || [];
     const usersById = new Map((allUsers || []).map(user => [String(user.id), user]));
@@ -8213,7 +8283,7 @@ async function renderTasks() {
         .map(({ user, label }) => `<option value="${escapeHTML(user.id)}">${escapeHTML(label)}</option>`)
         .join('');
     
-    return ''; 
+    return taskDirectoryContext;
 }
 
 async function renderArchivedTasks() {
@@ -8331,7 +8401,6 @@ function renderTaskCard(task) {
     const assigneeName = window.formatEmployeeName(task.assignee) || (assignedUsers[0] ? window.formatEmployeeName(assignedUsers[0]) : '') || t('task_unknown') || 'Unassigned';
     const assigneeProfiles = assignedUsers.length ? assignedUsers : [task.assignee].filter(Boolean);
     const assigneeLabel = assigneeProfiles.map(user => window.formatEmployeeName(user)).filter(Boolean).join(', ') || assigneeName;
-    const isCrmProposalDesignTask = task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN';
     const isOverdue = task.status === 'late' || (task.due_date && !['completed', 'Approved'].includes(task.status) && new Date(`${task.due_date}T23:59:59`) < new Date());
     const dueLabel = task.due_date
         ? new Intl.DateTimeFormat(currentLang === 'ar' ? 'ar-SA' : 'en', { month: 'short', day: 'numeric' }).format(new Date(`${task.due_date}T12:00:00`))
@@ -8345,8 +8414,10 @@ function renderTaskCard(task) {
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
                 ${canChangeTaskStage ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select status-${taskStatusClass(task.status)}" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
-                    ['todo','To do'],['in_progress','In progress'], ...(isCrmProposalDesignTask ? [['late','Late']] : []), ['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done'],['canceled','Canceled']
-                ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
+                    ['todo','To do'],['in_progress','In progress'], ['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done'],
+                    ...(task.status === 'late' ? [['late', taskDetailValue(task.status, 'status')]] : []),
+                    ['canceled', taskDetailText('Canceled — temporarily unavailable', 'ملغاة — الإلغاء غير متاح مؤقتًا')]
+                ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''} ${['late', 'canceled'].includes(String(value).toLowerCase()) ? 'disabled' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
                 <button type="button" class="task-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>
                     <i data-lucide="users"></i>
                     <span class="task-assignee-full-name">${escapeHTML(assigneeLabel)}</span>
@@ -8413,7 +8484,8 @@ window.addEventListener('resize', closeTaskContextMenu);
 window.addEventListener('scroll', closeTaskContextMenu, true);
 
 async function renderTasksV2() {
-    await renderTasks();
+    const taskDirectoryContext = await renderTasks();
+    if (!isCurrentTaskDirectoryLoad(taskDirectoryContext)) return null;
 
     window.taskV2HealthFilter = window.taskV2HealthFilter || 'all';
 
@@ -8591,14 +8663,13 @@ async function renderTasksV2() {
         const inlineStatusOptions = [
             ['todo', taskDetailText('To do', 'للعمل')],
             ['in_progress', taskDetailText('In progress', 'قيد التنفيذ')],
-            ['late', taskDetailText('Late', 'متأخر')],
             ['completed', taskDetailText('Completed', 'مكتمل')],
-            ['canceled', taskDetailText('Canceled', 'ملغاة')]
+            ['canceled', taskDetailText('Canceled — temporarily unavailable', 'ملغاة — الإلغاء غير متاح مؤقتًا')]
         ];
         if (!inlineStatusOptions.some(([value]) => value === task.status)) {
             inlineStatusOptions.unshift([task.status, taskDetailValue(task.status, 'status')]);
         }
-        const inlineStatusSelect = `<label class="task-v2-inline-status" onclick="event.stopPropagation()"><span class="sr-only">${taskDetailText('Task status', 'حالة المهمة')}</span><select class="task-v2-stage-select status-${taskStatusClass(task.status)}" aria-label="${taskDetailText('Change task status', 'تغيير حالة المهمة')}" onchange="window.handleTaskCardStageChange('${task.id}', this.value)" ${canChangeTaskStageRecord(task) ? '' : 'disabled'}>${inlineStatusOptions.map(([value, label]) => `<option value="${escapeHTML(value)}" ${task.status === value ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></label>`;
+        const inlineStatusSelect = `<label class="task-v2-inline-status" onclick="event.stopPropagation()"><span class="sr-only">${taskDetailText('Task status', 'حالة المهمة')}</span><select class="task-v2-stage-select status-${taskStatusClass(task.status)}" aria-label="${taskDetailText('Change task status', 'تغيير حالة المهمة')}" onchange="window.handleTaskCardStageChange('${task.id}', this.value)" ${canChangeTaskStageRecord(task) ? '' : 'disabled'}>${inlineStatusOptions.map(([value, label]) => `<option value="${escapeHTML(value)}" ${task.status === value ? 'selected' : ''} ${['late', 'canceled'].includes(String(value).toLowerCase()) ? 'disabled' : ''}>${escapeHTML(label)}</option>`).join('')}</select></label>`;
 
         return `
             <article class="task-v2-row ${isCompleted ? 'completed' : ''} ${isNestedSubtask ? 'task-v2-subtask-row' : 'task-v2-main-row'}" data-task-id="${task.id}" data-parent-task-id="${task.parent_task_id || ''}" data-task-depth="${taskDepth}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="--task-subtask-depth:${taskDepth}; cursor:pointer;">
@@ -9242,6 +9313,7 @@ async function refreshTaskWorkspaceInBackground() {
     };
     try {
         const content = await renderTasksV2();
+        if (content === null) return;
         const previousContent = window.viewHTMLCache.tasks;
         window.viewHTMLCache.tasks = content;
         // Realtime events can arrive in bursts. If the rendered result did not
@@ -9620,6 +9692,10 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus) {
         showToast(taskDetailText('This task is available in view-only mode.', 'هذه المهمة متاحة للعرض فقط.'), 'warning');
         return { error: new Error('Task is view-only') };
     }
+    if (String(requestedStatus || '').toLowerCase() === 'canceled') {
+        showToast(taskDetailText('Task cancellation is temporarily unavailable.', 'إلغاء المهام غير متاح مؤقتًا.'), 'warning');
+        return { error: new Error('Task cancellation is temporarily unavailable') };
+    }
     const previousStatus = task.status;
     const result = await window.handleUpdateTaskStatus(taskId, requestedStatus);
     if (result?.error) {
@@ -9829,7 +9905,12 @@ window.closeCreateTaskModal = function () {
 };
 
 window.handleTaskDepartmentChange = function (prefix = 'new', value = '', selectedAssigneeId = '') {
-    const selectedDepartment = (window.taskDepartmentsCache || []).find(item => item.id === value || item.name === value || getCanonicalDepartmentName(item) === value);
+    const normalizedValue = normalizeTaskManagerIdentifier(value);
+    const selectedDepartment = (window.taskDepartmentsCache || []).find(item =>
+        (normalizedValue && normalizeTaskManagerIdentifier(item.id) === normalizedValue)
+        || item.name === value
+        || getCanonicalDepartmentName(item) === value
+    );
     const departmentName = getCanonicalDepartmentName(selectedDepartment) || value;
     updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId);
     updateTaskDepartmentManager(prefix, selectedDepartment);
@@ -9849,16 +9930,71 @@ window.handleTaskDepartmentChange = function (prefix = 'new', value = '', select
 };
 
 function updateTaskDepartmentManager(prefix, department) {
-    const managerId = department?.head_id || department?.manager_id || '';
-    const manager = (window.taskAllUsersCache || []).find(user => user.id === managerId);
+    const result = resolveTaskDepartmentManager(department, window.taskAllUsersCache || [], {
+        ...window.taskManagerDirectoryStatus,
+        currentUserId: currentUser?.id,
+        ownDepartmentId: currentUserProfile?.department_id
+            || currentUser?.department_id
+            || (window.taskAllUsersCache || []).find(user => normalizeTaskManagerIdentifier(user.id) === normalizeTaskManagerIdentifier(currentUser?.id))?.department_id,
+        ownDepartmentSupervisors: window.taskDepartmentSupervisors || []
+    });
     const nameInput = document.getElementById(prefix === 'new' ? 'taskDepartmentManagerName' : 'editTaskDepartmentManagerName');
     const idInput = document.getElementById(prefix === 'new' ? 'taskSupervisorId' : 'editTaskSupervisorId');
+    const manager = result.manager;
+    const managerName = manager
+        ? (window.formatEmployeeName(manager) || manager.full_name || manager.display_name_ar || '').trim()
+        : '';
+    const labels = {
+        no_manager: currentLang === 'ar' ? 'لا يوجد مدير معيّن للقسم' : 'No department manager assigned',
+        name_unavailable: currentLang === 'ar' ? 'المدير معيّن لكن الاسم غير متاح' : 'Manager assigned, name unavailable',
+        load_error: currentLang === 'ar' ? 'تعذر تحميل بيانات مدير القسم' : 'Department manager data could not be loaded'
+    };
     if (nameInput) {
-        nameInput.value = manager ? (window.formatEmployeeName(manager) || manager.full_name || '') : '';
-        nameInput.placeholder = currentLang === 'ar' ? 'لا يوجد مدير محدد' : 'No manager assigned';
+        nameInput.value = managerName || labels[result.state];
+        nameInput.dataset.managerState = managerName ? 'resolved' : result.state;
+        nameInput.placeholder = currentLang === 'ar' ? 'يُحدد تلقائياً' : 'Selected automatically';
     }
-    if (idInput) idInput.value = managerId;
+    if (idInput) idInput.value = result.managerId;
 }
+
+function normalizeTaskManagerIdentifier(value) {
+    return String(value ?? '').trim().toLowerCase();
+}
+
+function resolveTaskDepartmentManager(department, users = [], {
+    departmentsFailed = false,
+    profilesFailed = false,
+    currentUserId = null,
+    ownDepartmentId = null,
+    ownDepartmentSupervisors = []
+} = {}) {
+    const headId = normalizeTaskManagerIdentifier(department?.head_id);
+    const managerId = headId || normalizeTaskManagerIdentifier(department?.manager_id);
+    const result = { managerId: headId ? String(department.head_id).trim() : (managerId ? String(department.manager_id).trim() : ''), manager: null, state: 'no_manager' };
+
+    if (departmentsFailed) return { ...result, state: 'load_error' };
+    if (!managerId) return result;
+
+    const normalizedUsers = Array.isArray(users) ? users : [];
+    const profile = normalizedUsers.find(user => normalizeTaskManagerIdentifier(user?.id) === managerId);
+    if (profile && String(profile.full_name || profile.display_name_ar || '').trim()) {
+        return { ...result, manager: profile, state: 'resolved' };
+    }
+
+    const isOwnDepartment = !!currentUserId
+        && normalizeTaskManagerIdentifier(department?.id) !== ''
+        && normalizeTaskManagerIdentifier(department?.id) === normalizeTaskManagerIdentifier(ownDepartmentId);
+    if (isOwnDepartment) {
+        const scopedSupervisor = (Array.isArray(ownDepartmentSupervisors) ? ownDepartmentSupervisors : [])
+            .find(supervisor => normalizeTaskManagerIdentifier(supervisor?.id || supervisor?.supervisor_id) === managerId);
+        if (scopedSupervisor && String(scopedSupervisor.full_name || '').trim()) {
+            return { ...result, manager: scopedSupervisor, state: 'resolved' };
+        }
+    }
+
+    return { ...result, state: profilesFailed ? 'load_error' : 'name_unavailable' };
+}
+window.resolveTaskDepartmentManager = resolveTaskDepartmentManager;
 
 function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = '') {
     const select = document.getElementById(prefix === 'new' ? 'taskAssignee' : 'editTaskAssignee');
@@ -10778,12 +10914,15 @@ window.openEditTaskModal = async function (id) {
         if (customDeptSelect) {
             customDeptSelect.innerHTML = `<option value="">None</option>`;
             (window.taskDepartmentsCache || window.departmentsCache || []).forEach(d => {
-                const isSelected = task.task_department_id === d.id || task.department === d.name ? 'selected' : '';
+                const isSelected = normalizeTaskManagerIdentifier(task.task_department_id) === normalizeTaskManagerIdentifier(d.id) || task.department === d.name ? 'selected' : '';
                 customDeptSelect.innerHTML += `<option value="${d.id}" ${isSelected}>${escapeHTML(d.name)}</option>`;
             });
             setTimeout(() => {
-                const selectedDepartment = (window.taskDepartmentsCache || []).find(d => d.id === task.task_department_id || d.name === task.department);
+                const taskDepartmentId = normalizeTaskManagerIdentifier(task.task_department_id);
+                const selectedDepartment = (window.taskDepartmentsCache || []).find(d => normalizeTaskManagerIdentifier(d.id) === taskDepartmentId || d.name === task.department);
                 window.handleTaskDepartmentChange('edit', selectedDepartment?.id || '', task.assignee_id || '');
+                const supervisorInput = document.getElementById('editTaskSupervisorId');
+                if (supervisorInput && task.supervisor_id) supervisorInput.value = task.supervisor_id;
                 const taskSubType = task.sub_type || task.task_sub_type || '';
                 const regularUrl = document.getElementById('editTaskRegularUrl');
                 if (regularUrl) regularUrl.value = task.source_link || '';
@@ -12831,6 +12970,7 @@ window.renderView = async function (viewId, isBack = false) {
                     setTimeout(() => window.scheduleTaskWorkspaceRefresh?.(0), 0);
                 } else {
                     content = await renderTasksV2();
+                    if (content === null) return;
                 }
                 break;
             case 'archived_tasks': content = await renderArchivedTasks(); break;
@@ -16994,6 +17134,7 @@ async function initApp() {
 
     // Listen for session expiration or logout
     db.onAuthStateChange((event, session) => {
+        updateTaskDirectoryAuthIdentity(session?.user?.id || null, !session || event === 'SIGNED_OUT');
         if (event === 'SIGNED_OUT' || !session) {
             stopNotificationsRealtime();
             stopTasksRealtime();

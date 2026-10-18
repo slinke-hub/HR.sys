@@ -19,8 +19,11 @@ assert.match(migration, /IF NEW\.assignee_id IS NULL THEN\s+NEW\.assignee_id := 
 
 assert.match(app, /updateTaskDepartmentManager\(prefix, selectedDepartment\)/);
 assert.match(app, /id="taskDepartmentManagerName"/);
+assert.match(app, /id="taskDepartmentManagerName" type="text" class="form-control" readonly aria-readonly="true"/);
+assert.match(app, /id="taskSupervisorId" type="hidden"/);
 assert.match(html, /id="editTaskDepartmentManagerName"/);
 assert.match(app, /selectedDepartment\?\.head_id\s+\|\| selectedDepartment\?\.manager_id/);
+assert.match(app, /updates\.supervisor_id = document\.getElementById\('editTaskSupervisorId'\)\?\.value \|\| selectedDepartment\?\.head_id \|\| selectedDepartment\?\.manager_id/);
 assert.match(migration, /tasks_apply_creation_defaults/);
 assert.match(migration, /department\.head_id/);
 
