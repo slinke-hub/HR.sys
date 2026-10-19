@@ -9,9 +9,7 @@ const { pathToFileURL } = require('node:url');
   const projectRoot = path.join(__dirname, '..');
   assert.equal(config.buildCommand, 'node scripts/build-vercel.mjs');
   assert.equal(config.outputDirectory, 'www-vercel');
-  assert.deepEqual(config.git?.deploymentEnabled, {
-    'codex/production-task-manager-hotfix': false,
-  });
+  assert.equal(config.git?.deploymentEnabled, undefined, 'Preview deployments must not be suppressed by branch configuration');
   for (const competingConfig of ['vercel.json', 'vercel.ts', 'vercel.js', 'vercel.cjs', 'vercel.mts']) {
     assert.equal(
       fs.existsSync(path.join(projectRoot, competingConfig)),

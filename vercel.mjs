@@ -16,11 +16,6 @@ const securityHeaders = {
 export const config = {
   buildCommand: 'node scripts/build-vercel.mjs',
   outputDirectory: 'www-vercel',
-  git: {
-    deploymentEnabled: {
-      'codex/production-task-manager-hotfix': false,
-    },
-  },
   routes: [
     {
       src: '/(.*)',
