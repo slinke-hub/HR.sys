@@ -1,11 +1,24 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 (async () => {
   const moduleUrl = new URL('../vercel.mjs?static=1', pathToFileURL(__filename));
   const config = (await import(moduleUrl.href)).config;
+  const projectRoot = path.join(__dirname, '..');
   assert.equal(config.buildCommand, 'node scripts/build-vercel.mjs');
   assert.equal(config.outputDirectory, 'www-vercel');
+  assert.deepEqual(config.git?.deploymentEnabled, {
+    'codex/production-task-manager-hotfix': false,
+  });
+  for (const competingConfig of ['vercel.json', 'vercel.ts', 'vercel.js', 'vercel.cjs', 'vercel.mts']) {
+    assert.equal(
+      fs.existsSync(path.join(projectRoot, competingConfig)),
+      false,
+      `${competingConfig} must not compete with the sole vercel.mjs configuration`,
+    );
+  }
   assert.ok(Array.isArray(config.routes), 'Vercel response-header rules must use the route schema');
   assert.equal(config.headers, undefined, 'legacy nested headers config must not be emitted');
   for (const [routeIndex, route] of config.routes.entries()) {
