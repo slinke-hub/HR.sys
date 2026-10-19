@@ -32,6 +32,10 @@ const { pathToFileURL } = require('node:url');
   }
   const securityRoute = config.routes.find(({ src }) => src === '/(.*)');
   assert.ok(securityRoute, 'security header route is required');
+  const runtimeConfigRoute = config.routes.find(({ src }) => src === '/runtime-config.js');
+  assert.ok(runtimeConfigRoute, 'runtime-config.js must have an explicit cache policy');
+  assert.equal(runtimeConfigRoute.headers['Cache-Control'], 'no-store');
+  assert.equal(runtimeConfigRoute.continue, true);
   const csp = securityRoute.headers['Content-Security-Policy'];
   assert.match(csp, /bbbetcdioiaozdjkvwxu\.supabase\.co/);
   assert.match(csp, /jcfyyxsuspukcmybyhjj\.supabase\.co/);
