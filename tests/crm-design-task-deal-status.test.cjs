@@ -26,10 +26,10 @@ assert.match(app, /function renderDealWorkflowDesignTaskStatus\(workflow, isMq08
 assert.match(app, /id="dealWorkflowDesignTaskStatusSelect"/);
 assert.match(app, /window\.handleDealWorkflowDesignTaskStatusChange = async function/);
 assert.match(app, /window\.taskV2ChangeStage\(task\.id, taskStatus\)/);
-assert.match(app, /Complete · Waiting for approval/);
+assert.match(app, /Complete/);
 assert.match(db, /completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids/);
 assert.match(dashboard, /designInProgress: 'In progress'/);
-assert.match(dashboard, /designCompleted: 'Complete · Waiting for approval'/);
+assert.match(dashboard, /designCompleted: 'Complete'/);
 assert.match(dashboard, /designInProgress, classes: 'tw-bg-amber-50 tw-text-amber-700/);
 assert.match(dashboard, /designCompleted, classes: 'tw-bg-emerald-50 tw-text-emerald-700/);
 assert.match(css, /\.task-crm-design-status-control/);
@@ -37,8 +37,8 @@ assert.match(css, /\.task-crm-design-status-select/);
 assert.match(css, /\.deal-workflow-design-status-actions/);
 assert.match(html, /css\/components\.css\?v=\d+/);
 assert.match(html, /js\/db\.js\?v=\d+/);
-assert.match(html, /js\/crm-dashboard\.bundle\.js\?v=2026100408/);
+assert.match(html, /js\/crm-dashboard\.bundle\.js\?v=2026102201/);
 assert.match(html, /js\/app\.js\?v=\d+/);
-assert.match(worker, /muqam-hr-mobile-v255/);
+assert.match(worker, /muqam-hr-mobile-v256/);
 
 console.log('MQ-08 CRM Design task deal-status selector tests passed.');

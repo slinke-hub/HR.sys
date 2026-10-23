@@ -19,7 +19,7 @@ assert.match(app, /deal-presentation-proposal-section/);
 assert.match(app, /deal-presentation-identity-section/);
 assert.match(app, /<figcaption>[\s\S]*file\.description/);
 assert.match(app, /db\.replaceDealPresentationAttachments\(dealId, currentUser\.id, replacementEntries/);
-assert.match(app, /isProposalDesignWorkflow[\s\S]*if \(isProposalDesignWorkflow\) return false/);
+assert.match(app, /viewing a deal must never mutate its stage/);
 assert.match(app, /task\.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN'/);
 assert.match(app, /\['late','Late'\]/);
 
@@ -27,7 +27,7 @@ assert.match(db, /async replaceDealPresentationAttachments\(dealId, userId, entr
 assert.match(db, /rpc\('archive_crm_deal_attachments'/);
 assert.match(db, /p_categories: replacementCategories/);
 assert.doesNotMatch(db.match(/async replaceDealPresentationAttachments[\s\S]*?async logDealActivity/)?.[0] || '', /previousPaths|\.delete\(\)[\s\S]*previousIds/);
-assert.match(db, /async fetchPendingCrmApprovals\(\)[\s\S]*rpc\('list_crm_deals_secure'\)/);
+assert.match(db, /async fetchPendingCrmApprovals\(\) \{\s*return \[\]/);
 assert.match(db, /async fetchDealPresentationAttachments\(dealId\)/);
 // Presentation assets now come through the authoritative secure attachment
 // RPC; category filtering is applied to the returned DTOs.

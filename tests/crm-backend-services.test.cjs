@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
-const migration = fs.readFileSync(path.join(root, 'supabase', 'staging', 'deal_backend_services.sql'), 'utf8');
+const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260930102000_deal_backend_services.sql'), 'utf8');
 const db = fs.readFileSync(path.join(root, 'js', 'db.js'), 'utf8');
 const contract = fs.readFileSync(path.join(root, 'src', 'shared', 'domain-services.ts'), 'utf8');
 

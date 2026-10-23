@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
-const sql = fs.readFileSync(path.join(root, 'supabase', 'staging', 'client_backend_services.sql'), 'utf8');
+const sql = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260930101000_client_backend_services.sql'), 'utf8');
 const db = fs.readFileSync(path.join(root, 'js', 'db.js'), 'utf8');
 const shared = fs.readFileSync(path.join(root, 'src', 'shared', 'domain-services.ts'), 'utf8');
 const bridge = fs.readFileSync(path.join(root, 'js', 'shared-services.js'), 'utf8');

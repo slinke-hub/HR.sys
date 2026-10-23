@@ -528,7 +528,7 @@ window.removeTaskDependencyFromDetail = async function (dependencyId, taskId, ev
 
 function crmDesignDealStatusFromTask(task) {
     const status = String(task?.status || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
-    if (['completed', 'approved', 'pending approval'].includes(status)) return 'COMPLETED';
+    if (['completed', 'approved'].includes(status)) return 'COMPLETED';
     if (status === 'late') return 'LATE';
     return 'IN_PROGRESS';
 }
@@ -4674,7 +4674,7 @@ async function prepareTeamworkTaskDetail(task) {
         const attachmentHTML = managedAttachmentHTML + looseAttachmentHTML + sharedDealFilesHTML;
         const showCrmDesignDealStatus = canMq08ChangeCrmDesignDealStatus(task);
         const crmDesignDealStatus = crmDesignDealStatusFromTask(task);
-        const crmDesignStatusLocked = ['completed', 'approved', 'pending approval'].includes(String(task.status || '').trim().toLowerCase());
+        const crmDesignStatusLocked = ['completed', 'approved'].includes(String(task.status || '').trim().toLowerCase());
         const crmDesignDealStatusHTML = showCrmDesignDealStatus ? `<section class="task-crm-design-status-control" aria-labelledby="crmDesignDealStatusLabel">
             <div class="task-crm-design-status-copy"><span class="task-crm-design-status-icon"><i data-lucide="gauge"></i></span><div><label id="crmDesignDealStatusLabel" for="crmDesignDealStatusSelect">${taskDetailText('Deal status', 'حالة الصفقة')}</label><small>${crmDesignStatusLocked ? taskDetailText('The completed Design is awaiting or has received approval.', 'التصميم المكتمل بانتظار الاعتماد أو تم اعتماده.') : taskDetailText('This status also updates the linked deal in CRM.', 'تُحدّث هذه الحالة الصفقة المرتبطة في إدارة علاقات العملاء أيضاً.')}</small></div></div>
             <select id="crmDesignDealStatusSelect" class="form-control task-crm-design-status-select" data-task-id="${escapeHTML(task.id)}" onchange="handleCrmDesignDealStatusChange(this)" ${crmDesignStatusLocked ? 'disabled' : ''}>
@@ -4770,14 +4770,14 @@ window.handleCrmDesignDealStatusChange = async function (select) {
     const result = await window.taskV2ChangeStage(taskId, requestedTaskStatus);
     if (result?.error) {
         select.value = previousDealStatus;
-        select.disabled = ['completed', 'approved', 'pending approval'].includes(String(task.status || '').trim().toLowerCase());
+        select.disabled = ['completed', 'approved'].includes(String(task.status || '').trim().toLowerCase());
         return;
     }
 
     const savedTaskStatus = result?.status || requestedTaskStatus;
     task.status = savedTaskStatus;
     select.value = crmDesignDealStatusFromTask(task);
-    select.disabled = ['completed', 'approved', 'pending approval'].includes(String(savedTaskStatus).trim().toLowerCase());
+    select.disabled = ['completed', 'approved'].includes(String(savedTaskStatus).trim().toLowerCase());
     const detailStatus = document.getElementById('detailsTaskStatus');
     if (detailStatus) detailStatus.textContent = taskDetailValue(savedTaskStatus, 'status');
     window.setTaskDetailInfoTab?.('details');
@@ -8345,7 +8345,7 @@ function renderTaskCard(task) {
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
                 ${canChangeTaskStage ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select status-${taskStatusClass(task.status)}" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
-                    ['todo','To do'],['in_progress','In progress'], ...(isCrmProposalDesignTask ? [['late','Late']] : []), ['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done'],['canceled','Canceled']
+                    ['todo','To do'],['in_progress','In progress'], ...(isCrmProposalDesignTask ? [['late','Late']] : []), ['review','Review'],...(task.crm_workflow_kind ? [] : [['Pending Approval','Awaiting approval']]),['completed','Done'],['canceled','Canceled']
                 ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
                 <button type="button" class="task-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>
                     <i data-lucide="users"></i>
@@ -10350,7 +10350,7 @@ function isDailyRepeatingTask(task) {
 
 function bypassesTaskCompletionApproval(task) {
     return isTaskAdmin() || task?.created_by === currentUser?.id || isDailyRepeatingTask(task)
-        || task?.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN';
+        || ['CONTACT_DISCUSSION', 'QUOTE_PROPOSAL_DESIGN'].includes(task?.crm_workflow_kind);
 }
 
 let crmDesignCompletionResolver = null;
@@ -10477,7 +10477,7 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
         const comment = await db.addTaskComment(
             task.id,
             currentUser.id,
-            taskDetailText('Completed Design files submitted for CRM approval.', 'تم إرسال ملفات التصميم المكتمل لاعتماد إدارة علاقات العملاء.'),
+            taskDetailText('Completed Design files submitted.', 'تم إرسال ملفات التصميم المكتمل.'),
             commentAttachments
         );
         if (!comment.success) throw comment.error || new Error(taskDetailText('The Design files could not be shared in the task comments.', 'تعذرت مشاركة ملفات التصميم في تعليقات المهمة.'));
@@ -10511,7 +10511,7 @@ window.handleUpdateTaskStatus = async function (id, status) {
 
     const needsCrmDesignSubmission = status === 'completed'
         && task?.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN'
-        && !['completed', 'Approved', 'Pending Approval'].includes(String(task.status || ''));
+        && !['completed', 'Approved'].includes(String(task.status || ''));
     if (needsCrmDesignSubmission) {
         const submitted = await window.openCrmDesignCompletionModal(task);
         if (!submitted) {
@@ -14331,7 +14331,7 @@ async function renderCRM() {
     /* Legacy CRM markup is retained below temporarily for backwards-compatible
        modal and workflow handlers; the React dashboard above is the active view. */
 
-    const stages = ['LEAD', 'QUALIFICATION', 'PITCH', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
+    const stages = ['LEAD', 'QUALIFICATION', 'PITCH', 'PROPOSAL', 'WON', 'LOST'];
 
     let boardHtml = '';
     stages.forEach(stage => {
@@ -14470,7 +14470,6 @@ const dealLifecycleStages = [
     { stage: 'LEAD', label: 'crm_lead' },
     { stage: 'QUALIFICATION', label: 'crm_contact' },
     { stage: 'PITCH', label: 'crm_presentation' },
-    { stage: 'NEGOTIATION', label: 'crm_discussion' },
     { stage: 'WON', label: 'crm_won' },
     { stage: 'LOST', label: 'crm_lost' }
 ];
@@ -14480,7 +14479,7 @@ let activeDealWorkflowContext = null;
 function canonicalDealLifecycleStage(stage) {
     const value = String(stage || 'LEAD').toUpperCase();
     if (value === 'CONTACTED') return 'QUALIFICATION';
-    if (value === 'PROPOSAL') return 'PITCH';
+    if (['PROPOSAL', 'NEGOTIATION'].includes(value)) return 'PITCH';
     return value;
 }
 
@@ -14494,32 +14493,9 @@ function areDealApprovalsComplete(workflow) {
     return approvals.length > 0 && approvals.every(step => String(step.status || '').toUpperCase() === 'APPROVED');
 }
 
-async function ensureApprovedDealIsInDiscussion(deal, workflow) {
-    if (!deal || !areDealApprovalsComplete(workflow)) return false;
-    const previousStage = canonicalDealLifecycleStage(deal.stage);
-    if (['NEGOTIATION', 'WON', 'LOST'].includes(previousStage)) return false;
-    const isProposalDesignWorkflow = String(deal.approval_type || '').toUpperCase() === 'QUOTE_PROPOSAL';
-    // Quote + proposal requests remain in Presentation until the MQ-08 task
-    // and its own approval cycle are complete. The database moves that deal
-    // to Discussion after the last Design approval.
-    if (isProposalDesignWorkflow) return false;
-
-    // Finalization is an atomic server-side operation. The client only asks
-    // the database to verify unanimous approval and perform the transition.
-    const stageResult = await (window.hrDomainServices?.deals?.finalizeApproval
-        ? window.hrDomainServices.deals.finalizeApproval(deal.id)
-        : db.finalizeCrmDealApproval(deal.id));
-    if (!stageResult.success) {
-        showToast(stageResult.error?.message || t('crm_stage_update_failed') || 'Could not move the approved deal to Discussion.', 'danger');
-        return false;
-    }
-
-    await db.logDealActivity(deal.id, 'STAGE_CHANGED', previousStage, 'NEGOTIATION', t('crm_approval_completed') || 'Internal approval completed');
-    deal.stage = 'NEGOTIATION';
-    deal.workflow_status = 'APPROVED';
-    window.setCrmDealStageLocally?.(String(deal.id), 'NEGOTIATION');
-    void window.refreshCrmDashboardInBackground?.();
-    return true;
+async function ensureApprovedDealIsInDiscussion() {
+    // Approval records are historical; viewing a deal must never mutate its stage.
+    return false;
 }
 
 function renderDealLifecycle(deal) {
@@ -14916,22 +14892,16 @@ function renderDealWorkflowDesignTaskStatus(workflow, isMq08Viewer) {
     }
 
     const status = crmDesignDealStatusFromTask(task);
-    const awaitingApproval = String(task.status || '').trim().toLowerCase() === 'pending approval';
-    const locked = awaitingApproval || ['completed', 'approved'].includes(String(task.status || '').trim().toLowerCase());
-    const badgeClass = awaitingApproval || status === 'COMPLETED' ? 'success' : (status === 'LATE' ? 'danger' : 'warning');
-    const badgeLabel = awaitingApproval
-        ? taskDetailText('Complete · Waiting for approval', 'مكتملة · بانتظار الاعتماد')
-        : status === 'COMPLETED'
-            ? taskDetailText('Complete', 'مكتملة')
-            : status === 'LATE'
-                ? taskDetailText('Late', 'متأخرة')
-                : taskDetailText('In Progress', 'قيد التنفيذ');
+    // Historical pending tasks may now be completed directly.
+    const locked = ['completed', 'approved'].includes(String(task.status || '').trim().toLowerCase());
+    const badgeClass = status === 'COMPLETED' ? 'success' : (status === 'LATE' ? 'danger' : 'warning');
+    const badgeLabel = status === 'COMPLETED'
+        ? taskDetailText('Complete', 'مكتملة')
+        : status === 'LATE' ? taskDetailText('Late', 'متأخرة') : taskDetailText('In Progress', 'قيد التنفيذ');
 
     container.innerHTML = `<div class="task-crm-design-status-copy">
             <span class="task-crm-design-status-icon"><i data-lucide="gauge"></i></span>
-            <div><label for="dealWorkflowDesignTaskStatusSelect">${taskDetailText("Deal's task status", 'حالة مهمة الصفقة')}</label><small>${awaitingApproval
-                ? taskDetailText('The completed Design is waiting for the approval team.', 'التصميم المكتمل بانتظار اعتماد فريق الموافقات.')
-                : taskDetailText('Completing the task starts the Design approval cycle.', 'إكمال المهمة يبدأ دورة اعتماد التصميم.')}</small></div>
+            <div><label for="dealWorkflowDesignTaskStatusSelect">${taskDetailText("Deal's task status", 'حالة مهمة الصفقة')}</label><small>${taskDetailText('Upload the completed Design files to finish the task.', 'ارفع ملفات التصميم المكتمل لإنهاء المهمة.')}</small></div>
         </div>
         <div class="deal-workflow-design-status-actions">
             <span class="status-badge ${badgeClass}">${escapeHTML(badgeLabel)}</span>
@@ -14967,21 +14937,20 @@ function renderDealWorkflowContents(workflow) {
         if (isMq08Viewer) documentsSection.hidden = false;
     }
     const setupSection = document.getElementById('workflowSetupSection');
-    const canRestartApproval = !workflow.approvals.length || workflow.approvals.some(step => step.status === 'REJECTED');
+    const canSubmitPresentation = !isMq08Viewer && !['WON', 'LOST'].includes(String(activeDealWorkflowContext?.deal?.stage || '').toUpperCase());
     if (setupSection) {
-        setupSection.hidden = isMq08Viewer;
-        setupSection.style.display = !isMq08Viewer && canRestartApproval ? 'block' : 'none';
+        setupSection.hidden = !canSubmitPresentation;
+        setupSection.style.display = canSubmitPresentation ? 'block' : 'none';
     }
     const approverGrid = setupSection?.querySelector('.workflow-approver-grid');
     const setupHelp = setupSection?.querySelector('.page-subtitle');
     const setupButton = setupSection?.querySelector('button.btn-primary');
-    const isPresentationWorkflow = Boolean(activeDealWorkflowContext?.deal?.approval_type);
-    if (approverGrid) approverGrid.style.display = isPresentationWorkflow ? 'none' : '';
-    if (setupHelp && isPresentationWorkflow) setupHelp.textContent = t('crm_edit_resend_help') || 'Upload the revised files and resend the request to the same approval group.';
+    if (approverGrid) approverGrid.style.display = 'none';
+    if (setupHelp) setupHelp.textContent = t('crm_edit_resend_help') || 'Upload the required files and submit the presentation.';
     if (setupButton) {
-        setupButton.onclick = isPresentationWorkflow ? window.openPresentationRequestFromWorkflow : window.startDealApprovalWorkflow;
-        setupButton.dataset.i18n = isPresentationWorkflow ? 'crm_edit_resend' : 'crm_start_approval';
-        setupButton.textContent = isPresentationWorkflow ? (t('crm_edit_resend') || 'Edit files and resend') : (t('crm_start_approval') || 'Start Approval');
+        setupButton.onclick = window.openPresentationRequestFromWorkflow;
+        setupButton.dataset.i18n = 'crm_edit_resend';
+        setupButton.textContent = t('crm_edit_resend') || 'Submit presentation';
     }
 
     const attachmentCategories = new Set(workflow.attachments.map(file => String(file.category || '').toUpperCase()));
@@ -14997,7 +14966,7 @@ function renderDealWorkflowContents(workflow) {
 
     const approvalsEl = document.getElementById('dealApprovalSteps');
     approvalsEl.innerHTML = workflow.approvals.length ? workflow.approvals.map(step => {
-        const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
+        const canDecide = false; // Historical records are read-only.
         const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
         return `<article class="deal-approval-step ${step.status.toLowerCase()}">
             <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
@@ -15019,13 +14988,13 @@ function renderDealWorkflowContents(workflow) {
                 : `<a class="crm-design-review-document" href="${escapeHTML(fileUrl)}" target="_blank" rel="noopener"><i data-lucide="file-text"></i><span><strong>${escapeHTML(fileName)}</strong><small>${taskDetailText('Open completed Design PDF', 'فتح ملف PDF للتصميم المكتمل')}</small></span><i data-lucide="external-link"></i></a>`;
         }).join('');
         approvalsEl.innerHTML += `<section class="crm-design-review-files">
-            <header><i data-lucide="palette"></i><div><h4>${taskDetailText('Completed Design files', 'ملفات التصميم المكتمل')}</h4><p>${taskDetailText('Review every submitted file before approving or rejecting the Design task.', 'راجع جميع الملفات المرسلة قبل اعتماد مهمة التصميم أو رفضها.')}</p></div></header>
+            <header><i data-lucide="palette"></i><div><h4>${taskDetailText('Completed Design files', 'ملفات التصميم المكتمل')}</h4><p>${taskDetailText('Completed Design deliverables.', 'ملفات التصميم المكتمل.')}</p></div></header>
             ${designFileCards ? `<div class="crm-design-review-grid">${designFileCards}</div>` : `<p class="empty-state-inline">${taskDetailText('No completed Design files were submitted.', 'لم يتم إرسال ملفات التصميم المكتمل.')}</p>`}
         </section>`;
     }
     if (workflow.designApprovals?.length) {
         approvalsEl.innerHTML += `<h4 class="deal-design-approval-title">${escapeHTML(t('crm_design_approval') || 'Design task approval')}</h4>` + workflow.designApprovals.map(step => {
-            const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
+            const canDecide = false; // Historical records are read-only.
             const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
             return `<article class="deal-approval-step ${step.status.toLowerCase()}">
                 <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
@@ -15589,11 +15558,7 @@ window.dropDeal = async (ev, newStage) => {
     const oldStage = ev.dataTransfer.getData('oldStage') || (card ? card.getAttribute('data-stage') : null);
     if (oldStage === newStage) return { success: true, reason: 'same_stage', dealId, oldStage, newStage };
 
-    if ((newStage === 'NEGOTIATION' || newStage === 'WON') && card?.getAttribute('data-workflow-status') !== 'APPROVED') {
-        showToast(t('crm_approval_required') || 'Complete all internal approvals before advancing this deal.', 'warning');
-        await window.openDealWorkflowModal(dealId);
-        return { success: false, reason: 'approval_required', dealId, oldStage, newStage };
-    }
+    if (newStage === 'NEGOTIATION') return { success: false, reason: 'retired_stage' };
 
     if (newStage === 'PITCH') {
         window.openCrmPresentationChoiceModal(dealId, oldStage);
@@ -15620,7 +15585,7 @@ window.dropDeal = async (ev, newStage) => {
         ? window.hrDomainServices.deals.changeStage(dealId, newStage)
         : db.updateDealStage(dealId, newStage));
     if (res.success) {
-        await db.logDealActivity(dealId, 'STAGE_CHANGED', oldStage, newStage, null);
+        // The stage RPC records this activity in the same transaction.
         showToast(t('toast_deal_moved_to') + newStage, "success");
         void window.refreshCrmDashboardInBackground?.();
         return { success: true, dealId, oldStage, newStage };
@@ -18461,7 +18426,7 @@ async function renderApprovals() {
         const ownDepartment = (departments || []).find(department => department.id === profile.department_id);
         if (ownDepartment && /manager|supervisor/i.test(profile.job_title || '') || ownDepartment && ['MANAGER', 'SUPERVISOR'].includes(currentUserRole)) departmentNames.add(ownDepartment.name);
     }
-    const pendingTasks = (allTasks || []).filter(task => task.crm_workflow_kind !== 'QUOTE_PROPOSAL_DESIGN' && String(task.status || '').trim().toLowerCase() === 'pending approval').filter(task =>
+    const pendingTasks = (allTasks || []).filter(task => !['CONTACT_DISCUSSION', 'QUOTE_PROPOSAL_DESIGN'].includes(task.crm_workflow_kind) && String(task.status || '').trim().toLowerCase() === 'pending approval').filter(task =>
         isAdmin || departmentNames.has(task.department) || (task.watchers || []).includes(currentUser?.id)
     );
     const taskRows = pendingTasks.map(task => {

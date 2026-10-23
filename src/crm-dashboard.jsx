@@ -20,9 +20,7 @@ const COPY = {
     activeClients: 'Active clients', wonDeals: 'Won deals', openDeals: 'Open deals',
     activityLabel: 'Client activity', noAnalytics: 'No client analytics yet',
     account: 'account', accounts: 'accounts', today: 'Today', daysAgo: 'days ago', viewDeal: 'View deal', editDeal: 'Edit deal', deleteDeal: 'Delete deal', unassigned: 'Unassigned',
-    approvalPending: 'Approval pending', approvalApproved: 'Approved', approvalRejected: 'Needs revision',
-    designInProgress: 'In progress', designLate: 'Late', designCompleted: 'Complete · Waiting for approval',
-    designApprovalPending: 'Design approval pending', designRejected: 'Design changes required'
+    designInProgress: 'In progress', designLate: 'Late', designCompleted: 'Complete',
   },
   ar: {
     dashboard: 'لوحة القيادة', employees: 'الموظفين', payroll: 'الرواتب', time: 'الوقت والحضور', crm: 'إدارة علاقات العملاء',
@@ -37,9 +35,7 @@ const COPY = {
     activeClients: 'العملاء النشطون', wonDeals: 'الصفقات الفائزة', openDeals: 'الصفقات المفتوحة',
     activityLabel: 'نشاط العميل', noAnalytics: 'لا توجد تحليلات للعملاء بعد',
     account: 'حساب', accounts: 'حسابات', today: 'اليوم', daysAgo: 'أيام مضت', viewDeal: 'عرض الصفقة', editDeal: 'تعديل الصفقة', deleteDeal: 'حذف الصفقة', unassigned: 'غير معيّن',
-    approvalPending: 'بانتظار الاعتماد', approvalApproved: 'معتمدة', approvalRejected: 'تحتاج تعديلاً',
-    designInProgress: 'قيد التنفيذ', designLate: 'متأخر', designCompleted: 'مكتملة · بانتظار الاعتماد',
-    designApprovalPending: 'بانتظار اعتماد التصميم', designRejected: 'التصميم يحتاج تعديلاً'
+    designInProgress: 'قيد التنفيذ', designLate: 'متأخر', designCompleted: 'مكتملة',
   }
 };
 
@@ -47,7 +43,6 @@ const STAGES = [
   { key: 'LEAD', dbStage: 'LEAD', label: 'lead', tone: 'tw-bg-sky-500', soft: 'tw-bg-sky-50', border: 'tw-border-sky-200' },
   { key: 'CONTACT', dbStage: 'QUALIFICATION', label: 'contact', tone: 'tw-bg-cyan-500', soft: 'tw-bg-cyan-50', border: 'tw-border-cyan-200' },
   { key: 'PRESENTATION', dbStage: 'PITCH', label: 'presentation', tone: 'tw-bg-indigo-500', soft: 'tw-bg-indigo-50', border: 'tw-border-indigo-200' },
-  { key: 'DISCUSSION', dbStage: 'NEGOTIATION', label: 'discussion', tone: 'tw-bg-amber-500', soft: 'tw-bg-amber-50', border: 'tw-border-amber-200' },
   { key: 'WON', dbStage: 'WON', label: 'won', tone: 'tw-bg-emerald-500', soft: 'tw-bg-emerald-50', border: 'tw-border-emerald-200' },
   { key: 'LOST', dbStage: 'LOST', label: 'lost', tone: 'tw-bg-slate-500', soft: 'tw-bg-slate-50', border: 'tw-border-slate-200' }
 ];
@@ -56,7 +51,7 @@ const normalizeStage = stage => {
   const value = String(stage || 'LEAD').toUpperCase();
   if (['CONTACTED', 'QUALIFICATION'].includes(value)) return 'CONTACT';
   if (['PITCH', 'PROPOSAL'].includes(value)) return 'PRESENTATION';
-  if (value === 'NEGOTIATION') return 'DISCUSSION';
+  if (value === 'NEGOTIATION') return 'PRESENTATION'; // Historical records stay visible.
   return value;
 };
 const money = value => new Intl.NumberFormat('en-SA', { maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -92,7 +87,6 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals, canViewFinancial
   const details = deal.details || deal.technical_description || deal.event_type || deal.title;
   const profile = deal.assignee || {};
   const isLost = normalizeStage(deal.stage) === 'LOST';
-  const workflowStatus = String(deal.workflow_status || 'NOT_STARTED').toUpperCase();
   const designTaskStatus = String(deal.design_task_status || '').toUpperCase();
   const designDueDate = deal.design_task_due_date ? new Date(`${deal.design_task_due_date}T23:59:59`) : null;
   const designIsLate = designTaskStatus !== 'COMPLETED' && (designTaskStatus === 'LATE' || (designDueDate && designDueDate < new Date()));
@@ -103,19 +97,7 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals, canViewFinancial
         ? { label: text.designCompleted, classes: 'tw-bg-emerald-50 tw-text-emerald-700 tw-ring-1 tw-ring-emerald-200' }
         : { label: text.designInProgress, classes: 'tw-bg-amber-50 tw-text-amber-700 tw-ring-1 tw-ring-amber-200' }
     : null;
-  const workflowBadge = designBadge || (workflowStatus === 'PENDING_APPROVAL'
-    ? { label: text.approvalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
-    : workflowStatus === 'APPROVED'
-      ? { label: text.approvalApproved, classes: 'tw-bg-emerald-50 tw-text-emerald-700' }
-      : workflowStatus === 'REJECTED'
-        ? { label: text.approvalRejected, classes: 'tw-bg-rose-50 tw-text-rose-700' }
-        : workflowStatus === 'DESIGN_IN_PROGRESS'
-          ? { label: text.designInProgress, classes: 'tw-bg-amber-50 tw-text-amber-700' }
-          : workflowStatus === 'DESIGN_PENDING_APPROVAL'
-            ? { label: text.designApprovalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
-            : workflowStatus === 'DESIGN_REJECTED'
-              ? { label: text.designRejected, classes: 'tw-bg-rose-50 tw-text-rose-700' }
-              : null);
+  const workflowBadge = designBadge;
   const openDetails = () => {
     if (!canOpenDetails) return;
     if (isLost) window.openLostDealSummaryModal?.(deal);
@@ -164,10 +146,8 @@ function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails, canDele
     if (!deal) return;
     const oldStage = deal.stage;
     if (oldStage === stage.dbStage) return;
-    const requiresApproval = ['NEGOTIATION', 'WON'].includes(stage.dbStage)
-      && deal.workflow_status !== 'APPROVED';
     const requiresDetails = ['PITCH', 'WON', 'LOST'].includes(stage.dbStage);
-    const canMoveImmediately = !requiresDetails && !requiresApproval;
+    const canMoveImmediately = !requiresDetails;
     if (canMoveImmediately) onDealStageChange(dealId, stage.dbStage);
     const result = await window.dropDeal?.(event.nativeEvent, stage.dbStage);
     if (canMoveImmediately && !result?.success) onDealStageChange(dealId, oldStage);

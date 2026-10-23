@@ -22,7 +22,9 @@
     "mobile:sync": "npm run mobile:web && node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor sync android",
     "mobile:open": "node --require=./scripts/capacitor-userinfo-shim.cjs ./node_modules/@capacitor/cli/bin/capacitor open android",
     "mobile:build:debug": "node scripts/build-android.mjs debug",
-    "mobile:build:release": "node scripts/build-android.mjs release"
+    "mobile:build:release": "node scripts/build-android.mjs release",
+    "test:crm-release-1a": "node tests/crm-release-1a.test.cjs",
+    "test:crm-release-1a:postgres": "node tests/crm-release-1a-postgres.test.cjs"
   },
   "keywords": [],
   "author": "",

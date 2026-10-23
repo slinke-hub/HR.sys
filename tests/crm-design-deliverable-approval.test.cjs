@@ -25,7 +25,7 @@ assert.match(app, /status === 'completed'[\s\S]*openCrmDesignCompletionModal\(ta
 assert.match(app, /db\.uploadTaskAttachment\(task\.id, currentUser\.id, file\)/);
 assert.match(app, /submission_links: uploadedReferences/);
 assert.match(app, /window\.removeCrmDesignCompletionFile = function/);
-assert.match(app, /db\.addTaskComment\([\s\S]*Completed Design files submitted for CRM approval\./);
+assert.match(app, /db\.addTaskComment\([\s\S]*Completed Design files submitted\./);
 assert.match(app, /window\.handleCrmDesignAdminApproveAll = async function/);
 assert.match(app, /db\.decideCrmDesignTaskApprovals\(pending\.map\(step => step\.id\), 'APPROVED'/);
 assert.match(app, /crm-design-review-files/);
@@ -36,7 +36,7 @@ assert.match(app, /notification\.event_type === 'crm_design_task_approval_reques
 assert.match(db, /tasks'\)\.select\('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids'\)/);
 assert.match(db, /task_attachments'[\s\S]*\.in\('file_url', submissionReferences\)/);
 assert.match(db, /designFiles/);
-assert.match(db, /async decideCrmDesignTaskApprovals\(stepIds, decision/);
+assert.match(db, /async decideCrmDesignTaskApprovals\(\)/);
 
 assert.match(migration, /cardinality\(NEW\.submission_links\)/);
 assert.match(migration, /NEW\.status := 'Pending Approval'/);

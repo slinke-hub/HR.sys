@@ -16,7 +16,7 @@ for (const component of ['CrmDashboard', 'PipelineBoard', 'DealCard', 'TasksWidg
   assert.match(source, new RegExp(`function ${component}\\(`), `Missing modular React component: ${component}`);
 }
 
-for (const stage of ['LEAD', 'CONTACT', 'PRESENTATION', 'DISCUSSION', 'WON', 'LOST']) {
+for (const stage of ['LEAD', 'CONTACT', 'PRESENTATION', 'WON', 'LOST']) {
   assert.match(source, new RegExp(`key: '${stage}'`), `Missing CRM stage: ${stage}`);
 }
 

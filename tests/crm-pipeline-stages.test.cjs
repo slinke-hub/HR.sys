@@ -7,7 +7,7 @@ const appSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'u
 const dataSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'data.js'), 'utf8');
 const workflowSource = fs.readFileSync(path.join(__dirname, '..', 'deal_workflow_migration.sql'), 'utf8');
 const migrationSource = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260905130000_crm_pipeline_stages.sql'), 'utf8');
-const expectedStages = ['LEAD', 'QUALIFICATION', 'PITCH', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
+const expectedStages = ['LEAD', 'QUALIFICATION', 'PITCH', 'PROPOSAL', 'WON', 'LOST'];
 
 const stageDeclaration = appSource.match(/const stages = \[([^\]]+)\];/);
 assert.ok(stageDeclaration, 'CRM stage declaration was not found');

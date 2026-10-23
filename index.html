@@ -329,17 +329,17 @@
     <div class="modal" id="crmPresentationChoiceModal">
         <div class="modal-content crm-presentation-choice-modal">
             <div class="modal-header">
-                <div><h2 data-i18n="crm_presentation_request">Presentation request</h2><p class="page-subtitle" data-i18n="crm_choose_request_type">Choose what you want to send for approval.</p></div>
+                <div><h2 data-i18n="crm_presentation_request">Presentation request</h2><p class="page-subtitle" data-i18n="crm_choose_request_type">Choose which presentation to submit.</p></div>
                 <button class="btn btn-icon" type="button" onclick="closeCrmPresentationChoiceModal()"><i data-lucide="x"></i></button>
             </div>
             <input type="hidden" id="presentationChoiceDealId">
             <input type="hidden" id="presentationChoiceOldStage">
             <div class="crm-presentation-options">
                 <button type="button" class="crm-presentation-option" onclick="openCrmPresentationRequest('QUOTE')">
-                    <i data-lucide="file-text"></i><strong data-i18n="crm_quote_only">Quote</strong><span data-i18n="crm_quote_approvers">CEO, GM and Marketing Manager approval</span>
+                    <i data-lucide="file-text"></i><strong data-i18n="crm_quote_only">Quote</strong><span data-i18n="crm_quote_approvers">Submit the quotation.</span>
                 </button>
                 <button type="button" class="crm-presentation-option" onclick="openCrmPresentationRequest('QUOTE_PROPOSAL')">
-                    <i data-lucide="images"></i><strong data-i18n="crm_quote_and_proposal">Quote and proposal</strong><span data-i18n="crm_quote_proposal_approvers">CEO, GM, MQ-04, MQ-05 and Marketing Manager approval</span>
+                    <i data-lucide="images"></i><strong data-i18n="crm_quote_and_proposal">Quote and proposal</strong><span data-i18n="crm_quote_proposal_approvers">Submit the complete proposal to create a Design task.</span>
                 </button>
             </div>
         </div>
@@ -376,7 +376,7 @@
                         <i data-lucide="plus"></i><span data-i18n="crm_add_proposal_image">Add proposal image</span>
                     </button>
                 </section>
-                <button id="sendPresentationApprovalBtn" type="submit" class="btn btn-primary crm-request-submit"><i data-lucide="send"></i><span data-i18n="crm_send_approval_request">Send approval request</span></button>
+                <button id="sendPresentationApprovalBtn" type="submit" class="btn btn-primary crm-request-submit"><i data-lucide="send"></i><span data-i18n="crm_send_approval_request">Submit presentation</span></button>
             </form>
         </div>
     </div>
@@ -519,18 +519,18 @@
                 <div id="dealWorkflowDesignTaskStatus" class="task-crm-design-status-control deal-workflow-design-status-control" hidden></div>
             </section>
             <section class="deal-workflow-section" id="workflowSetupSection">
-                <h3 data-i18n="crm_approval_setup">Approval Setup</h3>
-                <p class="page-subtitle" data-i18n="crm_approval_sequence_help">Select the approvers in sequence. The next approver is unlocked only after the previous approval.</p>
+                <h3 data-i18n="crm_presentation_request">Presentation request</h3>
+                <p class="page-subtitle" data-i18n="crm_edit_resend_help">Upload the required files and submit the presentation.</p>
                 <div id="dealProposalChecklist" class="deal-readiness-checklist"></div>
                 <div class="workflow-approver-grid">
                     <label><span data-i18n="crm_marketing_manager">Marketing Manager</span><select id="workflowMarketingManager" class="form-control"></select></label>
                     <label><span data-i18n="crm_general_manager">General Manager</span><select id="workflowGeneralManager" class="form-control"></select></label>
                     <label><span data-i18n="crm_operations_manager">Operations Manager</span><select id="workflowOperationsManager" class="form-control"></select></label>
                 </div>
-                <button type="button" class="btn btn-primary" onclick="startDealApprovalWorkflow()" data-i18n="crm_start_approval">Start Approval</button>
+                <button type="button" class="btn btn-primary" onclick="openPresentationRequestFromWorkflow()" data-i18n="crm_edit_resend">Submit presentation</button>
             </section>
             <section class="deal-workflow-section" id="dealApprovalProgressSection">
-                <h3 data-i18n="crm_approval_progress">Approval Progress</h3>
+                <h3 data-i18n="crm_approval_history">Approval History</h3>
                 <div id="dealApprovalSteps" class="deal-approval-steps"></div>
             </section>
             <section class="deal-workflow-section" id="dealDocumentsSection">
@@ -1692,17 +1692,17 @@
     <script defer src="js/document-ocr.js?v=2026091503"></script>
     <script defer src="js/runtime-config-resolver.js?v=2026100201"></script>
     <script defer src="runtime-config.js"></script>
-    <script defer src="js/db.js?v=2026093001"></script>
+    <script defer src="js/db.js?v=2026102201"></script>
     <script defer src="js/shared-services.js?v=2026091701"></script>
-    <script defer src="js/data.js?v=2026091510"></script>
+    <script defer src="js/data.js?v=2026102201"></script>
     <script defer src="js/contract.js?v=1788202890003"></script>
     <script defer src="js/payroll.js"></script>
-    <script defer src="js/crm-dashboard.bundle.js?v=2026100408"></script>
+    <script defer src="js/crm-dashboard.bundle.js?v=2026102201"></script>
     <script defer src="js/hr-suite-beta.js?v=2026090901"></script>
     <script defer src="js/enterprise-beta.js"></script>
     <script defer src="js/whatsapp-mock-data.js"></script>
     <script defer src="js/whatsapp-inbox.js"></script>
-    <script defer src="js/app.js?v=2026100801"></script>
+    <script defer src="js/app.js?v=2026102201"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

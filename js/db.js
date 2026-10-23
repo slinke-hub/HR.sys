@@ -4066,35 +4066,10 @@ const db = {
         }
     },
     async fetchPendingCrmApprovals() {
-        if (!supabaseClient) return [];
-        try {
-            const [{ data: steps, error: stepsError }, { data: deals, error: dealsError }] = await Promise.all([
-                supabaseClient.from('crm_deal_approval_steps').select('*').eq('status', 'PENDING').order('step_order', { ascending: true }),
-                supabaseClient.rpc('list_crm_deals_secure')
-            ]);
-            if (stepsError) throw stepsError;
-            if (dealsError) throw dealsError;
-            const dealMap = new Map((deals || []).filter(deal => deal.workflow_status === 'PENDING_APPROVAL').map(deal => [deal.id, deal]));
-            return (steps || []).filter(step => dealMap.has(step.deal_id)).map(step => ({ ...step, deal: dealMap.get(step.deal_id) }));
-        } catch (error) {
-            console.error('fetchPendingCrmApprovals Error:', error);
-            return [];
-        }
+        return []; // Release 1A: preserved approvals are history only.
     },
     async fetchPendingCrmDesignTaskApprovals() {
-        if (!supabaseClient) return [];
-        try {
-            const { data, error } = await supabaseClient
-                .from('crm_design_task_approval_steps')
-                .select('*, task:tasks(*), deal:crm_deals(id, title, stage, workflow_status, proposal_sent_at, client_id, crm_clients(*)), profiles:approver_id(full_name, display_name_ar, job_title, emp_index)')
-                .eq('status', 'PENDING')
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            return data || [];
-        } catch (error) {
-            console.error('fetchPendingCrmDesignTaskApprovals Error:', error);
-            return [];
-        }
+        return []; // Release 1A: preserved approvals are history only.
     },
     async fetchDealWorkflow(dealId) {
         if (!supabaseClient) return { approvals: [], designApprovals: [], attachments: [], designFiles: [], activity: [], project: null };
@@ -4168,34 +4143,11 @@ const db = {
         if (!supabaseClient) return { success: false };
         return this.changeProjectStatus(projectId, 'COMPLETED');
     },
-    async startDealApproval(dealId, approvers) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { error } = await supabaseClient.rpc('start_deal_approval', {
-                p_deal_id: dealId,
-                p_marketing_manager: approvers.marketingManager,
-                p_general_manager: approvers.generalManager,
-                p_operations_manager: approvers.operationsManager
-            });
-            if (error) throw error;
-            return { success: true };
-        } catch (error) {
-            console.error('startDealApproval Error:', error);
-            return { success: false, error };
-        }
+    async startDealApproval() {
+        return { success: false, error: new Error('CRM approvals are retired. Submit the presentation instead.') };
     },
-    async finalizeCrmDealApproval(dealId) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { data, error } = await supabaseClient.rpc('finalize_crm_deal_approval', {
-                p_deal_id: dealId
-            });
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            console.error('finalizeCrmDealApproval Error:', error);
-            return { success: false, error };
-        }
+    async finalizeCrmDealApproval() {
+        return { success: false, error: new Error('CRM approvals are retired. Submit the presentation instead.') };
     },
     async startCrmPresentationApproval(dealId, requestType) {
         if (!supabaseClient) return { success: false };
@@ -4217,37 +4169,11 @@ const db = {
             return { success: false, error };
         }
     },
-    async decideDealApproval(stepId, decision, note) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { error } = await supabaseClient.rpc('decide_deal_approval', {
-                p_step_id: stepId,
-                p_decision: decision,
-                p_note: note || null
-            });
-            if (error) throw error;
-            await this.flushTaskNotificationEmails();
-            return { success: true };
-        } catch (error) {
-            console.error('decideDealApproval Error:', error);
-            return { success: false, error };
-        }
+    async decideDealApproval() {
+        return { success: false, error: new Error('CRM approvals are retired. Submit the presentation instead.') };
     },
-    async decideCrmDesignTaskApproval(stepId, decision, note) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { error } = await supabaseClient.rpc('decide_crm_design_task_approval', {
-                p_step_id: stepId,
-                p_decision: decision,
-                p_note: note || null
-            });
-            if (error) throw error;
-            await this.flushTaskNotificationEmails();
-            return { success: true };
-        } catch (error) {
-            console.error('decideCrmDesignTaskApproval Error:', error);
-            return { success: false, error };
-        }
+    async decideCrmDesignTaskApproval() {
+        return { success: false, error: new Error('CRM approvals are retired. Submit the presentation instead.') };
     },
     async fetchTaskAttachments(taskId) {
         if (!supabaseClient || !taskId) return [];
@@ -4309,25 +4235,8 @@ const db = {
             return { success: false, error };
         }
     },
-    async decideCrmDesignTaskApprovals(stepIds, decision, note = '') {
-        if (!supabaseClient) return { success: false };
-        try {
-            const uniqueStepIds = [...new Set((stepIds || []).filter(Boolean))];
-            if (!uniqueStepIds.length) return { success: true, count: 0 };
-            for (const stepId of uniqueStepIds) {
-                const { error } = await supabaseClient.rpc('decide_crm_design_task_approval', {
-                    p_step_id: stepId,
-                    p_decision: decision,
-                    p_note: note || null
-                });
-                if (error) throw error;
-            }
-            await this.flushTaskNotificationEmails();
-            return { success: true, count: uniqueStepIds.length };
-        } catch (error) {
-            console.error('decideCrmDesignTaskApprovals Error:', error);
-            return { success: false, error };
-        }
+    async decideCrmDesignTaskApprovals() {
+        return { success: false, error: new Error('CRM approvals are retired. Submit the presentation instead.') };
     },
     async uploadDealAttachment(dealId, userId, file, category, description, visibleToProjectAssignee = false) {
         if (!supabaseClient) return { success: false };

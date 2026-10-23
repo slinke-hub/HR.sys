@@ -87,7 +87,7 @@ assert.match(app, /<figcaption>[\s\S]*file\.description/);
 assert.match(app, /db\.startCrmPresentationApproval\(dealId, requestType\)/);
 assert.match(app, /db\.decideCrmDesignTaskApproval/);
 assert.match(app, /function areDealApprovalsComplete\(workflow\)/);
-assert.match(app, /async function ensureApprovedDealIsInDiscussion\(deal, workflow\)/);
+assert.match(app, /async function ensureApprovedDealIsInDiscussion\(\)/);
 assert.match(app, /await ensureApprovedDealIsInDiscussion\(deal, workflow\)/);
 assert.doesNotMatch(app, /allApproved\s*&&[^\n]*approval_type\s*!==\s*'QUOTE_PROPOSAL'/);
 assert.doesNotMatch(app, /crm_approval_note_prompt/, 'Approving CRM requests must not open an optional note prompt');
@@ -124,7 +124,7 @@ assert.match(css, /max-height: calc\(100dvh - 2rem\)/);
 
 assert.match(db, /async startCrmPresentationApproval\(dealId, requestType\)/);
 assert.match(db, /async fetchPendingCrmDesignTaskApprovals\(\)/);
-assert.match(db, /async decideCrmDesignTaskApproval\(stepId, decision, note\)/);
+assert.match(db, /async decideCrmDesignTaskApproval\(\)/);
 assert.match(db, /async createProjectFromWonDealV2\(orderData, dealId\)/);
 assert.match(db, /rpc\('list_crm_deals_secure'\)/);
 assert.match(db, /rpc\('change_task_status'/);

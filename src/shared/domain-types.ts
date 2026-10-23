@@ -19,7 +19,6 @@ export type DealStage =
   | 'QUALIFICATION'
   | 'PITCH'
   | 'PROPOSAL'
-  | 'NEGOTIATION'
   | 'WON'
   | 'LOST';
 

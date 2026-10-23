@@ -13,7 +13,6 @@ for (const mapping of [
   ["key: 'LEAD'", "dbStage: 'LEAD'"],
   ["key: 'CONTACT'", "dbStage: 'QUALIFICATION'"],
   ["key: 'PRESENTATION'", "dbStage: 'PITCH'"],
-  ["key: 'DISCUSSION'", "dbStage: 'NEGOTIATION'"],
   ["key: 'WON'", "dbStage: 'WON'"],
   ["key: 'LOST'", "dbStage: 'LOST'"]
 ]) {
@@ -21,10 +20,10 @@ for (const mapping of [
 }
 
 assert.match(source, /\['PITCH', 'PROPOSAL'\]\.includes\(value\).*'PRESENTATION'/s);
-assert.match(source, /\['NEGOTIATION', 'WON'\]\.includes\(stage\.dbStage\)/);
+assert.doesNotMatch(source, /const requiresApproval/);
 assert.match(source, /requiresDetails = \['PITCH', 'WON', 'LOST'\]/);
-assert.match(source, /approvalPending: 'Approval pending'/);
-assert.match(source, /approvalRejected: 'Needs revision'/);
+assert.doesNotMatch(source, /workflowStatus === 'PENDING_APPROVAL'/);
+assert.match(source, /const workflowBadge = designBadge/);
 
 assert.match(html, /id="dealLifecycleStepper"/);
 assert.match(html, /id="dealProposalChecklist"/);
@@ -33,9 +32,9 @@ assert.match(html, /id="closeDealProjectBtn"/);
 
 assert.match(app, /const dealLifecycleStages = \[/);
 assert.match(app, /categories\.has\('QUOTATION'\).*categories\.has\('PROPOSAL'\)/s);
-assert.match(app, /workflow\.approvals\.some\(step => step\.status === 'REJECTED'\)/);
+assert.match(app, /const canSubmitPresentation = !isMq08Viewer/);
 assert.match(app, /approvals\.every\(step => String\(step\.status \|\| ''\)\.toUpperCase\(\) === 'APPROVED'\)/);
-assert.match(app, /finalizeCrmDealApproval|finalizeApproval/);
+assert.doesNotMatch(db, /rpc\('finalize_crm_deal_approval'/);
 assert.match(app, /newStage === 'LOST'/);
 assert.match(app, /newStage === 'WON'/);
 assert.match(app, /closeWonDealProjectFromWorkflow/);
