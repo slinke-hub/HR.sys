@@ -8,8 +8,9 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
 $$;
 GRANT USAGE ON SCHEMA auth, public TO authenticated, anon;
 CREATE TABLE departments(id uuid PRIMARY KEY, name text, name_ar text, head_id uuid);
-CREATE TABLE profiles(id uuid PRIMARY KEY, department_id uuid, role text, job_title text,
- full_name text, job_title_ar text, task_email_notifications boolean DEFAULT false, is_active boolean DEFAULT true, emp_index integer);
+CREATE TABLE profiles(id uuid PRIMARY KEY, department_id uuid, role text, job_title text, manager_id uuid,
+ full_name text, display_name text, display_name_ar text, job_title_ar text, employee_id text,
+ task_email_notifications boolean DEFAULT false, is_active boolean DEFAULT true, emp_index integer);
 CREATE TABLE crm_clients(id uuid PRIMARY KEY, name text, company text);
 CREATE TABLE task_lists(id uuid PRIMARY KEY, name text, department_id uuid, owner_id uuid,
  can_add_users uuid[] DEFAULT '{}', can_delete_users uuid[] DEFAULT '{}', shared_with uuid[] DEFAULT '{}', created_at timestamptz DEFAULT now());
@@ -56,6 +57,7 @@ CREATE TABLE projects(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), deal_id uui
 -- Specialist permission helpers are conservative fixture substitutes. The test
 -- runner loads real CRM, list and task façade predicates from repository SQL.
 CREATE FUNCTION can_marketing_manager_edit_task(uuid, uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
+CREATE FUNCTION can_view_task_via_employee_grant(uuid, uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 CREATE FUNCTION can_view_task_list_via_employee_grant(uuid, uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 CREATE FUNCTION can_access_project(uuid, uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 CREATE FUNCTION is_task_department_manager(text, uuid) RETURNS boolean LANGUAGE sql AS $$
@@ -82,7 +84,11 @@ INSERT INTO profiles(id, department_id, role, emp_index, is_active) VALUES
  ('00000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000002','EMPLOYEE',8,true),
  ('00000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003','EMPLOYEE',4,true),
  ('00000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','ADMIN',5,true),
- ('00000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','EMPLOYEE',6,false);
+ ('00000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','EMPLOYEE',6,false),
+ ('00000000-0000-0000-0000-000000000007','10000000-0000-0000-0000-000000000001','EMPLOYEE',20,true);
+UPDATE profiles SET employee_id='MQ-20', job_title='Sales Representative'
+ WHERE id='00000000-0000-0000-0000-000000000007';
+UPDATE profiles SET employee_id='MQ-08' WHERE id='00000000-0000-0000-0000-000000000003';
 INSERT INTO crm_clients VALUES ('20000000-0000-0000-0000-000000000001','Example Client','Example Company');
 INSERT INTO task_lists(id,name,department_id,owner_id) VALUES
  ('30000000-0000-0000-0000-000000000001','Design','10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003');
@@ -90,7 +96,7 @@ INSERT INTO crm_deals(id,client_id,title,created_by,assigned_to)
  SELECT ('40000000-0000-0000-0000-' || lpad(n::text,12,'0'))::uuid,
  '20000000-0000-0000-0000-000000000001','Example Project',
  '00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002'
- FROM generate_series(1,6) n;
+ FROM generate_series(1,10) n;
 INSERT INTO crm_deal_approval_steps(deal_id,status) VALUES ('40000000-0000-0000-0000-000000000001','PENDING');
 INSERT INTO crm_design_task_approval_steps(deal_id,status) VALUES ('40000000-0000-0000-0000-000000000001','REJECTED');
 UPDATE crm_deals SET stage='NEGOTIATION' WHERE id='40000000-0000-0000-0000-000000000006';

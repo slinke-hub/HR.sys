@@ -31,6 +31,14 @@ function sourceFunction(file, name) {
   assert(end > start, name);
   return source.slice(start, end);
 }
+function sourcePolicy(file, name) {
+  const source = fs.readFileSync(path.join(root, file), 'utf8');
+  const start = source.indexOf(`CREATE POLICY ${name} `);
+  assert(start >= 0, name);
+  const end = source.indexOf(';', start) + 1;
+  assert(end > start, name);
+  return source.slice(start, end);
+}
 function asyncSql(text) {
   return new Promise((resolve, reject) => {
     const child = spawn(path.join(bin, 'psql.exe'), ['-X', '-v', 'ON_ERROR_STOP=1', '-qAt'], { env, windowsHide: true });
@@ -59,6 +67,10 @@ function asyncSql(text) {
       sourceFunction('tasks_teamwork_workflow_migration.sql','notify_task_change'),
       ...['can_assign_tasks_company_wide','can_add_task_to_list','can_view_task_list'].map(n => sourceFunction(permissions,n)),
       ...['can_access_task','can_manage_task','record_task_activity'].map(n => sourceFunction(taskServices,n)),
+      ...['is_task_admin','can_view_task'].map(n => sourceFunction('tasks_teamwork_workflow_migration.sql',n)),
+      ...['is_ines_modani_profile','is_mq20_profile','is_ines_modani_task'].map(n => sourceFunction('supabase/migrations/20260908110000_marketing_manager_employee_task_access.sql',n)),
+      sourceFunction('supabase/migrations/20260908100000_sales_marketing_crm_and_mq07_design_access.sql','is_mq07_design_list'),
+      sourceFunction(permissions,'can_assign_tasks_company_wide'),
       sourceFunction('supabase/migrations/20260930104000_productivity_phase_a.sql','get_my_day'),
       ...['create_task_secure','change_task_status','mark_crm_deal_lost'].map(n => sourceFunction(services,n)),
       sourceFunction('supabase/migrations/20260901090000_task_list_permissions_and_company_watchers.sql','validate_task_department_supervisor'),
@@ -73,6 +85,20 @@ function asyncSql(text) {
     ].join('\n'));
     const migrationSql = fs.readFileSync(path.join(root, 'supabase/migrations/20261022100000_crm_release_1a.sql'), 'utf8');
     sql(migrationSql);
+    sql([
+      sourcePolicy('schema.sql','"Users can view tasks assigned to them"'),
+      sourcePolicy('tasks_teamwork_workflow_migration.sql','tasks_select_authorized'),
+      sourcePolicy('supabase/migrations/20260908100000_sales_marketing_crm_and_mq07_design_access.sql','mq07_design_tasks_select'),
+      sourcePolicy('supabase/migrations/20260908110000_marketing_manager_employee_task_access.sql','marketing_and_granted_tasks_select'),
+      sourcePolicy('supabase/migrations/20260908130000_executive_companywide_task_assignment.sql','executive_company_tasks_select'),
+      sourcePolicy(taskServices,'task_secure_access_select'),
+      sourcePolicy('supabase/migrations/20260908110000_marketing_manager_employee_task_access.sql','mq20_only_ines_tasks_select'),
+      `GRANT SELECT ON tasks TO authenticated;
+       GRANT EXECUTE ON FUNCTION can_access_task(uuid,uuid), can_view_task(uuid,uuid), is_task_admin(uuid), is_mq20_profile(uuid), is_ines_modani_task(uuid), is_mq07_design_list(uuid,uuid), can_assign_tasks_company_wide(uuid) TO authenticated;`
+    ].join('\n'));
+    const visibilityMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20261024100000_crm_mq20_contact_task_visibility.sql'), 'utf8');
+    sql(visibilityMigration);
+    sql(visibilityMigration);
     const triggerStart = migrationSql.indexOf('DROP TRIGGER IF EXISTS crm_deals_enforce_workflow_transition');
     const triggerEndMarker = 'FOR EACH ROW EXECUTE FUNCTION public.enforce_deal_workflow_transition();';
     const triggerEnd = migrationSql.indexOf(triggerEndMarker, triggerStart) + triggerEndMarker.length;
@@ -87,12 +113,20 @@ function asyncSql(text) {
     const grantCorrection = migrationSql.slice(grantStart, grantEnd);
     sql(grantCorrection);
     sql(grantCorrection);
+    sql(`INSERT INTO tasks(id,title,assignee_id,assignee_ids,created_by,supervisor_id,department,visible_to,visibility,status)
+      VALUES ('50000000-0000-0000-0000-000000000009','Synthetic authorized Ines visibility',
+        '00000000-0000-0000-0000-000000000003',ARRAY['00000000-0000-0000-0000-000000000003'::uuid],
+        '00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005','Sales',
+        ARRAY['00000000-0000-0000-0000-000000000007'::uuid],'private','todo');`);
     sql(`CREATE TRIGGER enforce_private_task_list_ownership_trigger BEFORE INSERT OR UPDATE OF task_list_id,created_by,assignee_id,supervisor_id,visibility,visible_to,watchers ON tasks FOR EACH ROW EXECUTE FUNCTION enforce_private_task_list_ownership();
       CREATE TRIGGER crm_design_task_completion_trigger BEFORE UPDATE OF status ON tasks FOR EACH ROW EXECUTE FUNCTION enforce_crm_design_task_completion();
       CREATE TRIGGER enforce_task_completion_approval_trigger BEFORE INSERT OR UPDATE OF status ON tasks FOR EACH ROW EXECUTE FUNCTION enforce_task_completion_approval();
       GRANT EXECUTE ON FUNCTION create_task_secure(jsonb), change_task_status(uuid,text) TO authenticated;`);
     const results = sql(fs.readFileSync(path.join(__dirname, 'fixtures/crm-release-1a-assertions.sql'), 'utf8'));
+    sql('ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;');
+    const visibilityResults = sql(fs.readFileSync(path.join(__dirname, 'fixtures/crm-release-1a-rls-assertions.sql'), 'utf8'));
     console.log('PASS: shipped trigger and privilege corrections are idempotent when reapplied');
+    console.log('PASS: MQ-20 visibility migration is idempotent when reapplied');
     const actor = n => `SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-${String(n).padStart(12,'0')}';`;
     const concurrent = n => `${actor(n)} SELECT change_crm_deal_stage('40000000-0000-0000-0000-000000000005','QUALIFICATION')->>'task_id';`;
     const outputs = await Promise.all([asyncSql(concurrent(1)), asyncSql(concurrent(2))]);
@@ -100,6 +134,7 @@ function asyncSql(text) {
     assert.equal(sql("SELECT count(*) FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000005'").trim(), '1');
     fs.writeFileSync(path.join(scratch, 'results.txt'), results + '\nPASS: concurrent Contact calls create one task\n');
     console.log(results.trim());
+    console.log(visibilityResults.trim());
     console.log('PASS: concurrent Contact calls create one task');
     console.log(`Actual PostgreSQL validation passed. Synthetic fixture and selected real predicates/triggers; full Supabase replay not performed. Evidence: ${scratch}`);
   } finally {
