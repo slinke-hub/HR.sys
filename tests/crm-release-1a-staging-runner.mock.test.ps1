@@ -107,6 +107,35 @@ function supabase {
   'synthetic exact-version repair completed'
 }
 
+# Model a clean reviewed commit for runner integration tests while keeping all
+# database and CLI calls mocked. The integrity verifier itself is tested against
+# real temporary Git repositories in crm-release-1a-integrity.test.ps1.
+function git {
+  param([Parameter(ValueFromRemainingArguments = $true)][object[]]$GitArgs)
+  $commandIndex = [Array]::IndexOf($GitArgs,'--show-current')
+  if ($commandIndex -ge 0) { $global:LASTEXITCODE = 0; return 'codex/production-crm-release-1a' }
+  $revIndex = [Array]::IndexOf($GitArgs,'rev-parse')
+  if ($revIndex -ge 0) {
+    $revision = [string]$GitArgs[$revIndex + 1]
+    if ($revision -eq 'HEAD') { $global:LASTEXITCODE = 0; return ('a' * 40) }
+    $relative = $revision -replace '^[a-f0-9]{40}:',''
+    $full = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ($relative.Replace('/',[IO.Path]::DirectorySeparatorChar))
+    $bytes = [IO.File]::ReadAllBytes($full)
+    $header = [Text.Encoding]::ASCII.GetBytes("blob $($bytes.Length)`0")
+    $payload = [byte[]]::new($header.Length + $bytes.Length)
+    [Buffer]::BlockCopy($header,0,$payload,0,$header.Length)
+    [Buffer]::BlockCopy($bytes,0,$payload,$header.Length,$bytes.Length)
+    $global:LASTEXITCODE = 0
+    return [Convert]::ToHexString([Security.Cryptography.SHA1]::HashData($payload)).ToLowerInvariant()
+  }
+  if ($GitArgs -contains 'diff' -or $GitArgs -contains 'cat-file' -or $GitArgs -contains 'merge-base') {
+    $global:LASTEXITCODE = 0
+    return
+  }
+  if ($GitArgs -contains 'ls-files' -or $GitArgs -contains 'status') { $global:LASTEXITCODE = 0; return }
+  throw "Unexpected Git operation in runner mock: $($GitArgs -join ' ')"
+}
+
 function Read-Host {
   param([string]$Prompt, [switch]$AsSecureString)
   if ($AsSecureString) { return ConvertTo-SecureString 'synthetic-test-only' -AsPlainText -Force }
@@ -154,7 +183,14 @@ try {
   Assert-Test (@($global:psqlCalls | Where-Object { $_ -contains '-f' -and $_[([Array]::IndexOf($_,'-f') + 1)] -match '^.*\\supabase\\migrations\\' }).Count -eq 0) 'Preflight-only mode applied a migration.'
 
   Reset-Mocks
-  & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY'
+  $caught = $false
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute }
+  catch { $caught = $true }
+  Assert-Test $caught 'Execution proceeded without explicit administrator approval and package commit anchor.'
+  Assert-Test ($global:psqlCalls.Count -eq 0 -and $global:migrationAttemptCount -eq 0) 'Runner performed database work without explicit approval.'
+
+  Reset-Mocks
+  & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40)
   $migrationCalls = @($global:psqlCalls | Where-Object {
     $i = [Array]::IndexOf($_, '-f'); $i -ge 0 -and [string]$_[$i + 1] -match 'supabase\\migrations\\202610.*\.sql$'
   })
@@ -174,7 +210,7 @@ try {
   Reset-Mocks
   $global:failPostcheckAt = 2
   $caught = $false
-  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' }
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40) }
   catch { $caught = $true }
   Assert-Test $caught 'Runner did not stop on a failed post-check.'
   Assert-Test (($global:repairCalls -join ',') -ceq '20261022100000') 'Runner recorded a migration whose post-check failed or continued past it.'
@@ -193,7 +229,7 @@ try {
   Reset-Mocks
   $global:failMigrationAt = 1
   $caught = $false
-  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' }
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40) }
   catch { $caught = $true }
   Assert-Test $caught 'Runner did not stop on a failed migration SQL command.'
   Assert-Test ($global:migrationAttemptCount -eq 1 -and $global:repairCalls.Count -eq 0) 'Runner recorded a failed migration or continued after its SQL error.'

@@ -3,7 +3,8 @@ param(
   [Parameter(Mandatory = $true)] [string]$ProjectRef,
   [Parameter(Mandatory = $true)] [string]$CaFile,
   [switch]$Execute,
-  [string]$ApprovalReference
+  [string]$ApprovalReference,
+  [string]$ApprovedCommit
 )
 
 Set-StrictMode -Version Latest
@@ -14,6 +15,9 @@ $expectedHost = 'db.jcfyyxsuspukcmybyhjj.supabase.co'
 $expectedBranch = 'codex/production-crm-release-1a'
 $expectedHead = '874181273a608aea73d26d20dce379074773e849'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$integrityHelper = Join-Path $PSScriptRoot 'crm-release-1a-integrity.ps1'
+if (-not (Test-Path -LiteralPath $integrityHelper -PathType Leaf)) { throw 'STOP: integrity verifier is missing.' }
+. $integrityHelper
 $migrationDir = Join-Path $root 'supabase\migrations'
 $linkFile = Join-Path $root 'supabase\.temp\project-ref'
 $preflightSql = Join-Path $root 'docs\CRM_RELEASE_1A_STAGING_PREFLIGHT.sql'
@@ -121,7 +125,10 @@ $allowedPackageChanges = @(
   'tests/crm-release-1a-staging-runner.mock.test.ps1',
   'tests/crm-release-1a-postgres.test.cjs',
   'tests/fixtures/crm-release-1a-baseline.sql',
-  'tests/fixtures/crm-release-1a-assertions.sql'
+  'tests/fixtures/crm-release-1a-assertions.sql',
+  'scripts/crm-release-1a-integrity.ps1',
+  'tests/crm-release-1a-integrity.test.ps1',
+  'docs/CRM_RELEASE_1A_DATABASE_METADATA_QUERIES.sql'
 )
 $changedPaths = @(& git -C $root diff --name-only $expectedHead $head)
 if ($LASTEXITCODE -ne 0) { Stop-Release 'Could not inspect changes since the reviewed baseline.' }
@@ -142,10 +149,40 @@ foreach ($m in $migrations) {
 foreach ($requiredFile in @($preflightSql,$postcheckSql,$catalogSql)) {
   if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) { Stop-Release "Missing validation file $requiredFile." }
 }
+$criticalFiles = @(
+  'docs/CRM_RELEASE_1A_RECOVERY.md',
+  'docs/CRM_RELEASE_1A_STAGING_EXECUTION.md',
+  'docs/CRM_RELEASE_1A_STAGING_PREFLIGHT.sql',
+  'docs/CRM_RELEASE_1A_STAGING_POSTCHECKS.sql',
+  'docs/CRM_RELEASE_1A_DATABASE_METADATA_QUERIES.sql',
+  'scripts/crm-release-1a-staging.ps1',
+  'scripts/crm-release-1a-integrity.ps1',
+  'scripts/run-crm-release-1a-pg17-docker.ps1',
+  'tests/crm-release-1a-postgres.test.cjs',
+  'tests/crm-release-1a-staging-runner.mock.test.ps1',
+  'tests/crm-release-1a-integrity.test.ps1',
+  'tests/fixtures/crm-release-1a-assertions.sql',
+  'tests/fixtures/crm-release-1a-baseline.sql',
+  'supabase/migrations/20261022100000_crm_release_1a.sql',
+  'supabase/migrations/20261024100000_crm_mq20_contact_task_visibility.sql',
+  'supabase/migrations/20261026100000_mq20_task_service_authorization_hardening.sql',
+  'supabase/migrations/20261027100000_task_dependency_visibility_hardening.sql'
+)
+$relevantUntrackedPatterns = @(
+  'scripts/*crm-release-1a*',
+  'docs/CRM_RELEASE_1A_STAGING_*',
+  'docs/CRM_RELEASE_1A_RECOVERY.md',
+  'docs/CRM_RELEASE_1A_DATABASE_METADATA_QUERIES.sql',
+  'supabase/migrations/202610*.sql',
+  'tests/crm-release-1a*',
+  'tests/fixtures/crm-release-1a-*'
+)
 $psqlCommand = Get-Command psql -ErrorAction SilentlyContinue
 $supabaseCommand = Get-Command supabase -ErrorAction SilentlyContinue
 if ($null -eq $psqlCommand) { Stop-Release 'PostgreSQL psql client is unavailable.' }
 if ($Execute -and $null -eq $supabaseCommand) { Stop-Release 'Supabase CLI is required for the approved ledger step.' }
+if ($Execute -and [string]::IsNullOrWhiteSpace($ApprovalReference)) { Stop-Release 'Execution mode requires a separate administrator approval reference.' }
+if ($Execute -and [string]::IsNullOrWhiteSpace($ApprovedCommit)) { Stop-Release 'Execution mode requires the full independently reviewed package commit SHA.' }
 
 $ca = (Resolve-Path -LiteralPath $CaFile).Path.Replace('\','/')
 $pemReader = [System.Security.Cryptography.X509Certificates.X509Certificate2Collection].GetMethod('ImportFromPem')
@@ -173,38 +210,60 @@ $script:connInfo = "postgresql://postgres@${expectedHost}:5432/postgres?sslmode=
 $script:psqlName = 'psql'
 $script:supabaseName = 'supabase'
 
-# The fixed host plus verify-full checks both the staging hostname and the
-# server chain against the supplied CA. The SQL preflight asserts TLS is active.
-Invoke-VerifiedPsql -File $preflightSql | ForEach-Object { Write-Host $_ }
-$baselineLedger = @(Get-LedgerVersions)
-Assert-BaselineLedger $baselineLedger
-Write-Host "Preflight passed for staging $expectedRef. Captured $($baselineLedger.Count) ledger version(s) in memory."
-Write-Host 'No ledger snapshot file is written.'
-
-if (-not $Execute) {
-  Write-Host 'Preflight-only mode completed. No migration or ledger writes were attempted.'
-  return
+$integritySnapshot = $null
+if ($Execute) {
+  try {
+    $integritySnapshot = New-CrmPackageIntegritySnapshot -Root $root -ApprovedCommit $ApprovedCommit `
+      -CriticalFiles $criticalFiles -RelevantUntrackedPatterns $relevantUntrackedPatterns
+  } catch { Stop-Release "Execution package integrity validation failed: $($_.Exception.Message)" }
+  $preflightSql = $integritySnapshot.Files['docs/CRM_RELEASE_1A_STAGING_PREFLIGHT.sql'].SnapshotPath
+  $postcheckSql = $integritySnapshot.Files['docs/CRM_RELEASE_1A_STAGING_POSTCHECKS.sql'].SnapshotPath
+  $catalogSql = $integritySnapshot.Files['docs/CRM_RELEASE_1A_DATABASE_METADATA_QUERIES.sql'].SnapshotPath
 }
-if ([string]::IsNullOrWhiteSpace($ApprovalReference)) { Stop-Release 'Execution mode requires a separate administrator approval reference.' }
-Confirm-ExactPhrase "AUTHORIZE CRM RELEASE 1A STAGING EXECUTION $expectedRef"
 
-$recordedThisRun = @()
-foreach ($m in $migrations) {
-  Assert-LedgerState $baselineLedger $recordedThisRun "before $($m.Version)"
-  $migrationPath = Join-Path $migrationDir $m.File
-  if ((Get-FileHash -Algorithm SHA256 -LiteralPath $migrationPath).Hash -cne $m.Sha256) { Stop-Release "Checksum changed before $($m.Version)." }
-  Confirm-ExactPhrase "APPLY $($m.Version) TO STAGING $expectedRef"
-  Write-Host "Applying exact file $($m.File)."
-  Invoke-VerifiedPsql -File $migrationPath | ForEach-Object { Write-Host $_ }
+try {
+  # The fixed host plus verify-full checks both the staging hostname and the
+  # server chain against the supplied CA. The SQL preflight asserts TLS is active.
+  Invoke-VerifiedPsql -File $preflightSql | ForEach-Object { Write-Host $_ }
+  $baselineLedger = @(Get-LedgerVersions)
+  Assert-BaselineLedger $baselineLedger
+  Write-Host "Preflight passed for staging $expectedRef. Captured $($baselineLedger.Count) ledger version(s) in memory."
+  Write-Host 'No ledger snapshot file is written.'
 
-  # A successful COMMIT is insufficient: the read-only migration-specific
-  # assertions must also pass before any history row is recorded.
-  Invoke-VerifiedPsql -File $postcheckSql -Variables @("migration_version=$($m.Version)") |
-    ForEach-Object { Write-Host $_ }
-  Assert-LedgerState $baselineLedger $recordedThisRun "after SQL/post-check for $($m.Version), before ledger recording"
+  if (-not $Execute) {
+    Write-Host 'Preflight-only mode completed. No migration or ledger writes were attempted.'
+    return
+  }
+  Confirm-ExactPhrase "CONFIRM APPROVED PACKAGE COMMIT $ApprovedCommit"
+  Confirm-ExactPhrase "AUTHORIZE CRM RELEASE 1A STAGING EXECUTION $expectedRef"
 
-  Confirm-ExactPhrase "RECORD $($m.Version) APPLIED IN STAGING LEDGER $expectedRef"
-  if ((Get-Content -Raw -LiteralPath $linkFile).Trim() -cne $expectedRef) { Stop-Release 'Supabase CLI link changed before ledger recording.' }
+  $recordedThisRun = @()
+  foreach ($m in $migrations) {
+    Assert-CrmPackageIntegritySnapshot $integritySnapshot
+    Assert-LedgerState $baselineLedger $recordedThisRun "before $($m.Version)"
+    $migrationRelative = "supabase/migrations/$($m.File)"
+    $migrationPath = $integritySnapshot.Files[$migrationRelative].SnapshotPath
+    $migrationBytes = $integritySnapshot.Files[$migrationRelative].Bytes
+    $migrationSha = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($migrationBytes))
+    if ($migrationSha -cne $m.Sha256) { Stop-Release "Checksum mismatch for validated snapshot $($m.File)." }
+    $migrationText = [Text.Encoding]::UTF8.GetString($migrationBytes)
+    if ([regex]::Matches($migrationText,'(?im)^\s*BEGIN\s*;').Count -ne 1 -or
+        [regex]::Matches($migrationText,'(?im)^\s*COMMIT\s*;').Count -ne 1) { Stop-Release "Unexpected transaction boundaries in validated snapshot $($m.File)." }
+    Confirm-ExactPhrase "APPLY $($m.Version) TO STAGING $expectedRef"
+    Assert-CrmPackageIntegritySnapshot $integritySnapshot
+    Write-Host "Applying exact file $($m.File)."
+    Invoke-VerifiedPsql -File $migrationPath | ForEach-Object { Write-Host $_ }
+
+    # A successful COMMIT is insufficient: the read-only migration-specific
+    # assertions must also pass before any history row is recorded.
+    Assert-CrmPackageIntegritySnapshot $integritySnapshot
+    Invoke-VerifiedPsql -File $postcheckSql -Variables @("migration_version=$($m.Version)") |
+      ForEach-Object { Write-Host $_ }
+    Assert-LedgerState $baselineLedger $recordedThisRun "after SQL/post-check for $($m.Version), before ledger recording"
+
+    Confirm-ExactPhrase "RECORD $($m.Version) APPLIED IN STAGING LEDGER $expectedRef"
+    Assert-CrmPackageIntegritySnapshot $integritySnapshot
+    if ((Get-Content -Raw -LiteralPath $linkFile).Trim() -cne $expectedRef) { Stop-Release 'Supabase CLI link changed before ledger recording.' }
   # This is a separate ledger write, gated by a distinct typed confirmation.
   # If it fails, do not retry the SQL; stop and reconcile with the DBA.
   $securePassword = Read-Host 'Enter staging database password for the separately approved ledger recording step' -AsSecureString
@@ -242,14 +301,19 @@ foreach ($m in $migrations) {
     if ($cliLatestExisted) { [IO.File]::WriteAllBytes($cliLatestFile,$cliLatestBytes) }
     elseif (Test-Path -LiteralPath $cliLatestFile -PathType Leaf) { Remove-Item -LiteralPath $cliLatestFile -Force }
   }
-  if ($repairCode -ne 0) { Stop-Release "Ledger recording failed for $($m.Version). Do not rerun SQL; reconcile with the DBA." }
-  Write-Host "Ledger recording command completed for $($m.Version)."
+    if ($repairCode -ne 0) { Stop-Release "Ledger recording failed for $($m.Version). Do not rerun SQL; reconcile with the DBA." }
+    Write-Host "Ledger recording command completed for $($m.Version)."
 
-  $recordedThisRun += $m.Version
-  Assert-LedgerState $baselineLedger $recordedThisRun "after recording $($m.Version)"
-  Write-Host "Checkpoint passed for $($m.Version); next migration may proceed."
+    $recordedThisRun += $m.Version
+    Assert-LedgerState $baselineLedger $recordedThisRun "after recording $($m.Version)"
+    Assert-CrmPackageIntegritySnapshot $integritySnapshot
+    Write-Host "Checkpoint passed for $($m.Version); next migration may proceed."
+  }
+
+  Assert-CrmPackageIntegritySnapshot $integritySnapshot
+  Invoke-VerifiedPsql -File $catalogSql | ForEach-Object { Write-Host $_ }
+  Assert-LedgerState $baselineLedger $recordedThisRun 'final verification'
+  Write-Host 'All four exact files and per-version ledger checkpoints passed.'
+} finally {
+  if ($null -ne $integritySnapshot) { Close-CrmPackageIntegritySnapshot $integritySnapshot }
 }
-
-Invoke-VerifiedPsql -File $catalogSql | ForEach-Object { Write-Host $_ }
-Assert-LedgerState $baselineLedger $recordedThisRun 'final verification'
-Write-Host 'All four exact files and per-version ledger checkpoints passed.'

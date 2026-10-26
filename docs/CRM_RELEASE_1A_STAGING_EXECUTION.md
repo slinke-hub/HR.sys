@@ -1,6 +1,6 @@
 # HR.sys CRM Release 1A staging execution package
 
-This package is prepared for DBA review. It has not connected to staging or run any migration. The runner defaults to a read-only preflight; its `-Execute` path requires separate administrator approval and typed confirmations.
+This package is prepared for DBA review. It has not connected to staging or run any migration. The runner defaults to a read-only preflight; its `-Execute` path requires a separate administrator approval, typed confirmations, and the full SHA of an independently reviewed immutable Git commit.
 
 ## Fixed scope
 
@@ -30,14 +30,17 @@ The October 27 timestamp is retained and sorts last. The historical `20260830000
    ```
 
 4. Review the full read-only report and confirm the four historical/security versions are present and all four Release 1A versions are absent. Any mismatch is a stop condition.
-5. Only after separate written DBA approval, run execution mode with the approval reference. The runner displays the CA bundle fingerprint and demands its exact confirmation, plus separate exact confirmations for the overall release, each migration, and each ledger update. It prompts for a hidden password separately for every `psql` connection and for the CLI ledger step. Credentials are held in process memory/environment only for the child CLI call and restored in `finally`.
+5. Before execution, independently review and record the full Git commit SHA containing the approved runner package. Execution requires `-ApprovedCommit` to equal `HEAD` exactly, rejects any tracked/index changes or relevant untracked execution files, and verifies every critical package file against that commit's Git blob. The commit SHA is the trust anchor; no editable local manifest can authorize its own changes. The runner copies verified SQL bytes into a unique temporary snapshot, keeps each snapshot write-locked while in use, and executes only those snapshots. It rechecks the anchored package at every migration, postcheck, and ledger checkpoint; any change stops further work.
+
+   Only after separate written DBA approval, run execution mode with both the approval reference and independently reviewed commit SHA. The runner displays the CA bundle fingerprint and demands its exact confirmation, plus separate exact confirmations for the approved commit, the overall release, each migration, and each ledger update. It prompts for a hidden password separately for every `psql` connection and for the CLI ledger step. Credentials are held in process memory/environment only for the child CLI call and restored in `finally`.
 
    ```powershell
    .\scripts\crm-release-1a-staging.ps1 `
      -ProjectRef jcfyyxsuspukcmybyhjj `
      -CaFile 'C:\approved\path\staging-ca.pem' `
      -Execute `
-     -ApprovalReference '<DBA approval reference>'
+     -ApprovalReference '<DBA approval reference>' `
+     -ApprovedCommit '<full independently reviewed Git commit SHA>'
    ```
 
 Do not invoke the execution command until that separate approval exists. The application Preview and its staging authentication issue are separate release gates; migration readiness alone does not authorize application deployment.
