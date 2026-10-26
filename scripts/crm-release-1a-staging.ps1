@@ -41,9 +41,51 @@ function Stop-Release([string]$Message) {
   throw "STOP: $Message"
 }
 
+function Get-ConfirmationDiagnostics([string]$Expected,[string]$Actual) {
+  $limit = [Math]::Min($Expected.Length,$Actual.Length)
+  $firstDifference = 0
+  for ($i = 0; $i -lt $limit; $i++) {
+    if ($Expected[$i] -cne $Actual[$i]) { $firstDifference = $i + 1; break }
+  }
+  if ($firstDifference -eq 0 -and $Expected.Length -ne $Actual.Length) { $firstDifference = $limit + 1 }
+
+  $unexpectedWhitespace = $false
+  $controlCharactersPresent = $false
+  $actualWhitespaceCount = 0
+  $expectedWhitespaceCount = 0
+  for ($i = 0; $i -lt $Actual.Length; $i++) {
+    $actualChar = $Actual[$i]
+    if ([char]::IsControl($actualChar)) { $controlCharactersPresent = $true }
+    if ([char]::IsWhiteSpace($actualChar)) {
+      $actualWhitespaceCount++
+      if ($i -ge $Expected.Length -or -not [char]::IsWhiteSpace($Expected[$i]) -or $Expected[$i] -cne $actualChar) {
+        $unexpectedWhitespace = $true
+      }
+    }
+  }
+  for ($i = 0; $i -lt $Expected.Length; $i++) {
+    if ([char]::IsWhiteSpace($Expected[$i])) { $expectedWhitespaceCount++ }
+  }
+  if ($actualWhitespaceCount -gt $expectedWhitespaceCount) { $unexpectedWhitespace = $true }
+  return [pscustomobject]@{
+    ExpectedLength=$Expected.Length
+    ActualLength=$Actual.Length
+    FirstDifference=if ($firstDifference -eq 0) { 'none' } else { $firstDifference }
+    UnexpectedWhitespace=$unexpectedWhitespace
+    ControlCharactersPresent=$controlCharactersPresent
+  }
+}
+
 function Confirm-ExactPhrase([string]$Phrase) {
-  $typed = Read-Host "Type exactly: $Phrase"
-  if ($typed -cne $Phrase) { Stop-Release 'Required explicit confirmation was not provided.' }
+  # Read-Host appends prompt punctuation. Bracketing the payload keeps that
+  # punctuation visibly outside the case-sensitive value to be entered.
+  $typed = Read-Host "Type only the text between angle brackets: <$Phrase>"
+  if ($typed -cne $Phrase) {
+    $diagnostics = Get-ConfirmationDiagnostics -Expected $Phrase -Actual $typed
+    Write-Warning ("Confirmation mismatch. Expected characters: {0}; entered characters: {1}; first differing position: {2}; unexpected whitespace: {3}; control characters present: {4}. Entered text is not displayed." -f `
+      $diagnostics.ExpectedLength,$diagnostics.ActualLength,$diagnostics.FirstDifference,$diagnostics.UnexpectedWhitespace,$diagnostics.ControlCharactersPresent)
+    Stop-Release 'Required explicit confirmation was not provided.'
+  }
 }
 
 function Invoke-VerifiedPsql {

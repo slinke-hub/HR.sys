@@ -27,6 +27,8 @@ $global:failPostcheckAt = 0
 $global:migrationAttemptCount = 0
 $global:failMigrationAt = 0
 $global:mockDbUrl = $null
+$global:confirmationTamper = $null
+$global:confirmationWarnings = [System.Collections.Generic.List[string]]::new()
 $global:savedDbEnv = @{}
 foreach ($envName in @('PGPASSWORD','PGPASSFILE','PGSERVICE','PGSERVICEFILE','PGSSLMODE','PGSSLROOTCERT')) {
   $global:savedDbEnv[$envName] = [Environment]::GetEnvironmentVariable($envName)
@@ -42,6 +44,8 @@ function Reset-Mocks {
   $global:migrationAttemptCount = 0
   $global:failMigrationAt = 0
   $global:mockDbUrl = $null
+  $global:confirmationTamper = $null
+  $global:confirmationWarnings.Clear()
 }
 
 function psql {
@@ -139,8 +143,19 @@ function git {
 function Read-Host {
   param([string]$Prompt, [switch]$AsSecureString)
   if ($AsSecureString) { return ConvertTo-SecureString 'synthetic-test-only' -AsPlainText -Force }
-  if ($Prompt -match 'Type exactly: (.+)$') { return $Matches[1] }
+  if ($Prompt -match '<(.+)>$') {
+    $confirmation = $Matches[1]
+    if ($global:confirmationTamper -eq 'trailing-space') { $global:confirmationTamper = $null; return $confirmation + ' ' }
+    if ($global:confirmationTamper -eq 'crlf') { $global:confirmationTamper = $null; return $confirmation + "`r`n" }
+    if ($global:confirmationTamper -eq 'prompt-colon') { $global:confirmationTamper = $null; return $confirmation + ':' }
+    return $confirmation
+  }
   throw 'Unexpected prompt in mock execution.'
+}
+
+function Write-Warning {
+  param([string]$Message)
+  $global:confirmationWarnings.Add($Message) | Out-Null
 }
 
 function Assert-Test([bool]$Condition, [string]$Message) {
@@ -188,6 +203,29 @@ try {
   catch { $caught = $true }
   Assert-Test $caught 'Execution proceeded without explicit administrator approval and package commit anchor.'
   Assert-Test ($global:psqlCalls.Count -eq 0 -and $global:migrationAttemptCount -eq 0) 'Runner performed database work without explicit approval.'
+
+  Reset-Mocks
+  $global:confirmationTamper = 'trailing-space'
+  $caught = $false
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40) }
+  catch { $caught = $true }
+  Assert-Test $caught 'Runner accepted a confirmation with an extra trailing space.'
+  Assert-Test ($global:psqlCalls.Count -eq 0) 'Runner connected before rejecting malformed CA confirmation.'
+  Assert-Test ($global:confirmationWarnings.Count -eq 1 -and
+    $global:confirmationWarnings[0] -match 'Expected characters: 98; entered characters: 99; first differing position: 99; unexpected whitespace: True; control characters present: False') `
+    'Mismatch diagnostic did not report safe lengths, position, whitespace and control flags.'
+  Assert-Test ($global:confirmationWarnings[0] -notmatch 'CONFIRM TRUSTED STAGING CA SHA256') 'Mismatch diagnostic exposed the entered confirmation.'
+
+  Reset-Mocks
+  $global:confirmationTamper = 'prompt-colon'
+  $caught = $false
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40) }
+  catch { $caught = $true }
+  Assert-Test $caught 'Runner accepted an extra prompt colon as part of the confirmation.'
+  Assert-Test ($global:psqlCalls.Count -eq 0) 'Runner connected before rejecting a prompt-colon mismatch.'
+  Assert-Test ($global:confirmationWarnings.Count -eq 1 -and
+    $global:confirmationWarnings[0] -match 'Expected characters: 98; entered characters: 99; first differing position: 99; unexpected whitespace: False; control characters present: False') `
+    'Prompt-colon mismatch diagnostics were incorrect.'
 
   Reset-Mocks
   & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40)
