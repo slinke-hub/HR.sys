@@ -83,6 +83,7 @@ RESET ROLE;
 UPDATE crm_deal_attachments SET description='Image description' WHERE category='PROPOSAL';
 SET ROLE authenticated;
 SELECT test_denied($q$SELECT start_crm_presentation_approval('40000000-0000-0000-0000-000000000002','QUOTE_PROPOSAL')$q$,'42501');
+RESET ROLE;
 SELECT test_assert((SELECT stage='LEAD' AND design_task_id IS NULL FROM crm_deals WHERE id='40000000-0000-0000-0000-000000000002'), 'Denied Design list permission leaves deal unchanged');
 RESET ROLE;
 SELECT test_assert(NOT EXISTS(SELECT 1 FROM crm_generated_tasks WHERE deal_id='40000000-0000-0000-0000-000000000002'), 'Denied submission creates no ledger entry');
@@ -92,13 +93,17 @@ SELECT start_crm_presentation_approval('40000000-0000-0000-0000-000000000002','Q
 SELECT start_crm_presentation_approval('40000000-0000-0000-0000-000000000002','QUOTE_PROPOSAL');
 SELECT test_assert((SELECT count(*)=1 AND min(assignee_id::text)='00000000-0000-0000-0000-000000000003'
  FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000002'), 'Complete proposal creates exactly one MQ-08 Design task');
+RESET ROLE;
 SELECT test_assert((SELECT stage='PITCH' AND design_task_id IS NOT NULL FROM crm_deals WHERE id='40000000-0000-0000-0000-000000000002'), 'Submission and task creation commit together');
+CREATE TEMP TABLE test_design_task_id AS SELECT id FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000002';
+GRANT SELECT ON test_design_task_id TO authenticated;
+SET ROLE authenticated;
 SET request.jwt.claim.sub='00000000-0000-0000-0000-000000000004';
 SELECT test_assert(NOT EXISTS(SELECT 1 FROM get_my_day() item WHERE item->>'crm_deal_id'='40000000-0000-0000-0000-000000000002'), 'Unrelated employee cannot see the Design task in My Day');
-SELECT test_assert(NOT can_access_task((SELECT id FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000002'), auth.uid()), 'Unrelated employee has no task access');
-SELECT test_denied($q$SELECT change_task_status((SELECT id FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000002'),'completed')$q$,'42501');
+SELECT test_assert(NOT can_access_task((SELECT id FROM test_design_task_id), auth.uid()), 'Unrelated employee has no task access');
+SELECT test_denied($q$SELECT change_task_status((SELECT id FROM test_design_task_id),'completed')$q$,'42501');
 SET request.jwt.claim.sub='00000000-0000-0000-0000-000000000003';
-SELECT test_denied($q$SELECT change_task_status((SELECT id FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000002'),'completed')$q$,'23514');
+SELECT test_denied($q$SELECT change_task_status((SELECT id FROM test_design_task_id),'completed')$q$,'23514');
 RESET ROLE;
 INSERT INTO task_attachments(task_id,file_url,file_type) SELECT id,'storage://task-attachments/design.pdf','application/pdf'
  FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000002';
@@ -144,15 +149,17 @@ INSERT INTO crm_deal_attachments(deal_id,category,file_url,file_type,description
  ('40000000-0000-0000-0000-000000000003','QUOTATION','storage://crm-deal-files/other.pdf','application/pdf','Quote');
 SET ROLE authenticated;
 SELECT test_denied($q$SELECT create_project_from_won_deal_v2('40000000-0000-0000-0000-000000000003','{"event_date":"2026-10-22","event_start_time":"10:00","client":{"name":"Client"},"installation_type":"INDOOR","assigned_people":["00000000-0000-0000-0000-000000000002"]}')$q$,'23514');
+RESET ROLE;
 SELECT test_assert((SELECT stage='LEAD' FROM crm_deals WHERE id='40000000-0000-0000-0000-000000000003') AND NOT EXISTS(SELECT 1 FROM projects WHERE deal_id='40000000-0000-0000-0000-000000000003'), 'Authorized user cannot bypass Presentation by calling the Won RPC directly');
+SET ROLE authenticated;
 SELECT start_crm_presentation_approval('40000000-0000-0000-0000-000000000003','QUOTE');
 SELECT test_assert(NOT EXISTS(SELECT 1 FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000003'), 'Quote-only submission does not create a Design task');
 SELECT test_denied($q$SELECT create_project_from_won_deal_v2('40000000-0000-0000-0000-000000000003','{"project_amount":12}')$q$,'42501');
 SELECT test_denied($q$SELECT create_project_from_won_deal_v2('40000000-0000-0000-0000-000000000003','{}')$q$,'P0001');
 SELECT test_denied($q$SELECT create_project_from_won_deal_v2('40000000-0000-0000-0000-000000000003','{"event_date":"2026-10-22","event_end_date":"2026-10-21","event_start_time":"10:00","client":{"name":"Client"},"installation_type":"INDOOR"}')$q$,'P0001');
 SELECT create_project_from_won_deal_v2('40000000-0000-0000-0000-000000000003','{"event_date":"2026-10-22","event_start_time":"10:00","client":{"name":"Client"},"installation_type":"INDOOR","assigned_people":["00000000-0000-0000-0000-000000000002"]}');
-SELECT test_assert((SELECT stage='WON' FROM crm_deals WHERE id='40000000-0000-0000-0000-000000000003'), 'Won/order creation preserves contractual requirements without an approval status');
 RESET ROLE;
+SELECT test_assert((SELECT stage='WON' FROM crm_deals WHERE id='40000000-0000-0000-0000-000000000003'), 'Won/order creation preserves contractual requirements without an approval status');
 UPDATE projects SET paid_amount=42, project_amount=100 WHERE deal_id='40000000-0000-0000-0000-000000000003';
 SET ROLE authenticated;
 SELECT create_project_from_won_deal_v2('40000000-0000-0000-0000-000000000003','{"event_date":"2026-10-22","event_start_time":"10:00","client":{"name":"Client"},"installation_type":"INDOOR","assigned_people":["00000000-0000-0000-0000-000000000002"]}');

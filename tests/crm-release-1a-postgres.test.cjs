@@ -19,6 +19,7 @@ const externalContainerId = process.env.CRM_TEST_POSTGRES_CONTAINER_ID || '';
 const externalImageId = process.env.CRM_TEST_POSTGRES_IMAGE_ID || '';
 const externalDatabase = process.env.CRM_TEST_POSTGRES_DATABASE || '';
 const externalPassword = process.env.CRM_TEST_POSTGRES_PASSWORD || '';
+const externalCaFile = process.env.CRM_TEST_POSTGRES_CA_FILE || '';
 const dockerBin = process.env.CRM_TEST_DOCKER_BIN || 'docker';
 const port = external ? externalPort : 56541;
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('PG')));
@@ -29,6 +30,10 @@ Object.assign(env, {
   PGDATABASE: external ? externalDatabase : 'postgres'
 });
 if (external) env.PGPASSWORD = externalPassword;
+if (external) {
+  env.PGSSLMODE = 'verify-full';
+  env.PGSSLROOTCERT = externalCaFile;
+}
 function verifyDisposableDockerTarget() {
   assert.equal(externalHost, '127.0.0.1', 'external PostgreSQL must be loopback-only');
   assert(Number.isInteger(externalPort) && externalPort > 0 && externalPort <= 65535, 'external PostgreSQL port must be valid');
@@ -36,6 +41,8 @@ function verifyDisposableDockerTarget() {
   assert.match(externalImageId, /^sha256:[a-f0-9]{64}$/i, 'verified image ID is required');
   assert.equal(externalDatabase, 'crm_release_1a_test', 'only the dedicated synthetic database is permitted');
   assert(externalPassword.length >= 24, 'temporary test credential is required');
+  assert(externalCaFile && fs.existsSync(externalCaFile), 'synthetic TLS root certificate must exist');
+  assert(path.resolve(externalCaFile).startsWith(`${scratch}${path.sep}`), 'synthetic TLS root certificate must stay in disposable scratch');
   const inspected = spawnSync(dockerBin, ['inspect', externalContainerId], { encoding: 'utf8', windowsHide: true });
   assert.equal(inspected.status, 0, 'Docker must inspect the exact disposable container');
   const [container] = JSON.parse(inspected.stdout);
@@ -73,6 +80,15 @@ const sql = text => {
   if (external) verifyDisposableDockerTarget();
   return run('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-qAt'], text);
 };
+function sqlFile(file, variables = []) {
+  if (external) verifyDisposableDockerTarget();
+  const args = ['-X', '-v', 'ON_ERROR_STOP=1', '-qAt'];
+  for (const variable of variables) args.push('-v', variable);
+  args.push('-f', file);
+  const result = spawnSync(path.join(bin, 'psql.exe'), args, { encoding: 'utf8', env, windowsHide: true, timeout: 60000 });
+  if (result.status !== 0) throw new Error(`psql file ${path.basename(file)}: ${result.error || result.stderr || result.stdout}`);
+  return result.stdout;
+}
 function sourceFunction(file, name) {
   const source = fs.readFileSync(path.join(root, file), 'utf8');
   const start = source.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
@@ -148,6 +164,8 @@ function asyncSql(text) {
       ...['add_task_comment','register_task_attachment'].map(n => sourceFunction(taskServices,n)),
       sourceFunction('supabase/migrations/20260901090000_task_list_permissions_and_company_watchers.sql','validate_task_department_supervisor'),
       sourceFunction('supabase/migrations/20260910150000_crm_presentation_revision_status.sql','sync_crm_design_task_status'),
+      sourceFunction('supabase/migrations/20260909100000_crm_deal_contact_requirements.sql','enforce_crm_deal_contact_requirements'),
+      sourceFunction('supabase/migrations/20260910100000_crm_lost_readonly_privileged_deletion.sql','protect_lost_crm_deal_edits'),
       sourceFunction('supabase/migrations/20260907130000_task_creation_defaults.sql','apply_task_creation_defaults'),
       `CREATE TRIGGER validate_task_department_supervisor BEFORE INSERT OR UPDATE ON tasks FOR EACH ROW EXECUTE FUNCTION validate_task_department_supervisor();
        CREATE TRIGGER tasks_apply_creation_defaults BEFORE INSERT ON tasks FOR EACH ROW EXECUTE FUNCTION apply_task_creation_defaults();
@@ -156,9 +174,26 @@ function asyncSql(text) {
        CREATE TRIGGER design_sync AFTER INSERT OR UPDATE ON tasks FOR EACH ROW EXECUTE FUNCTION sync_crm_design_task_status();
        CREATE TRIGGER notify_task_change_trigger AFTER INSERT OR UPDATE ON tasks FOR EACH ROW EXECUTE FUNCTION notify_task_change();`
     ].join('\n'));
+    // Model the tracked Productivity/Task Backend ACLs. The baseline fixture
+    // grants authenticated broadly for convenience, but these callable RPCs
+    // explicitly revoke PUBLIC/anon before granting authenticated in production.
+    sql(`REVOKE ALL ON FUNCTION complete_task_productivity(uuid),
+      complete_and_hand_off_task(uuid,uuid), list_task_dependencies_secure(uuid),
+      list_task_dependency_history_secure(uuid), list_task_dependency_blockers_secure(),
+      list_accessible_tasks_secure(), get_my_day(), list_task_activity_secure(uuid)
+      FROM PUBLIC, anon, authenticated;
+      GRANT EXECUTE ON FUNCTION complete_task_productivity(uuid),
+      complete_and_hand_off_task(uuid,uuid), list_task_dependencies_secure(uuid),
+      list_task_dependency_history_secure(uuid), list_task_dependency_blockers_secure(),
+      list_accessible_tasks_secure(), get_my_day(), list_task_activity_secure(uuid)
+      TO authenticated;`);
+    console.log('RUN: exact staging preflight SQL against synthetic baseline');
+    sqlFile(path.join(root, 'docs/CRM_RELEASE_1A_STAGING_PREFLIGHT.sql'), ['synthetic_test=on']);
     const migrationSql = fs.readFileSync(path.join(root, 'supabase/migrations/20261022100000_crm_release_1a.sql'), 'utf8');
     console.log('RUN: migration 20261022100000');
     sql(migrationSql);
+    console.log('RUN: exact postcheck SQL after 20261022100000');
+    sqlFile(path.join(root, 'docs/CRM_RELEASE_1A_STAGING_POSTCHECKS.sql'), ['synthetic_test=on','migration_version=20261022100000']);
     console.log('RUN: prerequisite RLS policies');
     sql([
       sourcePolicy('schema.sql','"Users can view tasks assigned to them"'),
@@ -178,14 +213,20 @@ function asyncSql(text) {
     const visibilityMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20261024100000_crm_mq20_contact_task_visibility.sql'), 'utf8');
     console.log('RUN: migration 20261024100000');
     sql(visibilityMigration);
+    console.log('RUN: exact postcheck SQL after 20261024100000');
+    sqlFile(path.join(root, 'docs/CRM_RELEASE_1A_STAGING_POSTCHECKS.sql'), ['synthetic_test=on','migration_version=20261024100000']);
     const authorizationMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20261026100000_mq20_task_service_authorization_hardening.sql'), 'utf8');
     console.log('RUN: migration 20261026100000');
     sql(authorizationMigration);
+    console.log('RUN: exact postcheck SQL after 20261026100000');
+    sqlFile(path.join(root, 'docs/CRM_RELEASE_1A_STAGING_POSTCHECKS.sql'), ['synthetic_test=on','migration_version=20261026100000']);
     const appliedAuthorization = sql("SELECT count(*) FROM pg_trigger WHERE tgrelid='public.tasks'::regclass AND tgname='mq20_task_service_view_only' AND tgenabled='O'");
     assert.equal(appliedAuthorization.trim(), '1', 'MQ-20 task guard must be installed before dependency privacy migration');
     const dependencyPrivacyMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20261027100000_task_dependency_visibility_hardening.sql'), 'utf8');
     console.log('RUN: migration 20261027100000');
     sql(dependencyPrivacyMigration);
+    console.log('RUN: exact postcheck SQL after 20261027100000');
+    sqlFile(path.join(root, 'docs/CRM_RELEASE_1A_STAGING_POSTCHECKS.sql'), ['synthetic_test=on','migration_version=20261027100000']);
     const triggerStart = migrationSql.indexOf('DROP TRIGGER IF EXISTS crm_deals_enforce_workflow_transition');
     const triggerEndMarker = 'FOR EACH ROW EXECUTE FUNCTION public.enforce_deal_workflow_transition();';
     const triggerEnd = migrationSql.indexOf(triggerEndMarker, triggerStart) + triggerEndMarker.length;

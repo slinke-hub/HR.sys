@@ -2,6 +2,13 @@
 -- Supabase migration replay or an export of any connected database.
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
+CREATE SCHEMA supabase_migrations;
+CREATE TABLE supabase_migrations.schema_migrations(version text PRIMARY KEY, name text);
+INSERT INTO supabase_migrations.schema_migrations(version, name) VALUES
+ ('20260830000000','initial_schema'),
+ ('20261001100000','revoke_project_profile_directory_public_execute'),
+ ('20261005100000','revoke_direct_crm_client_dto_execute'),
+ ('20261005110000','security_hardening_s3');
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
  SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
@@ -69,6 +76,13 @@ CREATE TABLE task_waiting_history(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  category text, related_user_id uuid, note text, started_at timestamptz DEFAULT now(), resumed_at timestamptz, resumed_by uuid);
 CREATE TABLE task_blocker_history(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid NOT NULL, actor_id uuid,
  category text, related_user_id uuid, note text, created_at timestamptz DEFAULT now(), resolved_at timestamptz, resolved_by uuid);
+CREATE FUNCTION public.record_failed_login(text) RETURNS void LANGUAGE sql AS $$ SELECT $$;
+ALTER TABLE crm_deals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_lists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_activity ENABLE ROW LEVEL SECURITY;
 -- Specialist permission helpers are conservative fixture substitutes. The test
 -- runner loads real CRM, list and task façade predicates from repository SQL.
 CREATE FUNCTION can_marketing_manager_edit_task(uuid, uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
