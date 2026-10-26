@@ -5,6 +5,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'crm-release-1a-integrity.ps1')
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $scratchRoot = Join-Path $root 'scratch'
@@ -22,7 +23,8 @@ if (-not (Test-Path -LiteralPath $psql -PathType Leaf)) { throw 'PostgreSQL clie
 $envNames = @(
   'POSTGRES_PASSWORD','CRM_TEST_POSTGRES_EXTERNAL','CRM_TEST_POSTGRES_HOST','CRM_TEST_POSTGRES_PORT',
   'CRM_TEST_POSTGRES_CONTAINER_ID','CRM_TEST_POSTGRES_IMAGE_ID','CRM_TEST_POSTGRES_DATABASE',
-  'CRM_TEST_POSTGRES_PASSWORD','CRM_TEST_POSTGRES_CA_FILE','CRM_TEST_DOCKER_BIN','CRM_TEST_POSTGRES_BIN','CRM_TEST_SCRATCH_DIR'
+  'CRM_TEST_POSTGRES_PASSWORD','CRM_TEST_POSTGRES_CA_FILE','CRM_TEST_DOCKER_BIN','CRM_TEST_POSTGRES_BIN','CRM_TEST_SCRATCH_DIR',
+  'CRM_TEST_GIT_BLOB_ROOT'
 )
 $saved = @{}
 foreach ($name in $envNames) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -58,6 +60,33 @@ try {
   $env:POSTGRES_PASSWORD = $password
   New-Item -ItemType Directory -Path $scratch -ErrorAction Stop | Out-Null
   $scratchCreated = $true
+  $gitBlobRoot = Join-Path $scratch 'approved-git-blobs'
+  $migrationBlobPins = @(
+    [pscustomobject]@{ File='20261022100000_crm_release_1a.sql'; Sha256='6BEB27A27AE7E58885D8872470E536471D8B2F7C3FBBBF46029B35919764AC59' },
+    [pscustomobject]@{ File='20261024100000_crm_mq20_contact_task_visibility.sql'; Sha256='E0232767A24E4FCF0B4A4D20F6E9328F2F3032653C654763CE14B07A600AED6D' },
+    [pscustomobject]@{ File='20261026100000_mq20_task_service_authorization_hardening.sql'; Sha256='BDA9573A6B04BC54E7DE42E1ADA154FEA9B7335A903D41FD4C4DE54B6825A28A' },
+    [pscustomobject]@{ File='20261027100000_task_dependency_visibility_hardening.sql'; Sha256='F33737D78BEFC42D0E0063AB286E749964363B38B64681BE73E00931A14D2445' }
+  )
+  $gitBlobCommit = 'f27dbb2c16e73757b376ddcb01f7e7ab8c986548'
+  & git -C $root cat-file -e "$gitBlobCommit^{commit}"
+  if ($LASTEXITCODE -ne 0) { throw 'STOP: reviewed migration source commit is unavailable for synthetic artifacts.' }
+  foreach ($migration in $migrationBlobPins) {
+    $relativePath = "supabase/migrations/$($migration.File)"
+    $workingPath = Join-Path $root ($relativePath.Replace('/',[IO.Path]::DirectorySeparatorChar))
+    $blobId = (& git -C $root rev-parse "${gitBlobCommit}:$relativePath").Trim()
+    if ($LASTEXITCODE -ne 0 -or $blobId -notmatch '^[a-f0-9]{40}$') { throw "STOP: migration Git blob is unavailable: $($migration.File)." }
+    if ((Get-CrmGitPathBlobId -Root $root -RelativePath $relativePath -FullPath $workingPath) -cne $blobId) {
+      throw "STOP: working migration content differs from its Git blob after clean filtering: $($migration.File)."
+    }
+    $bytes = Get-CrmGitBlobBytes -Root $root -BlobObjectId $blobId
+    $sha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+    if ($sha256 -cne $migration.Sha256) { throw "STOP: approved Git-blob SHA-256 mismatch for $($migration.File)." }
+    $snapshotPath = Join-Path $gitBlobRoot ($relativePath.Replace('/',[IO.Path]::DirectorySeparatorChar))
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $snapshotPath)) | Out-Null
+    [IO.File]::WriteAllBytes($snapshotPath,$bytes)
+    Write-Host "Verified synthetic migration artifact $($migration.File) commit=$gitBlobCommit SHA256=$sha256"
+  }
+  $env:CRM_TEST_GIT_BLOB_ROOT = $gitBlobRoot
   $rsa = [Security.Cryptography.RSA]::Create(2048)
   $certificateRequest = [Security.Cryptography.X509Certificates.CertificateRequest]::new(
     'CN=localhost', $rsa, [Security.Cryptography.HashAlgorithmName]::SHA256,

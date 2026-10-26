@@ -2,9 +2,25 @@
 // never reads connection settings or connects to an existing database.
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawnSync, spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
+const releaseMigrationSha256 = new Map([
+  ['20261022100000_crm_release_1a.sql', '6BEB27A27AE7E58885D8872470E536471D8B2F7C3FBBBF46029B35919764AC59'],
+  ['20261024100000_crm_mq20_contact_task_visibility.sql', 'E0232767A24E4FCF0B4A4D20F6E9328F2F3032653C654763CE14B07A600AED6D'],
+  ['20261026100000_mq20_task_service_authorization_hardening.sql', 'BDA9573A6B04BC54E7DE42E1ADA154FEA9B7335A903D41FD4C4DE54B6825A28A'],
+  ['20261027100000_task_dependency_visibility_hardening.sql', 'F33737D78BEFC42D0E0063AB286E749964363B38B64681BE73E00931A14D2445']
+]);
+function readReleaseMigration(filename) {
+  const blobRoot = process.env.CRM_TEST_GIT_BLOB_ROOT;
+  const source = path.join(blobRoot || root, 'supabase', 'migrations', filename);
+  const bytes = fs.readFileSync(source);
+  const actual = crypto.createHash('sha256').update(bytes).digest('hex').toUpperCase();
+  assert.equal(actual, releaseMigrationSha256.get(filename), `approved Git-blob SHA-256 mismatch: ${filename}`);
+  console.log(`PASS: migration artifact ${filename} SHA256=${actual}`);
+  return bytes.toString('utf8');
+}
 const bin = process.env.CRM_TEST_POSTGRES_BIN || 'C:/Program Files/PostgreSQL/18/bin';
 const scratchRoot = path.resolve(root, 'scratch');
 const scratch = path.resolve(process.env.CRM_TEST_SCRATCH_DIR || path.join(scratchRoot, `crm-release-1a-pg-${Date.now()}`));
@@ -189,7 +205,7 @@ function asyncSql(text) {
       TO authenticated;`);
     console.log('RUN: exact staging preflight SQL against synthetic baseline');
     sqlFile(path.join(root, 'docs/CRM_RELEASE_1A_STAGING_PREFLIGHT.sql'), ['synthetic_test=on']);
-    const migrationSql = fs.readFileSync(path.join(root, 'supabase/migrations/20261022100000_crm_release_1a.sql'), 'utf8');
+    const migrationSql = readReleaseMigration('20261022100000_crm_release_1a.sql');
     console.log('RUN: migration 20261022100000');
     sql(migrationSql);
     console.log('RUN: exact postcheck SQL after 20261022100000');
@@ -210,19 +226,19 @@ function asyncSql(text) {
        ALTER TABLE task_activity ENABLE ROW LEVEL SECURITY;
        GRANT EXECUTE ON FUNCTION can_access_task(uuid,uuid), can_view_task(uuid,uuid), is_task_admin(uuid), is_mq20_profile(uuid), is_ines_modani_task(uuid), is_mq07_design_list(uuid,uuid), can_assign_tasks_company_wide(uuid), list_task_dependencies_secure(uuid), list_task_dependency_history_secure(uuid), list_task_dependency_blockers_secure(), list_task_activity_secure(uuid), complete_and_hand_off_task(uuid,uuid) TO authenticated;`
     ].join('\n'));
-    const visibilityMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20261024100000_crm_mq20_contact_task_visibility.sql'), 'utf8');
+    const visibilityMigration = readReleaseMigration('20261024100000_crm_mq20_contact_task_visibility.sql');
     console.log('RUN: migration 20261024100000');
     sql(visibilityMigration);
     console.log('RUN: exact postcheck SQL after 20261024100000');
     sqlFile(path.join(root, 'docs/CRM_RELEASE_1A_STAGING_POSTCHECKS.sql'), ['synthetic_test=on','migration_version=20261024100000']);
-    const authorizationMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20261026100000_mq20_task_service_authorization_hardening.sql'), 'utf8');
+    const authorizationMigration = readReleaseMigration('20261026100000_mq20_task_service_authorization_hardening.sql');
     console.log('RUN: migration 20261026100000');
     sql(authorizationMigration);
     console.log('RUN: exact postcheck SQL after 20261026100000');
     sqlFile(path.join(root, 'docs/CRM_RELEASE_1A_STAGING_POSTCHECKS.sql'), ['synthetic_test=on','migration_version=20261026100000']);
     const appliedAuthorization = sql("SELECT count(*) FROM pg_trigger WHERE tgrelid='public.tasks'::regclass AND tgname='mq20_task_service_view_only' AND tgenabled='O'");
     assert.equal(appliedAuthorization.trim(), '1', 'MQ-20 task guard must be installed before dependency privacy migration');
-    const dependencyPrivacyMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20261027100000_task_dependency_visibility_hardening.sql'), 'utf8');
+    const dependencyPrivacyMigration = readReleaseMigration('20261027100000_task_dependency_visibility_hardening.sql');
     console.log('RUN: migration 20261027100000');
     sql(dependencyPrivacyMigration);
     console.log('RUN: exact postcheck SQL after 20261027100000');

@@ -16,6 +16,40 @@ function Get-CrmGitBlobSha1 {
   return [Convert]::ToHexString([Security.Cryptography.SHA1]::HashData($payload)).ToLowerInvariant()
 }
 
+function Get-CrmGitBlobBytes {
+  param([string]$Root,[string]$BlobObjectId)
+  if ($BlobObjectId -notmatch '^[a-f0-9]{40,64}$') { throw 'Invalid approved Git blob object ID.' }
+  $psi = [Diagnostics.ProcessStartInfo]::new('git')
+  $psi.WorkingDirectory = $Root
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  [void]$psi.ArgumentList.Add('cat-file')
+  [void]$psi.ArgumentList.Add('blob')
+  [void]$psi.ArgumentList.Add($BlobObjectId)
+  $process = [Diagnostics.Process]::Start($psi)
+  $memory = [IO.MemoryStream]::new()
+  try {
+    $process.StandardOutput.BaseStream.CopyTo($memory)
+    $errorText = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) { throw "Could not read approved Git blob: $errorText" }
+    return ,$memory.ToArray()
+  } finally {
+    $memory.Dispose()
+    $process.Dispose()
+  }
+}
+
+function Get-CrmGitPathBlobId {
+  param([string]$Root,[string]$RelativePath,[string]$FullPath)
+  $path = $RelativePath.Replace('\','/')
+  $result = Invoke-CrmIntegrityGit $Root @('hash-object',"--path=$path",'--',$FullPath)
+  $blob = ($result | Select-Object -First 1).ToString().Trim()
+  if ($blob -notmatch '^[a-f0-9]{40,64}$') { throw "Git returned an invalid path-filtered object ID for $path." }
+  return $blob
+}
+
 function Assert-CrmPackageGitState {
   param(
     [string]$Root,
@@ -53,7 +87,8 @@ function New-CrmPackageIntegritySnapshot {
     [string]$Root,
     [string]$ApprovedCommit,
     [string[]]$CriticalFiles,
-    [string[]]$RelevantUntrackedPatterns
+    [string[]]$RelevantUntrackedPatterns,
+    [hashtable]$ExpectedSha256 = @{}
   )
   Assert-CrmPackageGitState $Root $ApprovedCommit $RelevantUntrackedPatterns
   $snapshotDirectory = Join-Path ([IO.Path]::GetTempPath()) ('crm-release-1a-verified-' + [Guid]::NewGuid().ToString('N'))
@@ -68,10 +103,17 @@ function New-CrmPackageIntegritySnapshot {
       $fullPath = Join-Path $Root ($relativePath.Replace('/',[IO.Path]::DirectorySeparatorChar))
       if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { throw "Missing integrity-protected file: $relativePath" }
       $committedBlob = (Invoke-CrmIntegrityGit $Root @('rev-parse',"${ApprovedCommit}:$relativePath") | Select-Object -First 1).ToString().Trim()
-      $bytes = [IO.File]::ReadAllBytes($fullPath)
+      $workingBlob = Get-CrmGitPathBlobId -Root $Root -RelativePath $relativePath -FullPath $fullPath
+      if ($workingBlob -cne $committedBlob) { throw "File differs from the approved commit after Git clean filtering: $relativePath" }
+      # Execution input comes from the immutable approved tree object, never
+      # from the mutable worktree whose line endings may vary by checkout.
+      $bytes = Get-CrmGitBlobBytes -Root $Root -BlobObjectId $committedBlob
       $actualBlob = Get-CrmGitBlobSha1 $bytes
-      if ($actualBlob -cne $committedBlob) { throw "File differs from the approved commit: $relativePath" }
+      if ($actualBlob -cne $committedBlob) { throw "Approved Git blob snapshot failed object verification: $relativePath" }
       $sha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+      if ($ExpectedSha256.ContainsKey($relativePath) -and $sha256 -cne $ExpectedSha256[$relativePath]) {
+        throw "Approved SHA-256 mismatch for Git snapshot: $relativePath"
+      }
       $snapshotPath = Join-Path $snapshotDirectory ($relativePath.Replace('/',[IO.Path]::DirectorySeparatorChar))
       $snapshotParent = Split-Path -Parent $snapshotPath
       [IO.Directory]::CreateDirectory($snapshotParent) | Out-Null
@@ -90,14 +132,14 @@ function New-CrmPackageIntegritySnapshot {
     }
     Assert-CrmPackageGitState $Root $ApprovedCommit $RelevantUntrackedPatterns
     foreach ($relativePath in $CriticalFiles) {
-      $current = [IO.File]::ReadAllBytes((Join-Path $Root ($relativePath.Replace('/',[IO.Path]::DirectorySeparatorChar))))
-      if ((Get-CrmGitBlobSha1 $current) -cne $files[$relativePath].Blob) {
+      $currentPath = Join-Path $Root ($relativePath.Replace('/',[IO.Path]::DirectorySeparatorChar))
+      if ((Get-CrmGitPathBlobId -Root $Root -RelativePath $relativePath -FullPath $currentPath) -cne $files[$relativePath].Blob) {
         throw "Execution-critical file changed during snapshot creation: $relativePath"
       }
     }
     return [pscustomobject]@{
       Root=$Root; ApprovedCommit=$ApprovedCommit; CriticalFiles=$CriticalFiles
-      RelevantUntrackedPatterns=$RelevantUntrackedPatterns; Files=$files
+    RelevantUntrackedPatterns=$RelevantUntrackedPatterns; ExpectedSha256=$ExpectedSha256; Files=$files
       Streams=$streams; Directory=$snapshotDirectory
     }
   } catch {
@@ -113,12 +155,20 @@ function Assert-CrmPackageIntegritySnapshot {
   foreach ($relativePath in $Snapshot.CriticalFiles) {
     $fullPath = Join-Path $Snapshot.Root ($relativePath.Replace('/',[IO.Path]::DirectorySeparatorChar))
     if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { throw "Execution-critical file disappeared: $relativePath" }
-    $current = [IO.File]::ReadAllBytes($fullPath)
-    if ((Get-CrmGitBlobSha1 $current) -cne $Snapshot.Files[$relativePath].Blob) {
+    if ((Get-CrmGitPathBlobId -Root $Snapshot.Root -RelativePath $relativePath -FullPath $fullPath) -cne $Snapshot.Files[$relativePath].Blob) {
       throw "Execution-critical file changed after validation: $relativePath"
     }
     if (-not (Test-Path -LiteralPath $Snapshot.Files[$relativePath].SnapshotPath -PathType Leaf)) {
       throw "Validated SQL snapshot is missing: $relativePath"
+    }
+    $snapshotBytes = [IO.File]::ReadAllBytes($Snapshot.Files[$relativePath].SnapshotPath)
+    $snapshotSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($snapshotBytes))
+    if ($snapshotSha256 -cne $Snapshot.Files[$relativePath].Sha256 -or
+        (Get-CrmGitBlobSha1 $snapshotBytes) -cne $Snapshot.Files[$relativePath].Blob) {
+      throw "Validated execution snapshot hash mismatch: $relativePath"
+    }
+    if ($Snapshot.ExpectedSha256.ContainsKey($relativePath) -and $snapshotSha256 -cne $Snapshot.ExpectedSha256[$relativePath]) {
+      throw "Approved execution SHA-256 mismatch: $relativePath"
     }
   }
 }

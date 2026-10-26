@@ -29,6 +29,9 @@ $global:failMigrationAt = 0
 $global:mockDbUrl = $null
 $global:confirmationTamper = $null
 $global:confirmationWarnings = [System.Collections.Generic.List[string]]::new()
+$global:realGitPath = (Get-Command git -CommandType Application | Select-Object -First 1).Source
+$global:mockRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$global:mockApprovedCommit = (& $global:realGitPath -C $global:mockRepoRoot rev-parse HEAD).Trim()
 $global:savedDbEnv = @{}
 foreach ($envName in @('PGPASSWORD','PGPASSFILE','PGSERVICE','PGSERVICEFILE','PGSSLMODE','PGSSLROOTCERT')) {
   $global:savedDbEnv[$envName] = [Environment]::GetEnvironmentVariable($envName)
@@ -121,16 +124,21 @@ function git {
   $revIndex = [Array]::IndexOf($GitArgs,'rev-parse')
   if ($revIndex -ge 0) {
     $revision = [string]$GitArgs[$revIndex + 1]
-    if ($revision -eq 'HEAD') { $global:LASTEXITCODE = 0; return ('a' * 40) }
+    if ($revision -eq 'HEAD' -or $revision -match '\^\{commit\}$') { $global:LASTEXITCODE = 0; return $global:mockApprovedCommit }
     $relative = $revision -replace '^[a-f0-9]{40}:',''
-    $full = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ($relative.Replace('/',[IO.Path]::DirectorySeparatorChar))
-    $bytes = [IO.File]::ReadAllBytes($full)
-    $header = [Text.Encoding]::ASCII.GetBytes("blob $($bytes.Length)`0")
-    $payload = [byte[]]::new($header.Length + $bytes.Length)
-    [Buffer]::BlockCopy($header,0,$payload,0,$header.Length)
-    [Buffer]::BlockCopy($bytes,0,$payload,$header.Length,$bytes.Length)
+    $blob = (& $global:realGitPath -C $global:mockRepoRoot rev-parse "$($global:mockApprovedCommit):$relative").Trim()
+    if ($LASTEXITCODE -ne 0) { throw "Mock Git could not resolve committed blob $relative." }
     $global:LASTEXITCODE = 0
-    return [Convert]::ToHexString([Security.Cryptography.SHA1]::HashData($payload)).ToLowerInvariant()
+    return $blob
+  }
+  if ($GitArgs -contains 'hash-object') {
+    $pathArg = @($GitArgs | Where-Object { $_ -like '--path=*' } | Select-Object -First 1)
+    if ($pathArg.Count -ne 1) { throw 'Mock Git path-filtered hash did not include a single path.' }
+    $relative = ([string]$pathArg[0]).Substring('--path='.Length)
+    $blob = (& $global:realGitPath -C $global:mockRepoRoot rev-parse "$($global:mockApprovedCommit):$relative").Trim()
+    if ($LASTEXITCODE -ne 0) { throw "Mock Git could not resolve clean-filtered blob $relative." }
+    $global:LASTEXITCODE = 0
+    return $blob
   }
   if ($GitArgs -contains 'diff' -or $GitArgs -contains 'cat-file' -or $GitArgs -contains 'merge-base') {
     $global:LASTEXITCODE = 0
@@ -191,6 +199,9 @@ try {
   Assert-Test ($postgresHarnessSource.Contains("env.PGSSLMODE = 'verify-full'") -and
     $postgresHarnessSource.Contains('env.PGSSLROOTCERT = externalCaFile')) `
     'Synthetic PostgreSQL test connections must retain certificate and hostname verification.'
+  Assert-Test ($postgresHarnessSource.Contains('CRM_TEST_GIT_BLOB_ROOT') -and
+    $postgresHarnessSource.Contains('approved Git-blob SHA-256 mismatch')) `
+    'PostgreSQL runtime tests must consume and verify the approved Git-blob migration artifacts.'
 
   Reset-Mocks
   & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker
@@ -205,9 +216,16 @@ try {
   Assert-Test ($global:psqlCalls.Count -eq 0 -and $global:migrationAttemptCount -eq 0) 'Runner performed database work without explicit approval.'
 
   Reset-Mocks
+  $caught = $false
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('b' * 40) }
+  catch { $caught = $true }
+  Assert-Test $caught 'Runner accepted an unapproved package commit.'
+  Assert-Test ($global:psqlCalls.Count -eq 0 -and $global:migrationAttemptCount -eq 0) 'Runner attempted staging I/O after rejecting an unapproved commit.'
+
+  Reset-Mocks
   $global:confirmationTamper = 'trailing-space'
   $caught = $false
-  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40) }
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit $global:mockApprovedCommit }
   catch { $caught = $true }
   Assert-Test $caught 'Runner accepted a confirmation with an extra trailing space.'
   Assert-Test ($global:psqlCalls.Count -eq 0) 'Runner connected before rejecting malformed CA confirmation.'
@@ -219,7 +237,7 @@ try {
   Reset-Mocks
   $global:confirmationTamper = 'prompt-colon'
   $caught = $false
-  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40) }
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit $global:mockApprovedCommit }
   catch { $caught = $true }
   Assert-Test $caught 'Runner accepted an extra prompt colon as part of the confirmation.'
   Assert-Test ($global:psqlCalls.Count -eq 0) 'Runner connected before rejecting a prompt-colon mismatch.'
@@ -228,7 +246,7 @@ try {
     'Prompt-colon mismatch diagnostics were incorrect.'
 
   Reset-Mocks
-  & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40)
+  & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit $global:mockApprovedCommit
   $migrationCalls = @($global:psqlCalls | Where-Object {
     $i = [Array]::IndexOf($_, '-f'); $i -ge 0 -and [string]$_[$i + 1] -match 'supabase\\migrations\\202610.*\.sql$'
   })
@@ -248,7 +266,7 @@ try {
   Reset-Mocks
   $global:failPostcheckAt = 2
   $caught = $false
-  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40) }
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit $global:mockApprovedCommit }
   catch { $caught = $true }
   Assert-Test $caught 'Runner did not stop on a failed post-check.'
   Assert-Test (($global:repairCalls -join ',') -ceq '20261022100000') 'Runner recorded a migration whose post-check failed or continued past it.'
@@ -267,7 +285,7 @@ try {
   Reset-Mocks
   $global:failMigrationAt = 1
   $caught = $false
-  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit ('a' * 40) }
+  try { & $runner -ProjectRef 'jcfyyxsuspukcmybyhjj' -CaFile $caMarker -Execute -ApprovalReference 'TEST-APPROVAL-MOCK-ONLY' -ApprovedCommit $global:mockApprovedCommit }
   catch { $caught = $true }
   Assert-Test $caught 'Runner did not stop on a failed migration SQL command.'
   Assert-Test ($global:migrationAttemptCount -eq 1 -and $global:repairCalls.Count -eq 0) 'Runner recorded a failed migration or continued after its SQL error.'

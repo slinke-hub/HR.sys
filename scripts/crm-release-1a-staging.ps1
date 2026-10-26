@@ -25,7 +25,9 @@ $postcheckSql = Join-Path $root 'docs\CRM_RELEASE_1A_STAGING_POSTCHECKS.sql'
 $catalogSql = Join-Path $root 'docs\CRM_RELEASE_1A_DATABASE_METADATA_QUERIES.sql'
 
 $migrations = @(
-  [pscustomobject]@{ Version='20261022100000'; File='20261022100000_crm_release_1a.sql'; Sha256='1F6D6EBE995195A46AC29CD005F652673BB11994512E3A2E206AACFD79F91301' },
+  # Pin the immutable committed blob bytes. The previous pin represented a
+  # Windows mixed-EOL working copy; Git autocrlf normalizes that copy to this blob.
+  [pscustomobject]@{ Version='20261022100000'; File='20261022100000_crm_release_1a.sql'; Sha256='6BEB27A27AE7E58885D8872470E536471D8B2F7C3FBBBF46029B35919764AC59' },
   [pscustomobject]@{ Version='20261024100000'; File='20261024100000_crm_mq20_contact_task_visibility.sql'; Sha256='E0232767A24E4FCF0B4A4D20F6E9328F2F3032653C654763CE14B07A600AED6D' },
   [pscustomobject]@{ Version='20261026100000'; File='20261026100000_mq20_task_service_authorization_hardening.sql'; Sha256='BDA9573A6B04BC54E7DE42E1ADA154FEA9B7335A903D41FD4C4DE54B6825A28A' },
   [pscustomobject]@{ Version='20261027100000'; File='20261027100000_task_dependency_visibility_hardening.sql'; Sha256='F33737D78BEFC42D0E0063AB286E749964363B38B64681BE73E00931A14D2445' }
@@ -180,11 +182,22 @@ foreach ($statusLine in @(& git -C $root status --porcelain --untracked-files=al
 $unexpectedPaths = @($changedPaths | Sort-Object -Unique | Where-Object { $allowedPackageChanges -cnotcontains $_.Replace('\','/') })
 if ($unexpectedPaths.Count -gt 0) { Stop-Release "Unexpected workspace changes: $($unexpectedPaths -join ', ')" }
 
+if ($Execute -and $ApprovedCommit -notmatch '^[a-f0-9]{40}$') { Stop-Release 'Execution mode requires a full independently reviewed package commit SHA.' }
+$packageCommit = if ($Execute) { $ApprovedCommit } else { $head }
+$expectedMigrationSha256 = @{}
 foreach ($m in $migrations) {
   $path = Join-Path $migrationDir $m.File
   if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { Stop-Release "Missing migration file $($m.File)." }
-  if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -cne $m.Sha256) { Stop-Release "Checksum mismatch for $($m.File)." }
-  $sql = Get-Content -Raw -LiteralPath $path
+  $relativePath = "supabase/migrations/$($m.File)"
+  $committedBlob = (Invoke-CrmIntegrityGit $root @('rev-parse',"${packageCommit}:$relativePath") | Select-Object -First 1).ToString().Trim()
+  if ((Get-CrmGitPathBlobId -Root $root -RelativePath $relativePath -FullPath $path) -cne $committedBlob) {
+    Stop-Release "Migration differs from the approved commit after Git clean filtering: $($m.File)."
+  }
+  $migrationBytes = Get-CrmGitBlobBytes -Root $root -BlobObjectId $committedBlob
+  $migrationSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($migrationBytes))
+  if ($migrationSha256 -cne $m.Sha256) { Stop-Release "Committed-blob checksum mismatch for $($m.File)." }
+  $expectedMigrationSha256[$relativePath] = $m.Sha256
+  $sql = [Text.Encoding]::UTF8.GetString($migrationBytes)
   if ([regex]::Matches($sql,'(?im)^\s*BEGIN\s*;').Count -ne 1 -or
       [regex]::Matches($sql,'(?im)^\s*COMMIT\s*;').Count -ne 1) { Stop-Release "Unexpected transaction boundaries in $($m.File)." }
 }
@@ -256,7 +269,8 @@ $integritySnapshot = $null
 if ($Execute) {
   try {
     $integritySnapshot = New-CrmPackageIntegritySnapshot -Root $root -ApprovedCommit $ApprovedCommit `
-      -CriticalFiles $criticalFiles -RelevantUntrackedPatterns $relevantUntrackedPatterns
+      -CriticalFiles $criticalFiles -RelevantUntrackedPatterns $relevantUntrackedPatterns `
+      -ExpectedSha256 $expectedMigrationSha256
   } catch { Stop-Release "Execution package integrity validation failed: $($_.Exception.Message)" }
   $preflightSql = $integritySnapshot.Files['docs/CRM_RELEASE_1A_STAGING_PREFLIGHT.sql'].SnapshotPath
   $postcheckSql = $integritySnapshot.Files['docs/CRM_RELEASE_1A_STAGING_POSTCHECKS.sql'].SnapshotPath
