@@ -8,13 +8,13 @@ Status: operator-reviewed draft. This is a forward-recovery guide, not an execut
 - Verified Production rollback candidate: deployment `3iXVhhMKA`, immutable URL [https://hr-ndwggkkl-montis-projects-b7e2f4fe.vercel.app](https://hr-ndwggkkl-montis-projects-b7e2f4fe.vercel.app), Production domain [https://sys.muqam.net](https://sys.muqam.net), status Ready / Current, branch `main`, commit `df351eb`, deployed October 8, 2026. These details were verified by the administrator; re-verify the current Production deployment and confirm this candidate remains available immediately before release. Do not substitute the source commit for a deployment reference.
 - Database compatibility evidence: use [CRM_RELEASE_1A_DATABASE_METADATA_QUERIES.sql](CRM_RELEASE_1A_DATABASE_METADATA_QUERIES.sql) separately on staging and Production with an approved read-only role. The query file returns catalog metadata only; it does not inspect CRM/task business rows or change objects.
 - Vercel access check for this review: the deployment reference above was supplied and verified by the administrator; this review did not access Vercel directly.
-- Database migration: `20261022100000_crm_release_1a.sql`.
+- Ordered database migrations: `20261022100000_crm_release_1a.sql`, `20261024100000_crm_mq20_contact_task_visibility.sql`, and `20261026100000_mq20_task_service_authorization_hardening.sql`. Each is transactional and must be applied and recorded as a separate version, in order, after verifying the target and checksum.
 - This repository contains no CRM Release 1A down migration or approved SQL rollback artifact.
 
 ## Before release
 
 1. Immediately before release, the release owner re-verifies the current Production deployment in Vercel, records its immutable URL/ID, and confirms deployment `3iXVhhMKA` remains available as the approved rollback candidate. If the current deployment or candidate differs from this record, update the recovery reference and reassess compatibility before proceeding.
-2. The database operator confirms the target migration version, function owners, and required task triggers against the approved Production baseline evidence. In particular, verify `enforce_private_task_list_ownership_trigger`, `enforce_task_completion_approval_trigger`, `validate_task_department_supervisor_trigger`, task activity/notification triggers, `crm_design_task_completion_trigger`, and the CRM Release 1A `crm_deal_workflow_transition` trigger.
+2. The database operator confirms the target migration versions, function owners, and required task triggers against the approved baseline evidence. In particular, verify `enforce_private_task_list_ownership_trigger`, `enforce_task_completion_approval_trigger`, `validate_task_department_supervisor_trigger`, task activity/notification triggers, `crm_design_task_completion_trigger`, the CRM Release 1A `crm_deal_workflow_transition` trigger, `mq20_task_service_view_only`, and the `mq20_view_only_*` child-row triggers on task comments, attachments, dependencies, productivity history, and task lists.
 3. Confirm the selected Vercel rollback target is compatible with the database state. The pre-release application may call CRM approval RPCs that Release 1A revokes, so an application-only rollback after the database migration commits is not assumed safe.
 4. Ensure the operator has the approved database recovery procedure and a tested backup/restore path. Do not use this document as authorization to run a database restore.
 
@@ -27,10 +27,10 @@ Status: operator-reviewed draft. This is a forward-recovery guide, not an execut
 
 ## Database recovery options
 
-- **Migration failed before commit:** the migration is wrapped in a transaction. Confirm the database reports the migration as unapplied and verify no partial DDL or data changes remain before retrying a corrected migration.
+- **Migration failed before commit:** each migration is wrapped in its own transaction. Stop before the next file, confirm the failed version is unapplied, and verify no partial DDL or data changes remain before retrying a corrected migration. Do not use migration repair to erase or rewrite historical versions.
 - **Migration committed and behavior is defective:** prefer a new, reviewed forward migration. This release creates a generated-task identity ledger and tasks; reversing those records can lose idempotency or audit history.
 - **Database restore is considered:** only the database operator may decide whether a point-in-time or backup restore is appropriate under the established recovery objectives. A restore can discard subsequent CRM, task, notification, and project changes. Coordinate its data-loss window and application compatibility before execution.
-- **Function/trigger restoration:** no down migration is supplied. Use the exact pre-release definitions from the approved baseline artifacts and restore owners, `SECURITY DEFINER` attributes, pinned search paths, EXECUTE grants/revocations, and trigger event definitions. Do not recreate old approval gates by hand or infer missing definitions from function names.
+- **Function/trigger restoration:** no down migration is supplied. Use the exact pre-release definitions from approved baseline artifacts and restore owners, `SECURITY DEFINER` attributes, pinned search paths, EXECUTE grants/revocations, and trigger event definitions. The MQ-20 hardening migration replaces task access/manage/execute predicates, adds a ledger-backed Contact task visibility helper, and installs task/child-row view-only guards; a database recovery must account for all of these objects and the two MQ-20 comment/attachment SELECT policy expressions. Do not recreate old approval gates by hand or infer missing definitions from function names.
 
 ## Release 1A task and history handling
 
@@ -49,6 +49,7 @@ After a recovery action, verify against a disposable database or approved read-o
 5. Contact and Design tasks retain one-per-deal identity, authorization, assignees, due dates, completion status, activity history, and notifications.
 6. Task Manager and My Day visibility and action permissions still follow the established assignee, list, department, and manager rules.
 7. Historical CRM approvals, deals, activity, and notifications remain present and unchanged.
+8. MQ-20 can read only an authorized Ines/MQ-08 task or their own ledger-backed Contact task; privileged RPCs cannot create or modify tasks, comments, attachments, dependencies, productivity history, or task lists as MQ-20.
 
 ## Stop conditions
 

@@ -14,7 +14,7 @@ CREATE TABLE profiles(id uuid PRIMARY KEY, department_id uuid, role text, job_ti
 CREATE TABLE crm_clients(id uuid PRIMARY KEY, name text, company text);
 CREATE TABLE task_lists(id uuid PRIMARY KEY, name text, department_id uuid, owner_id uuid,
  can_add_users uuid[] DEFAULT '{}', can_delete_users uuid[] DEFAULT '{}', shared_with uuid[] DEFAULT '{}', created_at timestamptz DEFAULT now());
-CREATE TABLE crm_deals(id uuid PRIMARY KEY, client_id uuid, title text, amount numeric DEFAULT 0,
+CREATE TABLE crm_deals(id uuid PRIMARY KEY, client_id uuid, title text, amount numeric DEFAULT 0, created_at timestamptz DEFAULT now(),
  stage text DEFAULT 'LEAD', workflow_status text DEFAULT 'NOT_STARTED', approval_type text,
  created_by uuid, assigned_to uuid, technical_description text, design_task_id uuid,
  design_task_status text, design_task_due_date date, proposal_sent_at timestamptz, lost_reason text);
@@ -37,9 +37,16 @@ CREATE TABLE tasks(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), title varchar(
  parent_task_id uuid, marketing_department text, content_links text[], delivery_status text,
  repeat_type text, repeat_interval integer, notify_via_email boolean, attachments text[] DEFAULT '{}',
  work_state text DEFAULT 'ACTIVE', archived_at timestamptz, started_at timestamptz, completed_at timestamptz,
- waiting_category text, blocked_category text);
-CREATE TABLE task_attachments(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid, file_url text,
- file_type text, is_archived boolean DEFAULT false);
+ waiting_category text, waiting_related_user_id uuid, waiting_note text,
+ blocked_category text, blocked_related_user_id uuid, blocked_note text);
+ALTER TABLE tasks ADD COLUMN dependency_ready_notified_at timestamptz;
+ALTER TABLE tasks ADD COLUMN waiting_since timestamptz;
+ALTER TABLE tasks ADD COLUMN blocked_since timestamptz;
+ALTER TABLE tasks ADD COLUMN resume_status text;
+CREATE TABLE task_attachments(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid, user_id uuid,
+ file_url text, file_name text, file_type text, file_size bigint, created_at timestamptz DEFAULT now(),
+ is_archived boolean DEFAULT false, visible_to_project_assignee boolean DEFAULT false,
+ attachment_scope text DEFAULT 'TASK');
 CREATE TABLE notifications(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, message text, event_type text,
  task_id uuid, actor_id uuid, action_url text, metadata jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE auth.users(id uuid PRIMARY KEY, email text);
@@ -48,18 +55,27 @@ CREATE TABLE task_email_outbox(notification_id uuid, task_id uuid, recipient_id 
  subject text, message text, action_url text, comment_text text, attachment_links jsonb, always_send boolean, context_type text, details jsonb);
 CREATE FUNCTION email_profile_name(uuid) RETURNS text LANGUAGE sql AS $$ SELECT $1::text $$;
 CREATE TABLE task_activity(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid, actor_id uuid,
- action text, from_status text, to_status text, metadata jsonb);
+ action text, from_status text, to_status text, metadata jsonb, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE task_employee_access_grants(viewer_id uuid NOT NULL, subject_id uuid NOT NULL, granted_by uuid,
+ created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), PRIMARY KEY(viewer_id, subject_id));
 CREATE TABLE projects(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), deal_id uuid, created_at timestamptz DEFAULT now(),
- project_name text, project_type text, description text, assigned_people uuid[], project_tags text[], client_id uuid,
+ project_name text, project_type text, description text, created_by uuid, assigned_people uuid[], project_tags text[], client_id uuid,
  event_date date, start_date date, end_date date, event_location text, project_amount numeric, paid_amount numeric,
- project_status text, source text, order_employee_id uuid, event_start_time time, installation_time timestamp,
+ project_status text, source text, order_employee_id uuid, project_manager_id uuid, event_start_time time, installation_time timestamp,
  uninstallation_time timestamp, client_snapshot jsonb, event_location_text text, installation_type text, equipment jsonb);
+CREATE TABLE task_dependencies(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), predecessor_task_id uuid NOT NULL,
+ successor_task_id uuid NOT NULL, created_by uuid, created_at timestamptz DEFAULT now(), removed_by uuid, removed_at timestamptz);
+CREATE TABLE task_waiting_history(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid NOT NULL, actor_id uuid,
+ category text, related_user_id uuid, note text, started_at timestamptz DEFAULT now(), resumed_at timestamptz, resumed_by uuid);
+CREATE TABLE task_blocker_history(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid NOT NULL, actor_id uuid,
+ category text, related_user_id uuid, note text, created_at timestamptz DEFAULT now(), resolved_at timestamptz, resolved_by uuid);
 -- Specialist permission helpers are conservative fixture substitutes. The test
 -- runner loads real CRM, list and task façade predicates from repository SQL.
 CREATE FUNCTION can_marketing_manager_edit_task(uuid, uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 CREATE FUNCTION can_view_task_via_employee_grant(uuid, uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 CREATE FUNCTION can_view_task_list_via_employee_grant(uuid, uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 CREATE FUNCTION can_access_project(uuid, uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
+CREATE FUNCTION is_project_portfolio_admin(uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 CREATE FUNCTION is_task_department_manager(text, uuid) RETURNS boolean LANGUAGE sql AS $$
  SELECT EXISTS(SELECT 1 FROM departments WHERE name = $1 AND head_id = $2) $$;
 CREATE FUNCTION is_crm_approval_admin(uuid) RETURNS boolean LANGUAGE sql AS $$
@@ -89,6 +105,8 @@ INSERT INTO profiles(id, department_id, role, emp_index, is_active) VALUES
 UPDATE profiles SET employee_id='MQ-20', job_title='Sales Representative'
  WHERE id='00000000-0000-0000-0000-000000000007';
 UPDATE profiles SET employee_id='MQ-08' WHERE id='00000000-0000-0000-0000-000000000003';
+INSERT INTO task_employee_access_grants(viewer_id,subject_id,granted_by)
+ VALUES ('00000000-0000-0000-0000-000000000007','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000005');
 INSERT INTO crm_clients VALUES ('20000000-0000-0000-0000-000000000001','Example Client','Example Company');
 INSERT INTO task_lists(id,name,department_id,owner_id) VALUES
  ('30000000-0000-0000-0000-000000000001','Design','10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003');

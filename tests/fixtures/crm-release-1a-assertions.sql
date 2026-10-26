@@ -69,7 +69,7 @@ RESET ROLE;
 SELECT test_assert((SELECT count(*)=1 FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000001')
  AND (SELECT to_jsonb(t)=to_jsonb(o) FROM tasks t JOIN original_contact o ON t.id=o.id), 'Contact re-entry preserves the entire original completed task');
 SELECT test_denied($q$UPDATE tasks SET crm_workflow_kind=NULL WHERE crm_deal_id='40000000-0000-0000-0000-000000000001'$q$,'42501');
-SELECT test_denied($q$DELETE FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000001'$q$,'23001');
+SELECT test_denied($q$DELETE FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000001'$q$,'23503');
 SELECT test_assert((SELECT count(*)=1 AND min(status)='PENDING' FROM crm_deal_approval_steps)
  AND (SELECT count(*)=1 AND min(status)='REJECTED' FROM crm_design_task_approval_steps), 'Historical approval rows preserved unchanged');
 SELECT test_assert((SELECT stage='NEGOTIATION' FROM crm_deals WHERE id='40000000-0000-0000-0000-000000000006'), 'Historical Discussion stage preserved');
@@ -123,8 +123,18 @@ SELECT test_assert(EXISTS(SELECT 1 FROM task_activity WHERE action='TASK_CREATED
  AND EXISTS(SELECT 1 FROM task_activity WHERE action='TASK_STATUS_CHANGED')
  AND EXISTS(SELECT 1 FROM notifications WHERE event_type='task_created' AND user_id='00000000-0000-0000-0000-000000000003')
  AND EXISTS(SELECT 1 FROM notifications WHERE event_type='crm_presentation_submitted'), 'Task audit, assignment notifications and CRM submission notifications preserved');
-SELECT test_assert(NOT can_execute_task((SELECT id FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000002'), '00000000-0000-0000-0000-000000000004')
- AND can_execute_task((SELECT id FROM tasks WHERE crm_deal_id='40000000-0000-0000-0000-000000000002'), '00000000-0000-0000-0000-000000000003'), 'Existing My Day execution predicate retains assignee and outsider boundaries');
+SET ROLE authenticated;
+SET request.jwt.claim.sub='00000000-0000-0000-0000-000000000003';
+SELECT test_assert(NOT EXISTS (SELECT 1 FROM tasks task
+ WHERE task.crm_deal_id='40000000-0000-0000-0000-000000000002'
+   AND can_execute_task(task.id, '00000000-0000-0000-0000-000000000004')),
+ 'My Day execution predicate denies an unrelated employee');
+SELECT test_assert(EXISTS (SELECT 1 FROM tasks task
+ WHERE task.crm_deal_id='40000000-0000-0000-0000-000000000002'
+   AND task.assignee_id='00000000-0000-0000-0000-000000000003'
+   AND can_execute_task(task.id, task.assignee_id)),
+ 'My Day execution predicate permits the Design assignee');
+RESET ROLE;
 UPDATE profiles SET department_id='10000000-0000-0000-0000-000000000004' WHERE id='00000000-0000-0000-0000-000000000002';
 SET ROLE authenticated;
 SET request.jwt.claim.sub='00000000-0000-0000-0000-000000000002';

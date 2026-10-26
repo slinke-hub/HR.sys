@@ -14,7 +14,7 @@ SELECT test_assert(NOT EXISTS (SELECT 1 FROM tasks
  WHERE crm_deal_id='40000000-0000-0000-0000-000000000008'),
  'MQ-20 cannot see another employee Contact task');
 SELECT test_assert(NOT EXISTS (SELECT 1 FROM tasks
- WHERE id='50000000-0000-0000-0000-000000000001'),
+ WHERE id='50000000-0000-0000-0000-000000000005'),
  'MQ-20 cannot see an unrelated task without task-access authorization');
 SELECT test_assert((SELECT count(*)=1 FROM tasks
  WHERE id='50000000-0000-0000-0000-000000000009'),
