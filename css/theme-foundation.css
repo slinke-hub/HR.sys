@@ -505,3 +505,27 @@ i[data-lucide] {
     min-height: var(--control-target-touch);
   }
 }
+
+/* UI-01: predictable shared states without moving controls or changing handlers. */
+html[data-theme] .card:hover { transform: none; }
+html[data-theme] :is(.btn-primary, .btn-secondary, .btn-danger, .btn-destructive):hover {
+  transform: none;
+  filter: none;
+}
+html[data-theme] .btn:focus-visible { outline-offset: 3px !important; }
+html[data-theme] :is(.profile-dropdown-menu, .notifications-dropdown, .header-search-dialog) {
+  border-radius: var(--radius-lg);
+  border-color: var(--border-default);
+  background: var(--bg-surface-elevated);
+}
+html[data-theme] .profile-dropdown-menu .dropdown-item {
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: .875rem;
+  line-height: 1.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .topbar :is(button, .avatar), .card, .btn, .form-control, .dropdown-item {
+    transition: none !important;
+  }
+}

@@ -11413,3 +11413,85 @@ body > .task-watcher-dropdown.multi-select-modal-layer {
     overflow: visible;
   }
 }
+
+/* UI-01: consistent density and hierarchy for shared presentation primitives. */
+.page-header { gap: var(--space-4); flex-wrap: wrap; }
+.page-header > * { min-width: 0; }
+.page-title {
+  font-size: var(--font-size-title);
+  line-height: 1.35;
+  font-weight: 700;
+  letter-spacing: -.025em;
+  overflow-wrap: anywhere;
+}
+html[dir="rtl"] .page-title { letter-spacing: normal; line-height: 1.5; }
+.page-subtitle { color: var(--text-secondary); font-size: var(--font-size-body); line-height: 1.6; }
+.card-title { font-size: 1rem; line-height: 1.5; font-weight: 650; }
+.card-header:not([hidden]) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
+}
+.btn {
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  font-family: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.form-group > :is(label, .form-label):not([hidden]) {
+  display: block;
+  margin-block-end: var(--space-2);
+  color: var(--text-secondary);
+  font-size: .875rem;
+  font-weight: 550;
+  line-height: 1.5;
+  text-align: start;
+}
+.form-control { border-radius: var(--radius-md); font: inherit; line-height: 1.5; }
+textarea.form-control { min-height: 112px; resize: vertical; }
+.table-responsive { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.data-table { border-collapse: collapse; font-size: .875rem; line-height: 1.5; }
+.data-table :is(th, td) { text-align: start; vertical-align: middle; }
+.data-table th { font-size: var(--font-size-small); font-weight: 650; }
+.data-table td { border-bottom: 1px solid var(--border-subtle); }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.pagination { font-size: .875rem; line-height: 1.5; }
+.status-badge {
+  gap: var(--space-1);
+  border-radius: var(--radius-full);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.status-badge svg { flex-shrink: 0; }
+.empty-state { color: var(--text-secondary); line-height: 1.6; }
+.empty-state :is(h2, h3) { margin-block: var(--space-2); font-size: 1rem; }
+.error-message { color: var(--danger); line-height: 1.6; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .page-header { align-items: flex-start; gap: var(--space-4); }
+  .page-title { font-size: 1.5rem; }
+}
+
+/* UI-01: remove legacy 30–38px shell targets without changing visibility. */
+.topbar .topbar-actions :is(.header-search-trigger, .header-language-switcher, .header-notification-button) {
+  width: 40px !important;
+  height: 40px !important;
+  flex-basis: auto;
+  min-width: 40px;
+  min-height: 40px;
+}
+@media (pointer: coarse) {
+  .topbar .topbar-actions :is(.header-search-trigger, .header-language-switcher, .header-notification-button) {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

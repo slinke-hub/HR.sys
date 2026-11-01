@@ -838,3 +838,60 @@ html[data-theme] #crm-react-root .mogam-crm-react :is(.tw-shadow-panel, .tw-shad
     transform: none !important;
   }
 }
+
+/* UI-01: final shared-component cascade. Preserve status mappings above and
+   keep labels legible when legacy module rules set descendant text colors. */
+html[data-theme] :is(.btn.btn-primary, button.btn-primary) > :is(span, i, svg) {
+  color: var(--action-primary-text) !important;
+}
+html[data-theme] :is(.btn.btn-danger, .btn.btn-destructive) > :is(span, i, svg) {
+  color: var(--action-danger-text) !important;
+}
+html[data-theme] :is(.btn.btn-secondary, button.btn-secondary) {
+  color: var(--action-secondary-text) !important;
+}
+html[data-theme] :is(.btn.btn-secondary, button.btn-secondary) > :is(span, i, svg) {
+  color: inherit !important;
+}
+html[data-theme] .data-table th {
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border-bottom-color: var(--border-default);
+}
+html[data-theme] .data-table tbody tr:hover { background: var(--hover-surface); }
+html[data-theme] .page-title::after { content: none; }
+html[data-theme] :is(.btn, button):disabled > :is(span, i, svg) {
+  color: var(--disabled-text) !important;
+}
+html[data-theme] .form-group > :is(label, .form-label) { text-align: start !important; }
+html[data-theme] .error-message { color: var(--danger) !important; }
+html[data-theme] .card-header { margin-block-end: var(--space-4); }
+html[data-theme] :is(input, select, textarea).form-control:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]) {
+  min-height: 44px;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+}
+html[data-theme] .profile-dropdown-menu { padding: var(--space-2); }
+html[data-theme] .profile-dropdown-menu .dropdown-item {
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  border: 0 !important;
+}
+html[data-theme] .modal-footer { gap: var(--space-2); }
+html[data-theme] .modal > .modal-content { border-radius: var(--radius-lg); }
+html[data-theme] .modal > .modal-content > .modal-header {
+  padding-block-end: var(--space-4);
+  margin-block-end: var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent !important;
+}
+html[data-theme] .modal > .modal-content > .modal-footer:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-block-start: var(--space-4);
+  margin-block-start: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  background: transparent !important;
+}

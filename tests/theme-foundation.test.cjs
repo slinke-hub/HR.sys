@@ -26,19 +26,69 @@ for (const token of semanticTokens) {
   assert.match(darkBlock, new RegExp(`${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`), `Dark theme is missing ${token}`);
 }
 
-for (const [token, value] of Object.entries({
-  '--action-primary-bg': '#4868CF',
-  '--action-primary-hover': '#5879DF',
-  '--action-primary-text': '#FFFFFF',
-  '--brand-primary': '#9DB2FF',
-  '--focus-ring': '#92AAFF',
-})) {
-  assert.match(darkBlock, new RegExp(`${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*${value}`, 'i'), `Dark ${token} must remain ${value}`);
+// UI-01 intentionally replaces the previous blue palette. Keep concrete palette
+// checks alongside contrast checks so both design drift and unreadable states fail.
+for (const [block, name, expected] of [
+  [lightBlock, 'Light', {
+    '--brand-primary': '#1B4C5F', '--brand-accent': '#168C86',
+    '--bg-app': '#F6F8FA', '--bg-surface': '#FFFFFF',
+    '--action-primary-bg': '#1B4C5F', '--nav-item-selected': '#E2EFEE',
+  }],
+  [darkBlock, 'Dark', {
+    '--bg-app': '#14242E', '--action-primary-bg': '#286E80',
+    '--action-primary-hover': '#327B8A', '--action-primary-text': '#FFFFFF',
+    '--brand-primary': '#8FD3CF', '--focus-ring': '#76D3C9',
+  }],
+]) {
+  for (const [token, expectedValue] of Object.entries(expected)) {
+    assert.equal(tokenValue(block, token).toUpperCase(), expectedValue,
+      name + ' ' + token + ' must match the approved UI-01 palette');
+  }
 }
-assert.match(darkBlock, /--action-primary-bg:\s*#4868CF/i, 'Dark primary action background must not use the pale brand accent');
-assert.match(darkBlock, /--bg-app:\s*#111821/i, 'Approved layered Dark Mode background must be preserved');
-assert.match(lightBlock, /--border-default:\s*#C6D0DD/i, 'Light Mode control/surface border separation must be strengthened subtly');
-assert.match(lightBlock, /--nav-item-selected:\s*#E3EAFC/i, 'Light selected state must remain a soft brand surface');
+
+function tokenValue(block, token) {
+  assert.match(token, /^--[a-z-]+$/, 'Only semantic token names are accepted');
+  const escaped = token;
+  const value = block.match(new RegExp(escaped + '\\s*:\\s*([^;]+);'))?.[1].trim()
+    || (block !== lightBlock ? lightBlock.match(new RegExp(escaped + '\\s*:\\s*([^;]+);'))?.[1].trim() : undefined);
+  assert.ok(value, 'Missing semantic token ' + token);
+  const alias = value.match(/^var\((--[\w-]+)\)$/);
+  return alias ? tokenValue(block, alias[1]) : value;
+}
+function luminance(hex) {
+  assert.match(hex, /^#[a-f\d]{6}$/i, 'Contrast checks require concrete RGB colors');
+  const channels = hex.slice(1).match(/../g).map(channel => {
+    const value = parseInt(channel, 16) / 255;
+    return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+  });
+  return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+}
+function contrast(a, b) {
+  const values = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (values[0] + .05) / (values[1] + .05);
+}
+for (const [name, block] of [['Light', lightBlock], ['Dark', darkBlock]]) {
+  for (const [foreground, background, minimum] of [
+    ['--text-primary', '--bg-app', 4.5],
+    ['--text-secondary', '--bg-surface', 4.5],
+    ['--input-text', '--input-bg', 4.5],
+    ['--input-placeholder', '--input-bg', 4.5],
+    ['--input-border', '--input-bg', 3],
+    ['--action-primary-text', '--action-primary-bg', 4.5],
+    ['--action-primary-text', '--action-primary-hover', 4.5],
+    ['--action-danger-text', '--action-danger-bg', 4.5],
+    ['--selected-text', '--selected-surface', 4.5],
+    ['--focus-ring', '--bg-surface', 3],
+  ]) {
+    assert.ok(contrast(tokenValue(block, foreground), tokenValue(block, background)) >= minimum,
+      name + ' ' + foreground + ' against ' + background + ' must meet ' + minimum + ':1');
+  }
+  assert.notEqual(tokenValue(block, '--action-primary-bg'), tokenValue(block, '--brand-primary-soft'),
+    'Primary actions must remain distinct from quiet selected surfaces');
+}
+assert.match(lightBlock, /--space-unit:\s*8px/, 'UI-01 uses the approved 8px rhythm');
+assert.match(lightBlock, /--radius-md:\s*8px/, 'Shared controls use a consistent radius');
+assert.match(lightBlock, /--radius-lg:\s*16px/, 'Elevated surfaces use a consistent radius');
 
 for (const alias of ['--color-bg-subtle', '--color-text', '--color-text-muted', '--color-primary', '--color-bg-base']) {
   assert.match(variables, new RegExp(`${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*var\\(`), `${alias} compatibility alias must resolve to a semantic token`);
@@ -48,7 +98,7 @@ const foundationHref = html.match(/<link[^>]+href="([^"]*theme-foundation\.css[^
 assert.ok(foundationHref, 'HTML must load the shared theme foundation');
 assert.ok(html.indexOf(foundationHref) > html.indexOf('css/crm-tailwind.css'), 'Theme foundation must load after existing component styles');
 assert.match(foundation, /\.card\s*\{[\s\S]*?background:\s*var\(--bg-surface\)/, 'Shared card surface must use semantic tokens');
-assert.match(foundation, /\.btn\.btn-primary[\s\S]*?background-color:\s*var\(--action-primary-bg\)/, 'Primary action must use actionable blue token');
+assert.match(foundation, /\.btn\.btn-primary[\s\S]*?background-color:\s*var\(--action-primary-bg\)/, 'Primary action must use its semantic action token');
 assert.match(foundation, /\.btn\.btn-secondary[\s\S]*?background:\s*var\(--action-secondary-bg\)/, 'Secondary action foundation must exist');
 assert.match(foundation, /\.btn\.btn-destructive[\s\S]*?background:\s*var\(--action-danger-bg\)/, 'Destructive action foundation must exist');
 assert.match(foundation, /input[^\n]*textarea, select[\s\S]*?var\(--input-bg\)/, 'Shared form controls must use input tokens');

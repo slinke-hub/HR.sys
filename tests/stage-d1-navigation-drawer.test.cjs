@@ -48,7 +48,7 @@ assert.match(app, /hasParentRoute = viewId !== 'login' && hasHierarchicalProject
 assert.match(app, /sw\.js\?v=2026100801/, 'Service worker registration forces an update check');
 assert.match(serviceWorker, /muqam-hr-mobile-v255/, 'New service-worker cache retires stale shell/app bundles');
 
-assert.match(layout, /\.app-navigation-drawer\s*\{[\s\S]*?position: fixed;[\s\S]*?top: 0;[\s\S]*?bottom: 0;[\s\S]*?inset-inline-start: auto;[\s\S]*?inset-inline-end: 0;[\s\S]*?width: 320px;[\s\S]*?height: 100dvh;[\s\S]*?border-start-start-radius: 24px;[\s\S]*?border-end-start-radius: 24px;[\s\S]*?transform: translateX\(calc\(100% \+ 1px\)\)/, 'Drawer attaches to header brand/hamburger inline-end with matching LTR entry direction');
+assert.match(layout, /\.app-navigation-drawer\s*\{[\s\S]*?position: fixed;[\s\S]*?top: 0;[\s\S]*?bottom: 0;[\s\S]*?inset-inline-start: auto;[\s\S]*?inset-inline-end: 0;[\s\S]*?width: 320px;[\s\S]*?height: 100dvh;[\s\S]*?transform: translateX\(calc\(100% \+ 1px\)\)/, 'Drawer attaches to header brand/hamburger inline-end with matching LTR entry direction');
 assert.match(layout, /@media \(max-width: 767px\)[\s\S]*?\.app-navigation-drawer \{ width: min\(86vw, 340px\); \}/, 'Mobile drawer uses the specified viewport-relative width');
 assert.match(layout, /html\[dir="rtl"\] \.app-navigation-drawer\s*\{\s*transform: translateX\(calc\(-100% - 1px\)\);\s*\}/, 'RTL drawer enters from the left edge, matching the header hamburger');
 assert.match(layout, /\.navigation-drawer-item\s*\{[\s\S]*?display: flex;[\s\S]*?min-height: 46px/, 'Drawer navigation is a vertical row list, not a tile grid');
@@ -58,10 +58,29 @@ assert.match(layout, /\.header-logo \.app-logo \{ max-height: 44px/, 'Mobile log
 assert.match(layout, /\.header-logo \.app-logo \{[^}]*width: auto;[^}]*max-width:/, 'Logo keeps its native aspect ratio and is not cropped');
 assert.match(layout, /\.app-navigation-drawer-overlay\s*\{[\s\S]*?position: fixed;[\s\S]*?inset: 0;/, 'Dedicated drawer overlay spans the viewport');
 assert.match(layout, /\.app-navigation-drawer-overlay\.is-open \.app-navigation-drawer \{ transform: translateX\(0\); \}/, 'Open drawer settles without an opposite-edge flash');
-assert.match(layout, /backdrop-filter: blur\(18px\) saturate\(130%\)/, 'Drawer uses restrained glassmorphism');
-assert.match(layout, /background: var\(--nav-bg\)[\s\S]*?@supports[\s\S]*?background: var\(--nav-drawer-glass\)/, 'Solid semantic fallback is provided without backdrop-filter');
-assert.match(variables, /--nav-drawer-glass:\s*rgba\(255, 255, 255, 0\.9\)/, 'Light theme has a translucent elevated drawer surface');
-assert.match(variables, /--nav-drawer-glass:\s*rgba\(21, 31, 42, 0\.92\)/, 'Dark theme has a separate navy translucent drawer surface');
+// Inspect the final cascade rule rather than accepting superseded glass rules.
+function lastRule(source, selector) {
+  assert.match(selector, /^\.[a-z-]+$/, 'Only simple class selectors are accepted');
+  const escaped = selector.replaceAll('.', String.fromCharCode(92) + '.');
+  const matches = [...source.matchAll(new RegExp(escaped + '\\s*\{([^}]+)\}', 'g'))];
+  assert.ok(matches.length, 'Missing presentation rule for ' + selector);
+  return matches.at(-1)[1];
+}
+const finalDrawer = lastRule(layout, '.app-navigation-drawer');
+assert.match(finalDrawer, /background:\s*var\(--nav-bg\)/, 'UI-01 drawer uses its semantic opaque surface');
+assert.match(finalDrawer, /(?:^|[;\n])\s*backdrop-filter:\s*none\s*;/, 'UI-01 intentionally removes glass blur');
+assert.match(finalDrawer, /-webkit-backdrop-filter:\s*none\s*;/, 'WebKit uses the same opaque presentation');
+assert.match(finalDrawer, /border-start-start-radius:\s*var\(--radius-lg\)/, 'Drawer radius follows the shared surface token');
+assert.match(finalDrawer, /border-end-start-radius:\s*var\(--radius-lg\)/, 'Both drawer corners follow the same token');
+const lightTokens = variables.match(/:root\s*\{([\s\S]*?)\n\}/)?.[1];
+const darkTokens = variables.match(/\[data-theme="dark"\]\s*\{([\s\S]*?)\n\}/)?.[1];
+assert.ok(lightTokens && darkTokens, 'Both theme definitions remain present');
+assert.match(lightTokens, /--nav-bg:\s*#FFFFFF;/i, 'Light drawer remains an opaque light surface');
+assert.match(lightTokens, /--nav-drawer-glass:\s*#FFFFFF;/i, 'Legacy alias must not restore translucency');
+assert.match(darkTokens, /--nav-bg:\s*#182B36;/i, 'Dark drawer remains an opaque dark surface');
+assert.match(darkTokens, /--nav-drawer-glass:\s*#182B36;/i, 'Dark legacy alias matches the opaque drawer');
+assert.match(lastRule(layout, '.navigation-drawer-item'), /min-height:\s*48px;/,
+  'Drawer rows retain generous 48px targets under the UI-01 spacing scale');
 assert.match(layout, /prefers-reduced-motion: reduce/, 'Motion respects reduced-motion preference');
 assert.match(layout, /\.sidebar-nav > \.nav-item\[data-view="dashboard"\][\s\S]*?#mobileMoreNav\s*\{\s*display: flex !important;/, 'Existing mobile bottom-nav destinations remain preserved');
 assert.match(layout, /\.navigation-drawer-item\.active::before[\s\S]*?inset-inline-start/, 'Selected state uses a semantic logical-edge indicator');
