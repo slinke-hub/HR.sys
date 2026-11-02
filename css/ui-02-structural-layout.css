@@ -434,6 +434,23 @@
 #viewContainer .ui02-task-shell .task-v2-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; align-items: center; }
 #viewContainer .ui02-task-shell .task-v2-row-actions .task-row-due { order: -1; }
 
+/* Keep the table header and task rows on the same five-column contract.
+ * ui-01 has a legacy four-column rule with !important; this scoped override
+ * prevents the Actions cell from wrapping into a second row. */
+#viewContainer #task-v2-rows-container .task-v2-table-header,
+#viewContainer #task-v2-rows-container .task-v2-row {
+  grid-template-columns: minmax(0, 1.7fr) minmax(7rem, .7fr) minmax(9rem, .85fr) minmax(10rem, 1fr) minmax(14rem, 1.15fr) !important;
+}
+
+#viewContainer #task-v2-rows-container .task-v2-table-header > span,
+#viewContainer #task-v2-rows-container .task-v2-row > * {
+  min-width: 0;
+}
+
+#viewContainer #task-v2-rows-container .task-v2-row-actions {
+  justify-content: flex-start;
+}
+
 #viewContainer .ui02-task-shell .task-v2-register-view {
   background: color-mix(in srgb, var(--color-primary) 2%, var(--color-surface));
 }
@@ -468,6 +485,14 @@
   #viewContainer .ui02-task-shell .task-lists-nav { display: flex; gap: .45rem; overflow-x: auto; }
   #viewContainer .ui02-task-shell .task-lists-nav > li { flex: 0 0 auto; }
   #viewContainer .ui02-task-shell .task-list-sidebar-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+
+  #viewContainer #task-v2-rows-container .task-v2-table-header { display: none !important; }
+  #viewContainer #task-v2-rows-container .task-v2-row { grid-template-columns: minmax(0, 1fr) !important; }
+  #viewContainer #task-v2-rows-container .task-v2-row-left,
+  #viewContainer #task-v2-rows-container .task-v2-row-priority,
+  #viewContainer #task-v2-rows-container .task-v2-row-status,
+  #viewContainer #task-v2-rows-container .task-v2-row-creator,
+  #viewContainer #task-v2-rows-container .task-v2-row-actions { grid-column: 1; }
 }
 
 @media (max-width: 640px) {
