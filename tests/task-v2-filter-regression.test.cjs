@@ -29,6 +29,10 @@ assert.deepEqual(tasks.filter(task => helper(task, { ...base, query: 'does-not-e
 assert.deepEqual(tasks.filter(task => helper(task, base)).map(task => task.id), ['1', '2', '3']);
 
 assert.match(app, /!hasExplicitTaskFilter/);
+assert.match(app, /visibleRowIds/);
+assert.match(app, /#task-v2-rows-container \.task-v2-row/);
+assert.match(app, /style\.setProperty\('display', 'none', 'important'\)/);
+assert.match(app, /setAttribute\('aria-hidden', String\(!matches\)\)/);
 assert.match(app, /classList\.toggle\('task-v2-filtered-out', !matches\)/);
 assert.match(app, /data-task-v2-visible-count/);
 assert.match(css, /task-v2-filtered-out\[style\][\s\S]*display: none !important/);

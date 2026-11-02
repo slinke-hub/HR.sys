@@ -9465,19 +9465,35 @@ window.filterTasksV2 = function () {
         .filter(task => directMatchesById.get(String(task.id)) && (healthFilter !== 'all' || isFocusCandidate(task)))
         .map(rootTaskId));
 
-    document.querySelectorAll('.task-v2-row, .task-item-card').forEach(el => {
+    const visibleRowIds = new Set();
+    if (window.taskV2Mode === 'focus' && !hasExplicitTaskFilter) {
+        tasks.forEach(task => {
+            if (visibleFocusRoots.has(rootTaskId(task))) visibleRowIds.add(String(task.id));
+        });
+    } else {
+        tasks.filter(matchesFilters).forEach(task => visibleRowIds.add(String(task.id)));
+    }
+
+    document.querySelectorAll('#task-v2-rows-container .task-v2-row').forEach(el => {
         const taskId = String(el.getAttribute('data-task-id') || '');
         const task = window.taskCache[taskId];
-        let matches = !!task && visibleIds.has(taskId) && directMatchesById.get(taskId);
-        if (task && visibleIds.has(taskId) && window.taskV2Mode === 'focus' && el.classList.contains('task-v2-row') && !hasExplicitTaskFilter) {
-            // Focus is grouped by main task. Once any member needs attention,
-            // keep the main task and every subtask together and permanently expanded,
-            // even when a filter matched only one member of the family.
-            matches = visibleFocusRoots.has(rootTaskId(task));
-        }
+        const matches = !!task && visibleIds.has(taskId) && visibleRowIds.has(taskId);
         el.classList.toggle('task-v2-filtered-out', !matches);
         el.hidden = !matches;
-        el.style.display = matches ? '' : 'none';
+        el.setAttribute('aria-hidden', String(!matches));
+        if (matches) el.style.removeProperty('display');
+        else el.style.setProperty('display', 'none', 'important');
+    });
+
+    document.querySelectorAll('#tasks-view-board .task-item-card').forEach(el => {
+        const taskId = String(el.getAttribute('data-task-id') || '');
+        const task = window.taskCache[taskId];
+        const matches = !!task && visibleIds.has(taskId) && directMatchesById.get(taskId);
+        el.classList.toggle('task-v2-filtered-out', !matches);
+        el.hidden = !matches;
+        el.setAttribute('aria-hidden', String(!matches));
+        if (matches) el.style.removeProperty('display');
+        else el.style.setProperty('display', 'none', 'important');
     });
 
     const matchesSelectedScope = task => {
