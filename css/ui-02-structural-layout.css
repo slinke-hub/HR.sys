@@ -1,0 +1,486 @@
+/* UI-02/03/04 structural layout
+ * Presentation-only composition layer. Existing data hooks, IDs and action
+ * handlers remain in js/app.js; this file gives them a new information order.
+ */
+#viewContainer > .ui02-dashboard-header {
+  margin-bottom: 1.25rem;
+}
+
+#viewContainer .ui02-dashboard-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(20rem, .8fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+#viewContainer .ui02-dashboard-primary,
+#viewContainer .ui02-dashboard-rail {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+#viewContainer .ui02-admin-banner,
+#viewContainer .ui02-alert-stack,
+#viewContainer .ui02-command-grid,
+#viewContainer .ui02-leave-card,
+#viewContainer .ui02-short-leave-card,
+#viewContainer .ui02-team-widgets,
+#viewContainer .ui02-admin-widgets {
+  width: 100%;
+}
+
+#viewContainer .ui02-admin-banner {
+  padding: 1.15rem 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)), var(--color-surface));
+}
+
+#viewContainer .ui02-command-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+#viewContainer .ui02-command-card {
+  min-height: 7.5rem;
+  padding: 1rem;
+  border-top: 3px solid var(--color-primary);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+#viewContainer .ui02-command-card span,
+#viewContainer .ui02-command-card small,
+#viewContainer .ui02-panel-note {
+  color: var(--color-text-secondary);
+  font-size: .78rem;
+}
+
+#viewContainer .ui02-command-card strong {
+  display: block;
+  margin: .35rem 0;
+  color: var(--color-text);
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+#viewContainer .ui02-command-card--teal { border-top-color: var(--color-success); }
+#viewContainer .ui02-command-card--amber { border-top-color: var(--color-warning); }
+#viewContainer .ui02-command-card--violet { border-top-color: var(--color-info); }
+
+#viewContainer .ui02-operating-overview {
+  padding: 1.25rem;
+  border-color: color-mix(in srgb, var(--color-primary) 16%, var(--color-border));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 4%, var(--color-surface)), var(--color-surface));
+}
+
+#viewContainer .ui02-operating-heading,
+#viewContainer .task-v2-workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+#viewContainer .ui02-operating-heading h2,
+#viewContainer .task-v2-workspace-header h1 {
+  margin: .25rem 0 .35rem;
+  color: var(--color-text);
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
+  line-height: 1.15;
+}
+
+#viewContainer .ui02-operating-heading p,
+#viewContainer .task-v2-workspace-header p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: .82rem;
+}
+
+#viewContainer .ui02-section-kicker,
+#viewContainer .task-v2-workspace-kicker,
+#viewContainer .task-v2-sidebar-kicker {
+  color: var(--color-primary);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+#viewContainer .ui02-inline-link { white-space: nowrap; }
+#viewContainer .ui02-inline-link svg { width: 1rem; height: 1rem; margin-inline-start: .3rem; }
+
+#viewContainer .ui02-operating-metrics,
+#viewContainer .task-v2-header-metrics,
+#viewContainer .task-v2-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .65rem;
+}
+
+#viewContainer .ui02-operating-metrics { margin: 1.15rem 0 1rem; }
+#viewContainer .ui02-operating-metrics > div,
+#viewContainer .task-v2-header-metrics > div,
+#viewContainer .task-v2-summary-tile {
+  min-width: 0;
+  padding: .75rem .85rem;
+  border: 1px solid var(--color-border);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--color-surface) 86%, var(--color-primary));
+}
+
+#viewContainer .ui02-operating-metrics strong,
+#viewContainer .task-v2-header-metrics strong,
+#viewContainer .task-v2-summary-tile strong {
+  display: block;
+  color: var(--color-text);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+#viewContainer .ui02-operating-metrics span,
+#viewContainer .task-v2-header-metrics span,
+#viewContainer .task-v2-summary-tile span {
+  display: block;
+  margin-top: .3rem;
+  color: var(--color-text-secondary);
+  font-size: .72rem;
+}
+
+#viewContainer .ui02-focus-queue {
+  padding: .9rem;
+  border: 1px solid var(--color-border);
+  border-radius: .85rem;
+  background: color-mix(in srgb, var(--color-primary) 3%, var(--color-surface));
+}
+
+#viewContainer .ui02-focus-queue-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: .55rem;
+}
+
+#viewContainer .ui02-focus-queue-heading span { color: var(--color-text-secondary); font-size: .75rem; }
+#viewContainer .ui02-focus-task {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  gap: .65rem;
+  align-items: center;
+  width: 100%;
+  padding: .65rem .2rem;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  text-align: start;
+  cursor: pointer;
+}
+
+#viewContainer .ui02-focus-task:hover,
+#viewContainer .ui02-focus-task:focus-visible { background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
+#viewContainer .ui02-focus-task-index { display: grid; place-items: center; width: 1.8rem; height: 1.8rem; border-radius: .55rem; background: color-mix(in srgb, var(--color-primary) 13%, var(--color-surface)); color: var(--color-primary); font-size: .75rem; font-weight: 800; }
+#viewContainer .ui02-focus-task-body { min-width: 0; }
+#viewContainer .ui02-focus-task-body strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+#viewContainer .ui02-focus-task-body small { display: block; margin-top: .2rem; overflow: hidden; color: var(--color-text-secondary); text-overflow: ellipsis; white-space: nowrap; font-size: .72rem; }
+#viewContainer .ui02-focus-task-state { color: var(--color-warning); font-size: .72rem; font-weight: 750; white-space: nowrap; }
+#viewContainer .ui02-focus-empty { display: flex; align-items: center; gap: .55rem; padding: .8rem 0 .2rem; color: var(--color-text-secondary); font-size: .8rem; }
+#viewContainer .ui02-focus-empty svg { color: var(--color-success); }
+
+#viewContainer .ui02-announcement-panel,
+#viewContainer .ui02-news-panel {
+  min-width: 0;
+  padding: 1.1rem;
+}
+
+#viewContainer .ui02-announcement-panel {
+  grid-column: 1;
+}
+
+#viewContainer .ui02-news-panel {
+  grid-column: 2;
+}
+
+#viewContainer .ui02-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: .85rem;
+}
+
+#viewContainer .ui02-scroll-region {
+  max-height: 18rem;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+#viewContainer .ui02-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .6rem;
+}
+
+#viewContainer .ui02-action-tile {
+  min-height: 4.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--color-primary) 4%, var(--color-surface));
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .75rem;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color .18s ease, transform .18s ease, background .18s ease;
+}
+
+#viewContainer .ui02-action-tile:hover,
+#viewContainer .ui02-action-tile:focus-visible {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface));
+  transform: translateY(-1px);
+}
+
+#viewContainer .ui02-action-tile svg { color: var(--color-primary); flex: 0 0 auto; }
+#viewContainer .ui02-activity-list { display: grid; gap: .8rem; }
+#viewContainer .ui02-activity-list > div { display: flex; gap: .65rem; align-items: flex-start; color: var(--color-text-secondary); font-size: .82rem; }
+#viewContainer .ui02-activity-list svg { color: var(--color-primary); flex: 0 0 auto; margin-top: .1rem; }
+
+#viewContainer .ui02-rail-note {
+  display: flex;
+  gap: .7rem;
+  align-items: flex-start;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--color-info) 7%, var(--color-surface));
+}
+
+#viewContainer .ui02-rail-note svg { color: var(--color-info); flex: 0 0 auto; }
+#viewContainer .ui02-rail-note strong { display: block; margin-bottom: .2rem; }
+#viewContainer .ui02-rail-note p { margin: 0; color: var(--color-text-secondary); font-size: .78rem; }
+
+#viewContainer .ui02-leave-card,
+#viewContainer .ui02-short-leave-card {
+  padding: 1.1rem;
+}
+
+#viewContainer .ui02-admin-widgets,
+#viewContainer .ui02-team-widgets {
+  display: grid;
+  gap: 1rem;
+}
+
+/* Task Manager and Tasks List share data/actions but get distinct hierarchy. */
+#viewContainer .ui02-task-shell {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#viewContainer .ui02-task-shell .task-v2-workspace {
+  grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+#viewContainer .ui02-task-shell .task-v2-lists {
+  position: sticky;
+  top: 1rem;
+  min-height: 31rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm, 0 8px 24px rgb(0 0 0 / 7%));
+}
+
+#viewContainer .ui02-task-shell .task-v2-sidebar-header { padding-bottom: .8rem; border-bottom: 1px solid var(--color-border); }
+#viewContainer .ui02-task-shell .task-v2-sidebar-total { margin-inline-start: auto; min-width: 1.7rem; padding: .25rem .4rem; border-radius: .45rem; background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface)); color: var(--color-primary); font-size: .75rem; font-weight: 800; text-align: center; }
+#viewContainer .ui02-task-shell .task-v2-workspace-header { padding: 1.15rem 1.2rem 1rem; border-bottom: 1px solid var(--color-border); background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 5%, var(--color-surface)), var(--color-surface)); }
+#viewContainer .ui02-task-shell .task-v2-header-metrics { flex: 0 0 min(29rem, 48%); }
+#viewContainer .ui02-task-shell .task-v2-header-metrics > div { border-top: 3px solid var(--color-primary); }
+#viewContainer .ui02-task-shell .task-v2-header-metrics > div:nth-child(2) { border-top-color: var(--color-warning); }
+#viewContainer .ui02-task-shell .task-v2-header-metrics > div:nth-child(3) { border-top-color: var(--color-danger); }
+#viewContainer .ui02-task-shell .task-v2-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 1rem 1rem 0; }
+#viewContainer .ui02-task-shell .task-v2-summary-tile { border-top: 3px solid var(--color-primary); }
+#viewContainer .ui02-task-shell .task-v2-summary-tile.tone-amber { border-top-color: var(--color-warning); }
+#viewContainer .ui02-task-shell .task-v2-summary-tile.tone-red { border-top-color: var(--color-danger); }
+#viewContainer .ui02-task-shell .task-v2-summary-tile.tone-green { border-top-color: var(--color-success); }
+
+#viewContainer .ui02-task-shell .task-v2-list-pane {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm, 0 8px 24px rgb(0 0 0 / 7%));
+}
+
+#viewContainer .ui02-task-shell .task-v2-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-primary) 3%, var(--color-surface));
+}
+
+#viewContainer .ui02-task-shell .task-v2-toolbar-left {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.35fr) repeat(4, minmax(7rem, .72fr)) minmax(8rem, .75fr);
+  gap: .55rem;
+  align-items: center;
+}
+
+#viewContainer .ui02-task-shell .task-v2-filter-group,
+#viewContainer .ui02-task-shell .task-v2-date-control { display: grid; min-width: 0; gap: .25rem; }
+#viewContainer .ui02-task-shell .task-v2-filter-label { color: var(--color-text-secondary); font-size: .67rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+#viewContainer .ui02-task-shell .task-v2-search { position: relative; min-width: 0; }
+#viewContainer .ui02-task-shell .task-v2-search .task-v2-filter-label { padding-inline-start: 1.7rem; }
+#viewContainer .ui02-task-shell .task-v2-search > svg { position: absolute; inset-inline-start: .55rem; bottom: .55rem; width: 1rem; height: 1rem; color: var(--color-text-secondary); pointer-events: none; }
+#viewContainer .ui02-task-shell .task-v2-search input { min-height: 2.45rem; }
+#viewContainer .ui02-task-shell .task-v2-toolbar-right { align-items: center; }
+#viewContainer .ui02-task-shell .task-v2-view-toggles { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+#viewContainer .ui02-task-shell .view-toggle-btn { min-height: 2.3rem; border-radius: .6rem; }
+
+#viewContainer .ui02-task-shell .task-pipeline-health {
+  display: flex;
+  gap: .45rem;
+  align-items: center;
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+#viewContainer .ui02-task-shell .task-health-heading { margin-inline-end: .35rem; white-space: nowrap; }
+#viewContainer .ui02-task-shell .task-health-item { white-space: nowrap; border-radius: 999px; }
+#viewContainer .ui02-task-shell .task-health-new-task { margin-inline-start: auto; white-space: nowrap; }
+
+#viewContainer .ui02-task-shell .task-v2-rows {
+  padding: 1rem;
+  background: var(--color-surface);
+}
+
+#viewContainer .ui02-task-shell .task-focus-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  margin-bottom: .75rem;
+}
+
+#viewContainer .ui02-task-shell .task-focus-header h3 { margin: .15rem 0 0; font-size: 1.1rem; }
+#viewContainer .ui02-task-shell .task-v2-table-header,
+#viewContainer .ui02-task-shell .task-v2-row {
+  display: grid !important;
+  grid-template-columns: minmax(13rem, 1.6fr) minmax(6rem, .62fr) minmax(9rem, .75fr) minmax(10rem, .8fr) minmax(10rem, 1fr);
+  gap: .8rem;
+  align-items: center;
+}
+
+#viewContainer .ui02-task-shell .task-v2-table-header {
+  padding: .65rem .75rem;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  font-size: .72rem;
+  font-weight: 750;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+#viewContainer .ui02-task-shell .task-v2-row {
+  min-height: 4.6rem;
+  padding: .8rem .75rem;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: .65rem;
+  transition: background .18s ease, border-color .18s ease;
+}
+
+#viewContainer .ui02-task-shell .task-v2-row:hover { background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface)); }
+#viewContainer .ui02-task-shell .task-v2-row:last-child { border-bottom: 0; }
+#viewContainer .ui02-task-shell .task-v2-row-left { min-width: 0; }
+#viewContainer .ui02-task-shell .task-v2-row-content { min-width: 0; }
+#viewContainer .ui02-task-shell .task-v2-row-content h4 { overflow-wrap: anywhere; }
+#viewContainer .ui02-task-shell .task-v2-row-priority { display: inline-flex; align-items: center; gap: .4rem; color: var(--color-text-secondary); font-size: .78rem; text-transform: capitalize; }
+#viewContainer .ui02-task-shell .task-v2-priority-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--color-text-secondary); }
+#viewContainer .ui02-task-shell .task-v2-row-priority.priority-high .task-v2-priority-dot,
+#viewContainer .ui02-task-shell .task-v2-row-priority.priority-urgent .task-v2-priority-dot { background: var(--color-warning); }
+#viewContainer .ui02-task-shell .task-v2-row-priority.priority-critical .task-v2-priority-dot { background: var(--color-danger); }
+#viewContainer .ui02-task-shell .task-v2-row-status,
+#viewContainer .ui02-task-shell .task-v2-row-creator,
+#viewContainer .ui02-task-shell .task-v2-row-actions { min-width: 0; }
+#viewContainer .ui02-task-shell .task-v2-row-creator { display: flex; gap: .35rem; align-items: center; color: var(--color-text-secondary); font-size: .78rem; }
+#viewContainer .ui02-task-shell .task-v2-row-creator strong { color: var(--color-text); overflow-wrap: anywhere; }
+#viewContainer .ui02-task-shell .task-v2-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; align-items: center; }
+#viewContainer .ui02-task-shell .task-v2-row-actions .task-row-due { order: -1; }
+
+#viewContainer .ui02-task-shell .task-v2-register-view {
+  background: color-mix(in srgb, var(--color-primary) 2%, var(--color-surface));
+}
+
+#viewContainer .ui02-task-shell .task-v2-register-view .task-v2-row { min-height: 4rem; }
+#viewContainer .ui02-task-shell .task-v2-register-view .task-v2-row-content h4 { font-size: .9rem; }
+#viewContainer .ui02-task-shell .task-v2-register-view .task-v2-row-left { align-items: flex-start; }
+
+@media (max-width: 1180px) {
+  #viewContainer .ui02-dashboard-shell { grid-template-columns: minmax(0, 1fr) minmax(16rem, .65fr); }
+  #viewContainer .ui02-task-shell .task-v2-toolbar { grid-template-columns: 1fr; }
+  #viewContainer .ui02-task-shell .task-v2-toolbar-left { grid-template-columns: minmax(12rem, 1.4fr) repeat(2, minmax(8rem, .8fr)); }
+  #viewContainer .ui02-task-shell .task-v2-search { grid-column: 1 / -1; }
+  #viewContainer .ui02-task-shell .task-v2-toolbar-right { justify-content: flex-start; }
+}
+
+@media (max-width: 860px) {
+  #viewContainer .ui02-dashboard-shell { grid-template-columns: 1fr; }
+  #viewContainer .ui02-dashboard-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #viewContainer .ui02-command-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #viewContainer .ui02-operating-heading,
+  #viewContainer .task-v2-workspace-header { flex-direction: column; }
+  #viewContainer .task-v2-shell .task-v2-header-metrics { width: 100%; flex-basis: auto; }
+  #viewContainer .ui02-task-shell .task-v2-workspace { grid-template-columns: 1fr; }
+  #viewContainer .ui02-task-shell .task-v2-lists { position: static; min-height: auto; }
+  #viewContainer .ui02-task-shell .task-lists-nav { display: flex; gap: .45rem; overflow-x: auto; }
+  #viewContainer .ui02-task-shell .task-lists-nav > li { flex: 0 0 auto; }
+  #viewContainer .ui02-task-shell .task-list-sidebar-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+}
+
+@media (max-width: 640px) {
+  #viewContainer .ui02-dashboard-rail { grid-template-columns: 1fr; }
+  #viewContainer .ui02-command-grid { grid-template-columns: 1fr 1fr; gap: .55rem; }
+  #viewContainer .ui02-command-card { min-height: 6.8rem; padding: .8rem; }
+  #viewContainer .ui02-command-card strong { font-size: 1rem; }
+  #viewContainer .ui02-operating-overview { padding: .9rem; }
+  #viewContainer .ui02-operating-metrics,
+  #viewContainer .task-v2-header-metrics { gap: .45rem; }
+  #viewContainer .ui02-operating-metrics > div,
+  #viewContainer .task-v2-header-metrics > div { padding: .65rem .55rem; }
+  #viewContainer .ui02-inline-link { width: 100%; justify-content: center; }
+  #viewContainer .ui02-announcement-panel,
+  #viewContainer .ui02-news-panel { grid-column: 1; }
+  #viewContainer .ui02-task-shell .task-v2-toolbar-left { grid-template-columns: 1fr; }
+  #viewContainer .ui02-task-shell .task-v2-search { grid-column: auto; }
+  #viewContainer .ui02-task-shell .task-v2-summary-grid { grid-template-columns: 1fr 1fr; padding: .75rem .75rem 0; }
+  #viewContainer .ui02-task-shell .task-v2-workspace-header { padding: 1rem .85rem .85rem; }
+  #viewContainer .ui02-task-shell .task-v2-view-toggles { width: 100%; justify-content: stretch; }
+  #viewContainer .ui02-task-shell .view-toggle-btn { flex: 1 1 0; }
+  #viewContainer .ui02-task-shell .task-v2-table-header { display: none !important; }
+  #viewContainer .ui02-task-shell .task-v2-row { grid-template-columns: minmax(0, 1fr); gap: .55rem; padding: .85rem .65rem; }
+  #viewContainer .ui02-task-shell .task-v2-row-left,
+  #viewContainer .ui02-task-shell .task-v2-row-priority,
+  #viewContainer .ui02-task-shell .task-v2-row-status,
+  #viewContainer .ui02-task-shell .task-v2-row-creator,
+  #viewContainer .ui02-task-shell .task-v2-row-actions { grid-column: 1; }
+  #viewContainer .ui02-task-shell .task-v2-row-actions { justify-content: flex-start; }
+  #viewContainer .ui02-task-shell .task-v2-row-actions .task-row-due { order: initial; }
+}
+
+html[dir="rtl"] #viewContainer .ui02-task-shell .task-v2-row-actions { justify-content: flex-start; }
+html[dir="rtl"] #viewContainer .ui02-task-shell .task-v2-toolbar-right { justify-content: flex-start; }
+
+@media (prefers-reduced-motion: reduce) {
+  #viewContainer .ui02-action-tile,
+  #viewContainer .ui02-task-shell .task-v2-row { transition: none; }
+}

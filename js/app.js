@@ -2514,8 +2514,15 @@ async function renderCommunity() {
 
     if (messages.length === 0) chatHTML = `<p style="text-align:center; color:var(--color-text-secondary);">No messages yet. Be the first to post!</p>`;
 
+    const dashboardPendingRequestCount = [...(dashboardLeaves || []), ...(dashboardGenericRequests || [])]
+        .filter(request => String(request.status || '').toUpperCase().startsWith('PENDING')).length;
+    const dashboardAnnouncementCount = announcementsList.length;
+    const dashboardAttendanceLabel = isClockedIn
+        ? (currentLang === 'ar' ? 'على رأس العمل' : 'On shift')
+        : (currentLang === 'ar' ? 'لم يبدأ الدوام' : 'Not clocked in');
+
     return `
-        <div class="page-header">
+        <div class="page-header ui02-dashboard-header">
             <div>
                 <h1 class="page-title">${t('community_chat')}</h1>
                 <p class="page-subtitle">${t('ui_connect_colleagues') || 'Connect with your colleagues!'}</p>
@@ -3455,6 +3462,35 @@ async function renderDashboard() {
         window.initializeEmployeesRadar?.(dashboardAttendance || []);
     }
 
+    const dashboardOpenTaskRecords = (dashboardTasks || []).filter(isOpenDashboardTask);
+    const dashboardDueSoonTaskRecords = dashboardOpenTaskRecords.filter(task => {
+        if (!task.due_date) return false;
+        const daysUntilDue = (new Date(`${task.due_date}T23:59:59`) - now) / 86400000;
+        return daysUntilDue >= 0 && daysUntilDue <= 7;
+    });
+    const dashboardAttentionTaskRecords = dashboardOpenTaskRecords
+        .filter(task => {
+            const daysUntilDue = task.due_date ? (new Date(`${task.due_date}T23:59:59`) - now) / 86400000 : null;
+            return ['urgent', 'critical'].includes(String(task.priority || '').toLowerCase())
+                || task.status === 'late'
+                || (daysUntilDue !== null && daysUntilDue <= 7);
+        })
+        .sort((a, b) => {
+            const aUrgency = ['urgent', 'critical'].includes(String(a.priority || '').toLowerCase()) ? 0 : 1;
+            const bUrgency = ['urgent', 'critical'].includes(String(b.priority || '').toLowerCase()) ? 0 : 1;
+            return aUrgency - bUrgency || String(a.due_date || '9999-12-31').localeCompare(String(b.due_date || '9999-12-31'));
+        })
+        .slice(0, 4);
+    const dashboardTaskQueueHTML = dashboardAttentionTaskRecords.length
+        ? dashboardAttentionTaskRecords.map(task => {
+            const taskTitle = getLocalizedTaskTitle(task) || task.title || (currentLang === 'ar' ? 'مهمة بدون عنوان' : 'Untitled task');
+            const assigneeName = task.assignee ? (window.formatEmployeeName(task.assignee) || task.assignee.full_name) : '';
+            const dueLabel = task.due_date ? new Intl.DateTimeFormat(currentLang === 'ar' ? 'ar-SA' : 'en', { month: 'short', day: 'numeric' }).format(new Date(`${task.due_date}T12:00:00`)) : (currentLang === 'ar' ? 'بدون موعد' : 'No due date');
+            const urgencyLabel = task.status === 'late' ? (currentLang === 'ar' ? 'متأخرة' : 'Overdue') : (task.priority || (currentLang === 'ar' ? 'عادية' : 'Normal'));
+            return `<button type="button" class="ui02-focus-task" onclick="openTaskDetailsModal('${task.id}')"><span class="ui02-focus-task-index">${escapeHTML(String(task.priority || '•').slice(0, 1).toUpperCase())}</span><span class="ui02-focus-task-body"><strong>${escapeHTML(taskTitle)}</strong><small>${assigneeName ? `${currentLang === 'ar' ? 'مُعيّنة إلى' : 'Assigned to'} ${escapeHTML(assigneeName)} · ` : ''}${escapeHTML(dueLabel)}</small></span><span class="ui02-focus-task-state">${escapeHTML(urgencyLabel)}</span></button>`;
+        }).join('')
+        : `<div class="ui02-focus-empty"><i data-lucide="check-circle-2"></i><span>${currentLang === 'ar' ? 'لا توجد مهام تحتاج إلى متابعة.' : 'No tasks need immediate attention.'}</span></div>`;
+
     return `
         <div class="page-header">
             <div>
@@ -3467,9 +3503,10 @@ async function renderDashboard() {
         }
         </div>
 
-        <div class="dashboard-grid">
+        <div class="ui02-dashboard-shell" data-ui-layout="dashboard">
+            <main class="ui02-dashboard-primary" aria-label="${currentLang === 'ar' ? 'نظرة عامة على الموارد البشرية' : 'HR overview'}">
             ${currentUserRole === 'ADMIN' ? `
-            <div class="card col-span-12 fade-in-up dashboard-admin-card">
+            <section class="card ui02-admin-banner fade-in-up dashboard-admin-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                     <div style="display: flex; align-items: center; gap: 1rem;">
                         <div class="admin-trust-icon" style="width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
@@ -3484,11 +3521,28 @@ async function renderDashboard() {
                         <i data-lucide="layout-dashboard" style="margin-inline-end: 6px;"></i> Open Admin Hub
                     </button>
                 </div>
-            </div>
+            </section>
             ` : ''}
-            ${expirationAlerts ? `<div class="col-span-12">${expirationAlerts}</div>` : ''}
+            ${expirationAlerts ? `<div class="ui02-alert-stack">${expirationAlerts}</div>` : ''}
+
+            <section class="ui02-command-grid" aria-label="${currentLang === 'ar' ? 'مؤشرات سريعة' : 'Quick metrics'}">
+                <article class="card ui02-command-card ui02-command-card--blue"><span>${currentLang === 'ar' ? 'الحضور اليوم' : 'Attendance today'}</span><strong>${escapeHTML(dashboardAttendanceLabel)}</strong><small>${isClockedIn ? (currentLang === 'ar' ? 'تسجيل الانصراف عند المغادرة' : 'Clock out when you leave') : (currentLang === 'ar' ? 'ابدأ دوامك لتحديث الحالة' : 'Clock in to update status')}</small></article>
+                <article class="card ui02-command-card ui02-command-card--teal"><span>${currentLang === 'ar' ? 'الإعلانات' : 'Announcements'}</span><strong>${dashboardAnnouncementCount}</strong><small>${currentLang === 'ar' ? 'تحديثات للفريق' : 'Updates for your team'}</small></article>
+                <article class="card ui02-command-card ui02-command-card--amber"><span>${currentLang === 'ar' ? 'طلبات قيد المراجعة' : 'Requests to review'}</span><strong>${dashboardPendingRequestCount}</strong><small>${currentLang === 'ar' ? 'تحتاج إلى متابعتك' : 'Waiting for your attention'}</small></article>
+                ${canUsePersonalLeaveWidgets ? `<article class="card ui02-command-card ui02-command-card--violet"><span>${currentLang === 'ar' ? 'الرصيد المتاح' : 'Leave available'}</span><strong>${annualAvailable.toFixed(1)}</strong><small>${currentLang === 'ar' ? 'حتى نهاية العام' : 'Available this year'}</small></article>` : ''}
+            </section>
+
+            <section class="card ui02-operating-overview" aria-labelledby="ui02OperatingOverviewTitle">
+                <div class="ui02-operating-heading">
+                    <div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صورة التشغيل اليوم' : 'TODAY\'S OPERATING PICTURE'}</span><h2 id="ui02OperatingOverviewTitle">${currentLang === 'ar' ? 'المهام التي تحتاج قراراً' : 'Work that needs a decision'}</h2><p>${currentLang === 'ar' ? 'أبرز المهام المفتوحة مرتبة حسب الأولوية والموعد.' : 'The most relevant open work, ranked by urgency and due date.'}</p></div>
+                    <button type="button" class="btn btn-secondary ui02-inline-link" onclick="renderView('tasks')">${currentLang === 'ar' ? 'فتح إدارة المهام' : 'Open task manager'} <i data-lucide="arrow-up-right"></i></button>
+                </div>
+                <div class="ui02-operating-metrics"><div><strong>${dashboardOpenTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مهام مفتوحة' : 'Open tasks'}</span></div><div><strong>${dashboardAttentionTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'تحتاج متابعة' : 'Need attention'}</span></div><div><strong>${dashboardDueSoonTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مستحقة هذا الأسبوع' : 'Due this week'}</span></div></div>
+                <div class="ui02-focus-queue" aria-label="${currentLang === 'ar' ? 'قائمة المهام المهمة' : 'Focus queue'}"><div class="ui02-focus-queue-heading"><strong>${currentLang === 'ar' ? 'قائمة التركيز' : 'Focus queue'}</strong><span>${dashboardAttentionTaskRecords.length} ${currentLang === 'ar' ? 'عناصر' : 'items'}</span></div>${dashboardTaskQueueHTML}</div>
+            </section>
+
             ${canUsePersonalLeaveWidgets ? `
-            <div class="card col-span-12 annual-leave-widget">
+            <section class="card ui02-leave-card annual-leave-widget">
                 <div class="annual-leave-widget-title"><i data-lucide="plane-takeoff"></i><span>${t('dashboard_annual_leave')}</span></div>
                 <div class="annual-leave-widget-balance"><i data-lucide="luggage"></i><strong>${annualAvailable.toFixed(2)}</strong></div>
                 <div class="annual-leave-widget-date">${t('dashboard_days_available_as_of')} ${annualBalanceAsOf}</div>
@@ -3497,9 +3551,9 @@ async function renderDashboard() {
                     <span>${annualUtilized.toFixed(2)} ${t('dashboard_days_utilized')}</span>
                     <span>${annualAvailableByYearEnd.toFixed(2)} ${t('dashboard_days_available_year_end')}</span>
                 </div>
-            </div>` : ''}
+            </section>` : ''}
             ${canUsePersonalLeaveWidgets ? `
-            <div class="card col-span-12 short-leave-card">
+            <section class="card ui02-short-leave-card short-leave-card">
                 <div class="short-leave-title"><i data-lucide="person-standing"></i><span>${t('dashboard_short_leave')}</span></div>
                 <div class="short-leave-reasons">
                     <label><input type="radio" name="dashboardShortLeaveReason" value="I am running late to the office."> ${t('dashboard_short_late')}</label>
@@ -3514,26 +3568,47 @@ async function renderDashboard() {
                     <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(180)">${t('dashboard_3_hours')}</button>
                     <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(1440)">${t('dashboard_1_day')}</button>
                 </div>
-            </div>` : ''}
+            </section>` : ''}
             
-            <div class="card col-span-12 md:col-span-8">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+            <section class="card ui02-announcement-panel">
+                <div class="ui02-panel-heading">
                     <div class="card-title" style="margin:0;">${t('announcements')}</div>
                     ${currentUserRole === 'ADMIN' ? `<button class="btn-primary btn-sm" onclick="showAnnouncementModal()">${t('post_announcement')}</button>` : ''}
                 </div>
-                <div class="announcement-list" style="max-height: 300px; overflow-y:auto;">
+                <div class="announcement-list ui02-scroll-region">
                     ${announcementsHTML}
                 </div>
-            </div>
+            </section>
 
-            <div class="card col-span-12 md:col-span-4">
+            <section class="card ui02-news-panel">
                 <div class="card-title">${t('news_hub')}</div>
-                <div style="max-height: 300px; overflow-y:auto;">
+                <div class="ui02-scroll-region">
                     ${newsHTML}
                 </div>
-            </div>
-            ${await renderTeamHierarchyWidget()}
-            ${adminWidgets}
+            </section>
+            <div class="ui02-team-widgets">${await renderTeamHierarchyWidget()}</div>
+            <div class="ui02-admin-widgets">${adminWidgets}</div>
+            </main>
+            <aside class="ui02-dashboard-rail" aria-label="${currentLang === 'ar' ? 'إجراءات ومعلومات إضافية' : 'Actions and supporting information'}">
+                <section class="card ui02-quick-actions">
+                    <div class="ui02-panel-heading"><div class="card-title">${currentLang === 'ar' ? 'إجراءات سريعة' : 'Quick actions'}</div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اختصارات' : 'Shortcuts'}</span></div>
+                    <div class="ui02-action-grid">
+                        <button type="button" class="ui02-action-tile" onclick="renderView('tasks')"><i data-lucide="list-checks"></i><span>${currentLang === 'ar' ? 'إدارة المهام' : 'Task manager'}</span></button>
+                        <button type="button" class="ui02-action-tile" onclick="renderView('requests')"><i data-lucide="inbox"></i><span>${currentLang === 'ar' ? 'عرض الطلبات' : 'Review requests'}</span></button>
+                        ${canViewEmployeesRadar() ? `<button type="button" class="ui02-action-tile" onclick="renderView('employees')"><i data-lucide="users-round"></i><span>${currentLang === 'ar' ? 'دليل الموظفين' : 'Employee directory'}</span></button>` : ''}
+                        ${currentUserRole === 'ADMIN' ? `<button type="button" class="ui02-action-tile" onclick="showAnnouncementModal()"><i data-lucide="megaphone"></i><span>${currentLang === 'ar' ? 'إضافة إعلان' : 'Post announcement'}</span></button>` : ''}
+                    </div>
+                </section>
+                <section class="card ui02-activity-panel">
+                    <div class="ui02-panel-heading"><div class="card-title">${currentLang === 'ar' ? 'آخر التحديثات' : 'Recent updates'}</div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اليوم' : 'Today'}</span></div>
+                    <div class="ui02-activity-list">
+                        <div><i data-lucide="megaphone"></i><span>${dashboardAnnouncementCount ? (currentLang === 'ar' ? 'تم نشر إعلان جديد للفريق' : 'A new team announcement is available') : (currentLang === 'ar' ? 'لا توجد إعلانات جديدة' : 'No new announcements')}</span></div>
+                        <div><i data-lucide="calendar-check-2"></i><span>${isClockedIn ? (currentLang === 'ar' ? 'تم تسجيل حضورك اليوم' : 'Your attendance is active today') : (currentLang === 'ar' ? 'لم يتم تسجيل حضور اليوم' : 'Attendance has not started today')}</span></div>
+                        <div><i data-lucide="clipboard-list"></i><span>${dashboardPendingRequestCount ? `${dashboardPendingRequestCount} ${currentLang === 'ar' ? 'طلبات تحتاج للمراجعة' : 'request(s) need review'}` : (currentLang === 'ar' ? 'لا توجد طلبات معلقة' : 'No pending requests')}</span></div>
+                    </div>
+                </section>
+                <section class="card ui02-rail-note"><i data-lucide="shield-check"></i><div><strong>${currentLang === 'ar' ? 'مساحة آمنة' : 'Secure workspace'}</strong><p>${currentLang === 'ar' ? 'تظهر الإجراءات حسب صلاحيات حسابك.' : 'Actions are shown according to your account permissions.'}</p></div></section>
+            </aside>
         </div>
 
         <!-- Announcement Modal -->
@@ -8448,6 +8523,21 @@ async function renderTasksV2() {
     const projects = window.projectsCache || [];
     const taskLists = window.taskListsCache || [];
     const taskViewMode = window.taskV2Mode || 'focus';
+    const taskFocusCount = selectedScopeTasks.filter(task => {
+        if (['completed', 'Approved', 'canceled', 'cancelled'].includes(String(task.status || ''))) return false;
+        const daysUntilDue = task.due_date ? (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000 : null;
+        return ['urgent', 'critical'].includes(String(task.priority || '').toLowerCase())
+            || task.status === 'late'
+            || (daysUntilDue !== null && daysUntilDue <= 7);
+    }).length;
+    const highPriorityCount = selectedScopeTasks.filter(task => ['high', 'urgent', 'critical'].includes(String(task.priority || '').toLowerCase()) && !['completed', 'Approved'].includes(task.status)).length;
+    const completedTaskCount = selectedScopeTasks.filter(task => ['completed', 'Approved'].includes(task.status)).length;
+    const taskWorkspaceTitle = taskViewMode === 'list' ? taskDetailText('Tasks list', 'قائمة المهام') : taskViewMode === 'board' ? taskDetailText('Task pipeline', 'مسار المهام') : taskDetailText('Work that needs a decision', 'مهام تحتاج قراراً');
+    const taskWorkspaceDescription = taskViewMode === 'list'
+        ? taskDetailText('A scannable register with the context and action at hand.', 'سجل واضح يضع السياق والإجراء أمامك.')
+        : taskViewMode === 'board'
+            ? taskDetailText('Move work through the existing status stages.', 'حرّك العمل عبر حالات التنفيذ الحالية.')
+            : taskDetailText('Prioritized from the task lists you can access.', 'مرتبة حسب الأولوية من القوائم المتاحة لك.');
     
     const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
     let canCreateTask = !!currentUser && !isMq20Profile();
@@ -8601,7 +8691,7 @@ async function renderTasksV2() {
         const inlineStatusSelect = `<label class="task-v2-inline-status" onclick="event.stopPropagation()"><span class="sr-only">${taskDetailText('Task status', 'حالة المهمة')}</span><select class="task-v2-stage-select status-${taskStatusClass(task.status)}" aria-label="${taskDetailText('Change task status', 'تغيير حالة المهمة')}" onchange="window.handleTaskCardStageChange('${task.id}', this.value)" ${canChangeTaskStageRecord(task) ? '' : 'disabled'}>${inlineStatusOptions.map(([value, label]) => `<option value="${escapeHTML(value)}" ${task.status === value ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></label>`;
 
         return `
-            <article class="task-v2-row ${isCompleted ? 'completed' : ''} ${isNestedSubtask ? 'task-v2-subtask-row' : 'task-v2-main-row'}" data-task-id="${task.id}" data-parent-task-id="${task.parent_task_id || ''}" data-task-depth="${taskDepth}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="--task-subtask-depth:${taskDepth}; cursor:pointer;">
+            <article class="task-v2-row ${isCompleted ? 'completed' : ''} ${isNestedSubtask ? 'task-v2-subtask-row' : 'task-v2-main-row'}" data-task-id="${task.id}" data-parent-task-id="${task.parent_task_id || ''}" data-task-depth="${taskDepth}" data-project-id="${task.project_id || 'none'}" data-list-id="${task.task_list_id || 'none'}" data-status="${escapeHTML(task.status)}" data-priority="${escapeHTML(task.priority || 'medium')}" data-focus="${isFocusTask}" onclick="openTaskDetailsModal('${task.id}')" style="--task-subtask-depth:${taskDepth}; cursor:pointer;">
                 <div class="task-v2-row-left task-v2-title-cell">
                     <button class="task-v2-check-btn" onclick="event.stopPropagation(); window.taskV2ToggleComplete('${task.id}', event)" ${!canManageTask ? 'disabled' : ''} style="background:none; border:none; cursor:pointer; display:flex; align-items:center; padding:0;">
                         <i data-lucide="check-circle-2" style="width: 20px; height: 20px; color: ${stageCheckColor};"></i>
@@ -8616,6 +8706,9 @@ async function renderTasksV2() {
                             <span class="task-focus-assignee"><i data-lucide="user-round"></i><span>${taskDetailText('Assigned To:', 'مُعيّنة إلى:')}</span><strong>${escapeHTML(rowAssigneeName)}</strong></span>
                         </div>
                     </div>
+                </div>
+                <div class="task-v2-row-priority priority-${escapeHTML(task.priority || 'medium')}" aria-label="${taskDetailText('Priority', 'الأولوية')}: ${escapeHTML(task.priority || 'medium')}">
+                    <span class="task-v2-priority-dot" aria-hidden="true"></span><strong>${escapeHTML(task.priority || 'medium')}</strong>
                 </div>
                 <div class="task-v2-row-status">${inlineStatusSelect}</div>
                 <div class="task-v2-row-creator"><i data-lucide="user-round-plus"></i><span>${taskDetailText('Created by:', 'أنشأها:')}</span><strong>${escapeHTML(rowCreatorName)}</strong></div>
@@ -9026,12 +9119,13 @@ async function renderTasksV2() {
         </div>` : '';
 
     return `
-        <div class="task-v2-shell fade-in-up">
+        <div class="task-v2-shell ui02-task-shell fade-in-up" data-ui-layout="task-manager">
             <div class="task-v2-workspace">
                 <aside class="task-v2-lists">
                     <div class="task-v2-sidebar-header" style="display: flex; align-items: center; justify-content: flex-start; gap: 8px;">
                         <button class="icon-btn sidebar-collapse-btn" style="padding: 4px; margin: 0;"><i data-lucide="chevron-left" style="width: 20px; height: 20px;"></i></button>
-                        <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">Task lists</h3>
+                        <div><span class="task-v2-sidebar-kicker">${taskDetailText('WORKSPACE', 'مساحة العمل')}</span><h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">${taskDetailText('Task lists', 'قوائم المهام')}</h3></div>
+                        <span class="task-v2-sidebar-total">${tasks.length}</span>
                     </div>
                     
                     <ul class="task-lists-nav" style="margin-top: 1rem; list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.25rem;">
@@ -9052,13 +9146,19 @@ async function renderTasksV2() {
                 </aside>
             
             <section class="task-v2-list-pane">
-                <header class="task-v2-toolbar">
+                <div class="task-v2-workspace-header">
+                    <div><span class="task-v2-workspace-kicker">${taskDetailText('WORK EXECUTION', 'تنفيذ العمل')}</span><h1>${taskWorkspaceTitle}</h1><p>${taskWorkspaceDescription}</p></div>
+                    <div class="task-v2-header-metrics"><div><strong>${taskFocusCount}</strong><span>${taskDetailText('Needs attention', 'تحتاج متابعة')}</span></div><div><strong>${dueSoonCount}</strong><span>${taskDetailText('Due this week', 'هذا الأسبوع')}</span></div><div><strong>${overdueCount}</strong><span>${taskDetailText('Overdue', 'متأخرة')}</span></div></div>
+                </div>
+                ${taskViewMode === 'list' ? `<div class="task-v2-summary-grid" aria-label="${taskDetailText('Task list summary', 'ملخص قائمة المهام')}"><div class="task-v2-summary-tile tone-blue"><span>${taskDetailText('Visible tasks', 'المهام الظاهرة')}</span><strong>${selectedScopeTasks.length}</strong></div><div class="task-v2-summary-tile tone-amber"><span>${taskDetailText('Due this week', 'مستحقة هذا الأسبوع')}</span><strong>${dueSoonCount}</strong></div><div class="task-v2-summary-tile tone-red"><span>${taskDetailText('High priority', 'أولوية عالية')}</span><strong>${highPriorityCount}</strong></div><div class="task-v2-summary-tile tone-green"><span>${taskDetailText('Completed', 'مكتملة')}</span><strong>${completedTaskCount}</strong></div></div>` : ''}
+                <header class="task-v2-toolbar" aria-label="${taskDetailText('Task filters and views', 'مرشحات وعروض المهام')}" data-ui-control="task-filter-bar">
                     <div class="task-v2-toolbar-left">
-                        <div class="task-v2-search">
+                        <div class="task-v2-filter-group task-v2-search">
+                            <span class="task-v2-filter-label">${taskDetailText('Find work', 'ابحث في العمل')}</span>
                             <i data-lucide="search"></i>
                             <input type="text" id="taskV2Search" placeholder="Search tasks..." onkeyup="window.filterTasksV2()">
                         </div>
-                        <select id="taskV2StatusFilter" class="form-control" onchange="window.filterTasksV2()">
+                        <label class="task-v2-filter-group"><span class="task-v2-filter-label">${taskDetailText('Status', 'الحالة')}</span><select id="taskV2StatusFilter" class="form-control" onchange="window.filterTasksV2()">
                             <option value="all">All Status</option>
                             <option value="open">Open Tasks</option>
                             <option value="todo">To Do</option>
@@ -9067,34 +9167,37 @@ async function renderTasksV2() {
                             <option value="Pending Approval">Awaiting Approval</option>
                             <option value="completed">Completed</option>
                             <option value="canceled">${taskDetailText('Canceled', 'ملغاة')}</option>
-                        </select>
-                        <select id="taskV2PriorityFilter" class="form-control" onchange="window.filterTasksV2()">
+                        </select></label>
+                        <label class="task-v2-filter-group"><span class="task-v2-filter-label">${taskDetailText('Priority', 'الأولوية')}</span><select id="taskV2PriorityFilter" class="form-control" onchange="window.filterTasksV2()">
                             <option value="all">All Priorities</option>
                             <option value="low">Low</option>
                             <option value="medium">Medium</option>
                             <option value="high">High</option>
                             <option value="urgent">Urgent</option>
                             <option value="critical">Critical</option>
-                        </select>
-                        <select id="taskV2CreatorFilter" class="form-control task-v2-person-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by task creator', 'تصفية حسب منشئ المهمة')}">
+                        </select></label>
+                        <label class="task-v2-filter-group"><span class="task-v2-filter-label">${taskDetailText('Created by', 'أنشأها')}</span><select id="taskV2CreatorFilter" class="form-control task-v2-person-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by task creator', 'تصفية حسب منشئ المهمة')}">
                             <option value="all">${taskDetailText('All creators', 'كل المنشئين')}</option>
                             ${window.taskPeopleFilterOptionsCache || ''}
-                        </select>
-                        <select id="taskV2AssigneeFilter" class="form-control task-v2-person-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by assignee', 'تصفية حسب المكلّف')}">
+                        </select></label>
+                        <label class="task-v2-filter-group"><span class="task-v2-filter-label">${taskDetailText('Assigned to', 'المكلّف')}</span><select id="taskV2AssigneeFilter" class="form-control task-v2-person-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by assignee', 'تصفية حسب المكلّف')}">
                             <option value="all">${taskDetailText('All assignees', 'كل المكلّفين')}</option>
                             ${window.taskPeopleFilterOptionsCache || ''}
-                        </select>
-                        <div class="task-v2-date-control">
+                        </select></label>
+                        <label class="task-v2-date-control"><span class="task-v2-filter-label">${taskDetailText('Due date', 'الموعد')}</span>
                             <input type="date" id="taskV2DateFilter" class="form-control task-v2-date-filter" onchange="window.filterTasksV2()" aria-label="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}" title="${taskDetailText('Filter by date', 'تصفية حسب التاريخ')}">
-                        </div>
+                        </label>
                     </div>
                     <div class="task-v2-toolbar-right">
-                        <div class="task-v2-view-toggles">
+                        <div class="task-v2-view-toggles" role="group" aria-label="${taskDetailText('Task view', 'عرض المهام')}" data-ui-control="task-view-switcher">
                             <button class="view-toggle-btn ${taskViewMode === 'focus' ? 'active' : ''}" id="btn-v2-focus" onclick="window.setTaskV2Mode('focus')">
                                 <i data-lucide="circle-alert"></i> Focus
                             </button>
                             <button class="view-toggle-btn ${taskViewMode === 'board' ? 'active' : ''}" id="btn-v2-board" onclick="window.setTaskV2Mode('board')">
                                 <i data-lucide="kanban"></i> Pipeline
+                            </button>
+                            <button class="view-toggle-btn ${taskViewMode === 'list' ? 'active' : ''}" id="btn-v2-list" onclick="window.setTaskV2Mode('list')">
+                                <i data-lucide="rows-3"></i> List
                             </button>
                         </div>
                     </div>
@@ -9110,12 +9213,13 @@ async function renderTasksV2() {
                     ${canCreateTask ? `<button class="btn btn-primary task-health-new-task" onclick="window.toggleTaskV2Create()"><i data-lucide="plus"></i><span>New Task</span></button>` : ''}
                 </div>
 
-                <div class="task-v2-rows" id="task-v2-rows-container" style="display: ${taskViewMode === 'focus' ? 'block' : 'none'};">
+                <div class="task-v2-rows ${taskViewMode === 'list' ? 'task-v2-register-view' : ''}" id="task-v2-rows-container" style="display: ${taskViewMode === 'board' ? 'none' : 'block'};">
                     <div class="task-focus-header">
-                        <div><span class="task-focus-kicker">Needs attention</span><h3>Focus view</h3></div>
+                        <div><span class="task-focus-kicker">${taskViewMode === 'list' ? 'Execution register' : 'Needs attention'}</span><h3>${taskViewMode === 'list' ? 'Tasks list' : 'Focus view'}</h3></div>
                     </div>
                     <div class="task-v2-table-header" role="row">
                         <span>${taskDetailText('Task Title', 'عنوان المهمة')}</span>
+                        <span>${taskDetailText('Priority', 'الأولوية')}</span>
                         <span>${taskDetailText('Task Status', 'حالة المهمة')}</span>
                         <span>${taskDetailText('Created By', 'أنشأها')}</span>
                         <span>${taskDetailText('Actions', 'الإجراءات')}</span>
@@ -9657,14 +9761,21 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus) {
 };
 
 window.setTaskV2Mode = function (mode) {
+    if (!['focus', 'board', 'list'].includes(mode)) mode = 'focus';
     window.taskV2Mode = mode;
     document.getElementById('btn-v2-focus')?.classList.toggle('active', mode === 'focus');
     document.getElementById('btn-v2-board')?.classList.toggle('active', mode === 'board');
+    document.getElementById('btn-v2-list')?.classList.toggle('active', mode === 'list');
     
     const listContainer = document.getElementById('task-v2-rows-container');
     const boardContainer = document.getElementById('tasks-view-board');
+    listContainer?.classList.toggle('task-v2-register-view', mode === 'list');
+    const focusKicker = listContainer?.querySelector('.task-focus-kicker');
+    const focusTitle = listContainer?.querySelector('.task-focus-header h3');
+    if (focusKicker) focusKicker.textContent = mode === 'list' ? 'Execution register' : 'Needs attention';
+    if (focusTitle) focusTitle.textContent = mode === 'list' ? 'Tasks list' : 'Focus view';
     
-    if (mode === 'focus') {
+    if (mode === 'focus' || mode === 'list') {
         if (listContainer) listContainer.style.display = '';
         if (boardContainer) boardContainer.style.display = 'none';
     } else {
