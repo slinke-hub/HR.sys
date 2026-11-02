@@ -854,3 +854,130 @@ html[dir="rtl"] #viewContainer .employees-radar-name {
     gap: .65rem;
   }
 }
+
+/* Dashboard responsive hotfix: size the composition from its available
+ * content width so side panels, browser chrome, and navigation drawers do
+ * not force narrow cards into tall, stretched columns. */
+#viewContainer .ui02-dashboard-primary {
+  container: ui02-dashboard / inline-size;
+  inline-size: 100%;
+  max-inline-size: 1600px;
+  margin-inline: auto;
+}
+
+#viewContainer .ui02-dashboard-top-grid > *,
+#viewContainer .ui02-command-grid > *,
+#viewContainer .ui02-operating-grid > *,
+#viewContainer .ui02-kpi-announcement-grid > *,
+#viewContainer .ui02-support-grid > * {
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+#viewContainer .ui02-command-card,
+#viewContainer .ui02-support-grid > .card,
+#viewContainer .ui02-expiry-card,
+#viewContainer .ui02-quick-actions,
+#viewContainer .ui02-operating-overview {
+  block-size: auto;
+  min-block-size: 0;
+}
+
+#viewContainer .ui02-expiry-card .document-expiry-name-table-wrap {
+  max-inline-size: 100%;
+  overflow-x: hidden;
+}
+
+#viewContainer .ui02-expiry-card .document-expiry-name-table {
+  inline-size: 100%;
+  min-inline-size: 0;
+  table-layout: fixed;
+}
+
+#viewContainer .ui02-expiry-card .document-expiry-name-table th,
+#viewContainer .ui02-expiry-card .document-expiry-name-table td {
+  max-inline-size: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+#viewContainer .ui02-expiry-card .document-expiry-name-table th:first-child,
+#viewContainer .ui02-expiry-card .document-expiry-name-table td:first-child,
+#viewContainer .ui02-expiry-card .document-expiry-name-table th:last-child,
+#viewContainer .ui02-expiry-card .document-expiry-name-table td:last-child {
+  inline-size: 50%;
+}
+
+#viewContainer .ui02-operating-metrics > div {
+  min-block-size: 0;
+  block-size: auto;
+}
+
+@supports (container-type: inline-size) {
+  @container ui02-dashboard (max-width: 1180px) {
+    #viewContainer .ui02-dashboard-top-grid,
+    #viewContainer .ui02-operating-grid,
+    #viewContainer .ui02-kpi-announcement-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #viewContainer .ui02-command-grid,
+    #viewContainer .ui02-support-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @container ui02-dashboard (max-width: 960px) {
+    #viewContainer .ui02-dashboard-top-grid,
+    #viewContainer .ui02-operating-grid,
+    #viewContainer .ui02-kpi-announcement-grid,
+    #viewContainer .ui02-personal-widgets {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    #viewContainer .ui02-command-grid,
+    #viewContainer .ui02-support-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #viewContainer .ui02-dashboard-top-grid > *,
+    #viewContainer .ui02-operating-grid > *,
+    #viewContainer .ui02-kpi-announcement-grid > * {
+      grid-column: auto;
+    }
+  }
+
+  @container ui02-dashboard (max-width: 680px) {
+    #viewContainer .ui02-support-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    #viewContainer .ui02-action-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #viewContainer .ui02-operating-metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @container ui02-dashboard (max-width: 440px) {
+    #viewContainer .ui02-command-grid,
+    #viewContainer .ui02-action-grid,
+    #viewContainer .ui02-operating-metrics,
+    #viewContainer .ui02-expiry-card .document-expiry-summary-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    #viewContainer .ui02-section-heading,
+    #viewContainer .ui02-operating-heading {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    #viewContainer .ui02-inline-link {
+      inline-size: 100%;
+      justify-content: center;
+    }
+  }
+}
