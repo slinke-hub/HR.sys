@@ -425,6 +425,12 @@
 #viewContainer .ui02-task-shell .task-v2-register-view .task-v2-row-content h4 { font-size: .9rem; }
 #viewContainer .ui02-task-shell .task-v2-register-view .task-v2-row-left { align-items: flex-start; }
 
+/* Filtering must win over responsive row display rules. */
+#viewContainer .ui02-task-shell .task-v2-filtered-out,
+#viewContainer .ui02-task-shell .task-v2-filtered-out[style] {
+  display: none !important;
+}
+
 @media (max-width: 1180px) {
   #viewContainer .ui02-dashboard-shell { grid-template-columns: minmax(0, 1fr) minmax(16rem, .65fr); }
   #viewContainer .ui02-task-shell .task-v2-toolbar { grid-template-columns: 1fr; }

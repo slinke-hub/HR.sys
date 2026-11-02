@@ -9149,7 +9149,7 @@ async function renderTasksV2() {
                     <div><span class="task-v2-workspace-kicker">${taskDetailText('WORK EXECUTION', 'تنفيذ العمل')}</span><h1>${taskWorkspaceTitle}</h1><p>${taskWorkspaceDescription}</p></div>
                     <div class="task-v2-header-metrics"><div><strong>${taskFocusCount}</strong><span>${taskDetailText('Needs attention', 'تحتاج متابعة')}</span></div><div><strong>${dueSoonCount}</strong><span>${taskDetailText('Due this week', 'هذا الأسبوع')}</span></div><div><strong>${overdueCount}</strong><span>${taskDetailText('Overdue', 'متأخرة')}</span></div></div>
                 </div>
-                ${taskViewMode === 'list' ? `<div class="task-v2-summary-grid" aria-label="${taskDetailText('Task list summary', 'ملخص قائمة المهام')}"><div class="task-v2-summary-tile tone-blue"><span>${taskDetailText('Visible tasks', 'المهام الظاهرة')}</span><strong>${selectedScopeTasks.length}</strong></div><div class="task-v2-summary-tile tone-amber"><span>${taskDetailText('Due this week', 'مستحقة هذا الأسبوع')}</span><strong>${dueSoonCount}</strong></div><div class="task-v2-summary-tile tone-red"><span>${taskDetailText('High priority', 'أولوية عالية')}</span><strong>${highPriorityCount}</strong></div><div class="task-v2-summary-tile tone-green"><span>${taskDetailText('Completed', 'مكتملة')}</span><strong>${completedTaskCount}</strong></div></div>` : ''}
+                ${taskViewMode === 'list' ? `<div class="task-v2-summary-grid" aria-label="${taskDetailText('Task list summary', 'ملخص قائمة المهام')}"><div class="task-v2-summary-tile tone-blue"><span>${taskDetailText('Visible tasks', 'المهام الظاهرة')}</span><strong data-task-v2-visible-count>${selectedScopeTasks.length}</strong></div><div class="task-v2-summary-tile tone-amber"><span>${taskDetailText('Due this week', 'مستحقة هذا الأسبوع')}</span><strong>${dueSoonCount}</strong></div><div class="task-v2-summary-tile tone-red"><span>${taskDetailText('High priority', 'أولوية عالية')}</span><strong>${highPriorityCount}</strong></div><div class="task-v2-summary-tile tone-green"><span>${taskDetailText('Completed', 'مكتملة')}</span><strong>${completedTaskCount}</strong></div></div>` : ''}
                 <header class="task-v2-toolbar" aria-label="${taskDetailText('Task filters and views', 'مرشحات وعروض المهام')}" data-ui-control="task-filter-bar">
                     <div class="task-v2-toolbar-left">
                         <div class="task-v2-filter-group task-v2-search">
@@ -9390,6 +9390,42 @@ window.scheduleTaskWorkspaceRefresh = function (delay = 0) {
     taskWorkspaceRefreshTimer = setTimeout(refreshTaskWorkspaceInBackground, delay);
 };
 
+function taskV2FilterMatches(task, options = {}) {
+    const {
+        query = '', status = 'all', priority = 'all', creator = 'all', assignee = 'all', dateFilter = '', healthFilter = 'all', project = 'all',
+        projectsById = new Map(), taskListsById = new Map(), taskCache = {}, now = new Date()
+    } = options;
+    let matchesSearch = true;
+    if (query) {
+        const projectObj = projectsById.get(String(task.project_id));
+        const parentTask = task.parent_task_id ? taskCache[task.parent_task_id] : null;
+        const privateList = taskListsById.get(String(task.task_list_id));
+        const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name_en, task.assignee?.full_name, task.assignee?.display_name_ar, projectObj?.project_name, privateList?.name, parentTask?.displayTitle].filter(Boolean).join(' ').toLowerCase();
+        matchesSearch = searchable.includes(query);
+    }
+    const matchesStatus = (status === 'all') || (status === 'open' && task.status !== 'completed') || (task.status === status);
+    const matchesPriority = (priority === 'all') || (task.priority === priority);
+    const matchesCreator = creator === 'all' || String(task.created_by || '') === creator;
+    const taskAssigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length ? task.assignee_ids.map(String) : [String(task.assignee_id || '')];
+    const matchesAssignee = assignee === 'all' || taskAssigneeIds.includes(assignee);
+    const matchesDate = !dateFilter || String(task.due_date || '').slice(0, 10) === dateFilter;
+    const isClosed = task.status === 'completed' || task.status === 'Approved';
+    const dueAt = task.due_date ? new Date(`${task.due_date}T23:59:59`) : null;
+    const currentTime = now || new Date();
+    const daysUntilDue = dueAt ? (dueAt - currentTime) / 86400000 : null;
+    const matchesHealth = healthFilter === 'all'
+        || (healthFilter === 'waiting' && ['todo', 'Pending Approval'].includes(task.status))
+        || (healthFilter === 'active' && task.status === 'in_progress')
+        || (healthFilter === 'due_this_week' && !isClosed && daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 7)
+        || (healthFilter === 'overdue' && !isClosed && dueAt && dueAt < new Date() && dueAt < currentTime);
+    let matchesProject = true;
+    if (project !== 'all') {
+        if (project.startsWith('list_')) matchesProject = String(task.task_list_id) === project.substring(5);
+        else matchesProject = String(task.project_id) === project;
+    }
+    return matchesSearch && matchesStatus && matchesPriority && matchesCreator && matchesAssignee && matchesDate && matchesHealth && matchesProject;
+}
+
 window.filterTasksV2 = function () {
     const query = (document.getElementById('taskV2Search')?.value || '').trim().toLowerCase();
     const status = document.getElementById('taskV2StatusFilter')?.value || 'all';
@@ -9404,41 +9440,9 @@ window.filterTasksV2 = function () {
     const projectsById = new Map((window.projectsCache || []).map(item => [String(item.id), item]));
     const taskListsById = new Map((window.taskListsCache || []).map(item => [String(item.id), item]));
 
-    const matchesFilters = task => {
-        let matchesSearch = true;
-        if (query) {
-            const projectObj = projectsById.get(String(task.project_id));
-            const parentTask = task.parent_task_id ? window.taskCache?.[task.parent_task_id] : null;
-            const privateList = taskListsById.get(String(task.task_list_id));
-            const searchable = [task.displayTitle, task.title, task.category, task.assignee?.full_name_en, task.assignee?.full_name, task.assignee?.display_name_ar, projectObj?.project_name, privateList?.name, parentTask?.displayTitle].filter(Boolean).join(' ').toLowerCase();
-            matchesSearch = searchable.includes(query);
-        }
-        const matchesStatus = (status === 'all') || (status === 'open' && task.status !== 'completed') || (task.status === status);
-        const matchesPriority = (priority === 'all') || (task.priority === priority);
-        const matchesCreator = creator === 'all' || String(task.created_by || '') === creator;
-        const taskAssigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length
-            ? task.assignee_ids.map(String)
-            : [String(task.assignee_id || '')];
-        const matchesAssignee = assignee === 'all' || taskAssigneeIds.includes(assignee);
-        const matchesDate = !dateFilter || String(task.due_date || '').slice(0, 10) === dateFilter;
-        const isClosed = task.status === 'completed' || task.status === 'Approved';
-        const dueAt = task.due_date ? new Date(`${task.due_date}T23:59:59`) : null;
-        const daysUntilDue = dueAt ? (dueAt - new Date()) / 86400000 : null;
-        const matchesHealth = healthFilter === 'all'
-            || (healthFilter === 'waiting' && ['todo', 'Pending Approval'].includes(task.status))
-            || (healthFilter === 'active' && task.status === 'in_progress')
-            || (healthFilter === 'due_this_week' && !isClosed && daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 7)
-            || (healthFilter === 'overdue' && !isClosed && dueAt && dueAt < new Date());
-        let matchesProject = true;
-        if (project !== 'all') {
-            if (project.startsWith('list_')) {
-                matchesProject = String(task.task_list_id) === project.substring(5);
-            } else {
-                matchesProject = String(task.project_id) === project;
-            }
-        }
-        return matchesSearch && matchesStatus && matchesPriority && matchesCreator && matchesAssignee && matchesDate && matchesHealth && matchesProject;
-    };
+    const filterOptions = { query, status, priority, creator, assignee, dateFilter, healthFilter, project, projectsById, taskListsById, taskCache: window.taskCache || {} };
+    const matchesFilters = task => taskV2FilterMatches(task, filterOptions);
+    const hasExplicitTaskFilter = Boolean(query || status !== 'all' || priority !== 'all' || creator !== 'all' || assignee !== 'all' || dateFilter || healthFilter !== 'all' || project !== 'all');
     const isFocusCandidate = task => {
         if (task.status === 'completed' || task.status === 'Approved') return false;
         const daysUntilDue = task.due_date ? (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000 : null;
@@ -9465,12 +9469,14 @@ window.filterTasksV2 = function () {
         const taskId = String(el.getAttribute('data-task-id') || '');
         const task = window.taskCache[taskId];
         let matches = !!task && visibleIds.has(taskId) && directMatchesById.get(taskId);
-        if (task && visibleIds.has(taskId) && window.taskV2Mode === 'focus' && el.classList.contains('task-v2-row')) {
+        if (task && visibleIds.has(taskId) && window.taskV2Mode === 'focus' && el.classList.contains('task-v2-row') && !hasExplicitTaskFilter) {
             // Focus is grouped by main task. Once any member needs attention,
             // keep the main task and every subtask together and permanently expanded,
             // even when a filter matched only one member of the family.
             matches = visibleFocusRoots.has(rootTaskId(task));
         }
+        el.classList.toggle('task-v2-filtered-out', !matches);
+        el.hidden = !matches;
         el.style.display = matches ? '' : 'none';
     });
 
@@ -9480,6 +9486,7 @@ window.filterTasksV2 = function () {
         return String(task.project_id) === project;
     };
     const scopedTasks = tasks.filter(matchesSelectedScope);
+    const filteredScopedTasks = scopedTasks.filter(matchesFilters);
     const now = new Date();
     const isClosed = task => task.status === 'completed' || task.status === 'Approved';
     const healthCounts = {
@@ -9497,7 +9504,9 @@ window.filterTasksV2 = function () {
         if (counter) counter.textContent = String(count);
     });
     const totalCounter = document.querySelector('[data-task-health-total]');
-    if (totalCounter) totalCounter.textContent = String(scopedTasks.length);
+    if (totalCounter) totalCounter.textContent = String(filteredScopedTasks.length);
+    const visibleTaskCounter = document.querySelector('[data-task-v2-visible-count]');
+    if (visibleTaskCounter) visibleTaskCounter.textContent = String(filteredScopedTasks.length);
 
     document.querySelectorAll('#tasks-view-board .task-stage-panel').forEach(panel => {
         const column = panel.querySelector('.task-column');
