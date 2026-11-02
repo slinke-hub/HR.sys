@@ -13540,6 +13540,37 @@ window.toggleNotifications = async function (forceOpen) {
     }
 }
 
+window.positionProfileDropdown = function () {
+    const dropdown = document.getElementById('profileDropdown');
+    const trigger = document.querySelector('.profile-dropdown-wrapper .user-profile');
+    if (!dropdown || !trigger || dropdown.style.display !== 'block') return;
+
+    const margin = 8;
+    const gap = 8;
+    const triggerRect = trigger.getBoundingClientRect();
+    const viewportWidth = window.visualViewport?.width || document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight = window.visualViewport?.height || document.documentElement.clientHeight || window.innerHeight;
+    const dropdownWidth = Math.min(dropdown.offsetWidth || 250, Math.max(0, viewportWidth - (margin * 2)));
+    const dropdownHeight = dropdown.offsetHeight || 0;
+    const isRtl = document.documentElement.dir === 'rtl';
+    const preferredLeft = isRtl ? triggerRect.right - dropdownWidth : triggerRect.left;
+    const left = Math.min(Math.max(margin, preferredLeft), Math.max(margin, viewportWidth - dropdownWidth - margin));
+    const belowTop = triggerRect.bottom + gap;
+    const aboveTop = triggerRect.top - dropdownHeight - gap;
+    const fitsBelow = belowTop + dropdownHeight <= viewportHeight - margin;
+    const top = fitsBelow || aboveTop < margin
+        ? Math.min(belowTop, Math.max(margin, viewportHeight - dropdownHeight - margin))
+        : aboveTop;
+
+    dropdown.style.setProperty('left', `${Math.round(left)}px`, 'important');
+    dropdown.style.setProperty('right', 'auto', 'important');
+    dropdown.style.setProperty('top', `${Math.round(Math.max(margin, top))}px`, 'important');
+};
+
+window.addEventListener('resize', window.positionProfileDropdown);
+window.visualViewport?.addEventListener('resize', window.positionProfileDropdown);
+window.visualViewport?.addEventListener('scroll', window.positionProfileDropdown);
+
 window.toggleProfileDropdown = function () {
     const dropdown = document.getElementById('profileDropdown');
     const notifDropdown = document.getElementById('notificationsDropdown');
@@ -13548,6 +13579,10 @@ window.toggleProfileDropdown = function () {
         const isShowing = dropdown.style.display === 'block';
         dropdown.style.display = isShowing ? 'none' : 'block';
         dropdown.setAttribute('aria-hidden', isShowing ? 'true' : 'false');
+        if (!isShowing) {
+            window.positionProfileDropdown();
+            requestAnimationFrame(window.positionProfileDropdown);
+        }
 
         // Keep the two header menus mutually exclusive.
         if (notifDropdown) {

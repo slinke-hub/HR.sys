@@ -1617,9 +1617,11 @@ body { background: var(--bg-app); }
 .user-profile { position: relative; min-height: 40px; min-width: 40px; }
 .profile-dropdown-menu {
   position: fixed !important;
-  top: calc(var(--topbar-height, 64px) + .5rem) !important;
-  inset-inline-end: max(.5rem, env(safe-area-inset-right)) !important;
+  top: auto !important;
+  inset-inline-end: auto !important;
   inset-inline-start: auto !important;
+  left: auto !important;
+  right: auto !important;
   width: min(250px, calc(100vw - 1rem)) !important;
   max-width: calc(100vw - 1rem) !important;
   z-index: 2147482000 !important;
