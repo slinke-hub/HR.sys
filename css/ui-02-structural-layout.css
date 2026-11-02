@@ -635,8 +635,12 @@ html[dir="rtl"] #viewContainer .ui02-task-shell .task-v2-toolbar-right { justify
 }
 
 #viewContainer .ui02-support-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
+}
+
+#viewContainer .ui02-support-grid:has(> .ui02-last-login-card) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 #viewContainer .ui02-support-grid > .card {
@@ -922,7 +926,8 @@ html[dir="rtl"] #viewContainer .employees-radar-name {
     }
 
     #viewContainer .ui02-command-grid,
-    #viewContainer .ui02-support-grid {
+    #viewContainer .ui02-support-grid,
+    #viewContainer .ui02-support-grid:has(> .ui02-last-login-card) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
@@ -948,7 +953,8 @@ html[dir="rtl"] #viewContainer .employees-radar-name {
   }
 
   @container ui02-dashboard (max-width: 680px) {
-    #viewContainer .ui02-support-grid {
+    #viewContainer .ui02-support-grid,
+    #viewContainer .ui02-support-grid:has(> .ui02-last-login-card) {
       grid-template-columns: minmax(0, 1fr);
     }
 
