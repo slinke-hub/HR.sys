@@ -126,10 +126,10 @@
                     <button type="button" id="appNavigationToggle" class="header-navigation-toggle" onclick="window.openMobileNavigation(this)" aria-label="Open navigation" title="Open navigation" aria-controls="appNavigationDrawerOverlay" aria-expanded="false">
                         <i data-lucide="menu" aria-hidden="true"></i>
                     </button>
-                    <div class="header-logo">
+                    <a href="#dashboard" class="header-logo" aria-label="Dashboard" onclick="event.preventDefault(); window.renderView('dashboard');">
                     <img src="/images/logo.png" alt="MUQAM HR Logo" class="app-logo app-logo-light">
                     <img src="/images/logo-dark.png?v=20260906" alt="MUQAM HR Logo" class="app-logo app-logo-dark">
-                    </div>
+                    </a>
                     <button id="globalBackButton" class="btn btn-icon" onclick="window.goBack()" aria-label="Go back">
                         <i data-lucide="arrow-left"></i>
                     </button>

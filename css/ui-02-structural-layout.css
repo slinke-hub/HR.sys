@@ -343,6 +343,23 @@
 #viewContainer .ui02-task-shell .task-v2-search .task-v2-filter-label { padding-inline-start: 1.7rem; }
 #viewContainer .ui02-task-shell .task-v2-search > svg { position: absolute; inset-inline-start: .55rem; bottom: .55rem; width: 1rem; height: 1rem; color: var(--color-text-secondary); pointer-events: none; }
 #viewContainer .ui02-task-shell .task-v2-search input { min-height: 2.45rem; }
+#viewContainer .ui02-task-shell .task-v2-toolbar-left .task-v2-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  padding: .45rem .6rem .55rem;
+}
+#viewContainer .ui02-task-shell .task-v2-search .task-v2-filter-label {
+  display: block;
+  min-width: 0;
+  padding-inline-start: 1.7rem;
+  overflow-wrap: anywhere;
+}
+#viewContainer .ui02-task-shell .task-v2-search > svg { top: 1.85rem; bottom: auto; }
+#viewContainer .ui02-task-shell .task-v2-search input { width: 100%; min-width: 0; padding-block: .35rem; }
 #viewContainer .ui02-task-shell .task-v2-toolbar-right { align-items: center; }
 #viewContainer .ui02-task-shell .task-v2-view-toggles { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
 #viewContainer .ui02-task-shell .view-toggle-btn { min-height: 2.3rem; border-radius: .6rem; }

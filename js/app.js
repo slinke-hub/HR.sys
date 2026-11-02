@@ -2663,6 +2663,7 @@ async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const isAdmin = isAdminRole(normalizedRole);
     if (isAdmin) return true;
+    if (viewId === 'dashboard') return true;
     if (viewId === 'my-day') return true;
     if (viewId === 'project-command-center') return canViewFullProjectCommandCenter();
 
@@ -2774,7 +2775,7 @@ window.updateSidebarVisibility = async function () {
     
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
         const viewId = item.dataset.view;
-        if (viewId === 'my-day') {
+        if (viewId === 'dashboard' || viewId === 'my-day') {
             item.style.display = 'flex';
         } else if (isAdmin) {
             item.style.display = 'flex';
@@ -8510,7 +8511,8 @@ async function renderTasksV2() {
     
     const projects = window.projectsCache || [];
     const taskLists = window.taskListsCache || [];
-    const taskViewMode = window.taskV2Mode || 'focus';
+    const taskViewMode = window.taskV2Mode === 'list' ? 'list' : 'focus';
+    window.taskV2Mode = taskViewMode;
     const taskFocusCount = selectedScopeTasks.filter(task => {
         if (['completed', 'Approved', 'canceled', 'cancelled'].includes(String(task.status || ''))) return false;
         const daysUntilDue = task.due_date ? (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000 : null;
@@ -9181,9 +9183,6 @@ async function renderTasksV2() {
                             <button class="view-toggle-btn ${taskViewMode === 'focus' ? 'active' : ''}" id="btn-v2-focus" onclick="window.setTaskV2Mode('focus')">
                                 <i data-lucide="circle-alert"></i> Focus
                             </button>
-                            <button class="view-toggle-btn ${taskViewMode === 'board' ? 'active' : ''}" id="btn-v2-board" onclick="window.setTaskV2Mode('board')">
-                                <i data-lucide="kanban"></i> Pipeline
-                            </button>
                             <button class="view-toggle-btn ${taskViewMode === 'list' ? 'active' : ''}" id="btn-v2-list" onclick="window.setTaskV2Mode('list')">
                                 <i data-lucide="rows-3"></i> List
                             </button>
@@ -9774,10 +9773,9 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus) {
 };
 
 window.setTaskV2Mode = function (mode) {
-    if (!['focus', 'board', 'list'].includes(mode)) mode = 'focus';
+    if (!['focus', 'list'].includes(mode)) mode = 'focus';
     window.taskV2Mode = mode;
     document.getElementById('btn-v2-focus')?.classList.toggle('active', mode === 'focus');
-    document.getElementById('btn-v2-board')?.classList.toggle('active', mode === 'board');
     document.getElementById('btn-v2-list')?.classList.toggle('active', mode === 'list');
     
     const listContainer = document.getElementById('task-v2-rows-container');
@@ -9788,13 +9786,8 @@ window.setTaskV2Mode = function (mode) {
     if (focusKicker) focusKicker.textContent = mode === 'list' ? 'Execution register' : 'Needs attention';
     if (focusTitle) focusTitle.textContent = mode === 'list' ? 'Tasks list' : 'Focus view';
     
-    if (mode === 'focus' || mode === 'list') {
-        if (listContainer) listContainer.style.display = '';
-        if (boardContainer) boardContainer.style.display = 'none';
-    } else {
-        if (listContainer) listContainer.style.display = 'none';
-        if (boardContainer) boardContainer.style.display = 'block';
-    }
+    if (listContainer) listContainer.style.display = '';
+    if (boardContainer) boardContainer.style.display = 'none';
     window.filterTasksV2();
 };
 
