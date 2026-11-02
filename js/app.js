@@ -2514,13 +2514,6 @@ async function renderCommunity() {
 
     if (messages.length === 0) chatHTML = `<p style="text-align:center; color:var(--color-text-secondary);">No messages yet. Be the first to post!</p>`;
 
-    const dashboardPendingRequestCount = [...(dashboardLeaves || []), ...(dashboardGenericRequests || [])]
-        .filter(request => String(request.status || '').toUpperCase().startsWith('PENDING')).length;
-    const dashboardAnnouncementCount = announcementsList.length;
-    const dashboardAttendanceLabel = isClockedIn
-        ? (currentLang === 'ar' ? 'على رأس العمل' : 'On shift')
-        : (currentLang === 'ar' ? 'لم يبدأ الدوام' : 'Not clocked in');
-
     return `
         <div class="page-header ui02-dashboard-header">
             <div>
@@ -3283,6 +3276,12 @@ async function renderDashboard() {
     const isClockedIn = todayAttendance != null && !todayAttendance.clock_out_time;
     window.currentTodayAttendance = todayAttendance || null;
     const announcementsList = announcements || [];
+    const dashboardPendingRequestCount = [...(dashboardLeaves || []), ...(dashboardGenericRequests || [])]
+        .filter(request => String(request.status || '').toUpperCase().startsWith('PENDING')).length;
+    const dashboardAnnouncementCount = announcementsList.length;
+    const dashboardAttendanceLabel = isClockedIn
+        ? (currentLang === 'ar' ? 'على رأس العمل' : 'On shift')
+        : (currentLang === 'ar' ? 'لم يبدأ الدوام' : 'Not clocked in');
     const dashboardName = getProfileDisplayName(profile);
     const currentHour = new Date().getHours();
     const greetingKey = currentHour < 12 ? 'welcome_morning' : currentHour < 18 ? 'welcome_afternoon' : 'welcome_evening';
