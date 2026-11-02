@@ -490,3 +490,367 @@ html[dir="rtl"] #viewContainer .ui02-task-shell .task-v2-toolbar-right { justify
   #viewContainer .ui02-action-tile,
   #viewContainer .ui02-task-shell .task-v2-row { transition: none; }
 }
+
+/* Dashboard composition refinement: the page now follows the operating
+ * sequence directly in the DOM, while each band remains an independent grid
+ * so permissions and existing handlers stay attached to their widgets. */
+#viewContainer .ui02-dashboard-shell {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+#viewContainer .ui02-dashboard-primary {
+  display: grid;
+  gap: clamp(1rem, 1.8vw, 1.5rem);
+  min-width: 0;
+  align-content: start;
+}
+
+#viewContainer .ui02-dashboard-section,
+#viewContainer .ui02-dashboard-section > *,
+#viewContainer .ui02-dashboard-operating-slot,
+#viewContainer .ui02-dashboard-kpi-slot {
+  min-width: 0;
+}
+
+#viewContainer .ui02-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: .7rem;
+}
+
+#viewContainer .ui02-section-heading h2 {
+  margin: .25rem 0 0;
+  color: var(--color-text);
+  font-size: clamp(1rem, 1.5vw, 1.3rem);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+#viewContainer .ui02-dashboard-top-grid,
+#viewContainer .ui02-operating-grid,
+#viewContainer .ui02-kpi-announcement-grid,
+#viewContainer .ui02-support-grid,
+#viewContainer .ui02-personal-widgets {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+#viewContainer .ui02-dashboard-top-grid {
+  grid-template-columns: minmax(0, 1.12fr) minmax(18rem, .88fr);
+  align-items: start;
+}
+
+#viewContainer .ui02-expiry-card,
+#viewContainer .ui02-quick-actions {
+  height: auto;
+  align-self: start;
+  padding: 1.05rem;
+}
+
+#viewContainer .ui02-expiry-card .document-expiry-dashboard,
+#viewContainer .ui02-expiry-card .dashboard-alert {
+  min-width: 0;
+}
+
+#viewContainer .ui02-empty-state {
+  margin: 0;
+  padding: .9rem 0 .15rem;
+  color: var(--color-text-secondary);
+  font-size: .82rem;
+}
+
+#viewContainer .ui02-dashboard-snapshot-section {
+  padding: .1rem 0 0;
+}
+
+#viewContainer .ui02-command-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .75rem;
+  align-items: start;
+}
+
+#viewContainer .ui02-command-card {
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  align-self: start;
+}
+
+#viewContainer .ui02-command-card span,
+#viewContainer .ui02-command-card strong,
+#viewContainer .ui02-command-card small,
+#viewContainer .ui02-action-tile span,
+#viewContainer .ui02-panel-note {
+  overflow-wrap: anywhere;
+}
+
+#viewContainer .ui02-command-card strong {
+  white-space: normal;
+}
+
+#viewContainer .ui02-personal-widgets {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+#viewContainer .ui02-operating-grid {
+  grid-template-columns: minmax(0, 1.04fr) minmax(0, 1.2fr);
+  align-items: start;
+}
+
+#viewContainer .ui02-dashboard-operating-slot {
+  display: block;
+  min-width: 0;
+}
+
+#viewContainer .ui02-dashboard-operating-slot > .card {
+  width: 100%;
+  height: auto;
+}
+
+#viewContainer .ui02-dashboard-operating-slot:only-child {
+  grid-column: 1 / -1;
+}
+
+#viewContainer .ui02-operating-overview {
+  height: auto;
+}
+
+#viewContainer .ui02-kpi-announcement-grid {
+  grid-template-columns: minmax(16rem, .88fr) minmax(0, 1.12fr);
+  align-items: start;
+}
+
+#viewContainer .ui02-dashboard-kpi-slot:empty {
+  display: none;
+}
+
+#viewContainer .ui02-dashboard-kpi-slot:empty + .ui02-announcement-panel {
+  grid-column: 1 / -1;
+}
+
+#viewContainer .ui02-support-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+}
+
+#viewContainer .ui02-support-grid > .card {
+  min-width: 0;
+  height: auto;
+}
+
+#viewContainer .ui02-dashboard-team-section {
+  padding-bottom: .5rem;
+}
+
+#viewContainer .ui02-dashboard-team-section .ui02-team-widgets {
+  min-width: 0;
+}
+
+#viewContainer .ui02-scroll-region {
+  max-height: none;
+  overflow: visible;
+}
+
+#viewContainer .ui02-expiry-card .document-expiry-summary {
+  min-width: 0;
+  min-height: 0;
+  padding: .8rem .9rem;
+}
+
+#viewContainer .ui02-expiry-card .document-expiry-summary span,
+#viewContainer .ui02-expiry-card .document-expiry-summary strong,
+#viewContainer .ui02-expiry-card .document-expiry-name-table th,
+#viewContainer .ui02-expiry-card .document-expiry-name-table td,
+#viewContainer .admin-kpi-grid span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+#viewContainer .employees-radar-card {
+  overflow: visible;
+}
+
+#viewContainer .employees-radar-layout,
+#viewContainer .employees-radar-list {
+  min-width: 0;
+}
+
+#viewContainer .employees-radar-list {
+  max-height: none;
+  overflow: visible;
+}
+
+#viewContainer .employees-radar-list li {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+#viewContainer .employees-radar-name {
+  flex: 1 1 8rem;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#viewContainer .employees-radar-meta {
+  flex: 0 1 auto;
+  min-width: 5.25rem;
+  max-width: 100%;
+}
+
+#viewContainer .employees-radar-clockout {
+  flex: 0 0 auto;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+#viewContainer .ui02-dashboard-team-section .hierarchy-square-tree {
+  max-height: none !important;
+  overflow: visible !important;
+  padding-block: .5rem;
+}
+
+#viewContainer .ui02-dashboard-team-section .hierarchy-square-tree > div {
+  gap: 1rem !important;
+}
+
+#viewContainer .ui02-dashboard-team-section .hierarchy-level-group {
+  gap: .85rem;
+}
+
+html[dir="rtl"] #viewContainer .employees-radar-name {
+  text-align: right;
+}
+
+#viewContainer .ui02-focus-task-body strong,
+#viewContainer .ui02-focus-task-body small,
+#viewContainer .ui02-focus-task-state {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#viewContainer .ui02-action-tile,
+#viewContainer .short-leave-duration-button {
+  min-height: 2.75rem;
+  touch-action: manipulation;
+}
+
+@media (max-width: 1180px) {
+  #viewContainer .ui02-dashboard-top-grid,
+  #viewContainer .ui02-operating-grid,
+  #viewContainer .ui02-kpi-announcement-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #viewContainer .ui02-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #viewContainer .ui02-support-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  #viewContainer .ui02-dashboard-top-grid,
+  #viewContainer .ui02-operating-grid,
+  #viewContainer .ui02-kpi-announcement-grid,
+  #viewContainer .ui02-personal-widgets {
+    grid-template-columns: 1fr;
+  }
+
+  #viewContainer .ui02-support-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #viewContainer .ui02-dashboard-operating-slot:only-child,
+  #viewContainer .ui02-dashboard-kpi-slot:empty + .ui02-announcement-panel {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  #viewContainer .ui02-dashboard-primary {
+    gap: 1rem;
+  }
+
+  #viewContainer .ui02-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-bottom: .55rem;
+  }
+
+  #viewContainer .ui02-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .55rem;
+  }
+
+  #viewContainer .ui02-command-card {
+    min-height: 0;
+    padding: .8rem;
+  }
+
+  #viewContainer .ui02-command-card strong {
+    font-size: 1rem;
+  }
+
+  #viewContainer .ui02-expiry-card,
+  #viewContainer .ui02-quick-actions,
+  #viewContainer .ui02-operating-overview {
+    padding: .9rem;
+  }
+
+  #viewContainer .ui02-support-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #viewContainer .ui02-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #viewContainer .ui02-action-tile {
+    align-items: flex-start;
+    min-height: 3.2rem;
+    padding: .7rem;
+  }
+
+  #viewContainer .ui02-operating-heading {
+    flex-direction: column;
+  }
+
+  #viewContainer .ui02-inline-link {
+    width: 100%;
+    justify-content: center;
+  }
+
+  #viewContainer .ui02-operating-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  #viewContainer .employees-radar-meta {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 360px) {
+  #viewContainer .ui02-command-grid,
+  #viewContainer .ui02-action-grid,
+  #viewContainer .ui02-operating-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  #viewContainer .ui02-command-card {
+    min-height: auto;
+  }
+
+  #viewContainer .ui02-expiry-card .document-expiry-summary-grid {
+    gap: .65rem;
+  }
+}

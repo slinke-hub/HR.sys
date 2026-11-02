@@ -3437,7 +3437,9 @@ async function renderDashboard() {
         }
     } catch (e) { }
 
-    let adminWidgets = '';
+    let employeesRadarWidgetHTML = '';
+    let dashboardKpiWidgetHTML = '';
+    let lastLoginWidgetHTML = '';
     if (canViewEmployeesRadar()) {
         const allProfiles = currentUserRole === 'ADMIN' ? ((await db.fetchAllProfiles()) || []) : [];
         const lastLoginsHTML = renderRecentLoginsHTML(allProfiles);
@@ -3447,17 +3449,17 @@ async function renderDashboard() {
         const pendingRequests = (dashboardGenericRequests || []).filter(request => String(request.status || '').toUpperCase().startsWith('PENDING')).length;
         const radarRows = renderEmployeesRadarRows(dashboardAttendance || []);
 
-        adminWidgets += `
+        employeesRadarWidgetHTML = `
             <section class="card col-span-12 employees-radar-card" id="employeesRadarWidget" aria-live="polite">
                 <div class="employees-radar-header"><div><div class="card-title">Employees Radar</div><p class="employees-radar-subtitle">Live view of today&rsquo;s clocked-in and clocked-out employees</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> Live</span></div>
                 <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>clocked in now</small><span class="employees-radar-out-count" id="employeesRadarOutCount">${clockedOutEmployees.length} clocked out</span></div><ul class="employees-radar-list" id="employeesRadarList">${radarRows || '<li class="employees-radar-empty">No attendance recorded today.</li>'}</ul></div>
             </section>
-            ${currentUserRole === 'ADMIN' ? `<section class="card col-span-12 admin-kpi-card" id="dashboardKpiOverview" aria-live="polite"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong id="dashboardKpiEmployees">${allProfiles.length}</strong><span>Total employees</span></div><div><strong id="dashboardKpiClockedIn">${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong id="dashboardKpiOpenTasks">${openTasks}</strong><span>Open tasks</span></div><div><strong id="dashboardKpiPendingRequests">${pendingRequests}</strong><span>Pending requests</span></div></div></section>` : ''}
-            ${currentUserRole === 'ADMIN' ? `<div class="card col-span-12 md:col-span-6">
+        `;
+        dashboardKpiWidgetHTML = currentUserRole === 'ADMIN' ? `<section class="card admin-kpi-card" id="dashboardKpiOverview" aria-live="polite"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong id="dashboardKpiEmployees">${allProfiles.length}</strong><span>Total employees</span></div><div><strong id="dashboardKpiClockedIn">${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong id="dashboardKpiOpenTasks">${openTasks}</strong><span>Open tasks</span></div><div><strong id="dashboardKpiPendingRequests">${pendingRequests}</strong><span>Pending requests</span></div></div></section>` : '';
+        lastLoginWidgetHTML = currentUserRole === 'ADMIN' ? `<section class="card ui02-last-login-card">
                 <div class="card-title">${t('last_login')}</div>
                 <div id="recentLoginsList" aria-live="polite">${lastLoginsHTML}</div>
-            </div>` : ''}
-        `;
+            </section>` : '';
         window.initializeEmployeesRadar?.(dashboardAttendance || []);
     }
 
@@ -3522,75 +3524,14 @@ async function renderDashboard() {
                 </div>
             </section>
             ` : ''}
-            ${expirationAlerts ? `<div class="ui02-alert-stack">${expirationAlerts}</div>` : ''}
 
-            <section class="ui02-command-grid" aria-label="${currentLang === 'ar' ? 'مؤشرات سريعة' : 'Quick metrics'}">
-                <article class="card ui02-command-card ui02-command-card--blue"><span>${currentLang === 'ar' ? 'الحضور اليوم' : 'Attendance today'}</span><strong>${escapeHTML(dashboardAttendanceLabel)}</strong><small>${isClockedIn ? (currentLang === 'ar' ? 'تسجيل الانصراف عند المغادرة' : 'Clock out when you leave') : (currentLang === 'ar' ? 'ابدأ دوامك لتحديث الحالة' : 'Clock in to update status')}</small></article>
-                <article class="card ui02-command-card ui02-command-card--teal"><span>${currentLang === 'ar' ? 'الإعلانات' : 'Announcements'}</span><strong>${dashboardAnnouncementCount}</strong><small>${currentLang === 'ar' ? 'تحديثات للفريق' : 'Updates for your team'}</small></article>
-                <article class="card ui02-command-card ui02-command-card--amber"><span>${currentLang === 'ar' ? 'طلبات قيد المراجعة' : 'Requests to review'}</span><strong>${dashboardPendingRequestCount}</strong><small>${currentLang === 'ar' ? 'تحتاج إلى متابعتك' : 'Waiting for your attention'}</small></article>
-                ${canUsePersonalLeaveWidgets ? `<article class="card ui02-command-card ui02-command-card--violet"><span>${currentLang === 'ar' ? 'الرصيد المتاح' : 'Leave available'}</span><strong>${annualAvailable.toFixed(1)}</strong><small>${currentLang === 'ar' ? 'حتى نهاية العام' : 'Available this year'}</small></article>` : ''}
-            </section>
-
-            <section class="card ui02-operating-overview" aria-labelledby="ui02OperatingOverviewTitle">
-                <div class="ui02-operating-heading">
-                    <div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صورة التشغيل اليوم' : 'TODAY\'S OPERATING PICTURE'}</span><h2 id="ui02OperatingOverviewTitle">${currentLang === 'ar' ? 'المهام التي تحتاج قراراً' : 'Work that needs a decision'}</h2><p>${currentLang === 'ar' ? 'أبرز المهام المفتوحة مرتبة حسب الأولوية والموعد.' : 'The most relevant open work, ranked by urgency and due date.'}</p></div>
-                    <button type="button" class="btn btn-secondary ui02-inline-link" onclick="renderView('tasks')">${currentLang === 'ar' ? 'فتح إدارة المهام' : 'Open task manager'} <i data-lucide="arrow-up-right"></i></button>
-                </div>
-                <div class="ui02-operating-metrics"><div><strong>${dashboardOpenTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مهام مفتوحة' : 'Open tasks'}</span></div><div><strong>${dashboardAttentionTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'تحتاج متابعة' : 'Need attention'}</span></div><div><strong>${dashboardDueSoonTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مستحقة هذا الأسبوع' : 'Due this week'}</span></div></div>
-                <div class="ui02-focus-queue" aria-label="${currentLang === 'ar' ? 'قائمة المهام المهمة' : 'Focus queue'}"><div class="ui02-focus-queue-heading"><strong>${currentLang === 'ar' ? 'قائمة التركيز' : 'Focus queue'}</strong><span>${dashboardAttentionTaskRecords.length} ${currentLang === 'ar' ? 'عناصر' : 'items'}</span></div>${dashboardTaskQueueHTML}</div>
-            </section>
-
-            ${canUsePersonalLeaveWidgets ? `
-            <section class="card ui02-leave-card annual-leave-widget">
-                <div class="annual-leave-widget-title"><i data-lucide="plane-takeoff"></i><span>${t('dashboard_annual_leave')}</span></div>
-                <div class="annual-leave-widget-balance"><i data-lucide="luggage"></i><strong>${annualAvailable.toFixed(2)}</strong></div>
-                <div class="annual-leave-widget-date">${t('dashboard_days_available_as_of')} ${annualBalanceAsOf}</div>
-                <div class="annual-leave-widget-breakdown">
-                    <span>${annualRequested.toFixed(2)} ${t('dashboard_days_requested')}</span>
-                    <span>${annualUtilized.toFixed(2)} ${t('dashboard_days_utilized')}</span>
-                    <span>${annualAvailableByYearEnd.toFixed(2)} ${t('dashboard_days_available_year_end')}</span>
-                </div>
-            </section>` : ''}
-            ${canUsePersonalLeaveWidgets ? `
-            <section class="card ui02-short-leave-card short-leave-card">
-                <div class="short-leave-title"><i data-lucide="person-standing"></i><span>${t('dashboard_short_leave')}</span></div>
-                <div class="short-leave-reasons">
-                    <label><input type="radio" name="dashboardShortLeaveReason" value="I am running late to the office."> ${t('dashboard_short_late')}</label>
-                    <label><input type="radio" name="dashboardShortLeaveReason" value="I will be out for a meeting."> ${t('dashboard_short_meeting')}</label>
-                    <label><input type="radio" name="dashboardShortLeaveReason" value="I need to attend an urgent family matter."> ${t('dashboard_short_family')}</label>
-                    <label><input type="radio" name="dashboardShortLeaveReason" value="I have an important outing to run."> ${t('dashboard_short_outing')}</label>
-                </div>
-                <div class="short-leave-durations">
-                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(15)">${t('dashboard_15_minutes')}</button>
-                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(60)">${t('dashboard_1_hour')}</button>
-                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(120)">${t('dashboard_2_hours')}</button>
-                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(180)">${t('dashboard_3_hours')}</button>
-                    <button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(1440)">${t('dashboard_1_day')}</button>
-                </div>
-            </section>` : ''}
-            
-            <section class="card ui02-announcement-panel">
-                <div class="ui02-panel-heading">
-                    <div class="card-title" style="margin:0;">${t('announcements')}</div>
-                    ${currentUserRole === 'ADMIN' ? `<button class="btn-primary btn-sm" onclick="showAnnouncementModal()">${t('post_announcement')}</button>` : ''}
-                </div>
-                <div class="announcement-list ui02-scroll-region">
-                    ${announcementsHTML}
-                </div>
-            </section>
-
-            <section class="card ui02-news-panel">
-                <div class="card-title">${t('news_hub')}</div>
-                <div class="ui02-scroll-region">
-                    ${newsHTML}
-                </div>
-            </section>
-            <div class="ui02-team-widgets">${await renderTeamHierarchyWidget()}</div>
-            <div class="ui02-admin-widgets">${adminWidgets}</div>
-            </main>
-            <aside class="ui02-dashboard-rail" aria-label="${currentLang === 'ar' ? 'إجراءات ومعلومات إضافية' : 'Actions and supporting information'}">
+            <section class="ui02-dashboard-section ui02-dashboard-top-grid" aria-label="${currentLang === 'ar' ? 'صحة المستندات والإجراءات السريعة' : 'Document health and quick actions'}">
+                <section class="card ui02-expiry-card">
+                    <div class="ui02-panel-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صحة المستندات' : 'DOCUMENT HEALTH'}</span><div class="card-title">${currentLang === 'ar' ? 'المستندات المنتهية أو القريبة من الانتهاء' : 'Expired documents / expiring soon'}</div></div></div>
+                    ${expirationAlerts || `<p class="ui02-empty-state">${currentLang === 'ar' ? 'لا توجد مستندات تحتاج إلى متابعة.' : 'No document expirations require attention.'}</p>`}
+                </section>
                 <section class="card ui02-quick-actions">
-                    <div class="ui02-panel-heading"><div class="card-title">${currentLang === 'ar' ? 'إجراءات سريعة' : 'Quick actions'}</div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اختصارات' : 'Shortcuts'}</span></div>
+                    <div class="ui02-panel-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'اختصارات العمل' : 'WORK SHORTCUTS'}</span><div class="card-title">${currentLang === 'ar' ? 'إجراءات سريعة' : 'Quick actions'}</div></div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اختصارات' : 'Shortcuts'}</span></div>
                     <div class="ui02-action-grid">
                         <button type="button" class="ui02-action-tile" onclick="renderView('tasks')"><i data-lucide="list-checks"></i><span>${currentLang === 'ar' ? 'إدارة المهام' : 'Task manager'}</span></button>
                         <button type="button" class="ui02-action-tile" onclick="renderView('requests')"><i data-lucide="inbox"></i><span>${currentLang === 'ar' ? 'عرض الطلبات' : 'Review requests'}</span></button>
@@ -3598,16 +3539,64 @@ async function renderDashboard() {
                         ${currentUserRole === 'ADMIN' ? `<button type="button" class="ui02-action-tile" onclick="showAnnouncementModal()"><i data-lucide="megaphone"></i><span>${currentLang === 'ar' ? 'إضافة إعلان' : 'Post announcement'}</span></button>` : ''}
                     </div>
                 </section>
-                <section class="card ui02-activity-panel">
-                    <div class="ui02-panel-heading"><div class="card-title">${currentLang === 'ar' ? 'آخر التحديثات' : 'Recent updates'}</div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اليوم' : 'Today'}</span></div>
-                    <div class="ui02-activity-list">
-                        <div><i data-lucide="megaphone"></i><span>${dashboardAnnouncementCount ? (currentLang === 'ar' ? 'تم نشر إعلان جديد للفريق' : 'A new team announcement is available') : (currentLang === 'ar' ? 'لا توجد إعلانات جديدة' : 'No new announcements')}</span></div>
-                        <div><i data-lucide="calendar-check-2"></i><span>${isClockedIn ? (currentLang === 'ar' ? 'تم تسجيل حضورك اليوم' : 'Your attendance is active today') : (currentLang === 'ar' ? 'لم يتم تسجيل حضور اليوم' : 'Attendance has not started today')}</span></div>
-                        <div><i data-lucide="clipboard-list"></i><span>${dashboardPendingRequestCount ? `${dashboardPendingRequestCount} ${currentLang === 'ar' ? 'طلبات تحتاج للمراجعة' : 'request(s) need review'}` : (currentLang === 'ar' ? 'لا توجد طلبات معلقة' : 'No pending requests')}</span></div>
-                    </div>
+            </section>
+
+            <section class="ui02-dashboard-section ui02-dashboard-snapshot-section" aria-label="${currentLang === 'ar' ? 'ملخص اليوم' : 'Today at a glance'}">
+                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'ملخص اليوم' : 'TODAY AT A GLANCE'}</span><h2>${currentLang === 'ar' ? 'الحضور والإعلانات والطلبات' : 'Attendance, announcements, and requests'}</h2></div></div>
+                <div class="ui02-command-grid">
+                    <article class="card ui02-command-card ui02-command-card--blue"><span>${currentLang === 'ar' ? 'الحضور اليوم' : 'Attendance today'}</span><strong>${escapeHTML(dashboardAttendanceLabel)}</strong><small>${isClockedIn ? (currentLang === 'ar' ? 'تسجيل الانصراف عند المغادرة' : 'Clock out when you leave') : (currentLang === 'ar' ? 'ابدأ دوامك لتحديث الحالة' : 'Clock in to update status')}</small></article>
+                    <article class="card ui02-command-card ui02-command-card--teal"><span>${currentLang === 'ar' ? 'الإعلانات' : 'Announcements'}</span><strong>${dashboardAnnouncementCount}</strong><small>${currentLang === 'ar' ? 'تحديثات للفريق' : 'Updates for your team'}</small></article>
+                    <article class="card ui02-command-card ui02-command-card--amber"><span>${currentLang === 'ar' ? 'طلبات قيد المراجعة' : 'Requests to review'}</span><strong>${dashboardPendingRequestCount}</strong><small>${currentLang === 'ar' ? 'تحتاج إلى متابعتك' : 'Waiting for your attention'}</small></article>
+                    ${canUsePersonalLeaveWidgets ? `<article class="card ui02-command-card ui02-command-card--violet"><span>${currentLang === 'ar' ? 'الرصيد المتاح' : 'Leave available'}</span><strong>${annualAvailable.toFixed(1)}</strong><small>${currentLang === 'ar' ? 'حتى نهاية العام' : 'Available this year'}</small></article>` : ''}
+                </div>
+            </section>
+
+            ${canUsePersonalLeaveWidgets ? `
+            <section class="ui02-dashboard-section ui02-personal-widgets" aria-label="${currentLang === 'ar' ? 'مزايا الإجازات الشخصية' : 'Personal leave widgets'}">
+                <section class="card ui02-leave-card annual-leave-widget">
+                    <div class="annual-leave-widget-title"><i data-lucide="plane-takeoff"></i><span>${t('dashboard_annual_leave')}</span></div>
+                    <div class="annual-leave-widget-balance"><i data-lucide="luggage"></i><strong>${annualAvailable.toFixed(2)}</strong></div>
+                    <div class="annual-leave-widget-date">${t('dashboard_days_available_as_of')} ${annualBalanceAsOf}</div>
+                    <div class="annual-leave-widget-breakdown"><span>${annualRequested.toFixed(2)} ${t('dashboard_days_requested')}</span><span>${annualUtilized.toFixed(2)} ${t('dashboard_days_utilized')}</span><span>${annualAvailableByYearEnd.toFixed(2)} ${t('dashboard_days_available_year_end')}</span></div>
                 </section>
-                <section class="card ui02-rail-note"><i data-lucide="shield-check"></i><div><strong>${currentLang === 'ar' ? 'مساحة آمنة' : 'Secure workspace'}</strong><p>${currentLang === 'ar' ? 'تظهر الإجراءات حسب صلاحيات حسابك.' : 'Actions are shown according to your account permissions.'}</p></div></section>
-            </aside>
+                <section class="card ui02-short-leave-card short-leave-card">
+                    <div class="short-leave-title"><i data-lucide="person-standing"></i><span>${t('dashboard_short_leave')}</span></div>
+                    <div class="short-leave-reasons"><label><input type="radio" name="dashboardShortLeaveReason" value="I am running late to the office."> ${t('dashboard_short_late')}</label><label><input type="radio" name="dashboardShortLeaveReason" value="I will be out for a meeting."> ${t('dashboard_short_meeting')}</label><label><input type="radio" name="dashboardShortLeaveReason" value="I need to attend an urgent family matter."> ${t('dashboard_short_family')}</label><label><input type="radio" name="dashboardShortLeaveReason" value="I have an important outing to run."> ${t('dashboard_short_outing')}</label></div>
+                    <div class="short-leave-durations"><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(15)">${t('dashboard_15_minutes')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(60)">${t('dashboard_1_hour')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(120)">${t('dashboard_2_hours')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(180)">${t('dashboard_3_hours')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(1440)">${t('dashboard_1_day')}</button></div>
+                </section>
+            </section>` : ''}
+
+            <section class="ui02-dashboard-section ui02-dashboard-operating-section" aria-label="${currentLang === 'ar' ? 'صورة التشغيل اليومية' : 'Daily operating picture'}">
+                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صورة التشغيل اليومية' : 'OPERATING PICTURE'}</span><h2>${currentLang === 'ar' ? 'المتابعة تبدأ من العمل الأهم' : 'Start with the work that matters most'}</h2></div></div>
+                <div class="ui02-operating-grid">
+                    ${employeesRadarWidgetHTML ? `<div class="ui02-dashboard-operating-slot">${employeesRadarWidgetHTML}</div>` : ''}
+                    <div class="ui02-dashboard-operating-slot">
+                        <section class="card ui02-operating-overview" aria-labelledby="ui02OperatingOverviewTitle">
+                            <div class="ui02-operating-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صورة التشغيل اليوم' : 'TODAY\'S OPERATING PICTURE'}</span><h2 id="ui02OperatingOverviewTitle">${currentLang === 'ar' ? 'المهام التي تحتاج قراراً' : 'Work that needs a decision'}</h2><p>${currentLang === 'ar' ? 'أبرز المهام المفتوحة مرتبة حسب الأولوية والموعد.' : 'The most relevant open work, ranked by urgency and due date.'}</p></div><button type="button" class="btn btn-secondary ui02-inline-link" onclick="renderView('tasks')">${currentLang === 'ar' ? 'فتح إدارة المهام' : 'Open task manager'} <i data-lucide="arrow-up-right"></i></button></div>
+                            <div class="ui02-operating-metrics"><div><strong>${dashboardOpenTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مهام مفتوحة' : 'Open tasks'}</span></div><div><strong>${dashboardAttentionTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'تحتاج متابعة' : 'Need attention'}</span></div><div><strong>${dashboardDueSoonTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مستحقة هذا الأسبوع' : 'Due this week'}</span></div></div>
+                            <div class="ui02-focus-queue" aria-label="${currentLang === 'ar' ? 'قائمة المهام المهمة' : 'Focus queue'}"><div class="ui02-focus-queue-heading"><strong>${currentLang === 'ar' ? 'قائمة التركيز' : 'Focus queue'}</strong><span>${dashboardAttentionTaskRecords.length} ${currentLang === 'ar' ? 'عناصر' : 'items'}</span></div>${dashboardTaskQueueHTML}</div>
+                        </section>
+                    </div>
+                </div>
+            </section>
+
+            <section class="ui02-dashboard-section ui02-dashboard-kpi-section" aria-label="${currentLang === 'ar' ? 'مؤشرات الأداء والإعلانات' : 'KPI overview and announcements'}">
+                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'نبض القوى العاملة' : 'WORKFORCE PULSE'}</span><h2>${currentLang === 'ar' ? 'المؤشرات والإعلانات' : 'KPI overview and announcements'}</h2></div></div>
+                <div class="ui02-kpi-announcement-grid"><div class="ui02-dashboard-kpi-slot">${dashboardKpiWidgetHTML}</div><section class="card ui02-announcement-panel"><div class="ui02-panel-heading"><div class="card-title" style="margin:0;">${t('announcements')}</div>${currentUserRole === 'ADMIN' ? `<button class="btn-primary btn-sm" onclick="showAnnouncementModal()">${t('post_announcement')}</button>` : ''}</div><div class="announcement-list ui02-scroll-region">${announcementsHTML}</div></section></div>
+            </section>
+
+            <section class="ui02-dashboard-section ui02-dashboard-support-section" aria-label="${currentLang === 'ar' ? 'النشاط ومساحة العمل الآمنة' : 'Activity and secure workspace'}">
+                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'النشاط والأمان' : 'ACTIVITY & SECURITY'}</span><h2>${currentLang === 'ar' ? 'آخر ما حدث ومساحة العمل' : 'Recent activity and workspace context'}</h2></div></div>
+                <div class="ui02-support-grid">
+                    ${lastLoginWidgetHTML}
+                    <section class="card ui02-news-panel"><div class="card-title">${t('news_hub')}</div><div class="ui02-scroll-region">${newsHTML}</div></section>
+                    <section class="card ui02-activity-panel"><div class="ui02-panel-heading"><div class="card-title">${currentLang === 'ar' ? 'آخر التحديثات' : 'Recent updates'}</div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اليوم' : 'Today'}</span></div><div class="ui02-activity-list"><div><i data-lucide="megaphone"></i><span>${dashboardAnnouncementCount ? (currentLang === 'ar' ? 'تم نشر إعلان جديد للفريق' : 'A new team announcement is available') : (currentLang === 'ar' ? 'لا توجد إعلانات جديدة' : 'No new announcements')}</span></div><div><i data-lucide="calendar-check-2"></i><span>${isClockedIn ? (currentLang === 'ar' ? 'تم تسجيل حضورك اليوم' : 'Your attendance is active today') : (currentLang === 'ar' ? 'لم يتم تسجيل حضور اليوم' : 'Attendance has not started today')}</span></div><div><i data-lucide="clipboard-list"></i><span>${dashboardPendingRequestCount ? `${dashboardPendingRequestCount} ${currentLang === 'ar' ? 'طلبات تحتاج للمراجعة' : 'request(s) need review'}` : (currentLang === 'ar' ? 'لا توجد طلبات معلقة' : 'No pending requests')}</span></div></div></section>
+                    <section class="card ui02-rail-note"><i data-lucide="shield-check"></i><div><strong>${currentLang === 'ar' ? 'مساحة آمنة' : 'Secure workspace'}</strong><p>${currentLang === 'ar' ? 'تظهر الإجراءات حسب صلاحيات حسابك.' : 'Actions are shown according to your account permissions.'}</p></div></section>
+                </div>
+            </section>
+
+            <section class="ui02-dashboard-section ui02-dashboard-team-section" aria-label="${currentLang === 'ar' ? 'التسلسل الهرمي للفريق' : 'Team hierarchy'}"><div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'هيكل الفريق' : 'TEAM STRUCTURE'}</span><h2>${currentLang === 'ar' ? 'التسلسل الهرمي للفريق' : 'Team hierarchy'}</h2></div></div><div class="ui02-team-widgets">${await renderTeamHierarchyWidget()}</div></section>
+            </main>
         </div>
 
         <!-- Announcement Modal -->
