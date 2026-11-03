@@ -244,7 +244,19 @@ html[data-theme="dark"] #viewContainer .employees-radar-list {
 #viewContainer .employees-radar-group .employees-radar-status { font-size: .67rem; font-weight: 700; }
 #viewContainer .employees-radar-group .employees-radar-meta time { color: var(--color-text-secondary); font-size: .68rem; }
 #viewContainer .employees-radar-group .employees-radar-clockout { grid-column: 2 / -1; justify-self: start; min-height: 2.25rem; }
-#viewContainer .employees-radar-group .employees-radar-empty { display: block; padding: .8rem 0; color: var(--color-text-secondary); font-size: .76rem; }
+#viewContainer .employees-radar-group .employees-radar-list li.employees-radar-empty {
+  display: block;
+  grid-column: 1 / -1;
+  inline-size: 100%;
+  min-width: 0;
+  padding: .8rem 0;
+  color: var(--color-text-secondary);
+  font-size: .76rem;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
 
 html[data-theme="dark"] #viewContainer .employees-radar-group {
   border-color: rgba(70, 167, 255, .22);
