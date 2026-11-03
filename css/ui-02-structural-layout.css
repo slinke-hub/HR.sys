@@ -1614,3 +1614,45 @@ html[dir="rtl"] #viewContainer .employees-radar-name {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Final mobile polish: empty Radar states and the five-item touch bar must
+ * use the full available track without inheriting narrow content sizing. */
+#viewContainer .employees-radar-group .employees-radar-list,
+#viewContainer .employees-radar-group .employees-radar-list li.employees-radar-empty {
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: none;
+}
+
+#viewContainer .employees-radar-group .employees-radar-list li.employees-radar-empty {
+  display: block !important;
+  grid-column: 1 / -1 !important;
+  justify-self: stretch;
+  white-space: normal !important;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-align: center;
+}
+
+html[data-platform="android"] .sidebar-nav > .nav-item > span {
+  display: -webkit-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: clamp(.55rem, 1.7vw, .68rem);
+  line-height: 1.05;
+  text-align: center;
+}
+
+html[data-platform="android"] .sidebar-nav > .nav-item {
+  gap: .14rem;
+  padding-inline: .1rem;
+}
