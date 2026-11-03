@@ -1,0 +1,221 @@
+/* Cyber Obsidian global dark-mode layer.
+ *
+ * The light theme remains owned by the existing semantic foundation. This
+ * layer only normalizes shared surfaces and legacy page primitives when the
+ * user selects dark mode, so every module can share the Dashboard identity
+ * without changing its markup, data flow, permissions, or actions.
+ */
+
+html[data-theme="dark"],
+html[data-theme="dark"] body,
+html[data-theme="dark"] .app-container,
+html[data-theme="dark"] .main-content,
+html[data-theme="dark"] .view-container,
+html[data-theme="dark"] #viewContainer {
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] :where(.sidebar, .topbar, .header-navigation,
+  .mobile-navigation-sheet, .mobile-navigation-panel, .app-navigation-drawer) {
+  background: var(--nav-bg) !important;
+  color: var(--nav-text);
+  border-color: var(--nav-border) !important;
+}
+
+html[data-theme="dark"] :where(.sidebar, .topbar) {
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme="dark"] :where(.app-container, .main-content, .view-container,
+  #viewContainer, .dashboard-grid, .dashboard-grid > *, .card) {
+  min-width: 0;
+}
+
+html[data-theme="dark"] :where(.card, .panel, .section-card, .table-card,
+  .data-card, .employee-details-card, .report-card, .settings-card,
+  .hr-beta-hero, .hr-beta-metric, .hr-beta-workspace,
+  .hr-beta-capabilities article, .task-v2-workspace, .task-v2-list-pane,
+  .task-v2-toolbar, .task-pipeline-view, .task-pipeline-card,
+  .task-stage-panel, .task-focus-card) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme="dark"] :where(.card-title, .page-title, .page-subtitle,
+  .section-title, .modal-header h1, .modal-header h2, .modal-header h3,
+  .modal-header h4, .table-title, .task-v2-row-content h4) {
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] :where(.page-subtitle, .muted, .text-muted,
+  small, .form-help, .empty-state p, .hr-beta-hero p,
+  .hr-beta-metric small, .hr-beta-empty p) {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] :where(.modal .modal-content, .side-panel,
+  .profile-dropdown-menu, .profile-dropdown, .notifications-dropdown,
+  .notification-dropdown, .dropdown-menu, .task-watcher-dropdown,
+  .custom-context-menu, .header-search-dialog, .mobile-navigation-panel,
+  .app-navigation-drawer) {
+  background: var(--overlay-surface) !important;
+  color: var(--text-primary);
+  border-color: var(--border-default) !important;
+  box-shadow: var(--shadow-lg);
+}
+
+html[data-theme="dark"] :where(.dropdown-item, .profile-menu-item,
+  .notifications-dropdown button, .notification-dropdown button) {
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] :where(.dropdown-item:hover, .dropdown-item:focus-visible,
+  .profile-menu-item:hover, .profile-menu-item:focus-visible,
+  .notification-item:hover, .mobile-navigation-item:hover) {
+  color: var(--text-primary) !important;
+  background: var(--hover-surface) !important;
+}
+
+html[data-theme="dark"] :where(.data-table, table) {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+html[data-theme="dark"] :where(.data-table thead, .data-table thead tr,
+  .table-header, .table-toolbar, .table-footer) {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] :where(.data-table th, .data-table td, table th, table td) {
+  color: inherit;
+  border-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] :where(.nav-item, .header-nav-item, .mobile-navigation-item) {
+  color: var(--nav-text-muted);
+}
+
+html[data-theme="dark"] :where(.nav-item:hover, .header-nav-item:hover,
+  .mobile-navigation-item:hover) {
+  color: var(--nav-text);
+  background: var(--nav-item-hover);
+}
+
+html[data-theme="dark"] :where(.nav-item.active, .header-nav-item.active,
+  .mobile-navigation-item.active, .nav-item[aria-current="page"],
+  .header-nav-item[aria-current="page"],
+  .mobile-navigation-item[aria-current="page"]) {
+  color: var(--nav-item-selected-text) !important;
+  background: var(--nav-item-selected) !important;
+  border-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] :where(.btn-secondary, .btn-ghost, .btn-icon,
+  .icon-btn, .header-search-trigger, .header-language-switcher,
+  .header-notification-button) {
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-bg);
+  border-color: var(--action-secondary-border);
+}
+
+html[data-theme="dark"] :where(.btn-secondary:hover, .btn-ghost:hover,
+  .btn-icon:hover, .icon-btn:hover, .header-search-trigger:hover,
+  .header-language-switcher:hover, .header-notification-button:hover) {
+  color: var(--action-secondary-text);
+  background: var(--action-secondary-hover);
+  border-color: var(--input-border-hover);
+}
+
+html[data-theme="dark"] :where(.form-control, input, select, textarea,
+  .search-input, .search-field input, .task-v2-search input,
+  .task-v2-toolbar select) {
+  color: var(--input-text);
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+  caret-color: var(--input-text);
+}
+
+html[data-theme="dark"] :where(input, select, textarea)::placeholder {
+  color: var(--input-placeholder);
+  opacity: 1;
+}
+
+html[data-theme="dark"] :where(.form-control:focus, input:focus, select:focus,
+  textarea:focus, .search-input:focus, .task-v2-search:focus-within) {
+  color: var(--input-text);
+  background-color: var(--input-bg);
+  border-color: var(--input-border-focus);
+  box-shadow: var(--focus-ring-shadow);
+}
+
+html[data-theme="dark"] :where(.status-badge, .badge, .tag, .chip,
+  .semantic-status, .hr-beta-badge, .hr-beta-category) {
+  border-color: var(--border-default);
+}
+
+/* Legacy CRM utility classes use !important; map their neutral utilities back
+   to the shared Cyber Obsidian surfaces without touching light mode. */
+html[data-theme="dark"] :where(.tw-bg-white, .tw-bg-slate-50,
+  .tw-bg-slate-100, .tw-bg-slate-200) {
+  background-color: var(--bg-surface) !important;
+}
+
+html[data-theme="dark"] :where(.tw-text-ink, .tw-text-slate-700,
+  .tw-text-slate-800, .tw-text-slate-900) {
+  color: var(--text-primary) !important;
+}
+
+html[data-theme="dark"] :where(.tw-text-slate-500, .tw-text-slate-600,
+  .tw-text-slate-400, .tw-text-slate-300) {
+  color: var(--text-secondary) !important;
+}
+
+html[data-theme="dark"] :where(.tw-border-slate-100, .tw-border-slate-200,
+  .tw-border-slate-300, .tw-border-white) {
+  border-color: var(--border-subtle) !important;
+}
+
+html[data-theme="dark"] :where(.modal-overlay, .side-panel-overlay,
+  .mobile-navigation-backdrop, .navigation-drawer-backdrop) {
+  background: var(--overlay-scrim);
+}
+
+html[data-theme="dark"] :where(.table-responsive, .scroll-region,
+  .ui02-scroll-region, .employees-radar-list) {
+  scrollbar-color: var(--brand-primary) transparent;
+}
+
+html[data-theme="dark"] :where(a) {
+  color: var(--accent-text);
+}
+
+html[data-theme="dark"] :where(a:hover) {
+  color: var(--brand-primary-hover);
+}
+
+html[data-theme="dark"] :where(.btn-primary, .btn-danger, .btn-destructive) {
+  color: var(--action-primary-text);
+}
+
+html[data-theme="dark"] :where(.btn-danger, .btn-destructive) {
+  color: var(--action-danger-text);
+  background: var(--action-danger-bg);
+  border-color: var(--action-danger-bg);
+}
+
+html[data-theme="dark"] :where(.btn-danger:hover, .btn-destructive:hover) {
+  background: var(--action-danger-hover);
+  border-color: var(--action-danger-hover);
+}
+
+@media (max-width: 700px) {
+  html[data-theme="dark"] :where(.card, .panel, .section-card,
+    .modal .modal-content, .side-panel) {
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .28);
+  }
+}

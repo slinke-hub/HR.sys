@@ -24,7 +24,7 @@ html[data-theme="dark"] body:has(.ui02-dashboard-shell) {
   --brand-primary-soft: rgba(70, 167, 255, .14);
   --accent-text: #72d7ff;
   --action-primary-bg: #1677d2;
-  --action-primary-hover: #218fe8;
+  --action-primary-hover: #176fc1;
   --input-bg: #081525;
   --input-border: rgba(88, 162, 231, .34);
   --input-border-focus: #46a7ff;

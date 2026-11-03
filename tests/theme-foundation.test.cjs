@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const variables = read('css/variables.css');
 const foundation = read('css/theme-foundation.css');
+const globalTheme = read('css/cyber-obsidian-theme.css');
 const components = read('css/components.css');
 const app = read('js/app.js');
 const html = read('index.html');
@@ -35,9 +36,10 @@ for (const [block, name, expected] of [
     '--action-primary-bg': '#1B4C5F', '--nav-item-selected': '#E2EFEE',
   }],
   [darkBlock, 'Dark', {
-    '--bg-app': '#14242E', '--action-primary-bg': '#286E80',
-    '--action-primary-hover': '#327B8A', '--action-primary-text': '#FFFFFF',
-    '--brand-primary': '#8FD3CF', '--focus-ring': '#76D3C9',
+    '--bg-app': '#050A14', '--bg-surface': '#0B1628',
+    '--action-primary-bg': '#1677D2', '--action-primary-hover': '#176FC1',
+    '--action-primary-text': '#FFFFFF', '--brand-primary': '#46A7FF',
+    '--focus-ring': '#72D7FF',
   }],
 ]) {
   for (const [token, expectedValue] of Object.entries(expected)) {
@@ -97,6 +99,13 @@ for (const alias of ['--color-bg-subtle', '--color-text', '--color-text-muted', 
 const foundationHref = html.match(/<link[^>]+href="([^"]*theme-foundation\.css[^"]*)"/)?.[1];
 assert.ok(foundationHref, 'HTML must load the shared theme foundation');
 assert.ok(html.indexOf(foundationHref) > html.indexOf('css/crm-tailwind.css'), 'Theme foundation must load after existing component styles');
+const globalThemeHref = html.match(/<link[^>]+href="([^"]*cyber-obsidian-theme\.css[^"]*)"/)?.[1];
+assert.ok(globalThemeHref, 'HTML must load the global Cyber Obsidian theme layer');
+assert.ok(html.indexOf(globalThemeHref) > html.indexOf('css/ui-02-structural-layout.css'), 'Global Cyber Obsidian layer must load after page-specific styles');
+assert.match(variables, /Cyber Obsidian: shared dark-mode identity/, 'Dark semantic tokens must document the Cyber Obsidian identity');
+assert.match(globalTheme, /html\[data-theme="dark"\][\s\S]*\.sidebar[\s\S]*var\(--nav-bg\)/, 'Global theme must cover shared navigation surfaces');
+assert.match(globalTheme, /html\[data-theme="dark"\][\s\S]*\.modal \.modal-content[\s\S]*var\(--overlay-surface\)/, 'Global theme must cover modal surfaces');
+assert.match(globalTheme, /html\[data-theme="dark"\][\s\S]*\.tw-bg-white[\s\S]*var\(--bg-surface\)/, 'Global theme must cover legacy CRM neutral utilities');
 assert.match(foundation, /\.card\s*\{[\s\S]*?background:\s*var\(--bg-surface\)/, 'Shared card surface must use semantic tokens');
 assert.match(foundation, /\.btn\.btn-primary[\s\S]*?background-color:\s*var\(--action-primary-bg\)/, 'Primary action must use its semantic action token');
 assert.match(foundation, /\.btn\.btn-secondary[\s\S]*?background:\s*var\(--action-secondary-bg\)/, 'Secondary action foundation must exist');
