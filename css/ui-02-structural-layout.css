@@ -6,6 +6,265 @@
   margin-bottom: 1.25rem;
 }
 
+/* Cyber Obsidian Dashboard theme. This is intentionally scoped to the live
+ * Dashboard view so the existing light theme and other screens keep their
+ * established visual language. */
+html[data-theme="dark"] body:has(.ui02-dashboard-shell) {
+  --bg-app: #050a14;
+  --bg-surface: #0b1628;
+  --bg-surface-elevated: #102039;
+  --bg-subtle: #081221;
+  --text-primary: #edf6ff;
+  --text-secondary: #91aac5;
+  --text-muted: #6f8aa6;
+  --border-default: rgba(88, 162, 231, .26);
+  --border-subtle: rgba(88, 162, 231, .15);
+  --brand-primary: #46a7ff;
+  --brand-primary-hover: #78c4ff;
+  --brand-primary-soft: rgba(70, 167, 255, .14);
+  --accent-text: #72d7ff;
+  --action-primary-bg: #1677d2;
+  --action-primary-hover: #218fe8;
+  --input-bg: #081525;
+  --input-border: rgba(88, 162, 231, .34);
+  --input-border-focus: #46a7ff;
+  --input-text: #edf6ff;
+  --input-placeholder: #6f8aa6;
+  --shadow-sm: 0 10px 26px rgba(0, 0, 0, .22);
+  --shadow-md: 0 16px 34px rgba(0, 0, 0, .32);
+}
+
+html[data-theme="dark"] body:has(.ui02-dashboard-shell),
+html[data-theme="dark"] body:has(.ui02-dashboard-shell) .app-container,
+html[data-theme="dark"] body:has(.ui02-dashboard-shell) #viewContainer {
+  background-color: var(--bg-app);
+  background-image: none !important;
+}
+
+html[data-theme="dark"] body:has(.ui02-dashboard-shell) #viewContainer {
+  background-image:
+    linear-gradient(rgba(70, 167, 255, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(70, 167, 255, .035) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+html[data-theme="dark"] #viewContainer > .ui02-dashboard-header {
+  padding: 1.25rem clamp(1rem, 2.5vw, 2.5rem) 1rem;
+  margin: 0;
+  background: linear-gradient(180deg, rgba(11, 22, 40, .96), rgba(5, 10, 20, .72));
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-dashboard-shell {
+  padding: clamp(1rem, 2.5vw, 2.5rem);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-dashboard-primary {
+  max-inline-size: 1680px;
+  gap: clamp(1.25rem, 2vw, 2rem);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-dashboard-section {
+  position: relative;
+}
+
+html[data-theme="dark"] #viewContainer .ui02-dashboard-section::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  inline-size: 3px;
+  block-size: 1.75rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #72d7ff, #1677d2);
+  box-shadow: 0 0 18px rgba(70, 167, 255, .64);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-section-heading {
+  padding-inline-start: 1rem;
+}
+
+html[data-theme="dark"] #viewContainer .ui02-section-kicker {
+  color: #72d7ff;
+  letter-spacing: .14em;
+}
+
+html[data-theme="dark"] #viewContainer :is(.card, .ui02-admin-banner) {
+  border-color: var(--border-default);
+  background: linear-gradient(145deg, rgba(16, 32, 57, .96), rgba(8, 18, 33, .96));
+  box-shadow: 0 14px 32px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(150, 214, 255, .045);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-admin-banner {
+  border-inline-start: 3px solid #46a7ff;
+}
+
+html[data-theme="dark"] #viewContainer .ui02-command-card {
+  min-block-size: 8.25rem;
+  border-top-width: 2px;
+  border-radius: 1rem;
+  background: linear-gradient(155deg, rgba(16, 32, 57, .98), rgba(8, 18, 33, .98));
+}
+
+html[data-theme="dark"] #viewContainer .ui02-command-card strong,
+html[data-theme="dark"] #viewContainer .ui02-operating-metrics strong,
+html[data-theme="dark"] #viewContainer .admin-kpi-grid strong {
+  color: #edf6ff;
+  text-shadow: 0 0 22px rgba(70, 167, 255, .24);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-command-card--blue { border-top-color: #46a7ff; }
+html[data-theme="dark"] #viewContainer .ui02-command-card--teal { border-top-color: #38d6c5; }
+html[data-theme="dark"] #viewContainer .ui02-command-card--amber { border-top-color: #ffc857; }
+html[data-theme="dark"] #viewContainer .ui02-command-card--violet { border-top-color: #b18cff; }
+
+html[data-theme="dark"] #viewContainer .ui02-expiry-card,
+html[data-theme="dark"] #viewContainer .ui02-quick-actions,
+html[data-theme="dark"] #viewContainer .ui02-operating-overview,
+html[data-theme="dark"] #viewContainer .ui02-announcement-panel,
+html[data-theme="dark"] #viewContainer .ui02-news-panel,
+html[data-theme="dark"] #viewContainer .ui02-activity-panel,
+html[data-theme="dark"] #viewContainer .ui02-last-login-card,
+html[data-theme="dark"] #viewContainer .ui02-rail-note,
+html[data-theme="dark"] #viewContainer .ui02-team-widgets {
+  border-radius: 1rem;
+}
+
+html[data-theme="dark"] #viewContainer .ui02-action-tile {
+  color: #d9edff;
+  background: rgba(70, 167, 255, .07);
+  border-color: rgba(70, 167, 255, .24);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-action-tile:hover,
+html[data-theme="dark"] #viewContainer .ui02-inline-link:hover {
+  color: #fff;
+  background: rgba(70, 167, 255, .16);
+  border-color: rgba(114, 215, 255, .7);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-focus-queue,
+html[data-theme="dark"] #viewContainer .ui02-operating-metrics > div,
+html[data-theme="dark"] #viewContainer .admin-kpi-grid > div {
+  background: rgba(4, 12, 24, .58);
+  border-color: rgba(70, 167, 255, .2);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-focus-task:hover {
+  background: rgba(70, 167, 255, .09);
+}
+
+html[data-theme="dark"] #viewContainer .ui02-scroll-region,
+html[data-theme="dark"] #viewContainer .employees-radar-list {
+  scrollbar-color: rgba(70, 167, 255, .55) transparent;
+}
+
+/* Radar presentation: split the authorized attendance feed into two clear
+ * operational groups. Records without a clock-in are intentionally omitted
+ * from both groups by the renderer and are never mislabeled as clocked out. */
+#viewContainer .employees-radar-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+  min-width: 0;
+}
+
+#viewContainer .employees-radar-group {
+  min-width: 0;
+  padding: .8rem;
+  border: 1px solid var(--color-border);
+  border-radius: .85rem;
+  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-primary));
+}
+
+#viewContainer .employees-radar-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding-bottom: .65rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+#viewContainer .employees-radar-group-heading > div {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  min-width: 0;
+}
+
+#viewContainer .employees-radar-group-heading h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: .82rem;
+  line-height: 1.2;
+}
+
+#viewContainer .employees-radar-group-heading > strong {
+  flex: 0 0 auto;
+  color: var(--color-primary);
+  font-size: 1.1rem;
+}
+
+#viewContainer .employees-radar-group-status {
+  inline-size: .55rem;
+  block-size: .55rem;
+  border-radius: 50%;
+  background: #38d6c5;
+  box-shadow: 0 0 0 .22rem color-mix(in srgb, #38d6c5 20%, transparent);
+}
+
+#viewContainer .employees-radar-group--out .employees-radar-group-status {
+  background: #879bb3;
+  box-shadow: 0 0 0 .22rem color-mix(in srgb, #879bb3 18%, transparent);
+}
+
+#viewContainer .employees-radar-group .employees-radar-list {
+  display: grid;
+  gap: .45rem;
+  margin: .65rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+#viewContainer .employees-radar-group .employees-radar-list li {
+  display: grid;
+  grid-template-columns: .55rem minmax(0, 1fr) auto;
+  gap: .45rem;
+  align-items: center;
+  padding: .55rem 0;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 68%, transparent);
+}
+
+#viewContainer .employees-radar-group .employees-radar-list li:last-child { border-bottom: 0; }
+#viewContainer .employees-radar-group .employees-radar-pulse { inline-size: .45rem; block-size: .45rem; }
+#viewContainer .employees-radar-group .employees-radar-name { font-size: .82rem; font-weight: 700; }
+#viewContainer .employees-radar-group .employees-radar-meta { display: grid; justify-items: end; gap: .1rem; min-width: max-content; }
+#viewContainer .employees-radar-group .employees-radar-status { font-size: .67rem; font-weight: 700; }
+#viewContainer .employees-radar-group .employees-radar-meta time { color: var(--color-text-secondary); font-size: .68rem; }
+#viewContainer .employees-radar-group .employees-radar-clockout { grid-column: 2 / -1; justify-self: start; min-height: 2.25rem; }
+#viewContainer .employees-radar-group .employees-radar-empty { display: block; padding: .8rem 0; color: var(--color-text-secondary); font-size: .76rem; }
+
+html[data-theme="dark"] #viewContainer .employees-radar-group {
+  border-color: rgba(70, 167, 255, .22);
+  background: rgba(4, 12, 24, .48);
+}
+
+html[data-theme="dark"] #viewContainer .employees-radar-group--in { box-shadow: inset 0 2px 0 rgba(56, 214, 197, .8); }
+html[data-theme="dark"] #viewContainer .employees-radar-group--out { box-shadow: inset 0 2px 0 rgba(135, 155, 179, .8); }
+
+@media (max-width: 760px) {
+  #viewContainer .employees-radar-groups { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 440px) {
+  html[data-theme="dark"] #viewContainer .ui02-dashboard-shell { padding: .85rem; }
+  #viewContainer .employees-radar-group .employees-radar-list li { grid-template-columns: .5rem minmax(0, 1fr); }
+  #viewContainer .employees-radar-group .employees-radar-meta { grid-column: 2; justify-items: start; display: flex; flex-wrap: wrap; gap: .35rem; }
+  #viewContainer .employees-radar-group .employees-radar-clockout { grid-column: 2; }
+}
+
 #viewContainer .ui02-dashboard-shell {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(20rem, .8fr);

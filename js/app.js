@@ -3503,12 +3503,12 @@ async function renderDashboard() {
         const clockedOutEmployees = (dashboardAttendance || []).filter(record => record.clock_in_time && record.clock_out_time);
         const openTasks = (dashboardTasks || []).filter(isOpenDashboardTask).length;
         const pendingRequests = (dashboardGenericRequests || []).filter(request => String(request.status || '').toUpperCase().startsWith('PENDING')).length;
-        const radarRows = renderEmployeesRadarRows(dashboardAttendance || []);
+        const radarGroups = renderEmployeesRadarGroups(dashboardAttendance || []);
 
         employeesRadarWidgetHTML = `
             <section class="card col-span-12 employees-radar-card" id="employeesRadarWidget" aria-live="polite">
-                <div class="employees-radar-header"><div><div class="card-title">Employees Radar</div><p class="employees-radar-subtitle">Live view of today&rsquo;s clocked-in and clocked-out employees</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> Live</span></div>
-                <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>clocked in now</small><span class="employees-radar-out-count" id="employeesRadarOutCount">${clockedOutEmployees.length} clocked out</span></div><ul class="employees-radar-list" id="employeesRadarList">${radarRows || '<li class="employees-radar-empty">No attendance recorded today.</li>'}</ul></div>
+                <div class="employees-radar-header"><div><div class="card-title">${currentLang === 'ar' ? 'رادار الموظفين' : 'Employees Radar'}</div><p class="employees-radar-subtitle">${currentLang === 'ar' ? 'عرض مباشر لحضور وانصراف الموظفين اليوم' : 'Live view of today&rsquo;s clocked-in and clocked-out employees'}</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> ${currentLang === 'ar' ? 'مباشر' : 'Live'}</span></div>
+                <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>${currentLang === 'ar' ? 'حاضرون الآن' : 'clocked in now'}</small><span class="employees-radar-out-count" id="employeesRadarOutCount">${clockedOutEmployees.length} ${currentLang === 'ar' ? 'انصرفوا' : 'clocked out'}</span></div><div class="employees-radar-groups" id="employeesRadarList">${radarGroups}</div></div>
             </section>
         `;
         dashboardKpiWidgetHTML = currentUserRole === 'ADMIN' ? `<section class="card admin-kpi-card" id="dashboardKpiOverview" aria-live="polite"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong id="dashboardKpiEmployees">${allProfiles.length}</strong><span>Total employees</span></div><div><strong id="dashboardKpiClockedIn">${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong id="dashboardKpiOpenTasks">${openTasks}</strong><span>Open tasks</span></div><div><strong id="dashboardKpiPendingRequests">${pendingRequests}</strong><span>Pending requests</span></div></div></section>` : '';
@@ -3720,18 +3720,34 @@ async function renderDashboard() {
 
 let employeesRadarChannel = null;
 let employeesRadarTimer = null;
-function renderEmployeesRadarRows(records) {
+function renderEmployeesRadarRows(records, state = 'all') {
     return (records || []).map(record => {
-        const isClockedOut = Boolean(record.clock_out_time);
+        const hasClockIn = Boolean(record.clock_in_time);
+        const isClockedOut = hasClockIn && Boolean(record.clock_out_time);
+        const isClockedIn = hasClockIn && !record.clock_out_time;
+        if ((state === 'in' && !isClockedIn) || (state === 'out' && !isClockedOut) || (!hasClockIn && state !== 'all')) return '';
+        if (!hasClockIn) return '';
         const eventTime = isClockedOut ? record.clock_out_time : record.clock_in_time;
-        const status = isClockedOut ? 'Clocked out' : 'Clocked in';
+        const status = isClockedOut
+            ? (currentLang === 'ar' ? 'انصرف' : 'Clocked out')
+            : (currentLang === 'ar' ? 'حاضر' : 'Clocked in');
         const employeeProfile = window.companyEmployeeNamesById?.[String(record.employee_id)] || record.profile || record;
-        const employeeName = window.formatEmployeeName(employeeProfile) || 'Employee';
+        const employeeName = window.formatEmployeeName(employeeProfile) || (currentLang === 'ar' ? 'موظف' : 'Employee');
         const adminClockOut = !isClockedOut && isTaskAdmin()
             ? `<button type="button" class="employees-radar-clockout" onclick="openEmployeesRadarClockOut('${escapeHTML(record.attendance_id)}')" aria-label="${currentLang === 'ar' ? 'تسجيل انصراف الموظف' : 'Clock out employee'}" title="${currentLang === 'ar' ? 'تسجيل انصراف الموظف' : 'Clock out employee'}"><i data-lucide="log-out"></i><span>${currentLang === 'ar' ? 'تسجيل الانصراف' : 'Clock out'}</span></button>`
             : '';
-        return `<li class="${isClockedOut ? 'is-clocked-out' : 'is-clocked-in'}"><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(employeeName)}</span><span class="employees-radar-meta"><span class="employees-radar-status">${status}</span><time>${eventTime ? new Date(eventTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '&mdash;'}</time></span>${adminClockOut}</li>`;
-    }).join('');
+        const timeLabel = eventTime ? new Intl.DateTimeFormat(currentLang === 'ar' ? 'ar-SA' : undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(eventTime)) : '—';
+        return `<li class="${isClockedOut ? 'is-clocked-out' : 'is-clocked-in'}"><span class="employees-radar-pulse"></span><span class="employees-radar-name">${escapeHTML(employeeName)}</span><span class="employees-radar-meta"><span class="employees-radar-status">${status}</span><time>${escapeHTML(timeLabel)}</time></span>${adminClockOut}</li>`;
+    }).filter(Boolean).join('');
+}
+
+function renderEmployeesRadarGroups(records) {
+    const clockedIn = (records || []).filter(record => record.clock_in_time && !record.clock_out_time);
+    const clockedOut = (records || []).filter(record => record.clock_in_time && record.clock_out_time);
+    const empty = currentLang === 'ar' ? 'لا توجد سجلات لهذا القسم.' : 'No employees in this group.';
+    const group = (state, label, count, rows, tone) => `<section class="employees-radar-group employees-radar-group--${tone}" aria-labelledby="employeesRadar${state}Title"><div class="employees-radar-group-heading"><div><span class="employees-radar-group-status"></span><h3 id="employeesRadar${state}Title">${label}</h3></div><strong id="employeesRadar${state}Count">${count}</strong></div><ul class="employees-radar-list employees-radar-list--${tone}" id="employeesRadar${state}List">${rows || `<li class="employees-radar-empty">${empty}</li>`}</ul></section>`;
+    return group('ClockedIn', currentLang === 'ar' ? 'حاضرون الآن' : 'Clocked In', clockedIn.length, renderEmployeesRadarRows(clockedIn, 'in'), 'in')
+        + group('ClockedOut', currentLang === 'ar' ? 'انصرفوا اليوم' : 'Clocked Out', clockedOut.length, renderEmployeesRadarRows(clockedOut, 'out'), 'out');
 }
 
 window.initializeEmployeesRadar = function (attendance) {
@@ -3741,11 +3757,15 @@ window.initializeEmployeesRadar = function (attendance) {
         const count = document.getElementById('employeesRadarCount');
         const outCount = document.getElementById('employeesRadarOutCount');
         const list = document.getElementById('employeesRadarList');
+        const inCount = document.getElementById('employeesRadarClockedInCount');
+        const outGroupCount = document.getElementById('employeesRadarClockedOutCount');
         if (!count || !list) return;
         window.employeesRadarAttendanceCache = Object.fromEntries((records || []).map(record => [String(record.attendance_id), record]));
         count.textContent = String(active.length);
-        if (outCount) outCount.textContent = `${clockedOut.length} clocked out`;
-        list.innerHTML = renderEmployeesRadarRows(records) || '<li class="employees-radar-empty">No attendance recorded today.</li>';
+        if (outCount) outCount.textContent = `${clockedOut.length} ${currentLang === 'ar' ? 'انصرفوا' : 'clocked out'}`;
+        if (inCount) inCount.textContent = String(active.length);
+        if (outGroupCount) outGroupCount.textContent = String(clockedOut.length);
+        list.innerHTML = renderEmployeesRadarGroups(records);
         if (window.lucide) window.lucide.createIcons();
     };
     window.refreshEmployeesRadar = refresh;

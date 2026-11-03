@@ -63,7 +63,11 @@ vm.runInContext(`${dbSource}\nglobalThis.__testDb = db;`, context);
         assert.match(appSource, new RegExp(`'${executive}'`));
         assert.match(migrationSource, new RegExp(`'${executive}'`));
     }
-    assert.match(appSource, /isClockedOut \? 'Clocked out' : 'Clocked in'/);
+    assert.match(appSource, /const hasClockIn = Boolean\(record\.clock_in_time\)/);
+    assert.match(appSource, /record\.clock_in_time && !record\.clock_out_time/);
+    assert.match(appSource, /record\.clock_in_time && record\.clock_out_time/);
+    assert.match(appSource, /if \(!hasClockIn\) return ''/);
+    assert.match(appSource, /renderEmployeesRadarGroups/);
     assert.match(appSource, /fetchEmployeesRadarAttendance\(\)/);
     assert.match(appSource, /window\.openEmployeesRadarClockOut = function/);
     assert.match(appSource, /window\.handleEmployeesRadarClockOut = async function/);
