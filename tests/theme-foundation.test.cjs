@@ -135,6 +135,6 @@ assert.match(app, /class="btn btn-primary" onclick="openProjectModal\(\)"/, 'New
 assert.match(app, /class="btn btn-secondary" onclick="renderView\('project-command-center'\)"/, 'Command Center must remain secondary');
 assert.match(app, /aria-label="\$\{escapeHTML\(projectText\('edit'\)\)\}"/, 'Project edit icon must expose a localized accessible name');
 assert.match(html, /closeProjectEditor\('projectModal'\)[^>]*aria-label="Close" title="Close"/, 'Project modal close control must have an accessible label and tooltip');
-assert.match(html, /header-search-trigger[^>]*aria-label="Search" title="Search"/, 'Shared search control must retain accessible label and tooltip');
+assert.doesNotMatch(html, /header-search-trigger[^>]*aria-label="Search" title="Search"/, 'The removed header search button must not return to the top bar');
 
 console.log('Theme foundation static contract: PASS');

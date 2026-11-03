@@ -1178,17 +1178,72 @@ window.toggleTheme = function () {
 
 // --- LANGUAGE MANAGEMENT ---
 
+function compactEmployeeDisplayName(value) {
+    const normalized = String(value || '').trim().replace(/\s+/g, ' ');
+    if (!normalized) return '';
+    const parts = normalized.split(' ');
+    if (parts.length < 2) return normalized;
+    const middleInitial = Array.from(parts[1])[0] || '';
+    return `${parts[0]} ${middleInitial}.`;
+}
+
 window.formatEmployeeName = (profile) => {
     if (!profile) return 'Unknown';
-    if (typeof profile === 'string') return profile;
+    if (typeof profile === 'string') return compactEmployeeDisplayName(profile);
     const employeeId = profile.id || profile.employee_id || profile.user_id;
     const directoryProfile = employeeId ? window.companyEmployeeNamesById?.[String(employeeId)] : null;
     const resolvedProfile = directoryProfile ? { ...directoryProfile, ...profile } : profile;
     if (typeof currentLang !== 'undefined' && currentLang === 'ar') {
-        return resolvedProfile.display_name_ar || resolvedProfile.full_name_ar || resolvedProfile.full_name_en || resolvedProfile.full_name || resolvedProfile.display_name || 'Unknown';
+        return compactEmployeeDisplayName(resolvedProfile.display_name_ar || resolvedProfile.full_name_ar || resolvedProfile.full_name_en || resolvedProfile.full_name || resolvedProfile.display_name || 'Unknown');
     }
-    return resolvedProfile.full_name_en || resolvedProfile.full_name || resolvedProfile.display_name || resolvedProfile.display_name_ar || 'Unknown';
+    return compactEmployeeDisplayName(resolvedProfile.full_name_en || resolvedProfile.full_name || resolvedProfile.display_name || resolvedProfile.display_name_ar || 'Unknown');
 };
+
+// Keep newly opened dialogs above any modal that is already open. A number of
+// task and HR dialogs are created dynamically, so a small DOM observer gives
+// them one consistent stacking order without changing their existing close or
+// focus behavior.
+let modalLayerSequence = 100050;
+const modalLayerState = new WeakMap();
+const isLayeredSurface = element => element?.matches?.('.modal, .my-day-modal-backdrop, .multi-select-modal-layer, .side-panel-overlay');
+const isOpenLayeredSurface = element => {
+    if (!isLayeredSurface(element)) return false;
+    if (element.hidden) return false;
+    const classes = element.classList;
+    if (classes.contains('active') || classes.contains('show') || classes.contains('is-open')) return true;
+    const inlineDisplay = String(element.style?.display || '').toLowerCase();
+    return inlineDisplay && inlineDisplay !== 'none';
+};
+const promoteModalLayer = element => {
+    if (!isOpenLayeredSurface(element)) return;
+    element.style.zIndex = String(++modalLayerSequence);
+};
+const observeModalLayers = () => {
+    if (!document.body || typeof MutationObserver === 'undefined') return;
+    const inspect = element => {
+        if (!element?.matches) return;
+        const open = isOpenLayeredSurface(element);
+        const wasOpen = modalLayerState.get(element) === true;
+        if (open && !wasOpen) promoteModalLayer(element);
+        modalLayerState.set(element, open);
+    };
+    document.body.querySelectorAll('.modal, .my-day-modal-backdrop, .multi-select-modal-layer, .side-panel-overlay').forEach(inspect);
+    new MutationObserver(records => {
+        records.forEach(record => {
+            if (record.type === 'childList') {
+                record.addedNodes.forEach(node => {
+                    if (node.nodeType !== 1) return;
+                    inspect(node);
+                    node.querySelectorAll?.('.modal, .my-day-modal-backdrop, .multi-select-modal-layer, .side-panel-overlay').forEach(inspect);
+                });
+            } else if (record.type === 'attributes') {
+                inspect(record.target);
+            }
+        });
+    }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style', 'hidden'] });
+};
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observeModalLayers, { once: true });
+else observeModalLayers();
 
 window.toggleLanguage = function () {
     currentLang = currentLang === 'en' ? 'ar' : 'en';
@@ -4617,7 +4672,7 @@ window.openTaskAssigneePicker = function (taskId) {
             }
             modal.classList.remove('show');
             showToast(window.t('msg_toast_13') || 'Task assignment updated.', 'success');
-            window.scheduleTaskWorkspaceRefresh(250);
+            window.scheduleTaskWorkspaceRefresh(0);
         };
     }
     modal.dataset.taskId = taskId;
@@ -5175,7 +5230,7 @@ window.approveTaskCompletion = async function (taskId) {
         task.status = 'completed';
         patchCachedTaskNodes(task);
         window.setTaskDetailInfoTab?.('overview');
-        window.scheduleTaskWorkspaceRefresh(250);
+        window.scheduleTaskWorkspaceRefresh(0);
     } else if (currentView === 'notifications') {
         await renderView('notifications');
     } else {
@@ -7036,6 +7091,8 @@ window.handleCompleteAndHandOffTask = async function (taskId) {
         showToast(taskDetailText('Complete the previous task before handing this one off.', 'أكمل المهمة السابقة قبل تسليم هذه المهمة.'), 'warning');
         return;
     }
+    const completionNote = String(await window.requestTaskCompletionNote(taskId) || '').trim();
+    if (!completionNote) return;
     const result = await db.completeAndHandOffTask(taskId);
     if (!result?.success) {
         showToast(result?.error?.message || taskDetailText('Unable to complete and hand off this task.', 'تعذر إنهاء وتسليم هذه المهمة.'), 'danger');
@@ -7046,6 +7103,8 @@ window.handleCompleteAndHandOffTask = async function (taskId) {
         ? taskDetailText('Task completed. The next task is ready.', 'اكتملت المهمة. المهمة التالية جاهزة.')
         : taskDetailText('Task completed and handed off.', 'اكتملت المهمة وتم تسليمها.'), 'success');
     if (window.taskCache?.[taskId]) window.taskCache[taskId].status = 'completed';
+    const commentResult = await db.addTaskComment(taskId, currentUser?.id, completionNote);
+    if (!commentResult?.success) showToast(taskDetailText('Task completed, but the completion note could not be saved.', 'اكتملت المهمة، لكن تعذر حفظ ملخص الإنجاز.'), 'warning');
     window.closeTaskDetailsModal?.();
     delete window.viewHTMLCache['my-day'];
     if (typeof renderView === 'function') await renderView(currentView === 'my-day' ? 'my-day' : 'tasks');
@@ -8628,6 +8687,16 @@ async function renderTasksV2() {
         }).join('');
     }
 
+    const mobileTaskListOptions = [
+        { value: 'all', label: taskDetailText('All lists', 'كل القوائم'), count: tasks.length },
+        ...taskLists.map(list => ({
+            value: `list_${list.id}`,
+            label: list.name,
+            count: taskCountByListId.get(String(list.id)) || 0
+        })),
+        ...projects.map(project => ({ value: String(project.id), label: project.project_name, count: '' }))
+    ];
+
     const taskRows = orderedFocusTasks.map(task => {
         const canManageTask = !isMq20Profile() && (canEditTaskRecord(task) || (task.task_list_id
             ? taskListsById.get(String(task.task_list_id))?.owner_id === currentUser?.id
@@ -8662,12 +8731,6 @@ async function renderTasksV2() {
         const rowAssigneeName = rowAssigneeNames.length
             ? rowAssigneeNames.join(', ')
             : taskDetailText('Unassigned', 'غير معيّن');
-        const rowCreator = usersById.get(String(task.created_by)) || task.creator;
-        const formattedRowCreatorName = rowCreator ? window.formatEmployeeName(rowCreator) : '';
-        const rowCreatorName = formattedRowCreatorName && formattedRowCreatorName !== 'Unknown'
-            ? formattedRowCreatorName
-            : taskDetailText('System', 'النظام');
-        const assigneeHTML = `<i data-lucide="users" style="width:14px;height:14px;"></i><span class="task-assignee-full-name">${escapeHTML(rowAssigneeName)}</span>`;
         const inlineStatusOptions = [
             ['todo', taskDetailText('To do', 'للعمل')],
             ['in_progress', taskDetailText('In progress', 'قيد التنفيذ')],
@@ -8701,9 +8764,7 @@ async function renderTasksV2() {
                     <span class="task-v2-priority-dot" aria-hidden="true"></span><strong>${escapeHTML(task.priority || 'medium')}</strong>
                 </div>
                 <div class="task-v2-row-status">${inlineStatusSelect}</div>
-                <div class="task-v2-row-creator"><i data-lucide="user-round-plus"></i><span>${taskDetailText('Created by:', 'أنشأها:')}</span><strong>${escapeHTML(rowCreatorName)}</strong></div>
                 <div class="task-v2-row-actions">
-                    <button type="button" class="task-assignee task-row-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignee" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>${assigneeHTML}</button>
                     ${task.due_date ? `<span class="task-row-due${dueClass}" style="display:flex; align-items: center; gap:4px; font-size:0.8rem; color:var(--color-text-secondary); white-space:nowrap; flex-shrink:0;"><i data-lucide="calendar" style="width:14px;height:14px;"></i> ${task.due_date}</span>` : ''}
                     ${task.category && task.category !== 'General' ? `<span class="task-category-chip">${escapeHTML(task.category)}</span>` : ''}
                     <button class="icon-btn ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `onclick="event.stopPropagation(); openEditTaskModal('${task.id}')"` : 'disabled'} title="${canEditTask ? 'Edit task' : 'Only the task creator or an administrator can edit this task'}" style="color:var(--color-text-secondary);"><i data-lucide="pencil" style="width:16px;height:16px;"></i></button>
@@ -8842,6 +8903,10 @@ async function renderTasksV2() {
                             <div class="form-group">
                                 <label class="form-label">Created Date</label>
                                 <input type="date" id="taskCreatedDate" class="form-control" value="${todayDate}" readonly style="opacity:0.7; cursor:default;">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="taskCreatedTime">Created Time</label>
+                                <input type="time" id="taskCreatedTime" class="form-control" readonly aria-readonly="true" tabindex="-1" style="opacity:0.7; cursor:default;">
                             </div>
                             <div class="form-group">
                                 <label class="form-label" for="taskDue">Due Date</label>
@@ -9117,6 +9182,13 @@ async function renderTasksV2() {
                         <div><span class="task-v2-sidebar-kicker">${taskDetailText('WORKSPACE', 'مساحة العمل')}</span><h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">${taskDetailText('Task lists', 'قوائم المهام')}</h3></div>
                         <span class="task-v2-sidebar-total">${tasks.length}</span>
                     </div>
+
+                    <label class="task-v2-mobile-list-picker">
+                        <span class="task-v2-sidebar-kicker">${taskDetailText('TASK LIST', 'قائمة المهام')}</span>
+                        <select class="form-control" aria-label="${taskDetailText('Choose a task list', 'اختر قائمة المهام')}" onchange="window.selectTaskV2Project(this.value)">
+                            ${mobileTaskListOptions.map(option => `<option value="${escapeHTML(option.value)}" ${selectedProject === option.value ? 'selected' : ''}>${escapeHTML(option.label)}${option.count !== '' ? ` (${option.count})` : ''}</option>`).join('')}
+                        </select>
+                    </label>
                     
                     <ul class="task-lists-nav" style="margin-top: 1rem; list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.25rem;">
                         <li class="${selectedProject === 'all' ? 'active' : ''}" onclick="window.selectTaskV2Project('all')">
@@ -9208,7 +9280,6 @@ async function renderTasksV2() {
                         <span>${taskDetailText('Task Title', 'عنوان المهمة')}</span>
                         <span>${taskDetailText('Priority', 'الأولوية')}</span>
                         <span>${taskDetailText('Task Status', 'حالة المهمة')}</span>
-                        <span>${taskDetailText('Created By', 'أنشأها')}</span>
                         <span>${taskDetailText('Actions', 'الإجراءات')}</span>
                     </div>
                     ${taskRows || '<div class="empty-state">No tasks found.</div>'}
@@ -9292,8 +9363,6 @@ function patchCachedTaskNodes(task) {
         if (priority) priority.innerHTML = `<i></i>${escapeHTML(task.priority === 'urgent' ? 'Urgent' : String(task.priority || 'medium').replace(/^./, value => value.toUpperCase()))}`;
         const focusAssignee = node.querySelector('.task-focus-assignee strong');
         if (focusAssignee) focusAssignee.textContent = assigneeName;
-        const rowAssignee = node.querySelector('.task-row-assignee');
-        if (rowAssignee) rowAssignee.innerHTML = assigneeHTML;
         const boardAssignee = node.querySelector('.task-pipeline-card-footer > .task-assignee');
         if (boardAssignee) boardAssignee.innerHTML = assigneeHTML;
         node.className = node.className.replace(/\bpriority-(?:low|medium|high|urgent|critical)\b/g, '').replace(/\s{2,}/g, ' ').trim();
@@ -9367,7 +9436,7 @@ async function refreshTaskWorkspaceInBackground() {
         taskWorkspaceRefreshInFlight = false;
         if (taskWorkspaceRefreshPending) {
             taskWorkspaceRefreshPending = false;
-            window.scheduleTaskWorkspaceRefresh(150);
+            window.scheduleTaskWorkspaceRefresh(0);
         }
     }
 }
@@ -9585,7 +9654,7 @@ function resolveTaskActionId(candidate, event) {
 
 window.handleTaskCardStageChange = async function (taskId, nextStatus) {
     const result = await window.taskV2ChangeStage(taskId, nextStatus);
-    if (!result?.error) window.scheduleTaskWorkspaceRefresh(250);
+    if (!result?.error) window.scheduleTaskWorkspaceRefresh(0);
 };
 
 window.taskV2ToggleComplete = async function (taskId, event) {
@@ -9600,15 +9669,8 @@ window.taskV2ToggleComplete = async function (taskId, event) {
     const newStatus = task.status === 'completed' ? 'todo' : 'completed';
     const wasCompleted = task.status === 'completed';
 
-    // --- Optimistic update: apply visual state instantly ---
-    window._applyTaskRowCompleteStyle(taskId, !wasCompleted);
-
     const result = await window.taskV2ChangeStage(taskId, newStatus);
-
-    // Revert on failure
-    if (result?.error) {
-        window._applyTaskRowCompleteStyle(taskId, wasCompleted);
-    }
+    if (!result?.error) window._applyTaskRowCompleteStyle(taskId, !wasCompleted);
 };
 
 // Handles clicking the check icon on a subtask row inside the task detail side panel.
@@ -9724,10 +9786,48 @@ window.submitInlineSubtask = async function (event) {
     }
     showToast(successful.length === 1 ? (window.t('msg_toast_28') || 'Subtask added') : `${successful.length} ${taskDetailText('subtasks added', 'مهام فرعية تمت إضافتها')}`, failed.length ? 'warning' : 'success');
     setTaskDetailInfoTab('overview');
-    window.scheduleTaskWorkspaceRefresh(250);
+    window.scheduleTaskWorkspaceRefresh(0);
 };
 
-window.taskV2ChangeStage = async function (taskId, requestedStatus) {
+window.requestTaskCompletionNote = function (taskId) {
+    const task = window.taskCache?.[taskId];
+    if (!task) return Promise.resolve(null);
+    const isArabic = currentLang === 'ar';
+    const modal = document.createElement('div');
+    modal.className = 'modal show task-completion-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'taskCompletionModalTitle');
+    modal.innerHTML = `<div class="modal-content" style="max-width: 520px;">
+        <div class="modal-header"><div><span class="task-v2-eyebrow">${isArabic ? 'إتمام المهمة' : 'TASK COMPLETION'}</span><h2 id="taskCompletionModalTitle">${isArabic ? 'ماذا تم إنجازه؟' : 'What was completed?'}</h2></div><button type="button" class="close-modal" aria-label="${isArabic ? 'إغلاق' : 'Close'}"><i data-lucide="x"></i></button></div>
+        <p class="task-completion-modal-help">${isArabic ? 'اكتب ملخصاً قصيراً لما تم إنجازه قبل تغيير حالة المهمة إلى مكتملة.' : 'Write a short summary of what was done before marking this task complete.'}</p>
+        <label class="form-group"><span class="form-label">${isArabic ? 'ملخص الإنجاز' : 'Completion summary'}</span><textarea class="form-control" id="taskCompletionNote" rows="5" required placeholder="${isArabic ? 'اكتب ما تم إنجازه...' : 'Describe what was completed...'}"></textarea></label>
+        <div class="modal-actions" style="display:flex; justify-content:flex-end; gap:.6rem; margin-top:1rem;"><button type="button" class="btn btn-secondary task-completion-cancel">${isArabic ? 'إلغاء' : 'Cancel'}</button><button type="button" class="btn btn-primary task-completion-confirm" disabled>${isArabic ? 'تأكيد الإكمال' : 'Confirm completion'}</button></div>
+    </div>`;
+    document.body.appendChild(modal);
+    const noteInput = modal.querySelector('#taskCompletionNote');
+    const confirmButton = modal.querySelector('.task-completion-confirm');
+    const finish = value => {
+        modal.remove();
+        resolve(value);
+    };
+    let resolve;
+    const promise = new Promise(done => { resolve = done; });
+    const close = () => finish(null);
+    noteInput.addEventListener('input', () => { confirmButton.disabled = !noteInput.value.trim(); });
+    confirmButton.addEventListener('click', () => {
+        const value = noteInput.value.trim();
+        if (value) finish(value);
+    });
+    modal.querySelector('.task-completion-cancel').addEventListener('click', close);
+    modal.querySelector('.close-modal').addEventListener('click', close);
+    modal.addEventListener('click', event => { if (event.target === modal) close(); });
+    if (window.lucide) window.lucide.createIcons({ elements: modal.querySelectorAll('[data-lucide]') });
+    requestAnimationFrame(() => noteInput.focus());
+    return promise;
+};
+
+window.taskV2ChangeStage = async function (taskId, requestedStatus, options = {}) {
     taskId = resolveTaskActionId(taskId);
     if (!taskId) return { error: new Error('Invalid task ID') };
     const task = window.taskCache?.[taskId];
@@ -9735,6 +9835,11 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus) {
     if (!canChangeTaskStageRecord(task)) {
         showToast(taskDetailText('This task is available in view-only mode.', 'هذه المهمة متاحة للعرض فقط.'), 'warning');
         return { error: new Error('Task is view-only') };
+    }
+    let completionNote = String(options.completionNote || '').trim();
+    if (requestedStatus === 'completed' && !options.skipCompletionPrompt && !completionNote) {
+        completionNote = String(await window.requestTaskCompletionNote(taskId) || '').trim();
+        if (!completionNote) return { error: new Error('Completion cancelled'), cancelled: true };
     }
     const previousStatus = task.status;
     const result = await window.handleUpdateTaskStatus(taskId, requestedStatus);
@@ -9769,6 +9874,12 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus) {
     const isNowCompleted = actualStatus === 'completed' || actualStatus === 'Approved';
     window._applyTaskRowCompleteStyle?.(taskId, isNowCompleted);
     window.syncTaskStageEmptyStates?.();
+    if (completionNote && !result?.error) {
+        const commentResult = await db.addTaskComment(taskId, currentUser?.id, completionNote);
+        if (!commentResult?.success) {
+            showToast(taskDetailText('Task completed, but the completion note could not be saved.', 'اكتملت المهمة، لكن تعذر حفظ ملخص الإنجاز.'), 'warning');
+        }
+    }
     return result;
 };
 
@@ -9870,7 +9981,7 @@ window.handleAICreateTask = async function (e) {
         if (createdTask) cacheTaskRecord(createdTask);
         showToast(t('toast_ai_parsed_and_created_task'), "success");
         db.triggerWebhooks('task_created', { title: input, assignee_id: assigneeId, due_date: dueStr, priority, is_ai_parsed: true }).catch(error => console.warn('Task creation webhook failed:', error));
-        window.scheduleTaskWorkspaceRefresh(150);
+        window.scheduleTaskWorkspaceRefresh(0);
     } else {
         showToast(t('toast_failed_to_create_task'), "danger");
     }
@@ -9917,6 +10028,11 @@ window.toggleTaskV2Create = function () {
     }
     document.body.classList.add('modal-open', 'create-task-modal-open');
     modal.classList.add('active');
+    const createdAt = new Date();
+    const createdDate = document.getElementById('taskCreatedDate');
+    const createdTime = document.getElementById('taskCreatedTime');
+    if (createdDate) createdDate.value = [createdAt.getFullYear(), String(createdAt.getMonth() + 1).padStart(2, '0'), String(createdAt.getDate()).padStart(2, '0')].join('-');
+    if (createdTime) createdTime.value = `${String(createdAt.getHours()).padStart(2, '0')}:${String(createdAt.getMinutes()).padStart(2, '0')}`;
     // Prefill the creator as the initial assignee while retaining a normal
     // department-scoped dropdown so the creator can choose another employee.
     const departmentInput = document.getElementById('taskDepartment');
@@ -10302,7 +10418,7 @@ window.handleQuickAddTask = async function(e) {
         }
         
         
-        window.scheduleTaskWorkspaceRefresh(150);
+        window.scheduleTaskWorkspaceRefresh(0);
     } else {
         showToast(error?.message || "Failed to create task", "danger");
     }
@@ -10455,7 +10571,7 @@ window.handleCreateTask = async function (e) {
         const emailOption = document.getElementById('taskNotifyViaEmail');
         if (emailOption) emailOption.checked = false;
 
-        window.scheduleTaskWorkspaceRefresh(150);
+        window.scheduleTaskWorkspaceRefresh(0);
     } else {
         showToast(t('toast_failed_to_create_task') + (error?.message || ''), "danger");
     }
@@ -10711,10 +10827,16 @@ window.handleTaskDrop = async function (e, status) {
     }
 
     const taskCard = document.getElementById(`task-card-${id}`);
+    let completionNote = '';
     if (taskCard) {
         const currentStatus = taskCard.getAttribute('data-status');
         taskCard.style.opacity = '1';
         if (currentStatus === status) return; // No change
+
+        if (status === 'completed') {
+            completionNote = String(await window.requestTaskCompletionNote(id) || '').trim();
+            if (!completionNote) return;
+        }
 
         const task = window.taskCache ? window.taskCache[id] : null;
         const isTaskDepartmentManager = task && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id;
@@ -10755,7 +10877,10 @@ window.handleTaskDrop = async function (e, status) {
     }
 
     const finalStatus = taskCard ? taskCard.getAttribute('data-status') : status;
-    const result = await window.handleUpdateTaskStatus(id, finalStatus);
+    const result = await window.taskV2ChangeStage(id, finalStatus, {
+        completionNote,
+        skipCompletionPrompt: Boolean(completionNote)
+    });
     if (result?.error) {
         await renderView(currentView === 'tasks_v2' ? 'tasks_v2' : 'tasks');
         return;
@@ -11126,7 +11251,7 @@ window.handleEditTaskSubmit = async function (e) {
         document.getElementById('editTaskModal').classList.remove('active');
         if (updatedTask) openTaskDetailsModal(id);
         db.triggerWebhooks('task_updated', { task_id: id, updates }).catch(error => console.warn('Task update webhook failed:', error));
-        window.scheduleTaskWorkspaceRefresh(250);
+        window.scheduleTaskWorkspaceRefresh(0);
     }
 };
 
@@ -11194,7 +11319,7 @@ window.handleDeleteTask = async function (id) {
             db.triggerWebhooks('task_deleted', { task_id: id }).catch(error => console.warn('Task deletion webhook failed:', error));
             document.getElementById('editTaskModal')?.classList.remove('active');
             window.syncTaskStageEmptyStates?.();
-            window.scheduleTaskWorkspaceRefresh(150);
+            window.scheduleTaskWorkspaceRefresh(0);
         }
     });
 };
@@ -13270,10 +13395,10 @@ async function startTasksRealtime() {
     tasksChannel = window.supabaseClient
         .channel('public:tasks-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, payload => {
-            if (window.scheduleTaskWorkspaceRefresh) window.scheduleTaskWorkspaceRefresh(100);
+            if (window.scheduleTaskWorkspaceRefresh) window.scheduleTaskWorkspaceRefresh(0);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'task_lists' }, payload => {
-            if (window.scheduleTaskWorkspaceRefresh) window.scheduleTaskWorkspaceRefresh(100);
+            if (window.scheduleTaskWorkspaceRefresh) window.scheduleTaskWorkspaceRefresh(0);
         })
         .subscribe();
 }
@@ -14222,7 +14347,7 @@ window.handleSaveTaskList = async function (event) {
         ? (currentLang === 'ar' ? 'تم تحديث إعدادات القائمة.' : 'List settings updated.')
         : (currentLang === 'ar' ? 'تم إنشاء القائمة الخاصة.' : 'Private task list created.'), 'success');
     window.closeTaskListModal();
-    window.scheduleTaskWorkspaceRefresh(100);
+    window.scheduleTaskWorkspaceRefresh(0);
 };
 
 window.handleDeleteTaskList = async function (id) {
@@ -14235,7 +14360,7 @@ window.handleDeleteTaskList = async function (id) {
             if (window.taskV2SelectedProject === 'list_' + id) {
                 window.taskV2SelectedProject = 'all';
             }
-            window.scheduleTaskWorkspaceRefresh(100);
+            window.scheduleTaskWorkspaceRefresh(0);
         }
     });
 };

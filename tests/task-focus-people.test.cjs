@@ -8,17 +8,14 @@ const cssSource = fs.readFileSync(path.join(__dirname, '..', 'css', 'components.
 const semanticCss = fs.readFileSync(path.join(__dirname, '..', 'css', 'component-semantic-migration.css'), 'utf8');
 
 assert.match(appSource, /const rowAssigneeNames = rowAssigneeProfiles\.map/);
-assert.match(appSource, /const rowCreator = usersById\.get\(String\(task\.created_by\)\) \|\| task\.creator/);
 assert.match(appSource, /class="task-focus-people"/);
 assert.match(appSource, /class="task-focus-assignee"/);
-// The current task table uses the row-specific creator class while retaining
-// the same creator/assignee content contract.
-assert.match(appSource, /class="task-v2-row-creator"/);
+// The task table keeps the assignee under the title and removes duplicate
+// creator/assignee metadata from the action area.
+assert.doesNotMatch(appSource, /class="task-v2-row-creator"/);
 assert.match(appSource, /font-weight: 700/);
 assert.match(appSource, /taskDetailText\('Assigned To:', 'مُعيّنة إلى:'\)/);
-assert.match(appSource, /taskDetailText\('Created by:', 'أنشأها:'\)/);
 assert.match(appSource, /escapeHTML\(rowAssigneeName\)/);
-assert.match(appSource, /escapeHTML\(rowCreatorName\)/);
 assert.match(appSource, /class="task-assignee-full-name"/);
 assert.doesNotMatch(appSource, /name\.split\(\/\\s\+\/\)\.map\(part => part\[0\]\)/);
 assert.match(appSource, /display_name_ar: assignee\.display_name_ar/);

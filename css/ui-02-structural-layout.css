@@ -331,35 +331,75 @@
 
 #viewContainer .ui02-task-shell .task-v2-toolbar-left {
   display: grid;
-  grid-template-columns: minmax(12rem, 1.35fr) repeat(4, minmax(7rem, .72fr)) minmax(8rem, .75fr);
+  grid-template-columns: minmax(12rem, 1.25fr) repeat(4, minmax(8rem, .8fr)) minmax(9rem, .85fr);
   gap: .55rem;
-  align-items: center;
+  align-items: start;
+  grid-auto-rows: minmax(0, auto);
 }
 
 #viewContainer .ui02-task-shell .task-v2-filter-group,
-#viewContainer .ui02-task-shell .task-v2-date-control { display: grid; min-width: 0; gap: .25rem; }
+#viewContainer .ui02-task-shell .task-v2-date-control {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  gap: .25rem;
+}
 #viewContainer .ui02-task-shell .task-v2-filter-label { color: var(--color-text-secondary); font-size: .67rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 #viewContainer .ui02-task-shell .task-v2-search { position: relative; min-width: 0; }
-#viewContainer .ui02-task-shell .task-v2-search .task-v2-filter-label { padding-inline-start: 1.7rem; }
-#viewContainer .ui02-task-shell .task-v2-search > svg { position: absolute; inset-inline-start: .55rem; bottom: .55rem; width: 1rem; height: 1rem; color: var(--color-text-secondary); pointer-events: none; }
-#viewContainer .ui02-task-shell .task-v2-search input { min-height: 2.45rem; }
+#viewContainer .ui02-task-shell .task-v2-filter-group select,
+#viewContainer .ui02-task-shell .task-v2-date-control input { min-height: 2.45rem; box-sizing: border-box; }
 #viewContainer .ui02-task-shell .task-v2-toolbar-left .task-v2-search {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  align-items: stretch;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  grid-template-rows: auto minmax(2.45rem, auto);
+  column-gap: .35rem;
+  row-gap: .25rem;
+  align-items: center;
+  align-self: start;
+  height: auto;
   width: 100%;
   min-width: 0;
-  padding: .45rem .6rem .55rem;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: .55rem .6rem .6rem;
 }
 #viewContainer .ui02-task-shell .task-v2-search .task-v2-filter-label {
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: block;
   min-width: 0;
-  padding-inline-start: 1.7rem;
+  padding-inline-start: 0;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
-#viewContainer .ui02-task-shell .task-v2-search > svg { top: 1.85rem; bottom: auto; }
-#viewContainer .ui02-task-shell .task-v2-search input { width: 100%; min-width: 0; padding-block: .35rem; }
+#viewContainer .ui02-task-shell .task-v2-search > svg {
+  position: static;
+  grid-column: 1;
+  grid-row: 2;
+  align-self: center;
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-text-secondary);
+  pointer-events: none;
+}
+#viewContainer .ui02-task-shell .task-v2-search input {
+  grid-column: 2;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+  height: 2.45rem;
+  min-height: 2.45rem;
+  box-sizing: border-box;
+  padding-block: .35rem;
+}
+#viewContainer .ui02-task-shell .task-v2-search input:focus { outline: none; }
+#viewContainer .ui02-task-shell .task-v2-search:focus-within { border-color: var(--color-accent); box-shadow: var(--focus-ring-shadow); }
+#viewContainer .ui02-task-shell .task-v2-search:focus-within input { box-shadow: none; }
+#viewContainer .ui02-task-shell .task-v2-search > svg,
+#viewContainer .ui02-task-shell .task-v2-search input { align-self: center; }
+html[dir="rtl"] #viewContainer .ui02-task-shell .task-v2-search { grid-template-columns: minmax(0, 1fr) 1.1rem; }
+html[dir="rtl"] #viewContainer .ui02-task-shell .task-v2-search > svg { grid-column: 2; }
+html[dir="rtl"] #viewContainer .ui02-task-shell .task-v2-search input { grid-column: 1; }
 #viewContainer .ui02-task-shell .task-v2-toolbar-right { align-items: center; }
 #viewContainer .ui02-task-shell .task-v2-view-toggles { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
 #viewContainer .ui02-task-shell .view-toggle-btn { min-height: 2.3rem; border-radius: .6rem; }
@@ -427,19 +467,15 @@
 #viewContainer .ui02-task-shell .task-v2-row-priority.priority-urgent .task-v2-priority-dot { background: var(--color-warning); }
 #viewContainer .ui02-task-shell .task-v2-row-priority.priority-critical .task-v2-priority-dot { background: var(--color-danger); }
 #viewContainer .ui02-task-shell .task-v2-row-status,
-#viewContainer .ui02-task-shell .task-v2-row-creator,
 #viewContainer .ui02-task-shell .task-v2-row-actions { min-width: 0; }
-#viewContainer .ui02-task-shell .task-v2-row-creator { display: flex; gap: .35rem; align-items: center; color: var(--color-text-secondary); font-size: .78rem; }
-#viewContainer .ui02-task-shell .task-v2-row-creator strong { color: var(--color-text); overflow-wrap: anywhere; }
 #viewContainer .ui02-task-shell .task-v2-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; align-items: center; }
 #viewContainer .ui02-task-shell .task-v2-row-actions .task-row-due { order: -1; }
 
-/* Keep the table header and task rows on the same five-column contract.
- * ui-01 has a legacy four-column rule with !important; this scoped override
- * prevents the Actions cell from wrapping into a second row. */
+/* Keep the table header and task rows on the same four-column contract after
+ * removing the duplicate creator metadata cell. */
 #viewContainer #task-v2-rows-container .task-v2-table-header,
 #viewContainer #task-v2-rows-container .task-v2-row {
-  grid-template-columns: minmax(0, 1.7fr) minmax(7rem, .7fr) minmax(9rem, .85fr) minmax(10rem, 1fr) minmax(14rem, 1.15fr) !important;
+  grid-template-columns: minmax(0, 1.8fr) minmax(7rem, .72fr) minmax(9rem, .9fr) minmax(12rem, 1.05fr) !important;
 }
 
 #viewContainer #task-v2-rows-container .task-v2-table-header > span,
@@ -468,7 +504,7 @@
 @media (max-width: 1180px) {
   #viewContainer .ui02-dashboard-shell { grid-template-columns: minmax(0, 1fr) minmax(16rem, .65fr); }
   #viewContainer .ui02-task-shell .task-v2-toolbar { grid-template-columns: 1fr; }
-  #viewContainer .ui02-task-shell .task-v2-toolbar-left { grid-template-columns: minmax(12rem, 1.4fr) repeat(2, minmax(8rem, .8fr)); }
+  #viewContainer .ui02-task-shell .task-v2-toolbar-left { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
   #viewContainer .ui02-task-shell .task-v2-search { grid-column: 1 / -1; }
   #viewContainer .ui02-task-shell .task-v2-toolbar-right { justify-content: flex-start; }
 }
@@ -485,13 +521,14 @@
   #viewContainer .ui02-task-shell .task-lists-nav { display: flex; gap: .45rem; overflow-x: auto; }
   #viewContainer .ui02-task-shell .task-lists-nav > li { flex: 0 0 auto; }
   #viewContainer .ui02-task-shell .task-list-sidebar-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+  #viewContainer .ui02-task-shell .task-v2-toolbar-left { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  #viewContainer .ui02-task-shell .task-v2-search { grid-column: 1 / -1; }
 
   #viewContainer #task-v2-rows-container .task-v2-table-header { display: none !important; }
   #viewContainer #task-v2-rows-container .task-v2-row { grid-template-columns: minmax(0, 1fr) !important; }
   #viewContainer #task-v2-rows-container .task-v2-row-left,
   #viewContainer #task-v2-rows-container .task-v2-row-priority,
   #viewContainer #task-v2-rows-container .task-v2-row-status,
-  #viewContainer #task-v2-rows-container .task-v2-row-creator,
   #viewContainer #task-v2-rows-container .task-v2-row-actions { grid-column: 1; }
 }
 
@@ -509,7 +546,7 @@
   #viewContainer .ui02-announcement-panel,
   #viewContainer .ui02-news-panel { grid-column: 1; }
   #viewContainer .ui02-task-shell .task-v2-toolbar-left { grid-template-columns: 1fr; }
-  #viewContainer .ui02-task-shell .task-v2-search { grid-column: auto; }
+  #viewContainer .ui02-task-shell .task-v2-search { grid-column: 1; }
   #viewContainer .ui02-task-shell .task-v2-summary-grid { grid-template-columns: 1fr 1fr; padding: .75rem .75rem 0; }
   #viewContainer .ui02-task-shell .task-v2-workspace-header { padding: 1rem .85rem .85rem; }
   #viewContainer .ui02-task-shell .task-v2-view-toggles { width: 100%; justify-content: stretch; }
@@ -519,7 +556,6 @@
   #viewContainer .ui02-task-shell .task-v2-row-left,
   #viewContainer .ui02-task-shell .task-v2-row-priority,
   #viewContainer .ui02-task-shell .task-v2-row-status,
-  #viewContainer .ui02-task-shell .task-v2-row-creator,
   #viewContainer .ui02-task-shell .task-v2-row-actions { grid-column: 1; }
   #viewContainer .ui02-task-shell .task-v2-row-actions { justify-content: flex-start; }
   #viewContainer .ui02-task-shell .task-v2-row-actions .task-row-due { order: initial; }
@@ -527,6 +563,54 @@
 
 html[dir="rtl"] #viewContainer .ui02-task-shell .task-v2-row-actions { justify-content: flex-start; }
 html[dir="rtl"] #viewContainer .ui02-task-shell .task-v2-toolbar-right { justify-content: flex-start; }
+
+/* Task Manager list selection stays compact on touch screens instead of
+ * forcing the whole sidebar into a horizontal scroller. */
+#viewContainer .ui02-task-shell .task-v2-mobile-list-picker { display: none; gap: .35rem; }
+#viewContainer .ui02-task-shell .task-v2-mobile-list-picker .form-control { min-width: 0; width: 100%; }
+
+/* The extra created-time field still fits beside the existing metadata on
+ * desktop and collapses with the existing modal breakpoints on tablets. */
+#createTaskModal .create-task-top-row {
+  grid-template-columns: minmax(105px, .7fr) minmax(100px, .6fr) minmax(105px, .6fr) minmax(110px, .65fr) minmax(190px, 1.45fr);
+}
+
+@media (min-width: 861px) and (max-width: 1180px) {
+  #viewContainer .ui02-task-shell .task-v2-workspace { grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr); }
+  #viewContainer .ui02-task-shell .task-v2-toolbar-left { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #viewContainer .ui02-task-shell .task-v2-toolbar-left .task-v2-search { grid-column: 1 / -1; }
+  #viewContainer .ui02-task-shell .task-v2-filter-group,
+  #viewContainer .ui02-task-shell .task-v2-date-control,
+  #viewContainer .ui02-task-shell .task-v2-filter-group select,
+  #viewContainer .ui02-task-shell .task-v2-date-control input { min-width: 0; width: 100%; }
+  #viewContainer .ui02-task-shell .task-v2-row-actions { justify-content: flex-start; }
+}
+
+@media (max-width: 767px) {
+  #viewContainer .ui02-task-shell .task-v2-mobile-list-picker { display: grid; margin-top: .8rem; }
+  #viewContainer .ui02-task-shell .task-v2-mobile-list-picker .task-v2-sidebar-kicker { color: var(--color-text-secondary); font-size: .67rem; font-weight: 750; letter-spacing: .04em; }
+  #viewContainer .ui02-task-shell .task-lists-nav { display: none !important; }
+  #viewContainer .ui02-task-shell .task-v2-lists { overflow: visible; }
+  #createTaskModal .create-task-top-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 860px) {
+  #viewContainer .ui02-task-shell .task-v2-mobile-list-picker { display: grid; margin-top: .8rem; }
+  #viewContainer .ui02-task-shell .task-lists-nav { display: none !important; }
+  #viewContainer .ui02-task-shell .task-v2-lists { overflow: visible; }
+}
+
+@media (min-width: 521px) and (max-width: 820px) {
+  #createTaskModal .create-task-top-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #createTaskModal .create-task-top-row .form-group:last-child { grid-column: 1 / -1; }
+}
+
+/* Keep modal surfaces in a predictable stacking context when a new task
+ * dialog opens from an existing task detail or picker surface. The runtime
+ * layer manager supplies the final per-open z-index. */
+.modal,
+.my-day-modal-backdrop,
+.multi-select-modal-layer { isolation: isolate; }
 
 @media (prefers-reduced-motion: reduce) {
   #viewContainer .ui02-action-tile,
