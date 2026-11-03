@@ -17,5 +17,8 @@ assert.match(layout, /html\[data-theme="dark"\] body:has\(\.ui02-dashboard-shell
 assert.match(layout, /#viewContainer \.employees-radar-groups[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/, 'Radar groups must sit side by side on wide screens');
 assert.match(layout, /@media \(max-width: 760px\)[\s\S]*\.employees-radar-groups \{ grid-template-columns: minmax\(0, 1fr\); \}/, 'Radar groups must stack on small screens');
 assert.match(layout, /@media \(max-width: 440px\)[\s\S]*employees-radar-group \.employees-radar-list li/, 'Radar rows must reflow on narrow screens');
+assert.match(layout, /ui02-kpi-announcement-grid \.ui02-announcement-panel[\s\S]*grid-column: auto/, 'KPI and announcements must occupy separate desktop tracks');
+assert.match(layout, /\.admin-kpi-grid strong[\s\S]*font-size: clamp\(1\.7rem/, 'Admin KPI values must remain prominent');
+assert.match(layout, /\.employees-radar-card[\s\S]*padding: 1\.15rem/, 'Radar card must use compact desktop proportions');
 
 console.log('Cyber Obsidian Dashboard and Employees Radar checks passed.');

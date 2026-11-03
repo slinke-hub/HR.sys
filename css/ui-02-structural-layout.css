@@ -1372,3 +1372,117 @@ html[dir="rtl"] #viewContainer .employees-radar-name {
     }
   }
 }
+
+/* Cyber Obsidian visual refinement: keep the workforce pulse balanced on
+ * wide screens instead of stacking both panels into the first grid track. */
+#viewContainer .ui02-kpi-announcement-grid {
+  grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+  align-items: start;
+}
+
+#viewContainer .ui02-dashboard-kpi-slot,
+#viewContainer .ui02-kpi-announcement-grid .ui02-announcement-panel {
+  min-width: 0;
+  grid-column: auto;
+  align-self: start;
+}
+
+#viewContainer .admin-kpi-card {
+  padding: 1.2rem;
+  border-top: 2px solid var(--color-primary);
+}
+
+#viewContainer .admin-kpi-card > .card-title {
+  margin-bottom: .85rem;
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+#viewContainer .admin-kpi-grid {
+  gap: .65rem;
+}
+
+#viewContainer .admin-kpi-grid > div {
+  min-height: 5.8rem;
+  justify-content: center;
+  padding: .85rem .8rem;
+}
+
+#viewContainer .admin-kpi-grid strong {
+  font-size: clamp(1.7rem, 2.2vw, 2.25rem);
+  line-height: 1;
+}
+
+#viewContainer .admin-kpi-grid span {
+  font-size: .78rem;
+  line-height: 1.25;
+}
+
+#viewContainer .ui02-section-heading h2,
+#viewContainer .ui02-operating-heading h2 {
+  font-size: clamp(1.12rem, 1.65vw, 1.5rem);
+}
+
+#viewContainer .ui02-dashboard-primary {
+  gap: clamp(1rem, 1.4vw, 1.35rem);
+}
+
+#viewContainer .employees-radar-card {
+  padding: 1.15rem;
+}
+
+#viewContainer .employees-radar-layout {
+  align-items: start;
+  gap: 1rem;
+}
+
+#viewContainer .employees-radar-visual {
+  width: clamp(128px, 10vw, 154px);
+  height: clamp(128px, 10vw, 154px);
+  margin-top: .65rem;
+}
+
+#viewContainer .employees-radar-groups {
+  gap: .65rem;
+}
+
+#viewContainer .employees-radar-group {
+  padding: .65rem;
+}
+
+#viewContainer .employees-radar-list {
+  gap: .35rem;
+}
+
+#viewContainer .employees-radar-list li {
+  min-height: 2.9rem;
+  padding: .42rem .5rem;
+}
+
+#viewContainer .employees-radar-name {
+  font-size: .82rem;
+}
+
+#viewContainer .employees-radar-clockout {
+  min-height: 1.75rem;
+  padding: .25rem .42rem;
+  font-size: .64rem;
+}
+
+@media (max-width: 960px) {
+  #viewContainer .ui02-kpi-announcement-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  #viewContainer .admin-kpi-card {
+    padding: .95rem;
+  }
+
+  #viewContainer .admin-kpi-grid > div {
+    min-height: 5.1rem;
+  }
+}
