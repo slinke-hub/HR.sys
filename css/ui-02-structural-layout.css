@@ -1498,3 +1498,119 @@ html[dir="rtl"] #viewContainer .employees-radar-name {
     min-height: 5.1rem;
   }
 }
+
+/* Final responsive correction: keep nested dashboard grids readable at the
+ * tablet/intermediate widths where their parent tracks are already compact. */
+#viewContainer .ui02-operating-grid {
+  align-items: start;
+}
+
+#viewContainer .ui02-operating-grid > .ui02-dashboard-operating-slot,
+#viewContainer .ui02-support-grid > *,
+#viewContainer .ui02-activity-panel,
+#viewContainer .ui02-news-panel,
+#viewContainer .ui02-last-login-card,
+#viewContainer .ui02-rail-note {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  align-self: start;
+}
+
+#viewContainer .ui02-activity-list > div {
+  min-inline-size: 0;
+  align-items: flex-start;
+}
+
+#viewContainer .ui02-activity-list > div > span,
+#viewContainer .ui02-rail-note p,
+#viewContainer .ui02-news-panel .ui02-scroll-region,
+#viewContainer .ui02-last-login-card #recentLoginsList {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+#viewContainer .ui02-activity-list > div > span {
+  flex: 1 1 auto;
+  line-height: 1.45;
+}
+
+#viewContainer .employees-radar-layout {
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+  align-items: start;
+}
+
+#viewContainer .employees-radar-visual {
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+#viewContainer .employees-radar-visual strong,
+#viewContainer .employees-radar-visual small,
+#viewContainer .employees-radar-out-count {
+  position: relative;
+  z-index: 2;
+  max-inline-size: 82%;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+#viewContainer .employees-radar-visual strong {
+  line-height: 1;
+  margin-block-end: .2rem;
+}
+
+#viewContainer .employees-radar-out-count {
+  display: block;
+  margin-block-start: .2rem;
+}
+
+#viewContainer .employees-radar-group .employees-radar-list li.employees-radar-empty {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+@media (max-width: 1180px) {
+  #viewContainer .ui02-operating-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  #viewContainer .ui02-dashboard-top-grid,
+  #viewContainer .ui02-kpi-announcement-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 820px) {
+  #viewContainer .employees-radar-layout {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  #viewContainer .employees-radar-visual {
+    margin-inline: auto;
+  }
+
+  #viewContainer .employees-radar-groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  #viewContainer .employees-radar-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #viewContainer .ui02-support-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
