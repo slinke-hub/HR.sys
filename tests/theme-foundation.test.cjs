@@ -27,8 +27,8 @@ for (const token of semanticTokens) {
   assert.match(darkBlock, new RegExp(`${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`), `Dark theme is missing ${token}`);
 }
 
-// UI-01 intentionally replaces the previous blue palette. Keep concrete palette
-// checks alongside contrast checks so both design drift and unreadable states fail.
+// Cyber Obsidian is the approved global dark palette. Keep concrete palette
+// checks alongside contrast checks so design drift and unreadable states fail.
 for (const [block, name, expected] of [
   [lightBlock, 'Light', {
     '--brand-primary': '#1B4C5F', '--brand-accent': '#168C86',
@@ -36,10 +36,10 @@ for (const [block, name, expected] of [
     '--action-primary-bg': '#1B4C5F', '--nav-item-selected': '#E2EFEE',
   }],
   [darkBlock, 'Dark', {
-    '--bg-app': '#050A14', '--bg-surface': '#0B1628',
-    '--action-primary-bg': '#1677D2', '--action-primary-hover': '#176FC1',
-    '--action-primary-text': '#FFFFFF', '--brand-primary': '#46A7FF',
-    '--focus-ring': '#72D7FF',
+    '--bg-app': '#080D16', '--bg-surface': '#111B29',
+    '--action-primary-bg': '#2A63D4', '--action-primary-hover': '#2454B5',
+    '--action-primary-text': '#FFFFFF', '--brand-primary': '#3478F6',
+    '--focus-ring': '#5C95FF',
   }],
 ]) {
   for (const [token, expectedValue] of Object.entries(expected)) {
@@ -102,7 +102,7 @@ assert.ok(html.indexOf(foundationHref) > html.indexOf('css/crm-tailwind.css'), '
 const globalThemeHref = html.match(/<link[^>]+href="([^"]*cyber-obsidian-theme\.css[^"]*)"/)?.[1];
 assert.ok(globalThemeHref, 'HTML must load the global Cyber Obsidian theme layer');
 assert.ok(html.indexOf(globalThemeHref) > html.indexOf('css/ui-02-structural-layout.css'), 'Global Cyber Obsidian layer must load after page-specific styles');
-assert.match(variables, /Cyber Obsidian: shared dark-mode identity/, 'Dark semantic tokens must document the Cyber Obsidian identity');
+assert.match(variables, /Cyber Obsidian: one global dark-mode identity/, 'Dark semantic tokens must document the Cyber Obsidian identity');
 assert.match(globalTheme, /html\[data-theme="dark"\][\s\S]*\.sidebar[\s\S]*var\(--nav-bg\)/, 'Global theme must cover shared navigation surfaces');
 assert.match(globalTheme, /html\[data-theme="dark"\][\s\S]*\.modal \.modal-content[\s\S]*var\(--overlay-surface\)/, 'Global theme must cover modal surfaces');
 assert.match(globalTheme, /html\[data-theme="dark"\][\s\S]*\.tw-bg-white[\s\S]*var\(--bg-surface\)/, 'Global theme must cover legacy CRM neutral utilities');

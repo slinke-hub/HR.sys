@@ -77,8 +77,8 @@ const darkTokens = variables.match(/\[data-theme="dark"\]\s*\{([\s\S]*?)\n\}/)?.
 assert.ok(lightTokens && darkTokens, 'Both theme definitions remain present');
 assert.match(lightTokens, /--nav-bg:\s*#FFFFFF;/i, 'Light drawer remains an opaque light surface');
 assert.match(lightTokens, /--nav-drawer-glass:\s*#FFFFFF;/i, 'Legacy alias must not restore translucency');
-assert.match(darkTokens, /--nav-bg:\s*#07111F;/i, 'Dark drawer remains an opaque Cyber Obsidian surface');
-assert.match(darkTokens, /--nav-drawer-glass:\s*#081525;/i, 'Dark legacy alias matches the Cyber Obsidian drawer');
+assert.match(darkTokens, /--nav-bg:\s*#0D1726;/i, 'Dark drawer remains an opaque Cyber Obsidian surface');
+assert.match(darkTokens, /--nav-drawer-glass:\s*#111B29;/i, 'Dark legacy alias matches the Cyber Obsidian drawer');
 assert.match(lastRule(layout, '.navigation-drawer-item'), /min-height:\s*48px;/,
   'Drawer rows retain generous 48px targets under the UI-01 spacing scale');
 assert.match(layout, /prefers-reduced-motion: reduce/, 'Motion respects reduced-motion preference');

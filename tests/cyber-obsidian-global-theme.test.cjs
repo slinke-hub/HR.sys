@@ -80,6 +80,7 @@ function stylesheet(includeGlobal, before) {
         const rootStyle = getComputedStyle(document.documentElement);
         return {
           theme: rootStyle.getPropertyValue('--bg-app').trim(),
+          body: getComputedStyle(document.body).backgroundColor,
           card: getComputedStyle(card).backgroundColor,
           sidebar: getComputedStyle(sidebar).backgroundColor,
           input: getComputedStyle(input).backgroundColor,
@@ -89,10 +90,11 @@ function stylesheet(includeGlobal, before) {
         };
       });
       if (scenario.theme === 'dark') {
-        assert.equal(state.theme, '#050A14', `${scenario.name}: Cyber Obsidian app token`);
-        assert.equal(state.card, 'rgb(11, 22, 40)', `${scenario.name}: card surface`);
-        assert.equal(state.sidebar, 'rgb(7, 17, 31)', `${scenario.name}: navigation surface`);
-        assert.equal(state.input, 'rgb(8, 21, 37)', `${scenario.name}: input surface`);
+        assert.equal(state.theme, '#080D16', `${scenario.name}: Cyber Obsidian app token`);
+        assert.equal(state.body, 'rgb(8, 13, 22)', `${scenario.name}: body surface`);
+        assert.equal(state.card, 'rgb(17, 27, 41)', `${scenario.name}: card surface`);
+        assert.equal(state.sidebar, 'rgb(13, 23, 38)', `${scenario.name}: navigation surface`);
+        assert.equal(state.input, 'rgb(13, 23, 38)', `${scenario.name}: input surface`);
       }
       assert.deepEqual(state.overflow, [], `${scenario.name}: no viewport overflow ${JSON.stringify(state)}`);
       if (scenario.capture) await page.screenshot({ path: path.join(outputDir, `${scenario.captureName}-after.png`), fullPage: true });

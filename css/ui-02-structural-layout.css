@@ -10,26 +10,26 @@
  * Dashboard view so the existing light theme and other screens keep their
  * established visual language. */
 html[data-theme="dark"] body:has(.ui02-dashboard-shell) {
-  --bg-app: #050a14;
-  --bg-surface: #0b1628;
-  --bg-surface-elevated: #102039;
-  --bg-subtle: #081221;
-  --text-primary: #edf6ff;
-  --text-secondary: #91aac5;
-  --text-muted: #6f8aa6;
-  --border-default: rgba(88, 162, 231, .26);
-  --border-subtle: rgba(88, 162, 231, .15);
-  --brand-primary: #46a7ff;
-  --brand-primary-hover: #78c4ff;
-  --brand-primary-soft: rgba(70, 167, 255, .14);
-  --accent-text: #72d7ff;
-  --action-primary-bg: #1677d2;
-  --action-primary-hover: #176fc1;
-  --input-bg: #081525;
-  --input-border: rgba(88, 162, 231, .34);
-  --input-border-focus: #46a7ff;
-  --input-text: #edf6ff;
-  --input-placeholder: #6f8aa6;
+  --bg-app: #080d16;
+  --bg-surface: #111b29;
+  --bg-surface-elevated: #17263a;
+  --bg-subtle: #0d1726;
+  --text-primary: #eaf2ff;
+  --text-secondary: #a8bad1;
+  --text-muted: #8297b1;
+  --border-default: #1d2b3c;
+  --border-subtle: #17263a;
+  --brand-primary: #3478f6;
+  --brand-primary-hover: #5c95ff;
+  --brand-primary-soft: rgba(52, 120, 246, .16);
+  --accent-text: #9ac3ff;
+  --action-primary-bg: #3478f6;
+  --action-primary-hover: #2a63d4;
+  --input-bg: #0d1726;
+  --input-border: #1d2b3c;
+  --input-border-focus: #3478f6;
+  --input-text: #eaf2ff;
+  --input-placeholder: #8297b1;
   --shadow-sm: 0 10px 26px rgba(0, 0, 0, .22);
   --shadow-md: 0 16px 34px rgba(0, 0, 0, .32);
 }
@@ -43,15 +43,15 @@ html[data-theme="dark"] body:has(.ui02-dashboard-shell) #viewContainer {
 
 html[data-theme="dark"] body:has(.ui02-dashboard-shell) #viewContainer {
   background-image:
-    linear-gradient(rgba(70, 167, 255, .035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(70, 167, 255, .035) 1px, transparent 1px);
+    linear-gradient(rgba(52, 120, 246, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(52, 120, 246, .035) 1px, transparent 1px);
   background-size: 42px 42px;
 }
 
 html[data-theme="dark"] #viewContainer > .ui02-dashboard-header {
   padding: 1.25rem clamp(1rem, 2.5vw, 2.5rem) 1rem;
   margin: 0;
-  background: linear-gradient(180deg, rgba(11, 22, 40, .96), rgba(5, 10, 20, .72));
+  background: linear-gradient(180deg, rgba(17, 27, 41, .96), rgba(8, 13, 22, .72));
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -76,8 +76,8 @@ html[data-theme="dark"] #viewContainer .ui02-dashboard-section::before {
   inline-size: 3px;
   block-size: 1.75rem;
   border-radius: 999px;
-  background: linear-gradient(180deg, #72d7ff, #1677d2);
-  box-shadow: 0 0 18px rgba(70, 167, 255, .64);
+  background: linear-gradient(180deg, #9ac3ff, #3478f6);
+  box-shadow: 0 0 18px rgba(52, 120, 246, .64);
 }
 
 html[data-theme="dark"] #viewContainer .ui02-section-heading {
@@ -85,35 +85,35 @@ html[data-theme="dark"] #viewContainer .ui02-section-heading {
 }
 
 html[data-theme="dark"] #viewContainer .ui02-section-kicker {
-  color: #72d7ff;
+  color: #9ac3ff;
   letter-spacing: .14em;
 }
 
 html[data-theme="dark"] #viewContainer :is(.card, .ui02-admin-banner) {
   border-color: var(--border-default);
-  background: linear-gradient(145deg, rgba(16, 32, 57, .96), rgba(8, 18, 33, .96));
+  background: linear-gradient(145deg, rgba(17, 27, 41, .96), rgba(13, 23, 38, .96));
   box-shadow: 0 14px 32px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(150, 214, 255, .045);
 }
 
 html[data-theme="dark"] #viewContainer .ui02-admin-banner {
-  border-inline-start: 3px solid #46a7ff;
+  border-inline-start: 3px solid #3478f6;
 }
 
 html[data-theme="dark"] #viewContainer .ui02-command-card {
   min-block-size: 8.25rem;
   border-top-width: 2px;
   border-radius: 1rem;
-  background: linear-gradient(155deg, rgba(16, 32, 57, .98), rgba(8, 18, 33, .98));
+  background: linear-gradient(155deg, rgba(17, 27, 41, .98), rgba(13, 23, 38, .98));
 }
 
 html[data-theme="dark"] #viewContainer .ui02-command-card strong,
 html[data-theme="dark"] #viewContainer .ui02-operating-metrics strong,
 html[data-theme="dark"] #viewContainer .admin-kpi-grid strong {
-  color: #edf6ff;
-  text-shadow: 0 0 22px rgba(70, 167, 255, .24);
+  color: #eaf2ff;
+  text-shadow: 0 0 22px rgba(52, 120, 246, .24);
 }
 
-html[data-theme="dark"] #viewContainer .ui02-command-card--blue { border-top-color: #46a7ff; }
+html[data-theme="dark"] #viewContainer .ui02-command-card--blue { border-top-color: #3478f6; }
 html[data-theme="dark"] #viewContainer .ui02-command-card--teal { border-top-color: #38d6c5; }
 html[data-theme="dark"] #viewContainer .ui02-command-card--amber { border-top-color: #ffc857; }
 html[data-theme="dark"] #viewContainer .ui02-command-card--violet { border-top-color: #b18cff; }
@@ -131,32 +131,32 @@ html[data-theme="dark"] #viewContainer .ui02-team-widgets {
 }
 
 html[data-theme="dark"] #viewContainer .ui02-action-tile {
-  color: #d9edff;
-  background: rgba(70, 167, 255, .07);
-  border-color: rgba(70, 167, 255, .24);
+  color: #eaf2ff;
+  background: rgba(52, 120, 246, .07);
+  border-color: rgba(52, 120, 246, .24);
 }
 
 html[data-theme="dark"] #viewContainer .ui02-action-tile:hover,
 html[data-theme="dark"] #viewContainer .ui02-inline-link:hover {
   color: #fff;
-  background: rgba(70, 167, 255, .16);
-  border-color: rgba(114, 215, 255, .7);
+  background: rgba(52, 120, 246, .16);
+  border-color: rgba(154, 195, 255, .7);
 }
 
 html[data-theme="dark"] #viewContainer .ui02-focus-queue,
 html[data-theme="dark"] #viewContainer .ui02-operating-metrics > div,
 html[data-theme="dark"] #viewContainer .admin-kpi-grid > div {
-  background: rgba(4, 12, 24, .58);
-  border-color: rgba(70, 167, 255, .2);
+  background: rgba(8, 13, 22, .58);
+  border-color: rgba(52, 120, 246, .2);
 }
 
 html[data-theme="dark"] #viewContainer .ui02-focus-task:hover {
-  background: rgba(70, 167, 255, .09);
+  background: rgba(52, 120, 246, .09);
 }
 
 html[data-theme="dark"] #viewContainer .ui02-scroll-region,
 html[data-theme="dark"] #viewContainer .employees-radar-list {
-  scrollbar-color: rgba(70, 167, 255, .55) transparent;
+  scrollbar-color: rgba(52, 120, 246, .55) transparent;
 }
 
 /* Radar presentation: split the authorized attendance feed into two clear
@@ -259,8 +259,8 @@ html[data-theme="dark"] #viewContainer .employees-radar-list {
 }
 
 html[data-theme="dark"] #viewContainer .employees-radar-group {
-  border-color: rgba(70, 167, 255, .22);
-  background: rgba(4, 12, 24, .48);
+  border-color: rgba(52, 120, 246, .22);
+  background: rgba(8, 13, 22, .48);
 }
 
 html[data-theme="dark"] #viewContainer .employees-radar-group--in { box-shadow: inset 0 2px 0 rgba(56, 214, 197, .8); }

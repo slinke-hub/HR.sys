@@ -16,6 +16,14 @@ html[data-theme="dark"] #viewContainer {
   color: var(--text-primary);
 }
 
+/* Login is rendered before the authenticated shell and can retain the legacy
+ * light body surface. Keep the correction dark-only so Light Mode is untouched. */
+html[data-theme="dark"] body.login-screen {
+  background-color: var(--bg-app) !important;
+  background-image: none !important;
+  color: var(--text-primary);
+}
+
 html[data-theme="dark"] :where(.sidebar, .topbar, .header-navigation,
   .mobile-navigation-sheet, .mobile-navigation-panel, .app-navigation-drawer) {
   background: var(--nav-bg) !important;
