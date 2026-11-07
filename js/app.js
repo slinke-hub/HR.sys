@@ -418,7 +418,14 @@ const canViewEmployeesRadar = () => {
     const permittedValues = ['MANAGER', 'SUPERVISOR', 'GENERAL MANAGER', 'GM', 'CEO', 'CHIEF EXECUTIVE OFFICER'];
     return isTaskAdmin() || isITManagerProfile() || accessValues.some(value => permittedValues.includes(value));
 };
-const canInteractWithTask = task => !!task && !isMq20Profile() && (canEditTaskRecord(task) || [task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
+const canViewArchivedTaskRecord = task => !!task?.archived_at && !!currentUser?.id && (
+    task.created_by === currentUser.id
+    || task.assignee_id === currentUser.id
+    || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser.id))
+    || (Array.isArray(task.watchers) && task.watchers.includes(currentUser.id))
+);
+const canInteractWithTask = task => !!task && !task.archived_at && !isMq20Profile() && (canEditTaskRecord(task) || [task.assignee_id, task.supervisor_id, ...(Array.isArray(task.assignee_ids) ? task.assignee_ids : [])].includes(currentUser?.id) || (task.watchers || []).includes(currentUser?.id));
+const canOpenTaskDetails = task => !!task && !isMq20Profile() && (canInteractWithTask(task) || canViewArchivedTaskRecord(task) || (!!task.archived_at && canEditTaskRecord(task)));
 
 const canManageTaskDependencies = task => {
     const role = String(currentUserRole || currentUserProfile?.role || '').trim().toUpperCase().replace(/[_-]+/g, ' ');
@@ -4551,7 +4558,7 @@ window.openTaskDetailsModal = async function (id) {
         }
     }
     if (!task) return;
-    if (!canInteractWithTask(task)) {
+    if (!canOpenTaskDetails(task)) {
         showToast(window.t('msg_toast_9') || 'You do not have access to this task.', 'warning');
         return;
     }
@@ -4595,7 +4602,7 @@ window.openTaskDetailsModal = async function (id) {
     // Check permission to create tasks
     const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
     const viewerDepartmentId = currentUserProfile?.department_id || (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id)?.department_id;
-    const canCreateTask = !!currentUser && !isMq20Profile() && (!task.task_list_id || privateList?.owner_id === currentUser.id || privateList?.department_id === viewerDepartmentId);
+    const canCreateTask = !!currentUser && !task.archived_at && !isMq20Profile() && (!task.task_list_id || privateList?.owner_id === currentUser.id || privateList?.department_id === viewerDepartmentId);
     const btnCreateSubTask = document.getElementById('btnCreateSubTask');
     if (btnCreateSubTask) {
         btnCreateSubTask.style.display = canCreateTask ? 'inline-block' : 'none';
@@ -4721,13 +4728,13 @@ async function prepareTeamworkTaskDetail(task) {
     const taskList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
     const canManagePrivateTask = !task.task_list_id || taskList?.owner_id === currentUser?.id;
     if (header) {
-        const canEdit = canEditTaskRecord(task) && !isMq20Profile();
+        const canEdit = !task.archived_at && canEditTaskRecord(task) && !isMq20Profile();
         const dependencyBlocked = task.dependency_blocked === true;
-        const canCompleteAndHandOff = canChangeTaskStageRecord(task)
+        const canCompleteAndHandOff = !task.archived_at && canChangeTaskStageRecord(task)
             && String(task.status || '').toLowerCase() !== 'completed'
             && !dependencyBlocked;
         const canApproveCompletion = !isMq20Profile() && task.status === 'Pending Approval' && (isTaskAdmin()
-            || (!task.task_list_id && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id));
+            || (!task.task_list_id && window.taskDepartmentManagerByName?.[task.department] === currentUser?.id)) && !task.archived_at;
         let actions = header.querySelector('.task-detail-actions');
         if (!actions) {
             actions = document.createElement('div');
@@ -4756,7 +4763,7 @@ async function prepareTeamworkTaskDetail(task) {
         ]);
         task._dependencies = taskDependencies || [];
         window.activeTaskDependencies = task._dependencies;
-        const canManageDependencies = canManageTaskDependencies(task);
+        const canManageDependencies = !task.archived_at && canManageTaskDependencies(task);
         const successorDependencies = task._dependencies.filter(item => item.relationship === 'unlocks');
         const taskActions = header?.querySelector('.task-detail-actions');
         if (taskActions) {
@@ -8364,6 +8371,13 @@ async function renderArchivedTasks() {
         db.fetchArchivedTasks(),
         db.fetchUsers()
     ]);
+    const isEmployee = String(currentUserRole || '').trim().toUpperCase() === 'EMPLOYEE';
+    const visibleArchivedTasks = isEmployee
+        ? (archivedTasks || []).filter(task => task.created_by === currentUser?.id
+            || task.assignee_id === currentUser?.id
+            || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser?.id))
+            || (Array.isArray(task.watchers) && task.watchers.includes(currentUser?.id)))
+        : (archivedTasks || []);
     const usersById = Object.fromEntries((allUsers || []).map(user => [String(user.id), user]));
     const locale = currentLang === 'ar' ? 'ar-SA' : undefined;
     const text = currentLang === 'ar' ? {
@@ -8371,19 +8385,20 @@ async function renderArchivedTasks() {
         subtitle: 'تُنقل المهام المكتملة تلقائياً إلى الأرشيف يومياً بعد الساعة 11:00 مساءً.',
         back: 'إدارة المهام', search: 'البحث في المهام المؤرشفة...', all: 'كل الحالات',
         task: 'المهمة', assigned: 'مُعيّنة إلى', creator: 'أنشأها', status: 'الحالة',
-        due: 'تاريخ الاستحقاق', archived: 'تاريخ الأرشفة', empty: 'لا توجد مهام مؤرشفة بعد.',
+        due: 'تاريخ الاستحقاق', archived: 'تاريخ الأرشفة', open: 'فتح المهمة', empty: 'لا توجد مهام مؤرشفة بعد.',
         completed: 'مكتملة', approved: 'مُعتمدة', unknown: 'غير معروف', unassigned: 'غير معيّنة'
     } : {
         title: 'Archived Tasks',
         subtitle: 'Completed tasks are moved here automatically every day after 11:00 PM.',
         back: 'Task Manager', search: 'Search archived tasks...', all: 'All statuses',
         task: 'Task', assigned: 'Assigned To', creator: 'Created By', status: 'Status',
-        due: 'Due Date', archived: 'Archived At', empty: 'No archived tasks yet.',
+        due: 'Due Date', archived: 'Archived At', open: 'Open task', empty: 'No archived tasks yet.',
         completed: 'Completed', approved: 'Approved', unknown: 'Unknown', unassigned: 'Unassigned'
     };
     const dateOnly = value => value ? new Date(value).toLocaleDateString(locale) : '—';
     const dateTime = value => value ? new Date(value).toLocaleString(locale) : '—';
-    const rows = (archivedTasks || []).map(task => {
+    window.taskCache = window.taskCache || {};
+    const rows = visibleArchivedTasks.map(task => {
         const assigneeIds = Array.isArray(task.assignee_ids) && task.assignee_ids.length
             ? task.assignee_ids
             : (task.assignee_id ? [task.assignee_id] : []);
@@ -8395,12 +8410,33 @@ async function renderArchivedTasks() {
         const creator = usersById[String(task.created_by || '')];
         const creatorName = creator ? window.formatEmployeeName(creator) : text.unknown;
         const title = getLocalizedTaskTitle(task) || task.title || '—';
+        const primaryAssignee = usersById[String(task.assignee_id || '')];
+        window.taskCache[String(task.id)] = {
+            ...task,
+            assignee_ids: assigneeIds,
+            displayTitle: title,
+            assignee: primaryAssignee ? {
+                id: primaryAssignee.id,
+                full_name: primaryAssignee.full_name,
+                display_name: primaryAssignee.display_name,
+                display_name_ar: primaryAssignee.display_name_ar
+            } : null,
+            creator: creator ? {
+                id: creator.id,
+                full_name: creator.full_name,
+                display_name: creator.display_name,
+                display_name_ar: creator.display_name_ar
+            } : null
+        };
         const normalizedStatus = String(task.status || 'completed').toLowerCase();
         const statusLabel = normalizedStatus === 'approved' ? text.approved : text.completed;
         const searchText = [title, assigneeNames.join(' '), creatorName, statusLabel].join(' ').toLowerCase();
+        const canOpen = canOpenTaskDetails(window.taskCache[String(task.id)]);
         return `
             <tr class="archived-task-row" data-status="${escapeHTML(normalizedStatus)}" data-search="${escapeHTML(searchText)}">
-                <td data-label="${escapeHTML(text.task)}"><strong>${escapeHTML(title)}</strong></td>
+                <td data-label="${escapeHTML(text.task)}">${canOpen
+                    ? `<button type="button" class="archived-task-open" onclick="window.openArchivedTaskDetails('${escapeHTML(task.id)}')" aria-label="${escapeHTML(text.open)}: ${escapeHTML(title)}">${escapeHTML(title)}</button>`
+                    : `<strong>${escapeHTML(title)}</strong>`}</td>
                 <td data-label="${escapeHTML(text.assigned)}">${escapeHTML(assigneeNames.join(', ') || text.unassigned)}</td>
                 <td data-label="${escapeHTML(text.creator)}">${escapeHTML(creatorName)}</td>
                 <td data-label="${escapeHTML(text.status)}"><span class="status-badge success">${escapeHTML(statusLabel)}</span></td>
@@ -8425,7 +8461,7 @@ async function renderArchivedTasks() {
                     <option value="completed">${escapeHTML(text.completed)}</option>
                     <option value="approved">${escapeHTML(text.approved)}</option>
                 </select>
-                <span class="archived-task-count"><strong id="archivedTaskVisibleCount">${archivedTasks.length}</strong> / ${archivedTasks.length}</span>
+                <span class="archived-task-count"><strong id="archivedTaskVisibleCount">${visibleArchivedTasks.length}</strong> / ${visibleArchivedTasks.length}</span>
             </div>
             <div class="table-responsive archived-task-table-wrap">
                 <table class="data-table archived-task-table">
@@ -8436,6 +8472,15 @@ async function renderArchivedTasks() {
             <div id="archivedTasksFilteredEmpty" class="empty-state-inline" hidden>${escapeHTML(text.empty)}</div>
         </section>`;
 }
+
+window.openArchivedTaskDetails = async function (taskId) {
+    const task = window.taskCache?.[String(taskId)];
+    if (!canOpenTaskDetails(task) || !task.archived_at) {
+        showToast(window.t('msg_toast_9') || 'You do not have access to this task.', 'warning');
+        return;
+    }
+    await window.openTaskDetailsModal(String(taskId));
+};
 
 window.filterArchivedTasks = function () {
     const query = String(document.getElementById('archivedTaskSearch')?.value || '').trim().toLowerCase();
