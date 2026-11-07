@@ -4566,7 +4566,7 @@ window.openTaskDetailsModal = async function (id) {
     // Keep the two task modals mutually exclusive when switching actions.
     document.getElementById('editTaskModal')?.classList.remove('active');
 
-    if (currentView !== 'tasks' && currentView !== 'tasks_v2') {
+    if (!['tasks', 'tasks_v2', 'archived_tasks'].includes(currentView)) {
         await renderView('tasks');
     }
 
@@ -7853,7 +7853,10 @@ window.deleteReminder = async (id) => {
 };
 
 async function renderProfile() {
-    const profile = await db.getUserProfile(currentUser.id);
+    const [profile, notificationSoundPreference] = await Promise.all([
+        db.getUserProfile(currentUser.id),
+        db.getMyNotificationSoundPreference()
+    ]);
     const [ownContracts, ownPrintRequests] = await Promise.all([
         db.fetchContracts(currentUser.id),
         db.fetchContractPrintRequests({ employeeId: currentUser.id })
@@ -7961,6 +7964,15 @@ async function renderProfile() {
                         </div>
                         <button type="submit" class="btn-secondary" style="transition: all 0.2s;">${t('prof_update_pass')}</button>
                     </form>
+                </div>
+
+                <div class="card profile-notification-settings">
+                    <div class="card-title">${currentLang === 'ar' ? 'إعدادات الإشعارات' : 'Notification settings'}</div>
+                    <p class="text-muted">${currentLang === 'ar' ? 'تحكم في نغمة الإشعارات على هذا الحساب.' : 'Control the notification ringtone for your account.'}</p>
+                    <label class="profile-notification-sound-setting" for="profileNotificationSoundEnabled" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+                        <span>${currentLang === 'ar' ? 'تشغيل نغمة الإشعار' : 'Play notification ringtone'}</span>
+                        <input type="checkbox" id="profileNotificationSoundEnabled" ${notificationSoundPreference.enabled ? 'checked' : ''} onchange="window.saveNotificationSoundPreference(this)">
+                    </label>
                 </div>
             </div>
         </div>
@@ -13358,6 +13370,7 @@ let notificationsInitialized = false;
 let knownNotificationIds = new Set();
 let notificationAudioContext = null;
 let notificationSoundUnlocked = false;
+let notificationSoundEnabled = true;
 
 function unlockNotificationSound() {
     if (notificationSoundUnlocked) return;
@@ -13375,7 +13388,7 @@ document.addEventListener('pointerdown', unlockNotificationSound, { once: true, 
 document.addEventListener('keydown', unlockNotificationSound, { once: true, capture: true });
 
 function playNotificationRing() {
-    if (!notificationSoundUnlocked || !notificationAudioContext) return;
+    if (!notificationSoundEnabled || !notificationSoundUnlocked || !notificationAudioContext) return;
     try {
         const context = notificationAudioContext;
         if (context.state === 'suspended') context.resume?.().catch?.(() => { });
@@ -13402,6 +13415,30 @@ function playNotificationRing() {
         });
     } catch (_) { }
 }
+
+window.saveNotificationSoundPreference = async function (input) {
+    if (!input || !currentUser) return;
+    const requestedValue = input.checked === true;
+    const previousValue = notificationSoundEnabled;
+    input.disabled = true;
+    notificationSoundEnabled = requestedValue;
+    let result;
+    try {
+        result = await db.setMyNotificationSoundPreference(requestedValue);
+    } catch (error) {
+        result = { success: false, error };
+    } finally {
+        input.disabled = false;
+    }
+    if (!result.success) {
+        notificationSoundEnabled = previousValue;
+        input.checked = previousValue;
+        showToast(result.error?.message || (currentLang === 'ar' ? 'تعذر حفظ إعداد نغمة الإشعار.' : 'Unable to save the notification ringtone setting.'), 'danger');
+        return;
+    }
+    notificationSoundEnabled = result.enabled;
+    input.checked = result.enabled;
+};
 
 function updateNotificationBadge(unreadCount) {
     const count = Math.max(0, Number(unreadCount) || 0);
@@ -13483,6 +13520,9 @@ function stopNotificationsRealtime() {
 async function startNotificationsRealtime() {
     stopNotificationsRealtime();
     if (!currentUser) return;
+    notificationSoundEnabled = true;
+    const soundPreference = await db.getMyNotificationSoundPreference();
+    if (soundPreference.success) notificationSoundEnabled = soundPreference.enabled;
     await pollNotifications({ playSound: false });
     notificationsInterval = setInterval(() => pollNotifications(), 30000);
     if (!window.supabaseClient) return;

@@ -259,7 +259,7 @@ Deno.serve(async (request) => {
 
   const { data: queuedRows, error: queueError } = await admin
     .from("task_email_outbox")
-    .select("id,notification_id,task_id,recipient_email,subject,message,action_url,attempts,comment_text,attachment_links,always_send,context_type,details")
+    .select("id,notification_id,task_id,recipient_id,recipient_email,subject,message,action_url,attempts,comment_text,attachment_links,always_send,context_type,details")
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(100);
@@ -283,6 +283,39 @@ Deno.serve(async (request) => {
     ? await admin.from("tasks").select("*").in("id", taskIds)
     : { data: [], error: null };
   if (taskDetailsError) return json({ error: "Unable to load task email details" }, 500);
+
+  const taskMap = new Map((queuedTasks || []).map((task) => [task.id, task]));
+  const recipientIds = [...new Set(queued.map((item) => item.recipient_id).filter(Boolean))];
+  const { data: recipientProfiles, error: recipientProfileError } = recipientIds.length
+    ? await admin.from("profiles").select("id,role").in("id", recipientIds)
+    : { data: [], error: null };
+  if (recipientProfileError) return json({ error: "Unable to verify task email recipients" }, 500);
+
+  const recipientProfileMap = new Map((recipientProfiles || []).map((profile) => [profile.id, profile]));
+  const assignmentSuppressedIds = queued
+    .filter((item) => {
+      if (!item.task_id) return false;
+      const recipientProfile = recipientProfileMap.get(item.recipient_id);
+      if (!recipientProfile) return true;
+      const role = String(recipientProfile.role || "").trim().toUpperCase().replace(/[_-]+/g, " ");
+      if (role !== "EMPLOYEE") return false;
+      const task = taskMap.get(item.task_id);
+      const multipleAssignees = Array.isArray(task?.assignee_ids) ? task.assignee_ids : [];
+      return !task || (task.assignee_id !== item.recipient_id && !multipleAssignees.includes(item.recipient_id));
+    })
+    .map((item) => item.id);
+  if (assignmentSuppressedIds.length) {
+    const { error: suppressError } = await admin.from("task_email_outbox").update({
+      status: "cancelled",
+      last_error: "Task email recipient is not currently assigned to the task.",
+    }).in("id", assignmentSuppressedIds);
+    if (suppressError) return json({ error: "Unable to suppress task emails for unassigned employees" }, 500);
+    const assignmentSuppressedSet = new Set(assignmentSuppressedIds);
+    queued = queued.filter((item) => !assignmentSuppressedSet.has(item.id));
+    if (!queued.length) {
+      return json({ processed: queuedRows.length, sent: 0, failed: 0, suppressed: assignmentSuppressedIds.length });
+    }
+  }
 
   // Fetch extra task attachments from public.task_attachments table if table exists
   const { data: dbTaskAttachments } = taskIds.length
@@ -339,7 +372,6 @@ Deno.serve(async (request) => {
   }
   if (!eligible.length) return json({ processed: queued.length, sent: 0, failed: 0, suppressed: suppressedIds.length });
 
-  const taskMap = new Map((queuedTasks || []).map((task) => [task.id, task]));
   const profileIds = [...new Set([
     ...(queuedTasks || []).flatMap((task) => [task.created_by, task.assignee_id, task.supervisor_id]),
     ...(queuedNotifications || []).map((notification) => notification.actor_id),
@@ -680,5 +712,5 @@ Deno.serve(async (request) => {
     }
   }
 
-  return json({ processed: queued.length, sent, failed, suppressed: suppressedIds.length });
+  return json({ processed: queued.length + assignmentSuppressedIds.length, sent, failed, suppressed: suppressedIds.length + assignmentSuppressedIds.length });
 });

@@ -2923,6 +2923,39 @@ const db = {
     // ==========================================
     // NOTIFICATIONS
     // ==========================================
+    async getMyNotificationSoundPreference() {
+        if (!supabaseClient) return { success: false, enabled: true, error: new Error('Not connected') };
+        try {
+            const { data, error } = await supabaseClient
+                .from('user_notification_preferences')
+                .select('sound_enabled')
+                .maybeSingle();
+            if (error) throw error;
+            return { success: true, enabled: data?.sound_enabled !== false };
+        } catch (error) {
+            console.error('getMyNotificationSoundPreference Error:', error?.message || error);
+            return { success: false, enabled: true, error };
+        }
+    },
+    async setMyNotificationSoundPreference(enabled) {
+        if (!supabaseClient) return { success: false, error: new Error('Not connected') };
+        try {
+            const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+            if (authError) throw authError;
+            const userId = authData?.user?.id;
+            if (!userId) throw new Error('Authentication required');
+            const { data, error } = await supabaseClient
+                .from('user_notification_preferences')
+                .upsert({ user_id: userId, sound_enabled: enabled === true }, { onConflict: 'user_id' })
+                .select('sound_enabled')
+                .single();
+            if (error) throw error;
+            return { success: true, enabled: data.sound_enabled === true };
+        } catch (error) {
+            console.error('setMyNotificationSoundPreference Error:', error?.message || error);
+            return { success: false, error };
+        }
+    },
     async fetchNotifications(userIdOrOptions = null) {
         if (!supabaseClient) return [];
         try {
