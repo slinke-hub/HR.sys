@@ -14,9 +14,9 @@ assert.match(html, /id="appNavigationToggle"[^>]+onclick="window\.openMobileNavi
 assert.ok(html.indexOf('id="appNavigationToggle"') < html.indexOf('class="header-logo"'), 'Hamburger is adjacent before the logo in the leading header group');
 assert.doesNotMatch(html, /<nav class="header-navigation"/, 'The duplicated horizontal module row is removed');
 assert.match(html, /id="mobileMoreNav"[^>]+onclick="window\.openMobileNavigation\(this\)"/, 'Mobile More opens the same drawer and supplies its focus-restoration target');
-assert.match(html, /js\/app\.js\?v=2026100801/, 'Application script cache key remains current');
+assert.match(html, /js\/app\.js\?v=2026110401/, 'Application script cache key remains current');
 assert.match(html, /css\/layout\.css\?v=2026100801/, 'Header and login layout changes receive a fresh stylesheet cache key');
-assert.match(html, /css\/components\.css\?v=2026100801/, 'The late component header override retains its current stylesheet cache key');
+assert.match(html, /css\/components\.css\?v=2026110401/, 'The late component header override retains its current stylesheet cache key');
 
 assert.match(app, /window\.openMobileNavigation\s*=\s*async function/, 'One shared permission-filtered drawer opener exists');
 assert.match(app, /\.sidebar-nav > \.nav-item\[data-view\]/, 'Drawer entries come from the existing permission-managed navigation source');

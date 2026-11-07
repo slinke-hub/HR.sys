@@ -9854,6 +9854,9 @@ html[dir="rtl"] select.form-control[multiple]:not([hidden]) { background-positio
 .archived-task-count { color:var(--color-text-secondary); white-space:nowrap; }
 .archived-task-table { min-width:920px; }
 .archived-task-table td:first-child { min-width:260px; }
+.archived-task-open { padding:0; border:0; background:transparent; color:var(--color-primary); font:inherit; font-weight:700; text-align:start; text-decoration:underline; text-underline-offset:.15em; cursor:pointer; }
+.archived-task-open:hover { color:var(--color-primary-hover, var(--color-primary)); }
+.archived-task-open:focus-visible { outline:2px solid var(--focus-ring, var(--color-primary)); outline-offset:3px; border-radius:2px; }
 .archived-task-table tbody tr[hidden] { display:none; }
 @media (max-width: 640px) {
   .archived-task-filters { align-items:stretch; flex-direction:column; }
