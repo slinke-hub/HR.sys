@@ -342,6 +342,12 @@ html[data-theme="dark"] #viewContainer .employees-radar-group--out { box-shadow:
 #viewContainer .ui02-command-card--amber { border-top-color: var(--color-warning); }
 #viewContainer .ui02-command-card--violet { border-top-color: var(--color-info); }
 
+#viewContainer .ui02-command-card--attendance .dashboard-attendance-clockin,
+#viewContainer .ui02-command-card--attendance .dashboard-attendance-clockout {
+  align-self: flex-start;
+  margin-top: .45rem;
+}
+
 #viewContainer .ui02-operating-overview {
   padding: 1.25rem;
   border-color: color-mix(in srgb, var(--color-primary) 16%, var(--color-border));

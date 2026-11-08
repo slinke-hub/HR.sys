@@ -10,15 +10,16 @@ const styles = [
   'css/components.css',
   'css/theme-foundation.css',
   'css/component-semantic-migration.css',
+  'css/ui-02-structural-layout.css',
 ].map(file => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
 
 const fixture = direction => `<!doctype html><html dir="${direction}" data-theme="light"><head><meta charset="utf-8"><style>${styles}</style></head><body>
-  <main class="app-container"><section class="view-container"><header class="page-header">
-    <div><h1 class="page-title">Dashboard</h1></div>
-    <button id="attendanceClockButton" class="employees-radar-clockout dashboard-attendance-clockout" aria-label="Clock Out">
-      ${direction === 'rtl' ? '<span class="dashboard-clock-button-label">تسجيل الخروج</span><svg aria-hidden="true"></svg>' : '<svg aria-hidden="true"></svg><span class="dashboard-clock-button-label">Clock Out</span>'}
-    </button>
-  </header><button class="employees-radar-clockout"><svg></svg><span>Clock out</span></button></section></main>
+  <main class="app-container"><section class="view-container" id="viewContainer"><header class="page-header"><div><h1 class="page-title">Dashboard</h1></div></header>
+    <section class="ui02-command-grid"><article class="card ui02-command-card ui02-command-card--blue ui02-command-card--attendance"><span>Attendance today</span><strong>Clocked in</strong><small class="attendance-guidance">Clock out when you leave</small>
+      <button id="attendanceClockButton" class="employees-radar-clockout dashboard-attendance-clockout" aria-label="Clock Out">
+        ${direction === 'rtl' ? '<span class="dashboard-clock-button-label">تسجيل الخروج</span><svg aria-hidden="true"></svg>' : '<svg aria-hidden="true"></svg><span class="dashboard-clock-button-label">Clock Out</span>'}
+      </button>
+    </article></section><button class="employees-radar-clockout"><svg></svg><span>Clock out</span></button></section></main>
 </body></html>`;
 
 (async () => {
@@ -37,9 +38,12 @@ const fixture = direction => `<!doctype html><html dir="${direction}" data-theme
             const mainStyle = getComputedStyle(main);
             const radarStyle = getComputedStyle(radar);
             const rect = main.getBoundingClientRect();
+            const guidanceRect = document.querySelector('.attendance-guidance').getBoundingClientRect();
             const properties = ['backgroundColor', 'borderColor', 'borderRadius', 'fontFamily', 'fontSize', 'fontWeight', 'gap', 'minHeight', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'color'];
             return {
               rect: { left: rect.left, right: rect.right, width: rect.width, height: rect.height },
+              guidanceBottom: guidanceRect.bottom,
+              buttonTop: rect.top,
               viewportWidth: innerWidth,
               scrollWidth: document.documentElement.scrollWidth,
               labelVisible: getComputedStyle(main.querySelector('span')).display !== 'none',
@@ -48,6 +52,7 @@ const fixture = direction => `<!doctype html><html dir="${direction}" data-theme
             };
           });
           assert.ok(result.sameCoreStyle, `${direction}/${theme}/${width}: main action shares Radar semantic styles`);
+          assert.ok(result.buttonTop >= result.guidanceBottom, `${direction}/${theme}/${width}: Clock Out appears below the Clock-in/attendance guidance`);
           assert.ok(result.rect.width > result.rect.height, `${direction}/${theme}/${width}: action remains compact, not square`);
           assert.ok(result.rect.width < result.viewportWidth, `${direction}/${theme}/${width}: action does not stretch across the viewport`);
           assert.equal(result.scrollWidth, result.viewportWidth, `${direction}/${theme}/${width}: no horizontal overflow`);
