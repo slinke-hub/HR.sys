@@ -1656,3 +1656,182 @@ html[data-platform="android"] .sidebar-nav > .nav-item {
   gap: .14rem;
   padding-inline: .1rem;
 }
+
+/* Dashboard request: keep the requested content bands full-width and pair
+   the smaller summary widgets on desktop, stacking cleanly on phones. */
+#viewContainer .ui02-dashboard-primary {
+  max-inline-size: none;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#viewContainer .ui02-dashboard-announcements,
+#viewContainer .ui02-dashboard-news {
+  inline-size: 100%;
+  min-inline-size: 0;
+  grid-column: 1 / -1;
+}
+
+#viewContainer .ui02-dashboard-snapshot-section .ui02-command-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#viewContainer .ui02-dashboard-kpi-updates {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+#viewContainer .ui02-dashboard-pair--single > .ui02-activity-panel {
+  grid-column: 1 / -1;
+}
+
+#viewContainer .ui02-dashboard-kpi-slot > .card,
+#viewContainer .ui02-dashboard-kpi-updates > .ui02-activity-panel {
+  block-size: 100%;
+}
+
+#viewContainer .ui02-news-carousel {
+  min-inline-size: 0;
+  padding: 1rem;
+  border-radius: .9rem;
+  background: color-mix(in srgb, var(--color-bg-surface) 76%, transparent);
+}
+
+#viewContainer .ui02-news-slide {
+  min-block-size: 7rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: .85rem;
+}
+
+#viewContainer .ui02-news-slide[hidden] {
+  display: none;
+}
+
+#viewContainer .ui02-news-slide a {
+  color: var(--color-text);
+  font-size: clamp(1rem, 1.8vw, 1.35rem);
+  font-weight: 750;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+#viewContainer .ui02-news-slide a:hover,
+#viewContainer .ui02-news-slide a:focus-visible {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: .2em;
+}
+
+#viewContainer .ui02-news-slide time,
+#viewContainer .ui02-news-empty {
+  color: var(--color-text-secondary);
+  font-size: .85rem;
+}
+
+#viewContainer .ui02-news-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .75rem;
+  margin-block-start: .85rem;
+}
+
+#viewContainer .ui02-news-controls button {
+  min-inline-size: 2.75rem;
+  min-block-size: 2.75rem;
+}
+
+#viewContainer .ui02-news-position {
+  min-inline-size: 4rem;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+#viewContainer .ui02-team-hierarchy {
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 1rem 1.15rem;
+}
+
+#viewContainer .ui02-team-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-block-size: 2.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+#viewContainer .ui02-team-summary::-webkit-details-marker {
+  display: none;
+}
+
+#viewContainer .ui02-team-summary:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 4px;
+  border-radius: .35rem;
+}
+
+#viewContainer .ui02-team-summary-title,
+#viewContainer .ui02-team-summary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+#viewContainer .ui02-team-summary-title > i,
+#viewContainer .ui02-team-chevron {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+}
+
+#viewContainer .ui02-team-chevron {
+  transition: transform .18s ease;
+}
+
+#viewContainer .ui02-team-hierarchy:not([open]) .ui02-team-chevron {
+  transform: rotate(-90deg);
+}
+
+[dir="rtl"] #viewContainer .ui02-team-hierarchy:not([open]) .ui02-team-chevron {
+  transform: rotate(90deg);
+}
+
+#viewContainer .ui02-team-empty {
+  padding-block: 1rem .25rem;
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 760px) {
+  #viewContainer .ui02-dashboard-snapshot-section .ui02-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #viewContainer .ui02-dashboard-kpi-updates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #viewContainer .ui02-team-hierarchy {
+    padding: .85rem;
+  }
+
+  #viewContainer .ui02-team-summary {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 380px) {
+  #viewContainer .ui02-dashboard-snapshot-section .ui02-command-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #viewContainer .ui02-team-chevron {
+    transition: none;
+  }
+}
