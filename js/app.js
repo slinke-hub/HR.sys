@@ -4566,7 +4566,8 @@ window.openTaskDetailsModal = async function (id) {
     // Keep the two task modals mutually exclusive when switching actions.
     document.getElementById('editTaskModal')?.classList.remove('active');
 
-    if (!['tasks', 'tasks_v2', 'archived_tasks'].includes(currentView)) {
+    const preserveArchivedTaskView = currentView === 'archived_tasks' && !!task.archived_at;
+    if (!preserveArchivedTaskView && !['tasks', 'tasks_v2'].includes(currentView)) {
         await renderView('tasks');
     }
 
@@ -4781,7 +4782,7 @@ async function prepareTeamworkTaskDetail(task) {
             .filter(item => item.url && !managedReferences.has(item.reference));
         const imageExtensions = /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i;
         const fileNameFromUrl = link => decodeURIComponent(String(link).split('?')[0].split('/').pop() || 'Attachment');
-        const canManageTaskFileSharing = canEditTaskRecord(task) && !isMq20Profile();
+        const canManageTaskFileSharing = !task.archived_at && canEditTaskRecord(task) && !isMq20Profile();
         const managedAttachmentHTML = taskAttachmentRows.map(file => {
             const safeLink = escapeHTML(safeExternalUrl(file.file_url));
             const label = escapeHTML(file.file_name || fileNameFromUrl(file.file_url));
@@ -4818,7 +4819,7 @@ async function prepareTeamworkTaskDetail(task) {
             }).join('');
 
         const attachmentHTML = managedAttachmentHTML + looseAttachmentHTML + sharedDealFilesHTML;
-        const showCrmDesignDealStatus = canMq08ChangeCrmDesignDealStatus(task);
+        const showCrmDesignDealStatus = !task.archived_at && canMq08ChangeCrmDesignDealStatus(task);
         const crmDesignDealStatus = crmDesignDealStatusFromTask(task);
         const crmDesignStatusLocked = ['completed', 'approved', 'pending approval'].includes(String(task.status || '').trim().toLowerCase());
         const crmDesignDealStatusHTML = showCrmDesignDealStatus ? `<section class="task-crm-design-status-control" aria-labelledby="crmDesignDealStatusLabel">
@@ -4893,7 +4894,7 @@ async function prepareTeamworkTaskDetail(task) {
 window.handleCrmDesignDealStatusChange = async function (select) {
     const taskId = String(select?.dataset?.taskId || '').trim();
     const task = window.taskCache?.[taskId];
-    if (!task || !canMq08ChangeCrmDesignDealStatus(task)) {
+    if (!task || task.archived_at || !canMq08ChangeCrmDesignDealStatus(task)) {
         if (select && task) select.value = crmDesignDealStatusFromTask(task);
         showToast(taskDetailText('Only the assigned employee MQ-08 can change this deal status.', 'يمكن فقط للموظفة المعيّنة MQ-08 تغيير حالة الصفقة.'), 'warning');
         return;
@@ -5164,7 +5165,7 @@ window.setTaskDetailInfoTab = function (tab) {
     const contentLinks = task.content_links || (task.source_link ? [task.source_link] : []);
     const proofLinks = task.submission_links || (task.upload_link ? [task.upload_link] : []);
     const privateList = (window.taskListsCache || []).find(list => list.id === task.task_list_id);
-    const canManageTask = !isMq20Profile() && (canEditTaskRecord(task) || !task.task_list_id || privateList?.owner_id === currentUser?.id);
+    const canManageTask = !task.archived_at && !isMq20Profile() && (canEditTaskRecord(task) || !task.task_list_id || privateList?.owner_id === currentUser?.id);
     if (tab === 'custom-fields') {
         const fields = [
             [taskDetailText('Department', 'القسم'), task.department], [taskDetailText('Task type', 'نوع المهمة'), task.sub_type], [taskDetailText('Business', 'النشاط'), task.marketing_department],
@@ -5195,7 +5196,7 @@ window.setTaskDetailInfoTab = function (tab) {
             const iconColor = isDone ? 'var(--success)' : 'var(--text-secondary)';
                 const iconName = isDone ? 'check-circle-2' : 'circle';
                 const titleStyle = isDone ? 'text-decoration:line-through;opacity:0.55;' : '';
-                const canChangeSubtask = canChangeTaskStageRecord(subtask);
+                const canChangeSubtask = !task.archived_at && canChangeTaskStageRecord(subtask);
                 return `<button type="button" class="task-detail-subtask-row${isDone ? ' subtask-done' : ''}" data-task-id="${subtask.id}" onclick="openTaskDetailsModal('${subtask.id}')"><span class="subtask-check-btn${canChangeSubtask ? '' : ' is-disabled'}" ${canChangeSubtask ? `onclick="event.stopPropagation();window.toggleSubtaskComplete('${subtask.id}',this)"` : ''} style="display:flex;align-items:center;flex-shrink:0;cursor:${canChangeSubtask ? 'pointer' : 'default'};padding:0 4px 0 0;"><i data-lucide="${iconName}" style="width:18px;height:18px;color:${iconColor};transition:color 0.2s ease;pointer-events:none;"></i></span><span style="${titleStyle}">${escapeHTML(getLocalizedTaskTitle(subtask))}</span><small>${escapeHTML(subtask.due_date || taskDetailText('No due date', 'بدون تاريخ استحقاق'))}</small></button>`;
             }).join('') : `<div class="task-tab-empty">${taskDetailText('No subtasks yet.', 'لا توجد مهام فرعية بعد.')}</div>`}</div></section>`;
     }
@@ -5344,6 +5345,7 @@ window.handleTaskCommentSubmit = async function (e) {
 window.handleCreateSubTaskClick = function () {
     const parentId = document.getElementById('detailsTaskId').value;
     if (!parentId) return;
+    if (window.activeTaskDetail?.archived_at) return;
 
     document.getElementById('taskSidePanel').classList.remove('active');
     document.getElementById('taskSidePanelOverlay').classList.remove('active');
@@ -9752,6 +9754,7 @@ window.taskV2ToggleComplete = async function (taskId, event) {
 
 // Handles clicking the check icon on a subtask row inside the task detail side panel.
 window.toggleSubtaskComplete = async function (subtaskId, iconEl) {
+    if (window.activeTaskDetail?.archived_at) return;
     const subtask = window.taskCache?.[subtaskId];
     if (!subtask) return;
     if (!canChangeTaskStageRecord(subtask)) {
@@ -9799,7 +9802,7 @@ window.toggleSubtaskComplete = async function (subtaskId, iconEl) {
 window.openInlineSubtaskComposer = function () {
     const task = window.activeTaskDetail;
     const host = document.getElementById('taskDetailSubtaskHost');
-    if (!task || !host) return;
+    if (!task || task.archived_at || !host) return;
     host.innerHTML = `<form class="inline-subtask-form" onsubmit="window.submitInlineSubtask(event)">
         <div id="inlineSubtaskRows" class="inline-subtask-rows"></div>
         <button type="button" class="inline-subtask-add-another" onclick="window.addInlineSubtaskRow()"><i data-lucide="plus"></i>${taskDetailText('Add another subtask', 'إضافة مهمة فرعية أخرى')}</button>
@@ -9842,6 +9845,7 @@ window.updateInlineSubtaskRemoveButtons = function () {
 window.submitInlineSubtask = async function (event) {
     event.preventDefault();
     const parent = window.activeTaskDetail;
+    if (!parent || parent.archived_at) return;
     const entries = Array.from(event.currentTarget.querySelectorAll('.inline-subtask-entry')).map(entry => ({
         title: entry.querySelector('[data-subtask-title]')?.value.trim() || '',
         due: entry.querySelector('[data-subtask-due]')?.value || null
@@ -13069,12 +13073,12 @@ window.renderView = async function (viewId, isBack = false) {
     if (!isBack) syncAppBrowserHistory(viewId, viewId === 'login');
     else if (window.history?.state?.[APP_HISTORY_VIEW_KEY] !== viewId) syncAppBrowserHistory(viewId, true);
 
-    const isTaskManagerView = viewId === 'tasks';
+    const isTaskDetailsView = viewId === 'tasks' || viewId === 'archived_tasks';
     const taskPanel = document.getElementById('taskSidePanel');
     const taskPanelOverlay = document.getElementById('taskSidePanelOverlay');
     window.closeTaskDetailsModal?.();
-    if (taskPanel) taskPanel.hidden = !isTaskManagerView;
-    if (taskPanelOverlay) taskPanelOverlay.hidden = !isTaskManagerView;
+    if (taskPanel) taskPanel.hidden = !isTaskDetailsView;
+    if (taskPanelOverlay) taskPanelOverlay.hidden = !isTaskDetailsView;
 
     if (viewId !== 'login') {
         localStorage.setItem('muqam_hr_last_view', viewId);

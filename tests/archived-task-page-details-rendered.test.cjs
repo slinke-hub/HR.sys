@@ -10,9 +10,14 @@ const nextFunction = app.indexOf('window.handleTaskViewClick = function', start)
 const end = app.lastIndexOf('};', nextFunction);
 assert.ok(start >= 0 && nextFunction > start && end > start, 'Task details modal source must remain extractable.');
 const modalSource = app.slice(start, end + 2);
+const closeStart = app.lastIndexOf('window.closeTaskDetailsModal = function () {');
+const closeEnd = app.indexOf('\n};', closeStart);
+assert.ok(closeStart >= 0 && closeEnd > closeStart, 'Task details close handler must remain available.');
+const closeSource = app.slice(closeStart, closeEnd + 3);
+const evaluatedSource = modalSource + '\n' + closeSource;
 
 const html = `<!doctype html><html><body>
-<main id="archivedTasksPage"><h1>Archived Tasks</h1><button id="archivedTask">Archived sample</button></main>
+<main id="archivedTasksPage"><h1>Archived Tasks</h1><input id="archivedTaskSearch"><select id="archivedTaskStatus"><option value="">All</option><option value="approved">Approved</option></select><div id="archiveScroll" style="height:80px;overflow:auto"><div style="height:400px"><button id="archivedTask">Archived sample</button></div></div></main>
 <div id="editTaskModal"></div>
 <div id="taskSidePanel" class="side-panel" hidden>
   <input id="detailsTaskId"><h2 id="detailsTaskTitle"></h2>
@@ -45,6 +50,11 @@ const html = `<!doctype html><html><body>
           assignee_id: 'synthetic-employee', assignee_ids: ['synthetic-employee']
         }
       };
+      window.taskCache['synthetic-active-task'] = {
+        id: 'synthetic-active-task', archived_at: null,
+        status: 'todo', priority: 'medium', title: 'Synthetic active task',
+        assignee_id: 'synthetic-employee', assignee_ids: ['synthetic-employee']
+      };
       window.taskListsCache = [];
       window.taskAllUsersCache = [];
       window.canOpenTaskDetails = () => true;
@@ -55,17 +65,37 @@ const html = `<!doctype html><html><body>
       window.prepareTeamworkTaskDetail = async () => {};
       window.isMq20Profile = () => false;
       window.db = { fetchTaskComments: async () => [] };
-      window.renderView = async view => { window.currentView = view; };
+      window.taskDetailText = english => english;
+      window.taskDetailValue = value => value || 'Not set';
+      window.renderedViews = [];
+      window.renderView = async view => { window.renderedViews.push(view); window.currentView = view; };
       window.eval(source);
-    }, modalSource);
+    }, evaluatedSource);
+
+    await page.$eval('#archivedTaskSearch', input => { input.value = 'review term'; });
+    await page.$eval('#archivedTaskStatus', select => { select.value = 'approved'; });
+    await page.$eval('#archiveScroll', scroller => { scroller.scrollTop = 110; });
 
     await page.evaluate(() => window.openTaskDetailsModal('synthetic-task'));
     assert.equal(await page.evaluate(() => window.currentView), 'archived_tasks');
+    assert.deepEqual(await page.evaluate(() => window.renderedViews), [], 'Opening archive details must not rerender or navigate the archive list.');
     assert.equal(await page.$eval('#taskSidePanel', panel => panel.classList.contains('active')), true);
     assert.equal(await page.$eval('#detailsTaskTitle', title => title.textContent), 'Synthetic archived task');
     assert.equal(await page.$eval('#archivedTasksPage h1', title => title.textContent), 'Archived Tasks');
+    await page.evaluate(() => window.closeTaskDetailsModal());
+    assert.equal(await page.evaluate(() => window.currentView), 'archived_tasks', 'Closing details must restore the same view.');
+    assert.equal(await page.$eval('#taskSidePanel', panel => panel.classList.contains('active')), false);
+    assert.equal(await page.$eval('#archivedTaskSearch', input => input.value), 'review term');
+    assert.equal(await page.$eval('#archivedTaskStatus', select => select.value), 'approved');
+    assert.equal(await page.$eval('#archiveScroll', scroller => scroller.scrollTop), 110);
+
+    await page.evaluate(() => { window.currentView = 'dashboard'; });
+    await page.evaluate(() => window.openTaskDetailsModal('synthetic-active-task'));
+    assert.equal(await page.evaluate(() => window.currentView), 'tasks', 'Active-task navigation from other views must remain unchanged.');
+    assert.deepEqual(await page.evaluate(() => window.renderedViews), ['tasks']);
   } finally {
     await browser?.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   }
   console.log('Archived task details render in place without leaving the archived tasks page.');
 })().catch(error => {
