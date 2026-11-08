@@ -3622,10 +3622,6 @@ async function renderDashboard() {
                 <h1 class="page-title">${welcomeMessage}</h1>
                 <p class="page-subtitle">${t('welcome_sub')}</p>
             </div>
-            ${isClockedIn
-            ? `<button id="attendanceClockButton" class="employees-radar-clockout dashboard-attendance-clockout" onclick="handleClockOutPrompt('${todayAttendance.id}')" aria-label="${escapeHTML(t('attendance_clock_out'))}">${currentLang === 'ar' ? `<span class="dashboard-clock-button-label">${escapeHTML(t('attendance_clock_out'))}</span><i data-lucide="log-out" aria-hidden="true"></i>` : `<i data-lucide="log-out" aria-hidden="true"></i><span class="dashboard-clock-button-label">${escapeHTML(t('attendance_clock_out'))}</span>`}</button>`
-            : `<button id="attendanceClockButton" class="btn-primary" onclick="handleClockIn()">${t('attendance_clock_in')}</button>`
-        }
         </div>
 
         <div class="ui02-dashboard-shell" data-ui-layout="dashboard">
@@ -3658,7 +3654,10 @@ async function renderDashboard() {
             <section class="ui02-dashboard-section ui02-dashboard-snapshot-section" aria-label="${currentLang === 'ar' ? 'الحضور والإعلانات والطلبات' : 'Attendance, announcements, and requests'}">
                 <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'ملخص اليوم' : 'TODAY AT A GLANCE'}</span><h2>${currentLang === 'ar' ? 'الحضور والإعلانات والطلبات' : 'Attendance, announcements, and requests'}</h2></div></div>
                 <div class="ui02-command-grid">
-                    <article class="card ui02-command-card ui02-command-card--blue"><span>${currentLang === 'ar' ? 'الحضور اليوم' : 'Attendance today'}</span><strong>${escapeHTML(dashboardAttendanceLabel)}</strong><small>${isClockedIn ? (currentLang === 'ar' ? 'تسجيل الانصراف عند المغادرة' : 'Clock out when you leave') : (currentLang === 'ar' ? 'ابدأ دوامك لتحديث الحالة' : 'Clock in to update status')}</small></article>
+                    <article class="card ui02-command-card ui02-command-card--blue ui02-command-card--attendance"><span>${currentLang === 'ar' ? 'الحضور اليوم' : 'Attendance today'}</span><strong>${escapeHTML(dashboardAttendanceLabel)}</strong><small>${isClockedIn ? (currentLang === 'ar' ? 'تسجيل الانصراف عند المغادرة' : 'Clock out when you leave') : (currentLang === 'ar' ? 'ابدأ دوامك لتحديث الحالة' : 'Clock in to update status')}</small>${isClockedIn
+                        ? `<button id="attendanceClockButton" class="employees-radar-clockout dashboard-attendance-clockout" onclick="handleClockOutPrompt('${todayAttendance.id}')" aria-label="${escapeHTML(t('attendance_clock_out'))}">${currentLang === 'ar' ? `<span class="dashboard-clock-button-label">${escapeHTML(t('attendance_clock_out'))}</span><i data-lucide="log-out" aria-hidden="true"></i>` : `<i data-lucide="log-out" aria-hidden="true"></i><span class="dashboard-clock-button-label">${escapeHTML(t('attendance_clock_out'))}</span>`}</button>`
+                        : `<button id="attendanceClockButton" class="btn-primary dashboard-attendance-clockin" onclick="handleClockIn()">${t('attendance_clock_in')}</button>`
+                    }</article>
                     <article class="card ui02-command-card ui02-command-card--teal"><span>${currentLang === 'ar' ? 'الإعلانات' : 'Announcements'}</span><strong>${dashboardAnnouncementCount}</strong><small>${currentLang === 'ar' ? 'تحديثات للفريق' : 'Updates for your team'}</small></article>
                     <article class="card ui02-command-card ui02-command-card--amber"><span>${currentLang === 'ar' ? 'طلبات قيد المراجعة' : 'Requests to review'}</span><strong>${dashboardPendingRequestCount}</strong><small>${currentLang === 'ar' ? 'تحتاج إلى متابعتك' : 'Waiting for your attention'}</small></article>
                 </div>
