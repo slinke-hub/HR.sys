@@ -1664,6 +1664,57 @@ html[data-platform="android"] .sidebar-nav > .nav-item {
   grid-template-columns: minmax(0, 1fr);
 }
 
+#viewContainer .ui02-admin-control-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+#viewContainer .ui02-admin-control-section > .ui02-admin-banner,
+#viewContainer .ui02-admin-control-section > .ui02-admin-tools-grid {
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+
+#viewContainer .ui02-admin-tools-grid {
+  grid-template-columns: minmax(0, 1.12fr) minmax(18rem, .88fr);
+  align-items: start;
+}
+
+#viewContainer .ui02-employees-radar-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+#viewContainer .ui02-radar-primary,
+#viewContainer .ui02-radar-primary > .employees-radar-card {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+#viewContainer .ui02-radar-followup-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+  min-inline-size: 0;
+}
+
+#viewContainer .ui02-dashboard-work-focus-slot,
+#viewContainer .ui02-dashboard-last-login-slot {
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+
+#viewContainer .ui02-dashboard-work-focus,
+#viewContainer .ui02-dashboard-last-login-slot > .ui02-last-login-card {
+  block-size: 100%;
+  min-inline-size: 0;
+}
+
 #viewContainer .ui02-dashboard-announcements,
 #viewContainer .ui02-dashboard-news {
   inline-size: 100%;
@@ -1807,6 +1858,11 @@ html[data-platform="android"] .sidebar-nav > .nav-item {
 }
 
 @media (max-width: 760px) {
+  #viewContainer .ui02-admin-tools-grid,
+  #viewContainer .ui02-radar-followup-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   #viewContainer .ui02-dashboard-snapshot-section .ui02-command-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
