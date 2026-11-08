@@ -578,6 +578,7 @@ let recentLoginsChannel = null;
 let recentLoginsPollInterval = null;
 let dashboardKpiChannel = null;
 let dashboardKpiPollInterval = null;
+let dashboardNewsCarouselTimer = null;
 let dashboardKpiRefreshTimer = null;
 let dashboardKpiRefreshInFlight = false;
 let dashboardKpiRefreshQueued = false;
@@ -3166,13 +3167,14 @@ async function renderTeamHierarchyWidget() {
     }
     if (!allUsers || allUsers.length === 0) {
         return `
-            <div class="card col-span-12">
-                <div class="card-title" style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+            <details class="card col-span-12 ui02-team-hierarchy" open>
+                <summary class="ui02-team-summary">
                     <i data-lucide="git-fork" style="width: 20px; height: 20px; color: var(--color-accent);"></i>
                     <span>${t('team_hierarchy')}</span>
-                </div>
-                <p style="color:var(--color-text-secondary); font-size:0.85rem; padding: 1rem 0;">${t('team_no_members')}</p>
-            </div>
+                    <i class="ui02-team-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
+                </summary>
+                <p class="ui02-team-empty">${t('team_no_members')}</p>
+            </details>
         `;
     }
 
@@ -3250,20 +3252,17 @@ async function renderTeamHierarchyWidget() {
     const treeHTML = rootUsers.map(u => renderNodeSquare(u, globalVisited)).join('');
 
     return `
-        <div class="card col-span-12">
-            <div class="card-title" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <i data-lucide="git-fork" style="width: 20px; height: 20px; color: var(--color-accent);"></i>
-                    <span>${t('team_hierarchy')}</span>
-                </div>
-                <span class="status-badge info" style="font-size: 0.75rem;">${t('team_members')} ${allUsers.length}</span>
-            </div>
+        <details class="card col-span-12 ui02-team-hierarchy" open>
+            <summary class="ui02-team-summary">
+                <span class="ui02-team-summary-title"><i data-lucide="git-fork" aria-hidden="true"></i><span>${t('team_hierarchy')}</span></span>
+                <span class="ui02-team-summary-meta"><span class="status-badge info" style="font-size: 0.75rem;">${t('team_members')} ${allUsers.length}</span><i class="ui02-team-chevron" data-lucide="chevron-down" aria-hidden="true"></i></span>
+            </summary>
             <div class="hierarchy-square-tree" style="max-height: 480px; overflow-x: auto; overflow-y: auto;">
                 <div style="display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; width: 100%;">
                     ${treeHTML}
                 </div>
             </div>
-        </div>
+        </details>
     `;
 }
 
@@ -3273,6 +3272,48 @@ async function translateSaudiNewsTitle(title) {
     // wait on five avoidable network requests and conflicted with the app's
     // bilingual content policy.
     return title;
+}
+
+function stopDashboardNewsCarousel() {
+    if (dashboardNewsCarouselTimer) clearInterval(dashboardNewsCarouselTimer);
+    dashboardNewsCarouselTimer = null;
+}
+
+function initializeDashboardNewsCarousel() {
+    stopDashboardNewsCarousel();
+    const carousel = document.getElementById('dashboardNewsCarousel');
+    if (!carousel) return;
+
+    const slides = [...carousel.querySelectorAll('[data-news-slide]')];
+    if (slides.length < 2 || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+    let activeIndex = 0;
+    const position = carousel.querySelector('[data-news-position]');
+    const showSlide = nextIndex => {
+        activeIndex = (nextIndex + slides.length) % slides.length;
+        slides.forEach((slide, index) => {
+            const isActive = index === activeIndex;
+            slide.hidden = !isActive;
+            slide.setAttribute('aria-hidden', String(!isActive));
+        });
+        if (position) position.textContent = `${activeIndex + 1} / ${slides.length}`;
+    };
+    const start = () => {
+        if (!carousel.matches(':hover') && !carousel.contains(document.activeElement) && !dashboardNewsCarouselTimer) {
+            dashboardNewsCarouselTimer = setInterval(() => showSlide(activeIndex + 1), 10000);
+        }
+    };
+
+    carousel.querySelector('[data-news-previous]')?.addEventListener('click', () => showSlide(activeIndex - 1));
+    carousel.querySelector('[data-news-next]')?.addEventListener('click', () => showSlide(activeIndex + 1));
+    carousel.addEventListener('pointerenter', stopDashboardNewsCarousel);
+    carousel.addEventListener('pointerleave', start);
+    carousel.addEventListener('focusin', stopDashboardNewsCarousel);
+    carousel.addEventListener('focusout', event => {
+        if (!carousel.contains(event.relatedTarget)) start();
+    });
+    showSlide(0);
+    start();
 }
 
 window.openHierarchyEmployeeInfo = function (userId) {
@@ -3406,18 +3447,21 @@ async function renderDashboard() {
     }
 
     // News Hub
-    let newsHTML = '<p>Failed to load news.</p>';
+    let newsHTML = `<p class="ui02-news-empty">${currentLang === 'ar' ? 'تعذر تحميل الأخبار.' : 'News could not be loaded.'}</p>`;
+    let newsSlideCount = 0;
+    const reducedMotionPreferred = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
     try {
         if (newsRes && newsRes.ok) {
             const newsData = await newsRes.json();
             if (newsData.status === 'ok') {
                 const approvedSaudiItems = newsData.items.slice(0, 5);
                 const localizedTitles = await Promise.all(approvedSaudiItems.map(item => translateSaudiNewsTitle(item.title)));
+                newsSlideCount = approvedSaudiItems.length;
                 newsHTML = approvedSaudiItems.map((item, index) => `
-                    <div style="margin-bottom: 1rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem;">
-                        <a href="${escapeHTML(item.link)}" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">${escapeHTML(localizedTitles[index])}</a>
-                        <div style="font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem;">${new Date(item.pubDate).toLocaleDateString()}</div>
-                    </div>
+                    <article class="ui02-news-slide" data-news-slide="${index}"${index === 0 ? '' : ' hidden'} aria-roledescription="slide" aria-label="${index + 1} ${currentLang === 'ar' ? 'من' : 'of'} ${approvedSaudiItems.length}">
+                        <a href="${escapeHTML(item.link)}" target="_blank" rel="noopener noreferrer">${escapeHTML(localizedTitles[index])}</a>
+                        <time${item.pubDate ? ` datetime="${escapeHTML(item.pubDate)}"` : ''}>${item.pubDate ? new Date(item.pubDate).toLocaleDateString(currentLang === 'ar' ? 'ar-SA' : 'en') : ''}</time>
+                    </article>
                 `).join('');
             }
         }
@@ -3518,13 +3562,23 @@ async function renderDashboard() {
                 <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>${currentLang === 'ar' ? 'حاضرون الآن' : 'clocked in now'}</small><span class="employees-radar-out-count" id="employeesRadarOutCount">${clockedOutEmployees.length} ${currentLang === 'ar' ? 'انصرفوا' : 'clocked out'}</span></div><div class="employees-radar-groups" id="employeesRadarList">${radarGroups}</div></div>
             </section>
         `;
-        dashboardKpiWidgetHTML = currentUserRole === 'ADMIN' ? `<section class="card admin-kpi-card" id="dashboardKpiOverview" aria-live="polite"><div class="card-title">KPI overview</div><div class="admin-kpi-grid"><div><strong id="dashboardKpiEmployees">${allProfiles.length}</strong><span>Total employees</span></div><div><strong id="dashboardKpiClockedIn">${clockedInEmployees.length}</strong><span>Clocked in now</span></div><div><strong id="dashboardKpiOpenTasks">${openTasks}</strong><span>Open tasks</span></div><div><strong id="dashboardKpiPendingRequests">${pendingRequests}</strong><span>Pending requests</span></div></div></section>` : '';
+        dashboardKpiWidgetHTML = currentUserRole === 'ADMIN' ? `<section class="card admin-kpi-card" id="dashboardKpiOverview" aria-live="polite"><div class="card-title">${currentLang === 'ar' ? 'نظرة عامة على مؤشرات الأداء' : 'KPI overview'}</div><div class="admin-kpi-grid"><div><strong id="dashboardKpiEmployees">${allProfiles.length}</strong><span>${currentLang === 'ar' ? 'إجمالي الموظفين' : 'Total employees'}</span></div><div><strong id="dashboardKpiClockedIn">${clockedInEmployees.length}</strong><span>${currentLang === 'ar' ? 'الحاضرون الآن' : 'Clocked in now'}</span></div><div><strong id="dashboardKpiOpenTasks">${openTasks}</strong><span>${currentLang === 'ar' ? 'المهام المفتوحة' : 'Open tasks'}</span></div><div><strong id="dashboardKpiPendingRequests">${pendingRequests}</strong><span>${currentLang === 'ar' ? 'الطلبات المعلقة' : 'Pending requests'}</span></div></div></section>` : '';
         lastLoginWidgetHTML = currentUserRole === 'ADMIN' ? `<section class="card ui02-last-login-card">
                 <div class="card-title">${t('last_login')}</div>
                 <div id="recentLoginsList" aria-live="polite">${lastLoginsHTML}</div>
             </section>` : '';
         window.initializeEmployeesRadar?.(dashboardAttendance || []);
     }
+
+    const recentUpdatesHTML = `
+        <section class="card ui02-activity-panel">
+            <div class="ui02-panel-heading"><div class="card-title">${currentLang === 'ar' ? 'آخر التحديثات' : 'Recent updates'}</div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اليوم' : 'Today'}</span></div>
+            <div class="ui02-activity-list">
+                <div><i data-lucide="megaphone"></i><span>${dashboardAnnouncementCount ? (currentLang === 'ar' ? 'تم نشر إعلان جديد للفريق' : 'A new team announcement is available') : (currentLang === 'ar' ? 'لا توجد إعلانات جديدة' : 'No new announcements')}</span></div>
+                <div><i data-lucide="calendar-check-2"></i><span>${isClockedIn ? (currentLang === 'ar' ? 'تم تسجيل حضورك اليوم' : 'Your attendance is active today') : (currentLang === 'ar' ? 'لم يتم تسجيل حضور اليوم' : 'Attendance has not started today')}</span></div>
+                <div><i data-lucide="clipboard-list"></i><span>${dashboardPendingRequestCount ? `${dashboardPendingRequestCount} ${currentLang === 'ar' ? 'طلبات تحتاج للمراجعة' : 'request(s) need review'}` : (currentLang === 'ar' ? 'لا توجد طلبات معلقة' : 'No pending requests')}</span></div>
+            </div>
+        </section>`;
 
     const dashboardOpenTaskRecords = (dashboardTasks || []).filter(isOpenDashboardTask);
     const dashboardDueSoonTaskRecords = dashboardOpenTaskRecords.filter(task => {
@@ -3577,88 +3631,67 @@ async function renderDashboard() {
                             <i data-lucide="shield-check" style="width: 24px; height: 24px;"></i>
                         </div>
                         <div>
-                            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700;">Admin Control Center</h3>
-                            <p style="margin: 2px 0 0; color: var(--color-text-secondary); font-size: 0.85rem;">Access employee directory, request overrides, system settings, security logs & role simulations.</p>
+                            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700;">${currentLang === 'ar' ? 'مركز تحكم المسؤول' : 'Admin Control Center'}</h3>
+                            <p style="margin: 2px 0 0; color: var(--color-text-secondary); font-size: 0.85rem;">${currentLang === 'ar' ? 'الوصول إلى دليل الموظفين وتجاوزات الطلبات وإعدادات النظام وسجلات الأمان ومحاكاة الأدوار.' : 'Access employee directory, request overrides, system settings, security logs & role simulations.'}</p>
                         </div>
                     </div>
                     <button class="btn-primary" type="button" onclick="renderView('admin')" style="padding: 0.65rem 1.35rem; font-size: 0.9rem; border-radius: 8px; font-weight: 600;">
-                        <i data-lucide="layout-dashboard" style="margin-inline-end: 6px;"></i> Open Admin Hub
+                        <i data-lucide="layout-dashboard" style="margin-inline-end: 6px;"></i> ${currentLang === 'ar' ? 'فتح لوحة المسؤول' : 'Open Admin Hub'}
                     </button>
                 </div>
             </section>
             ` : ''}
 
-            <section class="ui02-dashboard-section ui02-dashboard-top-grid" aria-label="${currentLang === 'ar' ? 'صحة المستندات والإجراءات السريعة' : 'Document health and quick actions'}">
-                <section class="card ui02-expiry-card">
-                    <div class="ui02-panel-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صحة المستندات' : 'DOCUMENT HEALTH'}</span><div class="card-title">${currentLang === 'ar' ? 'المستندات المنتهية أو القريبة من الانتهاء' : 'Expired documents / expiring soon'}</div></div></div>
-                    ${expirationAlerts || `<p class="ui02-empty-state">${currentLang === 'ar' ? 'لا توجد مستندات تحتاج إلى متابعة.' : 'No document expirations require attention.'}</p>`}
-                </section>
-                <section class="card ui02-quick-actions">
-                    <div class="ui02-panel-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'اختصارات العمل' : 'WORK SHORTCUTS'}</span><div class="card-title">${currentLang === 'ar' ? 'إجراءات سريعة' : 'Quick actions'}</div></div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اختصارات' : 'Shortcuts'}</span></div>
-                    <div class="ui02-action-grid">
-                        <button type="button" class="ui02-action-tile" onclick="renderView('tasks')"><i data-lucide="list-checks"></i><span>${currentLang === 'ar' ? 'إدارة المهام' : 'Task manager'}</span></button>
-                        <button type="button" class="ui02-action-tile" onclick="renderView('requests')"><i data-lucide="inbox"></i><span>${currentLang === 'ar' ? 'عرض الطلبات' : 'Review requests'}</span></button>
-                        ${canViewEmployeesRadar() ? `<button type="button" class="ui02-action-tile" onclick="renderView('employees')"><i data-lucide="users-round"></i><span>${currentLang === 'ar' ? 'دليل الموظفين' : 'Employee directory'}</span></button>` : ''}
-                        ${currentUserRole === 'ADMIN' ? `<button type="button" class="ui02-action-tile" onclick="showAnnouncementModal()"><i data-lucide="megaphone"></i><span>${currentLang === 'ar' ? 'إضافة إعلان' : 'Post announcement'}</span></button>` : ''}
-                    </div>
-                </section>
-            </section>
-
-            <section class="ui02-dashboard-section ui02-dashboard-snapshot-section" aria-label="${currentLang === 'ar' ? 'ملخص اليوم' : 'Today at a glance'}">
+            <section class="ui02-dashboard-section ui02-dashboard-snapshot-section" aria-label="${currentLang === 'ar' ? 'الحضور والإعلانات والطلبات' : 'Attendance, announcements, and requests'}">
                 <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'ملخص اليوم' : 'TODAY AT A GLANCE'}</span><h2>${currentLang === 'ar' ? 'الحضور والإعلانات والطلبات' : 'Attendance, announcements, and requests'}</h2></div></div>
                 <div class="ui02-command-grid">
                     <article class="card ui02-command-card ui02-command-card--blue"><span>${currentLang === 'ar' ? 'الحضور اليوم' : 'Attendance today'}</span><strong>${escapeHTML(dashboardAttendanceLabel)}</strong><small>${isClockedIn ? (currentLang === 'ar' ? 'تسجيل الانصراف عند المغادرة' : 'Clock out when you leave') : (currentLang === 'ar' ? 'ابدأ دوامك لتحديث الحالة' : 'Clock in to update status')}</small></article>
                     <article class="card ui02-command-card ui02-command-card--teal"><span>${currentLang === 'ar' ? 'الإعلانات' : 'Announcements'}</span><strong>${dashboardAnnouncementCount}</strong><small>${currentLang === 'ar' ? 'تحديثات للفريق' : 'Updates for your team'}</small></article>
                     <article class="card ui02-command-card ui02-command-card--amber"><span>${currentLang === 'ar' ? 'طلبات قيد المراجعة' : 'Requests to review'}</span><strong>${dashboardPendingRequestCount}</strong><small>${currentLang === 'ar' ? 'تحتاج إلى متابعتك' : 'Waiting for your attention'}</small></article>
-                    ${canUsePersonalLeaveWidgets ? `<article class="card ui02-command-card ui02-command-card--violet"><span>${currentLang === 'ar' ? 'الرصيد المتاح' : 'Leave available'}</span><strong>${annualAvailable.toFixed(1)}</strong><small>${currentLang === 'ar' ? 'حتى نهاية العام' : 'Available this year'}</small></article>` : ''}
                 </div>
             </section>
 
-            ${canUsePersonalLeaveWidgets ? `
-            <section class="ui02-dashboard-section ui02-personal-widgets" aria-label="${currentLang === 'ar' ? 'مزايا الإجازات الشخصية' : 'Personal leave widgets'}">
-                <section class="card ui02-leave-card annual-leave-widget">
-                    <div class="annual-leave-widget-title"><i data-lucide="plane-takeoff"></i><span>${t('dashboard_annual_leave')}</span></div>
-                    <div class="annual-leave-widget-balance"><i data-lucide="luggage"></i><strong>${annualAvailable.toFixed(2)}</strong></div>
-                    <div class="annual-leave-widget-date">${t('dashboard_days_available_as_of')} ${annualBalanceAsOf}</div>
-                    <div class="annual-leave-widget-breakdown"><span>${annualRequested.toFixed(2)} ${t('dashboard_days_requested')}</span><span>${annualUtilized.toFixed(2)} ${t('dashboard_days_utilized')}</span><span>${annualAvailableByYearEnd.toFixed(2)} ${t('dashboard_days_available_year_end')}</span></div>
-                </section>
-                <section class="card ui02-short-leave-card short-leave-card">
-                    <div class="short-leave-title"><i data-lucide="person-standing"></i><span>${t('dashboard_short_leave')}</span></div>
-                    <div class="short-leave-reasons"><label><input type="radio" name="dashboardShortLeaveReason" value="I am running late to the office."> ${t('dashboard_short_late')}</label><label><input type="radio" name="dashboardShortLeaveReason" value="I will be out for a meeting."> ${t('dashboard_short_meeting')}</label><label><input type="radio" name="dashboardShortLeaveReason" value="I need to attend an urgent family matter."> ${t('dashboard_short_family')}</label><label><input type="radio" name="dashboardShortLeaveReason" value="I have an important outing to run."> ${t('dashboard_short_outing')}</label></div>
-                    <div class="short-leave-durations"><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(15)">${t('dashboard_15_minutes')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(60)">${t('dashboard_1_hour')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(120)">${t('dashboard_2_hours')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(180)">${t('dashboard_3_hours')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(1440)">${t('dashboard_1_day')}</button></div>
-                </section>
+            <section class="card ui02-announcement-panel ui02-dashboard-announcements">
+                <div class="ui02-panel-heading"><div class="card-title" style="margin:0;">${t('announcements')}</div>${currentUserRole === 'ADMIN' ? `<button class="btn-primary btn-sm" onclick="showAnnouncementModal()">${t('post_announcement')}</button>` : ''}</div>
+                <div class="announcement-list ui02-scroll-region">${announcementsHTML}</div>
+            </section>
+
+            <section class="ui02-dashboard-section ui02-dashboard-kpi-section" aria-label="${currentLang === 'ar' ? 'مؤشرات الأداء وآخر التحديثات' : 'KPI overview and recent updates'}">
+                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'نبض القوى العاملة' : 'WORKFORCE PULSE'}</span><h2>${currentLang === 'ar' ? 'المؤشرات وآخر التحديثات' : 'KPI overview and recent updates'}</h2></div></div>
+                <div class="ui02-kpi-announcement-grid ui02-dashboard-kpi-updates${dashboardKpiWidgetHTML ? '' : ' ui02-dashboard-pair--single'}"><div class="ui02-dashboard-kpi-slot">${dashboardKpiWidgetHTML}</div>${recentUpdatesHTML}</div>
+            </section>
+
+            ${employeesRadarWidgetHTML || lastLoginWidgetHTML ? `<section class="ui02-dashboard-section ui02-dashboard-operating-section" aria-label="${currentLang === 'ar' ? 'صورة التشغيل وآخر تسجيل دخول' : 'Operating picture and last login'}">
+                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صورة التشغيل اليومية' : 'OPERATING PICTURE'}</span><h2>${currentLang === 'ar' ? 'ابدأ بالعمل الأهم' : 'Start with the work that matters most'}</h2></div></div>
+                <div class="ui02-operating-grid">${employeesRadarWidgetHTML ? `<div class="ui02-dashboard-operating-slot">${employeesRadarWidgetHTML}</div>` : ''}${lastLoginWidgetHTML ? `<div class="ui02-dashboard-operating-slot">${lastLoginWidgetHTML}</div>` : ''}</div>
             </section>` : ''}
 
-            <section class="ui02-dashboard-section ui02-dashboard-operating-section" aria-label="${currentLang === 'ar' ? 'صورة التشغيل اليومية' : 'Daily operating picture'}">
-                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صورة التشغيل اليومية' : 'OPERATING PICTURE'}</span><h2>${currentLang === 'ar' ? 'المتابعة تبدأ من العمل الأهم' : 'Start with the work that matters most'}</h2></div></div>
-                <div class="ui02-operating-grid">
-                    ${employeesRadarWidgetHTML ? `<div class="ui02-dashboard-operating-slot">${employeesRadarWidgetHTML}</div>` : ''}
-                    <div class="ui02-dashboard-operating-slot">
-                        <section class="card ui02-operating-overview" aria-labelledby="ui02OperatingOverviewTitle">
-                            <div class="ui02-operating-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صورة التشغيل اليوم' : 'TODAY\'S OPERATING PICTURE'}</span><h2 id="ui02OperatingOverviewTitle">${currentLang === 'ar' ? 'المهام التي تحتاج قراراً' : 'Work that needs a decision'}</h2><p>${currentLang === 'ar' ? 'أبرز المهام المفتوحة مرتبة حسب الأولوية والموعد.' : 'The most relevant open work, ranked by urgency and due date.'}</p></div><button type="button" class="btn btn-secondary ui02-inline-link" onclick="renderView('tasks')">${currentLang === 'ar' ? 'فتح إدارة المهام' : 'Open task manager'} <i data-lucide="arrow-up-right"></i></button></div>
-                            <div class="ui02-operating-metrics"><div><strong>${dashboardOpenTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مهام مفتوحة' : 'Open tasks'}</span></div><div><strong>${dashboardAttentionTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'تحتاج متابعة' : 'Need attention'}</span></div><div><strong>${dashboardDueSoonTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مستحقة هذا الأسبوع' : 'Due this week'}</span></div></div>
-                            <div class="ui02-focus-queue" aria-label="${currentLang === 'ar' ? 'قائمة المهام المهمة' : 'Focus queue'}"><div class="ui02-focus-queue-heading"><strong>${currentLang === 'ar' ? 'قائمة التركيز' : 'Focus queue'}</strong><span>${dashboardAttentionTaskRecords.length} ${currentLang === 'ar' ? 'عناصر' : 'items'}</span></div>${dashboardTaskQueueHTML}</div>
-                        </section>
-                    </div>
+            <section class="card ui02-news-panel ui02-dashboard-news" aria-label="${currentLang === 'ar' ? 'مركز الأخبار في السعودية' : 'News Hub Saudi Arabia'}">
+                <div class="ui02-panel-heading"><div class="card-title">${t('news_hub')} (${currentLang === 'ar' ? 'السعودية' : 'Saudi Arabia'})</div><span class="ui02-panel-note">${reducedMotionPreferred ? (currentLang === 'ar' ? 'استخدم الأسهم للتنقل' : 'Use the arrows to navigate') : (currentLang === 'ar' ? 'تحديث كل ١٠ ثوانٍ' : 'Changes every 10 seconds')}</span></div>
+                <div class="ui02-news-carousel" id="dashboardNewsCarousel" role="region" aria-roledescription="carousel" aria-label="${currentLang === 'ar' ? 'أخبار السعودية' : 'Saudi Arabia news'}" data-autoplay="${newsSlideCount > 1 && !reducedMotionPreferred ? 'true' : 'false'}">
+                    <div class="ui02-news-slide-track">${newsHTML}</div>
+                    ${newsSlideCount > 1 ? `<div class="ui02-news-controls"><button type="button" class="btn btn-secondary" data-news-previous aria-label="${currentLang === 'ar' ? 'الخبر السابق' : 'Previous news item'}"><i data-lucide="chevron-left" aria-hidden="true"></i></button><span class="ui02-news-position" data-news-position aria-live="polite">1 / ${newsSlideCount}</span><button type="button" class="btn btn-secondary" data-news-next aria-label="${currentLang === 'ar' ? 'الخبر التالي' : 'Next news item'}"><i data-lucide="chevron-right" aria-hidden="true"></i></button></div>` : ''}
                 </div>
             </section>
 
-            <section class="ui02-dashboard-section ui02-dashboard-kpi-section" aria-label="${currentLang === 'ar' ? 'مؤشرات الأداء والإعلانات' : 'KPI overview and announcements'}">
-                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'نبض القوى العاملة' : 'WORKFORCE PULSE'}</span><h2>${currentLang === 'ar' ? 'المؤشرات والإعلانات' : 'KPI overview and announcements'}</h2></div></div>
-                <div class="ui02-kpi-announcement-grid"><div class="ui02-dashboard-kpi-slot">${dashboardKpiWidgetHTML}</div><section class="card ui02-announcement-panel"><div class="ui02-panel-heading"><div class="card-title" style="margin:0;">${t('announcements')}</div>${currentUserRole === 'ADMIN' ? `<button class="btn-primary btn-sm" onclick="showAnnouncementModal()">${t('post_announcement')}</button>` : ''}</div><div class="announcement-list ui02-scroll-region">${announcementsHTML}</div></section></div>
+            <section class="ui02-dashboard-section ui02-dashboard-team-section" aria-label="${currentLang === 'ar' ? 'التسلسل الهرمي للفريق' : 'Team hierarchy'}"><div class="ui02-team-widgets">${await renderTeamHierarchyWidget()}</div></section>
+
+            <section class="ui02-dashboard-section ui02-dashboard-top-grid" aria-label="${currentLang === 'ar' ? 'صحة المستندات والإجراءات السريعة' : 'Document health and quick actions'}">
+                <section class="card ui02-expiry-card"><div class="ui02-panel-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صحة المستندات' : 'DOCUMENT HEALTH'}</span><div class="card-title">${currentLang === 'ar' ? 'المستندات المنتهية أو القريبة من الانتهاء' : 'Expired documents / expiring soon'}</div></div></div>${expirationAlerts || `<p class="ui02-empty-state">${currentLang === 'ar' ? 'لا توجد مستندات تحتاج إلى متابعة.' : 'No document expirations require attention.'}</p>`}</section>
+                <section class="card ui02-quick-actions"><div class="ui02-panel-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'اختصارات العمل' : 'WORK SHORTCUTS'}</span><div class="card-title">${currentLang === 'ar' ? 'إجراءات سريعة' : 'Quick actions'}</div></div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اختصارات' : 'Shortcuts'}</span></div><div class="ui02-action-grid"><button type="button" class="ui02-action-tile" onclick="renderView('tasks')"><i data-lucide="list-checks"></i><span>${currentLang === 'ar' ? 'إدارة المهام' : 'Task manager'}</span></button><button type="button" class="ui02-action-tile" onclick="renderView('requests')"><i data-lucide="inbox"></i><span>${currentLang === 'ar' ? 'عرض الطلبات' : 'Review requests'}</span></button>${canViewEmployeesRadar() ? `<button type="button" class="ui02-action-tile" onclick="renderView('employees')"><i data-lucide="users-round"></i><span>${currentLang === 'ar' ? 'دليل الموظفين' : 'Employee directory'}</span></button>` : ''}${currentUserRole === 'ADMIN' ? `<button type="button" class="ui02-action-tile" onclick="showAnnouncementModal()"><i data-lucide="megaphone"></i><span>${currentLang === 'ar' ? 'إضافة إعلان' : 'Post announcement'}</span></button>` : ''}</div></section>
             </section>
 
-            <section class="ui02-dashboard-section ui02-dashboard-support-section" aria-label="${currentLang === 'ar' ? 'النشاط ومساحة العمل الآمنة' : 'Activity and secure workspace'}">
-                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'النشاط والأمان' : 'ACTIVITY & SECURITY'}</span><h2>${currentLang === 'ar' ? 'آخر ما حدث ومساحة العمل' : 'Recent activity and workspace context'}</h2></div></div>
-                <div class="ui02-support-grid">
-                    ${lastLoginWidgetHTML}
-                    <section class="card ui02-news-panel"><div class="card-title">${t('news_hub')}</div><div class="ui02-scroll-region">${newsHTML}</div></section>
-                    <section class="card ui02-activity-panel"><div class="ui02-panel-heading"><div class="card-title">${currentLang === 'ar' ? 'آخر التحديثات' : 'Recent updates'}</div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اليوم' : 'Today'}</span></div><div class="ui02-activity-list"><div><i data-lucide="megaphone"></i><span>${dashboardAnnouncementCount ? (currentLang === 'ar' ? 'تم نشر إعلان جديد للفريق' : 'A new team announcement is available') : (currentLang === 'ar' ? 'لا توجد إعلانات جديدة' : 'No new announcements')}</span></div><div><i data-lucide="calendar-check-2"></i><span>${isClockedIn ? (currentLang === 'ar' ? 'تم تسجيل حضورك اليوم' : 'Your attendance is active today') : (currentLang === 'ar' ? 'لم يتم تسجيل حضور اليوم' : 'Attendance has not started today')}</span></div><div><i data-lucide="clipboard-list"></i><span>${dashboardPendingRequestCount ? `${dashboardPendingRequestCount} ${currentLang === 'ar' ? 'طلبات تحتاج للمراجعة' : 'request(s) need review'}` : (currentLang === 'ar' ? 'لا توجد طلبات معلقة' : 'No pending requests')}</span></div></div></section>
-                    <section class="card ui02-rail-note"><i data-lucide="shield-check"></i><div><strong>${currentLang === 'ar' ? 'مساحة آمنة' : 'Secure workspace'}</strong><p>${currentLang === 'ar' ? 'تظهر الإجراءات حسب صلاحيات حسابك.' : 'Actions are shown according to your account permissions.'}</p></div></section>
-                </div>
+            ${canUsePersonalLeaveWidgets ? `<section class="ui02-dashboard-section ui02-personal-widgets" aria-label="${currentLang === 'ar' ? 'مزايا الإجازات الشخصية' : 'Personal leave widgets'}">
+                <section class="card ui02-leave-card annual-leave-widget"><div class="annual-leave-widget-title"><i data-lucide="plane-takeoff"></i><span>${t('dashboard_annual_leave')}</span></div><div class="annual-leave-widget-balance"><i data-lucide="luggage"></i><strong>${annualAvailable.toFixed(2)}</strong></div><div class="annual-leave-widget-date">${t('dashboard_days_available_as_of')} ${annualBalanceAsOf}</div><div class="annual-leave-widget-breakdown"><span>${annualRequested.toFixed(2)} ${t('dashboard_days_requested')}</span><span>${annualUtilized.toFixed(2)} ${t('dashboard_days_utilized')}</span><span>${annualAvailableByYearEnd.toFixed(2)} ${t('dashboard_days_available_year_end')}</span></div></section>
+                <section class="card ui02-short-leave-card short-leave-card"><div class="short-leave-title"><i data-lucide="person-standing"></i><span>${t('dashboard_short_leave')}</span></div><div class="short-leave-reasons"><label><input type="radio" name="dashboardShortLeaveReason" value="I am running late to the office."> ${t('dashboard_short_late')}</label><label><input type="radio" name="dashboardShortLeaveReason" value="I will be out for a meeting."> ${t('dashboard_short_meeting')}</label><label><input type="radio" name="dashboardShortLeaveReason" value="I need to attend an urgent family matter."> ${t('dashboard_short_family')}</label><label><input type="radio" name="dashboardShortLeaveReason" value="I have an important outing to run."> ${t('dashboard_short_outing')}</label></div><div class="short-leave-durations"><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(15)">${t('dashboard_15_minutes')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(60)">${t('dashboard_1_hour')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(120)">${t('dashboard_2_hours')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(180)">${t('dashboard_3_hours')}</button><button type="button" class="short-leave-duration-button" onclick="submitDashboardShortLeave(1440)">${t('dashboard_1_day')}</button></div></section>
+            </section>` : ''}
+
+            <section class="ui02-dashboard-section ui02-dashboard-operating-section" aria-label="${currentLang === 'ar' ? 'قائمة المهام المهمة' : 'Work focus'}">
+                <div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'متابعة العمل' : 'WORK FOCUS'}</span><h2>${currentLang === 'ar' ? 'المهام التي تحتاج قراراً' : 'Work that needs a decision'}</h2></div></div>
+                <section class="card ui02-operating-overview"><div class="ui02-operating-heading"><div><p>${currentLang === 'ar' ? 'أبرز المهام المفتوحة مرتبة حسب الأولوية والموعد.' : 'The most relevant open work, ranked by urgency and due date.'}</p></div><button type="button" class="btn btn-secondary ui02-inline-link" onclick="renderView('tasks')">${currentLang === 'ar' ? 'فتح إدارة المهام' : 'Open task manager'} <i data-lucide="arrow-up-right"></i></button></div><div class="ui02-operating-metrics"><div><strong>${dashboardOpenTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مهام مفتوحة' : 'Open tasks'}</span></div><div><strong>${dashboardAttentionTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'تحتاج متابعة' : 'Need attention'}</span></div><div><strong>${dashboardDueSoonTaskRecords.length}</strong><span>${currentLang === 'ar' ? 'مستحقة هذا الأسبوع' : 'Due this week'}</span></div></div><div class="ui02-focus-queue" aria-label="${currentLang === 'ar' ? 'قائمة المهام المهمة' : 'Focus queue'}"><div class="ui02-focus-queue-heading"><strong>${currentLang === 'ar' ? 'قائمة التركيز' : 'Focus queue'}</strong><span>${dashboardAttentionTaskRecords.length} ${currentLang === 'ar' ? 'عناصر' : 'items'}</span></div>${dashboardTaskQueueHTML}</div></section>
             </section>
 
-            <section class="ui02-dashboard-section ui02-dashboard-team-section" aria-label="${currentLang === 'ar' ? 'التسلسل الهرمي للفريق' : 'Team hierarchy'}"><div class="ui02-section-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'هيكل الفريق' : 'TEAM STRUCTURE'}</span><h2>${currentLang === 'ar' ? 'التسلسل الهرمي للفريق' : 'Team hierarchy'}</h2></div></div><div class="ui02-team-widgets">${await renderTeamHierarchyWidget()}</div></section>
+            <section class="card ui02-rail-note"><i data-lucide="shield-check"></i><div><strong>${currentLang === 'ar' ? 'مساحة آمنة' : 'Secure workspace'}</strong><p>${currentLang === 'ar' ? 'تظهر الإجراءات حسب صلاحيات حسابك.' : 'Actions are shown according to your account permissions.'}</p></div></section>
             </main>
         </div>
 
@@ -13049,6 +13082,7 @@ window.renderView = async function (viewId, isBack = false) {
     if (viewId === 'tasks_v2') viewId = 'tasks';
     // Community has been retired; send old links/bookmarks to the dashboard.
     if (viewId === 'community') viewId = 'dashboard';
+    if (viewId !== 'dashboard') stopDashboardNewsCarousel();
     if (viewId !== 'crm') window.MogamCrmDashboard?.unmount?.();
     document.body.classList.remove('crm-dashboard-active');
     currentView = viewId;
@@ -13211,6 +13245,7 @@ window.renderView = async function (viewId, isBack = false) {
         } catch (e) {
             console.error("lucide error:", e);
         }
+        if (viewId === 'dashboard') initializeDashboardNewsCarousel();
         if (viewId === 'analytics') setTimeout(initCharts, 100);
         if (viewId === 'admin_page_access') setTimeout(() => window.filterAdminPageAccess?.(), 0);
         if (viewId === 'dashboard' || viewId === 'admin') startRecentLoginsRealtime();
