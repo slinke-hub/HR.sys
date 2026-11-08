@@ -14,7 +14,7 @@ assert.match(html, /id="appNavigationToggle"[^>]+onclick="window\.openMobileNavi
 assert.ok(html.indexOf('id="appNavigationToggle"') < html.indexOf('class="header-logo"'), 'Hamburger is adjacent before the logo in the leading header group');
 assert.doesNotMatch(html, /<nav class="header-navigation"/, 'The duplicated horizontal module row is removed');
 assert.match(html, /id="mobileMoreNav"[^>]+onclick="window\.openMobileNavigation\(this\)"/, 'Mobile More opens the same drawer and supplies its focus-restoration target');
-assert.match(html, /js\/app\.js\?v=2026110401/, 'Application script cache key remains current');
+assert.match(html, /js\/app\.js\?v=2026110803/, 'Application script cache key remains current');
 assert.match(html, /css\/layout\.css\?v=2026100801/, 'Header and login layout changes receive a fresh stylesheet cache key');
 assert.match(html, /css\/components\.css\?v=2026110401/, 'The late component header override retains its current stylesheet cache key');
 
@@ -77,8 +77,8 @@ const darkTokens = variables.match(/\[data-theme="dark"\]\s*\{([\s\S]*?)\n\}/)?.
 assert.ok(lightTokens && darkTokens, 'Both theme definitions remain present');
 assert.match(lightTokens, /--nav-bg:\s*#FFFFFF;/i, 'Light drawer remains an opaque light surface');
 assert.match(lightTokens, /--nav-drawer-glass:\s*#FFFFFF;/i, 'Legacy alias must not restore translucency');
-assert.match(darkTokens, /--nav-bg:\s*#0D1726;/i, 'Dark drawer remains an opaque Cyber Obsidian surface');
-assert.match(darkTokens, /--nav-drawer-glass:\s*#111B29;/i, 'Dark legacy alias matches the Cyber Obsidian drawer');
+assert.match(darkTokens, /--nav-bg:\s*#1E293B;/i, 'Dark drawer uses the slate surface token');
+assert.match(darkTokens, /--nav-drawer-glass:\s*#1E293B;/i, 'Dark legacy alias matches the slate drawer surface');
 assert.match(lastRule(layout, '.navigation-drawer-item'), /min-height:\s*48px;/,
   'Drawer rows retain generous 48px targets under the UI-01 spacing scale');
 assert.match(layout, /prefers-reduced-motion: reduce/, 'Motion respects reduced-motion preference');

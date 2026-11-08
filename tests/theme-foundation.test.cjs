@@ -17,6 +17,7 @@ const semanticTokens = [
   '--brand-primary', '--brand-primary-soft', '--action-primary-bg', '--action-primary-hover',
   '--action-primary-text', '--success', '--warning', '--danger', '--info', '--focus-ring',
   '--shadow-sm', '--shadow-md', '--shadow-lg', '--hover-surface', '--selected-surface',
+  '--accent-primary', '--status-success', '--status-warning', '--status-error',
   '--disabled-surface', '--overlay-scrim', '--overlay-surface', '--input-bg', '--nav-bg',
 ];
 const lightBlock = variables.match(/:root\s*\{([\s\S]*?)\n\}/)?.[1];
@@ -27,8 +28,8 @@ for (const token of semanticTokens) {
   assert.match(darkBlock, new RegExp(`${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`), `Dark theme is missing ${token}`);
 }
 
-// Cyber Obsidian is the approved global dark palette. Keep concrete palette
-// checks alongside contrast checks so design drift and unreadable states fail.
+// Keep concrete palette checks alongside contrast checks so design drift and
+// unreadable dark-mode states fail together.
 for (const [block, name, expected] of [
   [lightBlock, 'Light', {
     '--brand-primary': '#1B4C5F', '--brand-accent': '#168C86',
@@ -36,10 +37,14 @@ for (const [block, name, expected] of [
     '--action-primary-bg': '#1B4C5F', '--nav-item-selected': '#E2EFEE',
   }],
   [darkBlock, 'Dark', {
-    '--bg-app': '#080D16', '--bg-surface': '#111B29',
-    '--action-primary-bg': '#2A63D4', '--action-primary-hover': '#2454B5',
-    '--action-primary-text': '#FFFFFF', '--brand-primary': '#3478F6',
-    '--focus-ring': '#5C95FF',
+    '--bg-app': '#0F172A', '--bg-surface': '#1E293B',
+    '--action-primary-bg': '#60A5FA', '--action-primary-hover': '#93C5FD',
+    '--action-primary-text': '#0F172A', '--brand-primary': '#60A5FA',
+    '--text-primary': '#F1F5F9', '--text-secondary': '#CBD5E1',
+    '--text-muted': '#94A3B8', '--border-default': '#334155',
+    '--accent-primary': '#60A5FA', '--status-success': '#4ADE80',
+    '--status-warning': '#FBBF24', '--status-error': '#F87171',
+    '--focus-ring': '#93C5FD',
   }],
 ]) {
   for (const [token, expectedValue] of Object.entries(expected)) {
@@ -72,6 +77,8 @@ function contrast(a, b) {
 for (const [name, block] of [['Light', lightBlock], ['Dark', darkBlock]]) {
   for (const [foreground, background, minimum] of [
     ['--text-primary', '--bg-app', 4.5],
+    ['--text-primary', '--bg-surface', 4.5],
+    ['--text-primary', '--bg-surface-elevated', 4.5],
     ['--text-secondary', '--bg-surface', 4.5],
     ['--input-text', '--input-bg', 4.5],
     ['--input-placeholder', '--input-bg', 4.5],
@@ -88,6 +95,17 @@ for (const [name, block] of [['Light', lightBlock], ['Dark', darkBlock]]) {
   assert.notEqual(tokenValue(block, '--action-primary-bg'), tokenValue(block, '--brand-primary-soft'),
     'Primary actions must remain distinct from quiet selected surfaces');
 }
+for (const [foreground, background] of [
+  ['--text-muted', '--bg-app'], ['--text-muted', '--bg-surface'],
+  ['--accent-primary', '--bg-app'], ['--accent-primary', '--bg-surface'],
+  ['--status-success', '--bg-surface'], ['--status-warning', '--bg-surface'],
+  ['--status-error', '--bg-surface'],
+  ['--status-success', '--success-soft'], ['--status-warning', '--warning-soft'],
+  ['--status-error', '--danger-soft'], ['--accent-primary', '--brand-primary-soft'],
+]) {
+  assert.ok(contrast(tokenValue(darkBlock, foreground), tokenValue(darkBlock, background)) >= 4.5,
+    'Dark ' + foreground + ' against ' + background + ' must meet 4.5:1');
+}
 assert.match(lightBlock, /--space-unit:\s*8px/, 'UI-01 uses the approved 8px rhythm');
 assert.match(lightBlock, /--radius-md:\s*8px/, 'Shared controls use a consistent radius');
 assert.match(lightBlock, /--radius-lg:\s*16px/, 'Elevated surfaces use a consistent radius');
@@ -102,7 +120,14 @@ assert.ok(html.indexOf(foundationHref) > html.indexOf('css/crm-tailwind.css'), '
 const globalThemeHref = html.match(/<link[^>]+href="([^"]*cyber-obsidian-theme\.css[^"]*)"/)?.[1];
 assert.ok(globalThemeHref, 'HTML must load the global Cyber Obsidian theme layer');
 assert.ok(html.indexOf(globalThemeHref) > html.indexOf('css/ui-02-structural-layout.css'), 'Global Cyber Obsidian layer must load after page-specific styles');
-assert.match(variables, /Cyber Obsidian: one global dark-mode identity/, 'Dark semantic tokens must document the Cyber Obsidian identity');
+assert.match(html, /css\/variables\.css\?v=2026110801/, 'Dark palette variables receive a fresh cache key');
+assert.match(html, /css\/cyber-obsidian-theme\.css\?v=2026110801/, 'Dark typography rules receive a fresh cache key');
+assert.match(variables, /Dark-mode semantic palette: slate surfaces/, 'Dark semantic tokens must document the slate palette');
+assert.match(variables, /--opacity-scrim:\s*0\.72/);
+assert.match(variables, /--opacity-selection:\s*0\.22/);
+assert.match(variables, /--opacity-focus-glow:\s*42%/);
+assert.match(globalTheme, /font-weight:\s*450/);
+assert.match(globalTheme, /letter-spacing:\s*0\.015em/);
 assert.match(globalTheme, /html\[data-theme="dark"\][\s\S]*\.sidebar[\s\S]*var\(--nav-bg\)/, 'Global theme must cover shared navigation surfaces');
 assert.match(globalTheme, /html\[data-theme="dark"\][\s\S]*\.modal \.modal-content[\s\S]*var\(--overlay-surface\)/, 'Global theme must cover modal surfaces');
 assert.match(globalTheme, /html\[data-theme="dark"\][\s\S]*\.tw-bg-white[\s\S]*var\(--bg-surface\)/, 'Global theme must cover legacy CRM neutral utilities');

@@ -90,11 +90,11 @@ function stylesheet(includeGlobal, before) {
         };
       });
       if (scenario.theme === 'dark') {
-        assert.equal(state.theme, '#080D16', `${scenario.name}: Cyber Obsidian app token`);
-        assert.equal(state.body, 'rgb(8, 13, 22)', `${scenario.name}: body surface`);
-        assert.equal(state.card, 'rgb(17, 27, 41)', `${scenario.name}: card surface`);
-        assert.equal(state.sidebar, 'rgb(13, 23, 38)', `${scenario.name}: navigation surface`);
-        assert.equal(state.input, 'rgb(13, 23, 38)', `${scenario.name}: input surface`);
+        assert.equal(state.theme, '#0F172A', `${scenario.name}: dark app token`);
+        assert.equal(state.body, 'rgb(15, 23, 42)', `${scenario.name}: body surface`);
+        assert.equal(state.card, 'rgb(30, 41, 59)', `${scenario.name}: card surface`);
+        assert.equal(state.sidebar, 'rgb(30, 41, 59)', `${scenario.name}: navigation surface`);
+        assert.equal(state.input, 'rgb(30, 41, 59)', `${scenario.name}: input surface`);
       }
       assert.deepEqual(state.overflow, [], `${scenario.name}: no viewport overflow ${JSON.stringify(state)}`);
       if (scenario.capture) await page.screenshot({ path: path.join(outputDir, `${scenario.captureName}-after.png`), fullPage: true });
