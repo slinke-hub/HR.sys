@@ -221,6 +221,26 @@ html[data-theme="dark"] :where(.btn-danger:hover, .btn-destructive:hover) {
   border-color: var(--action-danger-hover);
 }
 
+/* Dark-mode reading comfort: slightly stronger type and subtle tracking improve
+   clarity without relying on pure-white text or pitch-black surfaces. */
+html[data-theme="dark"] body {
+  color: var(--text-primary);
+  background-color: var(--bg-app);
+  font-weight: 450;
+  letter-spacing: 0.015em;
+  -webkit-font-smoothing: antialiased;
+}
+
+html[data-theme="dark"] :where(button, input, select, textarea, table, th, td, label, small) {
+  font-family: inherit;
+  letter-spacing: inherit;
+}
+
+html[data-theme="dark"] :where(input, select, textarea)::placeholder {
+  color: var(--input-placeholder);
+  opacity: 1;
+}
+
 @media (max-width: 700px) {
   html[data-theme="dark"] :where(.card, .panel, .section-card,
     .modal .modal-content, .side-panel) {
