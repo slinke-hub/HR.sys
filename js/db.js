@@ -2164,6 +2164,23 @@ const db = {
             return [];
         }
     },
+    async executeCrmContactDiscussionTask(taskId, action, category = null, note = null) {
+        if (!supabaseClient || !taskId) return { success: false, error: new Error('Task is required.') };
+        try {
+            const { data, error } = await supabaseClient.rpc('execute_crm_contact_discussion_task', {
+                p_task_id: taskId,
+                p_action: action,
+                p_category: category,
+                p_note: note
+            });
+            if (error) throw error;
+            // This scoped RPC intentionally suppresses task notification emails.
+            return { success: true, data };
+        } catch (error) {
+            console.error('executeCrmContactDiscussionTask Error:', error);
+            return { success: false, error };
+        }
+    },
     async startTask(taskId) {
         if (!supabaseClient || !taskId) return { success: false, error: new Error('Task is required.') };
         try {

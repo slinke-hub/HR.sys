@@ -395,6 +395,12 @@ const canMarketingManagerEditTask = task => {
     return isMarketingManagedTaskList(list);
 };
 const canEditTaskRecord = task => !!task && (isTaskAdmin() || task.created_by === currentUser?.id || canMarketingManagerEditTask(task));
+const canExecuteMq20ContactDiscussionTask = task => !!task
+    && isMq20Profile()
+    && task.crm_workflow_kind === 'CONTACT_DISCUSSION'
+    && !task.archived_at
+    && !!currentUser?.id
+    && (task.assignee_id === currentUser.id || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser.id)));
 const canChangeTaskStageRecord = task => {
     if (!task || isMq20Profile()) return false;
     const list = (window.taskListsCache || []).find(item => item.id === task.task_list_id);
@@ -8169,6 +8175,7 @@ function myDayActionButton(task, action, label, kind = '') {
 
 async function renderMyDay() {
     const tasks = await db.fetchMyDay();
+    window.myDayTaskById = Object.fromEntries((tasks || []).filter(task => task?.id).map(task => [task.id, task]));
     const groups = ['DO_NOW', 'DUE_TODAY', 'WAITING', 'BLOCKED', 'OVERDUE', 'NEXT', 'COMPLETED_TODAY'];
     const grouped = Object.fromEntries(groups.map(section => [section, []]));
     (tasks || []).forEach(task => {
@@ -8190,6 +8197,18 @@ async function renderMyDay() {
         let actions = '';
         if (dependencyBlocked) {
             actions = `<span class="my-day-dependency-note"><i data-lucide="lock-keyhole"></i>${escapeHTML(taskDetailText('Waiting for previous task', 'بانتظار المهمة السابقة'))}${task.blocking_task_title ? `: ${escapeHTML(task.blocking_task_title)}` : ''}</span>`;
+        } else if (canExecuteMq20ContactDiscussionTask(task)) {
+            const taskStatus = String(task.status || '').trim().toLowerCase();
+            if (taskStatus === 'pending approval' || !['todo', 'in_progress', 'review'].includes(taskStatus)) {
+                actions = '';
+            } else if (state === 'WAITING' || state === 'BLOCKED') {
+                actions = myDayActionButton(task, 'resume', taskDetailText('Resume', 'استئناف'), 'secondary');
+            } else if (state !== 'COMPLETED_TODAY') {
+                if (taskStatus === 'todo') actions += myDayActionButton(task, 'start', taskDetailText('Start', 'بدء'), 'primary');
+                actions += myDayActionButton(task, 'waiting', taskDetailText('Waiting', 'انتظار'), 'secondary');
+                actions += myDayActionButton(task, 'blocked', taskDetailText("I'm blocked", 'أنا متعطل'), 'warning');
+                actions += myDayActionButton(task, 'complete', taskDetailText('Complete', 'إكمال'), 'success');
+            }
         } else if (state === 'WAITING' || state === 'BLOCKED') {
             actions = myDayActionButton(task, 'resume', taskDetailText('Resume', 'استئناف'), 'secondary');
         } else if (state !== 'COMPLETED_TODAY' && String(task.status || '').toLowerCase() !== 'completed') {
@@ -8236,11 +8255,19 @@ async function renderMyDay() {
 
 window.handleMyDayAction = async function (taskId, action) {
     let result;
+    const task = window.myDayTaskById?.[taskId];
+    const scopedMq20Task = canExecuteMq20ContactDiscussionTask(task);
+    if (isMq20Profile() && (!scopedMq20Task || action === 'handoff')) {
+        return showToast(taskDetailText('This task action is not available.', 'إجراء المهمة هذا غير متاح.'), 'warning');
+    }
     if (action === 'waiting' || action === 'blocked') return window.openMyDayWorkStateModal(taskId, action);
-    if (action === 'start') result = await db.startTask(taskId);
-    if (action === 'resume') result = await db.resumeTaskProductivity(taskId);
-    if (action === 'complete') result = await db.completeTaskProductivity(taskId);
-    if (action === 'handoff') result = await db.completeAndHandOffTask(taskId);
+    if (scopedMq20Task) result = await db.executeCrmContactDiscussionTask(taskId, action.toUpperCase());
+    else {
+        if (action === 'start') result = await db.startTask(taskId);
+        if (action === 'resume') result = await db.resumeTaskProductivity(taskId);
+        if (action === 'complete') result = await db.completeTaskProductivity(taskId);
+        if (action === 'handoff') result = await db.completeAndHandOffTask(taskId);
+    }
     if (!result?.success) return showToast(result?.error?.message || taskDetailText('Unable to update task.', 'تعذر تحديث المهمة.'), 'danger');
     showToast(taskDetailText('Task updated.', 'تم تحديث المهمة.'), 'success');
     delete window.viewHTMLCache['my-day'];
@@ -8249,6 +8276,7 @@ window.handleMyDayAction = async function (taskId, action) {
 
 window.openMyDayWorkStateModal = async function (taskId, mode) {
     const blocked = mode === 'blocked';
+    const scopedMq20Task = canExecuteMq20ContactDiscussionTask(window.myDayTaskById?.[taskId]);
     const categories = blocked ? MY_DAY_BLOCKED_CATEGORIES : MY_DAY_WAITING_CATEGORIES;
     const title = blocked ? taskDetailText("I'm blocked", 'أنا متعطل') : taskDetailText('Mark as waiting', 'وضع في الانتظار');
     const existing = document.getElementById('myDayWorkStateModal');
@@ -8257,13 +8285,15 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
     modal.id = 'myDayWorkStateModal';
     modal.className = 'my-day-modal-backdrop';
     let employeeOptions = '';
-    try {
-        const employees = await db.fetchUsers(false);
-        employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>` + (employees || []).filter(employee => employee.id !== currentUser?.id).map(employee => `<option value="${escapeHTML(employee.id)}">${escapeHTML(window.formatEmployeeName?.(employee) || employee.full_name || employee.email || '')}</option>`).join('');
-    } catch (_) {
-        employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>`;
+    if (!scopedMq20Task) {
+        try {
+            const employees = await db.fetchUsers(false);
+            employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>` + (employees || []).filter(employee => employee.id !== currentUser?.id).map(employee => `<option value="${escapeHTML(employee.id)}">${escapeHTML(window.formatEmployeeName?.(employee) || employee.full_name || employee.email || '')}</option>`).join('');
+        } catch (_) {
+            employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>`;
+        }
     }
-    modal.innerHTML = `<div class="my-day-modal" role="dialog" aria-modal="true"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" title="${escapeHTML(taskDetailText('Close', 'إغلاق'))}"><i data-lucide="x" aria-hidden="true"></i></button><h2>${escapeHTML(title)}</h2><label>${escapeHTML(taskDetailText('Reason', 'السبب'))}<select id="myDayWorkCategory">${categories.map(([value, label]) => `<option value="${value}">${escapeHTML(currentLang === 'ar' ? ({CLIENT:'العميل',SUPPLIER:'المورد',MANAGEMENT:'الإدارة',APPROVAL:'الموافقة',DESIGN:'التصميم',PRODUCTION:'الإنتاج',ANOTHER_EMPLOYEE:'موظف آخر',MISSING_INFORMATION:'معلومات ناقصة',TECHNICAL_PROBLEM:'مشكلة تقنية',OTHER:'أخرى'}[value] || label) : label)}</option>`).join('')}</select></label><label>${escapeHTML(taskDetailText('Waiting for (optional)', 'بانتظار (اختياري)'))}<select id="myDayRelatedUser">${employeeOptions}</select></label><label>${escapeHTML(taskDetailText('Note (optional)', 'ملاحظة (اختيارية)'))}<textarea id="myDayWorkNote" rows="3"></textarea></label><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary my-day-modal-cancel">${escapeHTML(taskDetailText('Cancel', 'إلغاء'))}</button><button type="button" class="btn btn-primary my-day-modal-submit">${escapeHTML(taskDetailText('Save', 'حفظ'))}</button></div></div>`;
+    modal.innerHTML = `<div class="my-day-modal" role="dialog" aria-modal="true"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" title="${escapeHTML(taskDetailText('Close', 'إغلاق'))}"><i data-lucide="x" aria-hidden="true"></i></button><h2>${escapeHTML(title)}</h2><label>${escapeHTML(taskDetailText('Reason', 'السبب'))}<select id="myDayWorkCategory">${categories.map(([value, label]) => `<option value="${value}">${escapeHTML(currentLang === 'ar' ? ({CLIENT:'العميل',SUPPLIER:'المورد',MANAGEMENT:'الإدارة',APPROVAL:'الموافقة',DESIGN:'التصميم',PRODUCTION:'الإنتاج',ANOTHER_EMPLOYEE:'موظف آخر',MISSING_INFORMATION:'معلومات ناقصة',TECHNICAL_PROBLEM:'مشكلة تقنية',OTHER:'أخرى'}[value] || label) : label)}</option>`).join('')}</select></label>${scopedMq20Task ? '' : `<label>${escapeHTML(taskDetailText('Waiting for (optional)', 'بانتظار (اختياري)'))}<select id="myDayRelatedUser">${employeeOptions}</select></label>`}<label>${escapeHTML(taskDetailText('Note (optional)', 'ملاحظة (اختيارية)'))}<textarea id="myDayWorkNote" rows="3"></textarea></label><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary my-day-modal-cancel">${escapeHTML(taskDetailText('Cancel', 'إلغاء'))}</button><button type="button" class="btn btn-primary my-day-modal-submit">${escapeHTML(taskDetailText('Save', 'حفظ'))}</button></div></div>`;
     document.body.appendChild(modal);
     const close = () => modal.remove();
     modal.querySelector('.my-day-modal-close').onclick = close;
@@ -8271,9 +8301,11 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
     modal.addEventListener('click', event => { if (event.target === modal) close(); });
     modal.querySelector('.my-day-modal-submit').onclick = async () => {
         const category = modal.querySelector('#myDayWorkCategory').value;
-        const relatedUserId = modal.querySelector('#myDayRelatedUser').value || null;
+        const relatedUserId = modal.querySelector('#myDayRelatedUser')?.value || null;
         const note = modal.querySelector('#myDayWorkNote').value.trim() || null;
-        const result = blocked ? await db.markTaskBlocked(taskId, category, relatedUserId, note) : await db.markTaskWaiting(taskId, category, relatedUserId, note);
+        const result = scopedMq20Task
+            ? await db.executeCrmContactDiscussionTask(taskId, blocked ? 'BLOCK' : 'WAIT', category, note)
+            : (blocked ? await db.markTaskBlocked(taskId, category, relatedUserId, note) : await db.markTaskWaiting(taskId, category, relatedUserId, note));
         if (!result?.success) return showToast(result?.error?.message || taskDetailText('Unable to update task.', 'تعذر تحديث المهمة.'), 'danger');
         close();
         showToast(taskDetailText('Task updated.', 'تم تحديث المهمة.'), 'success');

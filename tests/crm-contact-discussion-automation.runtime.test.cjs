@@ -27,10 +27,17 @@ const extractFunction = (source, name) => {
 
 const shared = read('supabase/migrations/20260917090000_shared_business_logic_services.sql');
 const dealBackend = read('supabase/migrations/20260930102000_deal_backend_services.sql');
+const mq20Access = read('supabase/migrations/20260908110000_marketing_manager_employee_task_access.sql');
+const productivityA = read('supabase/migrations/20260930104000_productivity_phase_a.sql');
+const productivityB = read('supabase/migrations/20260930105000_productivity_phase_b.sql');
 const migration = read('supabase/migrations/20261109100000_crm_contact_discussion_automation.sql');
+const mq20Migration = read('supabase/migrations/20261109110000_mq20_contact_discussion_execution.sql');
 const taskCreate = extractFunction(shared, 'create_task_secure');
 const stageChange = extractFunction(shared, 'change_crm_deal_stage');
 const dealRead = extractFunction(dealBackend, 'get_crm_deal_secure');
+const isMq20Profile = extractFunction(mq20Access, 'is_mq20_profile');
+const productivityValidateCategory = extractFunction(productivityA, 'productivity_validate_category');
+const taskDependencyBlocked = extractFunction(productivityB, 'task_dependency_blocked');
 
 const baseline = String.raw`
 DO $$ BEGIN
@@ -45,7 +52,7 @@ $$;
 GRANT USAGE ON SCHEMA auth TO authenticated;
 GRANT EXECUTE ON FUNCTION auth.uid() TO PUBLIC;
 CREATE TABLE public.profiles (
-  id uuid PRIMARY KEY, is_active boolean DEFAULT true,
+  id uuid PRIMARY KEY, employee_id text, is_active boolean DEFAULT true,
   crm_access boolean NOT NULL DEFAULT false, financial_access boolean NOT NULL DEFAULT false
 );
 CREATE TABLE public.crm_clients (id uuid PRIMARY KEY, name text, company text);
@@ -152,7 +159,7 @@ CREATE OR REPLACE FUNCTION public.can_access_project(p_project_id uuid, p_user_i
 LANGUAGE sql STABLE AS $$ SELECT false $$;
 CREATE OR REPLACE FUNCTION public.can_add_task_to_list(p_list_id uuid, p_user_id uuid) RETURNS boolean
 LANGUAGE sql STABLE AS $$ SELECT false $$;
-`;
+` + '\n' + isMq20Profile;
 
 const assertions = String.raw`
 INSERT INTO public.profiles(id,is_active,crm_access) VALUES
@@ -379,6 +386,215 @@ VALUES ('00000000-0000-4000-8000-000000000301','Synthetic existing Design task',
 COMMIT;
 `;
 
+// Extend the same disposable database after CRM Release 1A has run. This
+// synthetic security overlay reproduces the exported MQ-20 task guard,
+// access-field guard, relevant notification triggers, and restrictive write
+// policies; unrelated Staging policy helper bodies are not mocked as if exact.
+const mq20Prerequisites = String.raw`
+UPDATE public.profiles SET employee_id = CASE id
+  WHEN '00000000-0000-4000-8000-000000000001'::uuid THEN 'MQ-20'
+  WHEN '00000000-0000-4000-8000-000000000002'::uuid THEN 'EMP-2'
+  WHEN '00000000-0000-4000-8000-000000000003'::uuid THEN 'CRM-ADMIN'
+  WHEN '00000000-0000-4000-8000-000000000004'::uuid THEN 'INACTIVE'
+  ELSE employee_id END;
+INSERT INTO public.profiles(id,employee_id,is_active,crm_access,financial_access)
+VALUES ('00000000-0000-4000-8000-000000000005','MQ-20',true,false,false);
+ALTER TABLE public.tasks
+  ADD COLUMN archived_at timestamptz,
+  ADD COLUMN started_at timestamptz,
+  ADD COLUMN completed_at timestamptz,
+  ADD COLUMN work_state text NOT NULL DEFAULT 'ACTIVE',
+  ADD COLUMN resume_status text,
+  ADD COLUMN waiting_category text,
+  ADD COLUMN waiting_related_user_id uuid,
+  ADD COLUMN waiting_note text,
+  ADD COLUMN waiting_since timestamptz,
+  ADD COLUMN blocked_category text,
+  ADD COLUMN blocked_related_user_id uuid,
+  ADD COLUMN blocked_note text,
+  ADD COLUMN blocked_since timestamptz,
+  ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now();
+CREATE TABLE public.task_waiting_history(
+  id bigserial PRIMARY KEY, task_id uuid NOT NULL, actor_id uuid, category text NOT NULL,
+  related_user_id uuid, note text, started_at timestamptz NOT NULL DEFAULT now(), resumed_at timestamptz, resumed_by uuid
+);
+CREATE TABLE public.task_blocker_history(
+  id bigserial PRIMARY KEY, task_id uuid NOT NULL, actor_id uuid, category text NOT NULL,
+  related_user_id uuid, note text, created_at timestamptz NOT NULL DEFAULT now(), resolved_at timestamptz, resolved_by uuid
+);
+CREATE TABLE public.task_activity(
+  id bigserial PRIMARY KEY, task_id uuid NOT NULL, actor_id uuid, action text NOT NULL,
+  from_status text, to_status text, metadata jsonb NOT NULL DEFAULT '{}'
+);
+CREATE TABLE public.task_dependencies(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), predecessor_task_id uuid NOT NULL,
+  successor_task_id uuid NOT NULL, removed_at timestamptz
+);
+CREATE TABLE auth.users(id uuid PRIMARY KEY, email text);
+INSERT INTO auth.users(id,email) SELECT id, 'synthetic-' || id::text || '@example.invalid' FROM public.profiles;
+CREATE TABLE public.notifications(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, message text, event_type text,
+  task_id uuid, actor_id uuid, action_url text, metadata jsonb
+);
+CREATE TABLE public.task_email_outbox(
+  id bigserial PRIMARY KEY, notification_id uuid, task_id uuid, recipient_id uuid, recipient_email text,
+  subject text, message text, action_url text, always_send boolean, context_type text, details jsonb
+);
+CREATE OR REPLACE FUNCTION public.is_mq07_design_list(uuid,uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$ SELECT false $$;
+CREATE OR REPLACE FUNCTION public.is_task_admin(uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$ SELECT false $$;
+CREATE OR REPLACE FUNCTION public.email_profile_name(uuid) RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$ SELECT 'Synthetic employee'::text $$;
+CREATE OR REPLACE FUNCTION public.queue_task_notification(uuid,uuid,text,text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN INSERT INTO public.notifications(user_id,message,event_type,task_id) VALUES($2,$4,$3,$1); END $$;
+CREATE OR REPLACE FUNCTION public.enforce_mq20_task_service_boundaries()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE caller_id uuid := auth.uid(); BEGIN
+  IF caller_id IS NULL OR NOT public.is_mq20_profile(caller_id) THEN
+    IF TG_OP='DELETE' THEN RETURN OLD; END IF; RETURN NEW;
+  END IF;
+  IF TG_TABLE_NAME='tasks' AND TG_OP='INSERT' AND NEW.created_by=caller_id AND NEW.assignee_id=caller_id
+     AND caller_id=ANY(COALESCE(NEW.assignee_ids,'{}'::uuid[])) AND NEW.crm_workflow_kind='CONTACT_DISCUSSION'
+     AND EXISTS (SELECT 1 FROM public.crm_generated_tasks g WHERE g.task_id=NEW.id AND g.deal_id=NEW.crm_deal_id AND g.kind='CONTACT_DISCUSSION') THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'MQ-20 task access is view-only' USING ERRCODE='42501';
+END $$;
+CREATE OR REPLACE FUNCTION public.protect_task_access_fields()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF auth.uid() IS NULL OR public.is_task_admin(auth.uid()) THEN RETURN NEW; END IF;
+  IF NEW.created_by IS DISTINCT FROM OLD.created_by THEN RAISE EXCEPTION 'The task creator cannot be changed' USING ERRCODE='42501'; END IF;
+  IF auth.uid() <> OLD.created_by AND (
+    NEW.assignee_id IS DISTINCT FROM OLD.assignee_id OR NEW.supervisor_id IS DISTINCT FROM OLD.supervisor_id
+    OR NEW.project_id IS DISTINCT FROM OLD.project_id OR NEW.parent_task_id IS DISTINCT FROM OLD.parent_task_id
+    OR NEW.visibility IS DISTINCT FROM OLD.visibility OR NEW.visible_to IS DISTINCT FROM OLD.visible_to
+    OR NEW.watchers IS DISTINCT FROM OLD.watchers
+  ) THEN RAISE EXCEPTION 'Only the task creator can change task access' USING ERRCODE='42501'; END IF;
+  RETURN NEW;
+END $$;
+CREATE OR REPLACE FUNCTION public.notify_task_change()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$ BEGIN RETURN NEW; END $$;
+CREATE OR REPLACE FUNCTION public.queue_task_status_notification()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$ BEGIN RETURN NEW; END $$;
+CREATE OR REPLACE FUNCTION public.record_task_activity()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF TG_OP='UPDATE' AND NEW.status IS DISTINCT FROM OLD.status THEN
+    INSERT INTO public.task_activity(task_id,actor_id,action,from_status,to_status) VALUES(NEW.id,auth.uid(),'TASK_STATUS_CHANGED',OLD.status,NEW.status);
+  END IF;
+  IF TG_OP='UPDATE' AND (NEW.assignee_id IS DISTINCT FROM OLD.assignee_id OR NEW.assignee_ids IS DISTINCT FROM OLD.assignee_ids) THEN
+    INSERT INTO public.task_activity(task_id,actor_id,action,metadata) VALUES(NEW.id,auth.uid(),'TASK_ASSIGNED',jsonb_build_object('assignee_id',NEW.assignee_id,'assignee_ids',NEW.assignee_ids));
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER mq20_task_service_view_only BEFORE INSERT OR UPDATE OR DELETE ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.enforce_mq20_task_service_boundaries();
+CREATE TRIGGER protect_task_access_fields_trigger BEFORE UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.protect_task_access_fields();
+CREATE TRIGGER notify_task_change_trigger AFTER INSERT OR UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.notify_task_change();
+CREATE TRIGGER task_status_notification_trigger AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.queue_task_status_notification();
+CREATE TRIGGER task_activity_after_update AFTER UPDATE OF status,assignee_id,assignee_ids ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.record_task_activity();
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY mq20_no_tasks_update ON public.tasks AS RESTRICTIVE FOR UPDATE TO authenticated
+  USING (NOT public.is_mq20_profile(auth.uid())) WITH CHECK (NOT public.is_mq20_profile(auth.uid()));
+CREATE POLICY mq20_test_task_update ON public.tasks AS PERMISSIVE FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE TABLE public.task_comments(id bigserial PRIMARY KEY, task_id uuid NOT NULL, user_id uuid NOT NULL, comment text NOT NULL);
+ALTER TABLE public.task_comments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY mq20_test_comments_insert ON public.task_comments AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY mq20_no_task_comments_insert ON public.task_comments AS RESTRICTIVE FOR INSERT TO authenticated
+  WITH CHECK (NOT public.is_mq20_profile(auth.uid()));
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT,UPDATE ON public.crm_deals,public.tasks TO authenticated;
+GRANT INSERT ON public.task_comments TO authenticated;
+GRANT USAGE,SELECT ON SEQUENCE public.task_comments_id_seq TO authenticated;
+` + '\n' + productivityValidateCategory + '\n' + taskDependencyBlocked + String.raw`
+UPDATE public.crm_deals
+   SET title='Synthetic multi-assignee deal', assignee_ids=ARRAY[
+       '00000000-0000-4000-8000-000000000001'::uuid,
+       '00000000-0000-4000-8000-000000000002'::uuid
+   ]
+ WHERE title='Single assignment';
+`;
+
+const mq20Assertions = String.raw`
+SELECT set_config('test.mq20.deal_id', (
+  SELECT deal.id::text FROM public.crm_deals deal WHERE deal.title='Synthetic multi-assignee deal' LIMIT 1), false);
+SELECT set_config('test.mq20.task_id', (
+  SELECT task.id::text FROM public.tasks task JOIN public.crm_deals deal ON deal.id=task.crm_deal_id
+   WHERE deal.id=current_setting('test.mq20.deal_id')::uuid AND task.crm_workflow_kind='CONTACT_DISCUSSION' LIMIT 1), false);
+DO $$ BEGIN
+  IF current_setting('test.mq20.deal_id',true) IS NULL OR current_setting('test.mq20.task_id',true) IS NULL THEN RAISE EXCEPTION 'Synthetic multi-assignee CRM Contact task missing'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.crm_deals WHERE id=current_setting('test.mq20.deal_id')::uuid AND assignee_ids=ARRAY['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002']::uuid[]) THEN RAISE EXCEPTION 'CRM migration did not preserve the synthetic multi-assignee set'; END IF;
+END $$;
+INSERT INTO public.tasks(id,title,created_by,status) VALUES ('00000000-0000-4000-8000-000000000901','Synthetic successor','00000000-0000-4000-8000-000000000003','todo');
+INSERT INTO public.task_dependencies(predecessor_task_id,successor_task_id) VALUES (current_setting('test.mq20.task_id')::uuid,'00000000-0000-4000-8000-000000000901');
+SELECT set_config('test.mq20.notifications_before',(SELECT count(*)::text FROM public.notifications),false);
+SELECT set_config('test.mq20.outbox_before',(SELECT count(*)::text FROM public.task_email_outbox),false);
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
+SELECT public.execute_crm_contact_discussion_task(current_setting('test.mq20.task_id')::uuid,'START');
+SELECT public.execute_crm_contact_discussion_task(current_setting('test.mq20.task_id')::uuid,'START');
+SELECT public.execute_crm_contact_discussion_task(current_setting('test.mq20.task_id')::uuid,'WAIT','CLIENT','Synthetic wait');
+SELECT public.execute_crm_contact_discussion_task(current_setting('test.mq20.task_id')::uuid,'BLOCK','OTHER','Synthetic block');
+SELECT public.execute_crm_contact_discussion_task(current_setting('test.mq20.task_id')::uuid,'RESUME');
+SELECT public.execute_crm_contact_discussion_task(current_setting('test.mq20.task_id')::uuid,'COMPLETE');
+DO $$ DECLARE denied boolean:=false; BEGIN
+  UPDATE public.tasks SET title='forged MQ-20 task write' WHERE id=current_setting('test.mq20.task_id')::uuid;
+  IF FOUND THEN RAISE EXCEPTION 'Restrictive task RLS allowed direct MQ-20 write'; END IF;
+  BEGIN INSERT INTO public.task_comments(task_id,user_id,comment) VALUES(current_setting('test.mq20.task_id')::uuid,auth.uid(),'forged child write');
+  EXCEPTION WHEN insufficient_privilege THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Restrictive child-row RLS allowed direct MQ-20 comment write'; END IF;
+END $$;
+RESET ROLE;
+DO $$ DECLARE denied boolean:=false; BEGIN
+  IF (SELECT count(*) FROM public.notifications)<>current_setting('test.mq20.notifications_before')::integer
+     OR (SELECT count(*) FROM public.task_email_outbox)<>current_setting('test.mq20.outbox_before')::integer THEN RAISE EXCEPTION 'Scoped task actions emitted notification/outbox rows'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.tasks WHERE id='00000000-0000-4000-8000-000000000901' AND status='todo') THEN RAISE EXCEPTION 'Scoped completion activated its successor'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.task_activity WHERE task_id=current_setting('test.mq20.task_id')::uuid) THEN RAISE EXCEPTION 'Scoped task actions did not preserve activity logging'; END IF;
+END $$;
+SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
+UPDATE public.crm_deals SET assigned_to='00000000-0000-4000-8000-000000000001', assignee_ids=ARRAY['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000005']::uuid[] WHERE id=current_setting('test.mq20.deal_id')::uuid;
+RESET ROLE;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM public.tasks WHERE id=current_setting('test.mq20.task_id')::uuid AND assignee_ids=ARRAY['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000005']::uuid[] AND visible_to=ARRAY['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000005']::uuid[]) THEN RAISE EXCEPTION 'Deal-to-task multi-assignee synchronization failed'; END IF;
+END $$;
+SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
+UPDATE public.crm_deals SET assigned_to='00000000-0000-4000-8000-000000000002', assignee_ids=ARRAY['00000000-0000-4000-8000-000000000002']::uuid[] WHERE id=current_setting('test.mq20.deal_id')::uuid;
+RESET ROLE;
+SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
+DO $$ DECLARE denied boolean:=false; BEGIN
+ BEGIN PERFORM public.execute_crm_contact_discussion_task(current_setting('test.mq20.task_id')::uuid,'START'); EXCEPTION WHEN insufficient_privilege THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'Removed CRM assignee retained scoped execution access'; END IF;
+END $$;
+RESET ROLE;
+SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
+UPDATE public.crm_deals SET assigned_to='00000000-0000-4000-8000-000000000001', assignee_ids=ARRAY['00000000-0000-4000-8000-000000000001']::uuid[] WHERE id=current_setting('test.mq20.deal_id')::uuid;
+SELECT public.change_crm_deal_stage(current_setting('test.mq20.deal_id')::uuid,'LOST');
+RESET ROLE;
+SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
+DO $$ DECLARE denied boolean:=false; BEGIN
+ BEGIN PERFORM public.execute_crm_contact_discussion_task(current_setting('test.mq20.task_id')::uuid,'START'); EXCEPTION WHEN insufficient_privilege THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'Lost CRM deal remained executable'; END IF;
+END $$;
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','',false);
+UPDATE public.tasks SET archived_at=now() WHERE id=current_setting('test.mq20.task_id')::uuid;
+SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
+DO $$ DECLARE denied boolean:=false; BEGIN
+ BEGIN PERFORM public.execute_crm_contact_discussion_task(current_setting('test.mq20.task_id')::uuid,'START'); EXCEPTION WHEN insufficient_privilege THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'Archived Contact task remained executable'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+ IF has_function_privilege('anon','public.execute_crm_contact_discussion_task(uuid,text,text,text)','EXECUTE')
+    OR has_function_privilege('service_role','public.execute_crm_contact_discussion_task(uuid,text,text,text)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.execute_crm_contact_discussion_task(uuid,text,text,text)','EXECUTE') THEN RAISE EXCEPTION 'Scoped RPC grants do not match expected authenticated-only policy'; END IF;
+ IF has_function_privilege('authenticated','hrsys_private.valid_mq20_task_context(uuid,text,text)','EXECUTE')
+    OR has_schema_privilege('authenticated','hrsys_private','USAGE') THEN RAISE EXCEPTION 'Private context helper is exposed'; END IF;
+END $$;
+`;
+
 const run = (binary, args, options = {}) => {
   const result = childProcess.spawnSync(binary, args, { encoding: 'utf8', windowsHide: true, ...options });
   if (result.error) throw result.error;
@@ -423,16 +639,25 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     const baselineSql = [baseline, taskCreate, dealRead, stageChange].join('\n\n');
     const migrationFile = path.join(tempRoot, 'migration.sql');
     const assertionsFile = path.join(tempRoot, 'assertions.sql');
+    const mq20PrerequisitesFile = path.join(tempRoot, 'mq20-prerequisites.sql');
+    const mq20MigrationFile = path.join(tempRoot, 'mq20-migration.sql');
+    const mq20AssertionsFile = path.join(tempRoot, 'mq20-assertions.sql');
     fs.writeFileSync(sqlFile, baselineSql, 'utf8');
     fs.writeFileSync(migrationFile, migration, 'utf8');
     fs.writeFileSync(assertionsFile, assertions, 'utf8');
+    fs.writeFileSync(mq20PrerequisitesFile, mq20Prerequisites, 'utf8');
+    fs.writeFileSync(mq20MigrationFile, mq20Migration, 'utf8');
+    fs.writeFileSync(mq20AssertionsFile, mq20Assertions, 'utf8');
     const psqlArgs = ['-X', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', String(port), '-U', 'postgres', '-d', 'postgres'];
     run(psql, [...psqlArgs, '-f', sqlFile]);
     const identityGuardHash = run(psql, [...psqlArgs, '-A', '-t', '-c', "SELECT md5(pg_get_functiondef('public.protect_crm_generated_task_identity()'::regprocedure))"]).trim();
     console.log(`Legacy guard test-fixture definition MD5: ${identityGuardHash}`);
     run(psql, [...psqlArgs, '-f', migrationFile]);
     run(psql, [...psqlArgs, '-f', assertionsFile]);
-    console.log('PostgreSQL disposable runtime assertions passed (legacy identity guard remained enabled and accepted only the pre-registered generated task).');
+    run(psql, [...psqlArgs, '-f', mq20PrerequisitesFile]);
+    run(psql, [...psqlArgs, '-f', mq20MigrationFile]);
+    run(psql, [...psqlArgs, '-f', mq20AssertionsFile]);
+    console.log('PostgreSQL disposable runtime assertions passed: CRM migration 1 then MQ-20 migration 2, with synthetic MQ-20 security overlays.');
   } finally {
     if (serverStarted) {
       const stopped = childProcess.spawnSync(pgCtl, ['-D', dataDir, '-m', 'fast', '-w', 'stop'], { encoding: 'utf8', windowsHide: true });
