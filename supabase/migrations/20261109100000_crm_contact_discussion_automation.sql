@@ -13,8 +13,8 @@ UPDATE public.crm_deals
    SET assignee_ids = ARRAY[assigned_to]::uuid[]
  WHERE assigned_to IS NOT NULL
    -- Existing Production protection rejects any field change while a deal
-   -- remains LOST. Preserve those historical rows as-is; the assignee-sync
-   -- trigger will populate the array only after an authorized reopen.
+   -- remains LOST. Preserve those historical rows as-is; Qualification
+   -- automation can safely read their legacy assigned_to value after reopening.
    AND UPPER(COALESCE(stage, '')) <> 'LOST'
    AND COALESCE(cardinality(assignee_ids), 0) = 0;
 
@@ -233,19 +233,17 @@ $$;
 
 DROP TRIGGER IF EXISTS crm_deal_assignees_sync ON public.crm_deals;
 CREATE TRIGGER crm_deal_assignees_sync
-BEFORE INSERT OR UPDATE OF assigned_to, assignee_ids, stage ON public.crm_deals
+BEFORE INSERT OR UPDATE OF assigned_to, assignee_ids ON public.crm_deals
 FOR EACH ROW EXECUTE FUNCTION public.sync_crm_deal_assignees();
 
-ALTER TABLE public.tasks DROP CONSTRAINT IF EXISTS tasks_crm_workflow_kind_check;
-ALTER TABLE public.tasks ADD CONSTRAINT tasks_crm_workflow_kind_check
-    CHECK (crm_workflow_kind IS NULL OR crm_workflow_kind IN ('QUOTE_PROPOSAL_DESIGN', 'CONTACT_DISCUSSION'));
-
+-- Staging already has the legacy CRM registry keyed by deal and workflow kind.
+-- Reuse that durable table so its Design mappings and stricter task FK survive.
 CREATE TABLE IF NOT EXISTS public.crm_generated_tasks (
     deal_id uuid NOT NULL REFERENCES public.crm_deals(id) ON DELETE CASCADE,
-    event_key text NOT NULL,
-    task_id uuid REFERENCES public.tasks(id) ON DELETE SET NULL,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (deal_id, event_key)
+    kind text NOT NULL CHECK (kind IN ('CONTACT_DISCUSSION', 'QUOTE_PROPOSAL_DESIGN')),
+    task_id uuid NOT NULL UNIQUE REFERENCES public.tasks(id)
+        ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+    PRIMARY KEY (deal_id, kind)
 );
 ALTER TABLE public.crm_generated_tasks ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.crm_generated_tasks FROM PUBLIC, anon, authenticated;
@@ -258,12 +256,13 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
     v_deal public.crm_deals%ROWTYPE;
+    v_assignees uuid[];
     v_existing_id uuid;
     v_existing_count integer;
     v_task jsonb;
     v_task_id uuid;
     v_previous_context text := current_setting('app.crm_contact_discussion_creation', true);
-    v_event_key constant text := 'qualification-entry-v1';
+    v_kind constant text := 'CONTACT_DISCUSSION';
 BEGIN
     IF auth.uid() IS NULL OR NOT public.can_access_crm(auth.uid()) THEN
         RAISE EXCEPTION 'CRM access denied' USING ERRCODE = '42501';
@@ -274,11 +273,15 @@ BEGIN
     IF UPPER(COALESCE(v_deal.stage, '')) <> 'QUALIFICATION' THEN
         RAISE EXCEPTION 'Contact Discussion tasks require a Qualification deal' USING ERRCODE = '23514';
     END IF;
-    IF COALESCE(cardinality(v_deal.assignee_ids), 0) = 0 THEN
+    v_assignees := COALESCE(
+        NULLIF(v_deal.assignee_ids, '{}'::uuid[]),
+        CASE WHEN v_deal.assigned_to IS NULL THEN '{}'::uuid[] ELSE ARRAY[v_deal.assigned_to]::uuid[] END
+    );
+    IF cardinality(v_assignees) = 0 THEN
         RAISE EXCEPTION 'Assign an active deal owner before moving this deal to Qualification' USING ERRCODE = '23514';
     END IF;
     IF EXISTS (
-        SELECT 1 FROM unnest(v_deal.assignee_ids) AS selected(id)
+        SELECT 1 FROM unnest(v_assignees) AS selected(id)
          WHERE NOT EXISTS (
              SELECT 1 FROM public.profiles profile
               WHERE profile.id = selected.id AND profile.is_active IS DISTINCT FROM false
@@ -288,8 +291,21 @@ BEGIN
     END IF;
 
     SELECT task_id INTO v_task_id FROM public.crm_generated_tasks
-     WHERE deal_id = p_deal_id AND event_key = v_event_key;
-    IF FOUND THEN RETURN v_task_id; END IF;
+     WHERE deal_id = p_deal_id AND kind = v_kind;
+    IF FOUND THEN
+        IF v_task_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM public.tasks task
+             WHERE task.id = v_task_id
+               AND task.crm_deal_id = p_deal_id
+               AND task.crm_workflow_kind = v_kind
+               AND COALESCE(NULLIF(task.assignee_ids, '{}'::uuid[]),
+                   CASE WHEN task.assignee_id IS NULL THEN '{}'::uuid[] ELSE ARRAY[task.assignee_id]::uuid[] END)
+                   = v_assignees
+        ) THEN
+            RAISE EXCEPTION 'The registered Contact Discussion task does not match the current deal assignees; review required' USING ERRCODE = '23514';
+        END IF;
+        RETURN v_task_id;
+    END IF;
 
     SELECT count(*) INTO v_existing_count
       FROM public.tasks task
@@ -305,15 +321,28 @@ BEGIN
         IF NOT EXISTS (
             SELECT 1 FROM public.tasks task
              WHERE task.id = v_existing_id
-               AND COALESCE(task.assignee_ids, '{}'::uuid[]) = v_deal.assignee_ids
+               AND COALESCE(NULLIF(task.assignee_ids, '{}'::uuid[]),
+                   CASE WHEN task.assignee_id IS NULL THEN '{}'::uuid[] ELSE ARRAY[task.assignee_id]::uuid[] END)
+                   = v_assignees
         ) THEN
             RAISE EXCEPTION 'Existing Contact Discussion task assignees differ from the current deal assignees; review required' USING ERRCODE = '23514';
         END IF;
-        INSERT INTO public.crm_generated_tasks(deal_id, event_key, task_id)
-        VALUES (p_deal_id, v_event_key, v_existing_id)
-        ON CONFLICT (deal_id, event_key) DO NOTHING;
+        INSERT INTO public.crm_generated_tasks(deal_id, kind, task_id)
+        VALUES (p_deal_id, v_kind, v_existing_id)
+        ON CONFLICT (deal_id, kind) DO NOTHING;
         SELECT task_id INTO v_task_id FROM public.crm_generated_tasks
-         WHERE deal_id = p_deal_id AND event_key = v_event_key;
+         WHERE deal_id = p_deal_id AND kind = v_kind;
+        IF NOT EXISTS (
+            SELECT 1 FROM public.tasks task
+             WHERE task.id = v_task_id
+               AND task.crm_deal_id = p_deal_id
+               AND task.crm_workflow_kind = v_kind
+               AND COALESCE(NULLIF(task.assignee_ids, '{}'::uuid[]),
+                   CASE WHEN task.assignee_id IS NULL THEN '{}'::uuid[] ELSE ARRAY[task.assignee_id]::uuid[] END)
+                   = v_assignees
+        ) THEN
+            RAISE EXCEPTION 'The registered Contact Discussion task does not match the current deal assignees; review required' USING ERRCODE = '23514';
+        END IF;
         RETURN v_task_id;
     END IF;
 
@@ -329,14 +358,14 @@ BEGIN
             'en', 'Follow up on the CRM deal contact discussion.',
             'ar', 'متابعة مناقشة التواصل الخاصة بصفقة إدارة علاقات العملاء.'
         ),
-        'assignee_id', v_deal.assignee_ids[1],
-        'assignee_ids', to_jsonb(v_deal.assignee_ids),
+        'assignee_id', v_assignees[1],
+        'assignee_ids', to_jsonb(v_assignees),
         'created_by', auth.uid(),
         'status', 'todo',
         'priority', 'medium',
         'category', 'CRM',
         'visibility', 'private',
-        'visible_to', to_jsonb(v_deal.assignee_ids),
+        'visible_to', to_jsonb(v_assignees),
         'notify_via_email', false,
         'crm_deal_id', p_deal_id,
         'crm_workflow_kind', 'CONTACT_DISCUSSION'
@@ -346,8 +375,12 @@ BEGIN
     IF v_task_id IS NULL THEN
         RAISE EXCEPTION 'Contact Discussion task creation returned no task ID' USING ERRCODE = '23514';
     END IF;
-    INSERT INTO public.crm_generated_tasks(deal_id, event_key, task_id)
-    VALUES (p_deal_id, v_event_key, v_task_id);
+    IF NOT EXISTS (
+        SELECT 1 FROM public.crm_generated_tasks
+         WHERE deal_id = p_deal_id AND kind = v_kind AND task_id = v_task_id
+    ) THEN
+        RAISE EXCEPTION 'Contact Discussion task registration did not complete' USING ERRCODE = '23514';
+    END IF;
     RETURN v_task_id;
 END;
 $$;
@@ -360,13 +393,18 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
     v_deal public.crm_deals%ROWTYPE;
+    v_assignees uuid[];
 BEGIN
-    IF TG_OP = 'UPDATE'
-       AND OLD.crm_workflow_kind = 'CONTACT_DISCUSSION'
-       AND (NEW.crm_workflow_kind IS DISTINCT FROM OLD.crm_workflow_kind
-            OR NEW.crm_deal_id IS DISTINCT FROM OLD.crm_deal_id)
-       AND current_setting('app.crm_contact_discussion_creation', true) IS DISTINCT FROM 'on' THEN
-        RAISE EXCEPTION 'CRM Contact Discussion task identity is protected' USING ERRCODE = '42501';
+    IF TG_OP = 'UPDATE' THEN
+        IF (OLD.crm_workflow_kind = 'CONTACT_DISCUSSION'
+            OR NEW.crm_workflow_kind = 'CONTACT_DISCUSSION')
+           AND (NEW.crm_workflow_kind IS DISTINCT FROM OLD.crm_workflow_kind
+                OR NEW.crm_deal_id IS DISTINCT FROM OLD.crm_deal_id) THEN
+            RAISE EXCEPTION 'CRM Contact Discussion task identity is protected' USING ERRCODE = '42501';
+        END IF;
+        -- Preserve ordinary Task Manager updates. The legacy identity guard
+        -- still rejects identity changes and retired approval statuses.
+        RETURN NEW;
     END IF;
     IF NEW.crm_workflow_kind IS DISTINCT FROM 'CONTACT_DISCUSSION' THEN RETURN NEW; END IF;
     IF current_setting('app.crm_contact_discussion_creation', true) IS DISTINCT FROM 'on'
@@ -374,20 +412,52 @@ BEGIN
         RAISE EXCEPTION 'Contact Discussion tasks can only be created by the CRM Qualification workflow' USING ERRCODE = '42501';
     END IF;
     SELECT * INTO v_deal FROM public.crm_deals WHERE id = NEW.crm_deal_id FOR UPDATE;
+    IF FOUND THEN
+        v_assignees := COALESCE(
+            NULLIF(v_deal.assignee_ids, '{}'::uuid[]),
+            CASE WHEN v_deal.assigned_to IS NULL THEN '{}'::uuid[] ELSE ARRAY[v_deal.assigned_to]::uuid[] END
+        );
+    END IF;
     IF NOT FOUND OR UPPER(COALESCE(v_deal.stage, '')) <> 'QUALIFICATION'
-       OR COALESCE(cardinality(v_deal.assignee_ids), 0) = 0
-       OR COALESCE(NEW.assignee_ids, '{}'::uuid[]) IS DISTINCT FROM v_deal.assignee_ids
-       OR NEW.assignee_id IS DISTINCT FROM v_deal.assignee_ids[1] THEN
+       OR COALESCE(cardinality(v_assignees), 0) = 0
+       OR COALESCE(NEW.assignee_ids, '{}'::uuid[]) IS DISTINCT FROM v_assignees
+       OR NEW.assignee_id IS DISTINCT FROM v_assignees[1] THEN
         RAISE EXCEPTION 'Contact Discussion task recipients must match the current active deal assignees' USING ERRCODE = '42501';
     END IF;
     IF EXISTS (
-        SELECT 1 FROM unnest(NEW.assignee_ids) AS selected(id)
+        SELECT 1 FROM unnest(v_assignees) AS selected(id)
          WHERE NOT EXISTS (
              SELECT 1 FROM public.profiles profile
               WHERE profile.id = selected.id AND profile.is_active IS DISTINCT FROM false
          )
     ) THEN
         RAISE EXCEPTION 'Contact Discussion recipients must be active employees' USING ERRCODE = '23514';
+    END IF;
+
+    IF TG_OP = 'INSERT' THEN
+        IF auth.uid() IS NULL
+           OR NOT COALESCE(public.can_access_crm(auth.uid()), false)
+           OR NOT EXISTS (
+               SELECT 1 FROM public.profiles profile
+                WHERE profile.id = auth.uid() AND profile.is_active IS DISTINCT FROM false
+           ) THEN
+            RAISE EXCEPTION 'CRM access denied for generated Contact Discussion task' USING ERRCODE = '42501';
+        END IF;
+        -- The pre-existing protect_crm_generated_task_identity trigger runs
+        -- after this trigger alphabetically and requires this exact mapping.
+        -- The verified Staging task_id FK is initially deferred, so the task
+        -- row can be inserted later in the same transaction.
+        INSERT INTO public.crm_generated_tasks(deal_id, kind, task_id)
+        VALUES (NEW.crm_deal_id, 'CONTACT_DISCUSSION', NEW.id)
+        ON CONFLICT (deal_id, kind) DO NOTHING;
+        IF NOT EXISTS (
+            SELECT 1 FROM public.crm_generated_tasks mapping
+             WHERE mapping.deal_id = NEW.crm_deal_id
+               AND mapping.kind = 'CONTACT_DISCUSSION'
+               AND mapping.task_id = NEW.id
+        ) THEN
+            RAISE EXCEPTION 'Contact Discussion task identity is already registered to another task' USING ERRCODE = '23505';
+        END IF;
     END IF;
     RETURN NEW;
 END;

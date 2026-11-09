@@ -24,18 +24,24 @@ assert.match(migration, /can_view_business_financials\(auth\.uid\(\)\)/);
 // Qualification automation uses the deal's exact current assignment set, never the actor.
 assert.match(migration, /AFTER UPDATE OF stage ON public\.crm_deals/);
 assert.match(migration, /NEW\.stage = 'QUALIFICATION' AND OLD\.stage IS DISTINCT FROM 'QUALIFICATION'/);
-assert.match(migration, /'assignee_id', v_deal\.assignee_ids\[1\]/);
-assert.match(migration, /'assignee_ids', to_jsonb\(v_deal\.assignee_ids\)/);
+assert.match(migration, /'assignee_id', v_assignees\[1\]/);
+assert.match(migration, /'assignee_ids', to_jsonb\(v_assignees\)/);
 assert.match(migration, /'visibility', 'private'/);
-assert.match(migration, /'visible_to', to_jsonb\(v_deal\.assignee_ids\)/);
+assert.match(migration, /'visible_to', to_jsonb\(v_assignees\)/);
 assert.doesNotMatch(migration.slice(migration.indexOf('create_crm_contact_discussion_task'), migration.indexOf('CREATE OR REPLACE FUNCTION public.guard_crm_contact_discussion_task')), /'assignee_id'\s*,\s*auth\.uid\(\)/);
 assert.match(migration, /Assign an active deal owner before moving this deal to Qualification/);
 assert.match(migration, /Every deal assignee must be active before entering Qualification/);
 
 // The task creation path is guarded, linked, and idempotent for the event.
-assert.match(migration, /PRIMARY KEY \(deal_id, event_key\)/);
-assert.match(migration, /'qualification-entry-v1'/);
-assert.match(migration, /ON CONFLICT \(deal_id, event_key\) DO NOTHING/);
+assert.match(migration, /PRIMARY KEY \(deal_id, kind\)/);
+assert.doesNotMatch(migration, /DROP CONSTRAINT IF EXISTS tasks_crm_workflow_kind_check/);
+assert.match(migration, /v_kind constant text := 'CONTACT_DISCUSSION'/);
+assert.match(migration, /ON CONFLICT \(deal_id, kind\) DO NOTHING/);
+assert.doesNotMatch(migration, /event_key/);
+assert.doesNotMatch(migration, /DROP TRIGGER IF EXISTS protect_crm_generated_task_identity/);
+assert.match(migration, /INSERT INTO public\.crm_generated_tasks\(deal_id, kind, task_id\)[\s\S]*VALUES \(NEW\.crm_deal_id, 'CONTACT_DISCUSSION', NEW\.id\)/);
+assert.ok('crm_contact_discussion_task_guard' < 'protect_crm_generated_task_identity', 'Contact identity registration must run before the legacy guard by PostgreSQL trigger-name order');
+assert.match(migration, /CRM access denied for generated Contact Discussion task/);
 assert.match(migration, /Multiple Contact Discussion tasks are already linked/);
 assert.match(migration, /crm_workflow_kind = 'CONTACT_DISCUSSION'/);
 assert.match(migration, /create_task_secure\(jsonb_build_object/);
