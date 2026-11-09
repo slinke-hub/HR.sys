@@ -15018,14 +15018,19 @@ window.openDealWorkflowModal = async function (dealId) {
     document.getElementById('workflowDealId').value = dealId;
     document.getElementById('dealWorkflowName').textContent = deal.title;
     const clientName = deal.crm_clients?.name || (t('crm_unassigned') || 'Unassigned');
-    const assignee = users.find(user => user.id === deal.assigned_to);
+    const assigneeIds = Array.isArray(deal.assignee_ids) && deal.assignee_ids.length
+        ? deal.assignee_ids.map(String)
+        : (deal.assigned_to ? [String(deal.assigned_to)] : []);
+    const assignees = assigneeIds.map(id => users.find(user => String(user.id) === id)).filter(Boolean);
     const dealStage = dealLifecycleLabel(deal.stage);
     const summaryFields = [
         [t('crm_client') || 'Client', clientName],
         [t('status') || 'Stage', dealStage],
         ...(canViewFinancials ? [[t('crm_amount_sar') || 'Amount (SAR)', Number(deal.amount || 0) > 0 ? `SAR ${Number(deal.amount).toLocaleString()}` : '—']] : []),
         [t('crm_closing_date') || 'Closing Date', deal.closing_date || '—'],
-        [t('crm_assigned_to') || 'Assigned To', dealEmployeeName(assignee) || (t('crm_unassigned') || 'Unassigned')],
+        [t('crm_assigned_to') || 'Assigned To', assignees.length
+            ? assignees.map(dealEmployeeName).filter(Boolean).join(', ')
+            : (t('crm_unassigned') || 'Unassigned')],
         [t('crm_event_type') || 'Event Type', deal.event_type || '—'],
         [t('crm_first_contact_date') || 'First Contact Date', deal.first_contact_date || '—'],
         [t('crm_contacted_via') || 'Contacted Via', deal.contact_method || '—'],
@@ -16050,7 +16055,11 @@ window.dropDeal = async (ev, newStage) => {
         void window.refreshCrmDashboardInBackground?.();
         return { success: true, dealId, oldStage, newStage };
     } else {
-        showToast(t('toast_failed_to_move_deal'), "danger");
+        const reason = String(res.error?.message || res.data?.message || '');
+        const assignmentRequired = /active deal owner|deal assignee|assignee must be active/i.test(reason);
+        showToast(assignmentRequired
+            ? (t('crm_contact_discussion_assignee_required') || 'Assign an active deal owner before moving this deal to Qualification.')
+            : (t('toast_failed_to_move_deal') || reason), "danger");
         if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
         return { success: false, reason: 'save_failed', dealId, oldStage, newStage };
     }
@@ -17111,8 +17120,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     const users = await db.fetchUsers();
     const assigneeSelect = document.getElementById('crmDealAssignee');
     if (assigneeSelect) {
-        assigneeSelect.innerHTML = `<option value="">${t('crm_select_assignee')}</option>` +
-            users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
+        assigneeSelect.innerHTML = users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
     }
 
     document.getElementById('crmDealId').value = id || '';
@@ -17155,7 +17163,12 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
             if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = deal.lead_source || '';
             document.getElementById('crmDealTechnicalDescription').value = deal.technical_description || '';
 
-            if (assigneeSelect) assigneeSelect.value = deal.assigned_to || '';
+            if (assigneeSelect) {
+                const selectedAssignees = new Set(Array.isArray(deal.assignee_ids) && deal.assignee_ids.length
+                    ? deal.assignee_ids.map(String)
+                    : (deal.assigned_to ? [String(deal.assigned_to)] : []));
+                Array.from(assigneeSelect.options).forEach(option => { option.selected = selectedAssignees.has(option.value); });
+            }
 
             if (deal.stage === 'LOST') {
                 document.getElementById('crmDealLostReasonGroup').style.display = 'block';
@@ -17174,7 +17187,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
         if (document.getElementById('crmDealContactMethod')) document.getElementById('crmDealContactMethod').value = '';
         if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = '';
         document.getElementById('crmDealTechnicalDescription').value = '';
-        if (assigneeSelect) assigneeSelect.value = '';
+        if (assigneeSelect) Array.from(assigneeSelect.options).forEach(option => { option.selected = false; });
         document.getElementById('crmDealLostReasonGroup').style.display = 'none';
     }
 
@@ -17188,7 +17201,8 @@ window.handleCreateDeal = async (e) => {
     e.preventDefault();
     const id = document.getElementById('crmDealId').value;
     const assigneeEl = document.getElementById('crmDealAssignee');
-    const assigneeVal = assigneeEl ? assigneeEl.value : null;
+    const assigneeIds = assigneeEl ? Array.from(assigneeEl.selectedOptions || []).map(option => option.value).filter(Boolean) : [];
+    const assigneeVal = assigneeIds[0] || null;
     const closingDateEl = document.getElementById('crmDealClosingDate');
 
     const eventTypeEl = document.getElementById('crmDealEventType');
@@ -17197,7 +17211,7 @@ window.handleCreateDeal = async (e) => {
     const leadSourceEl = document.getElementById('crmDealLeadSource');
     const amountValue = canCurrentUserViewBusinessFinancials() ? document.getElementById('crmDealAmount').value.trim() : '';
 
-    if (!firstContactDateEl?.value || !contactMethodEl?.value || !assigneeVal) {
+    if (!firstContactDateEl?.value || !contactMethodEl?.value || !assigneeIds.length) {
         return showToast(window.t('msg_toast_26') || 'Please fill in all required fields.', 'danger');
     }
 
@@ -17210,7 +17224,8 @@ window.handleCreateDeal = async (e) => {
         contact_method: (contactMethodEl && contactMethodEl.value) ? contactMethodEl.value : null,
         lead_source: (leadSourceEl && leadSourceEl.value) ? leadSourceEl.value : null,
         technical_description: document.getElementById('crmDealTechnicalDescription').value || null,
-        assigned_to: assigneeVal
+        assigned_to: assigneeVal,
+        assignee_ids: assigneeIds
     };
     if (canCurrentUserViewBusinessFinancials()) data.amount = amountValue === '' ? null : Number(amountValue);
     if (!id) {

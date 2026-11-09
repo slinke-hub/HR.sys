@@ -312,7 +312,8 @@
                 </div>
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label class="form-label"><i data-lucide="user" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> <span data-i18n="crm_assigned_to">Assigned To</span> *</label>
-                    <select id="crmDealAssignee" class="form-control" required></select>
+                    <select id="crmDealAssignee" class="form-control" multiple size="4" required aria-describedby="crmDealAssigneeHelp"></select>
+                    <small id="crmDealAssigneeHelp" class="form-hint" data-i18n="crm_assignees_help">Select one or more active employees.</small>
                 </div>
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label class="form-label" data-i18n="crm_technical_description">Technical Presentation / Project Description</label>
