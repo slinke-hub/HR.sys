@@ -5,11 +5,13 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const postgresDocker = require('./helpers/postgres-docker-runtime.cjs');
 
 const root = path.join(__dirname, '..');
+const dockerMode = process.env.HRSYS_PG_DOCKER === '1';
 const pgBin = process.env.PG_BIN || 'C:\\Program Files\\PostgreSQL\\18\\bin';
 const bin = name => path.join(pgBin, `${name}.exe`);
-for (const name of ['initdb', 'pg_ctl', 'postgres', 'psql', 'pg_isready']) assert.ok(fs.existsSync(bin(name)), `Missing PostgreSQL utility ${name}`);
+if (!dockerMode) for (const name of ['initdb', 'pg_ctl', 'postgres', 'psql', 'pg_isready']) assert.ok(fs.existsSync(bin(name)), `Missing PostgreSQL utility ${name}`);
 const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261109110000_mq20_contact_discussion_execution.sql'), 'utf8');
 const crmMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20261109100000_crm_contact_discussion_automation.sql'), 'utf8');
 const syncFunction = crmMigration.match(/CREATE OR REPLACE FUNCTION public\.sync_crm_deal_assignees\([\s\S]*?\n\$\$;/)?.[0];
@@ -120,7 +122,7 @@ COMMIT;
 INSERT INTO public.tasks(id,title,created_by,status) VALUES ('20000000-0000-4000-8000-000000000009','Unrelated synthetic task','00000000-0000-4000-8000-000000000003','todo');
 INSERT INTO public.tasks(id,title,created_by,status) VALUES ('20000000-0000-4000-8000-000000000010','Synthetic successor task','00000000-0000-4000-8000-000000000003','todo');
 INSERT INTO public.task_dependencies VALUES ('20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000010');
-CREATE TEMP TABLE expected_counts AS SELECT (SELECT count(*) FROM public.notifications) notifications, (SELECT count(*) FROM public.task_email_outbox) outbox;
+CREATE TABLE public.mq20_test_expected_counts AS SELECT (SELECT count(*) FROM public.notifications) notifications, (SELECT count(*) FROM public.task_email_outbox) outbox;
 SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
 SELECT public.execute_crm_contact_discussion_task('20000000-0000-4000-8000-000000000001','START');
 SELECT public.execute_crm_contact_discussion_task('20000000-0000-4000-8000-000000000001','WAIT','CLIENT','Synthetic wait');
@@ -128,7 +130,7 @@ SELECT public.execute_crm_contact_discussion_task('20000000-0000-4000-8000-00000
 SELECT public.execute_crm_contact_discussion_task('20000000-0000-4000-8000-000000000001','RESUME');
 RESET ROLE;
 DO $$ BEGIN
- IF (SELECT count(*) FROM public.notifications)<>(SELECT notifications FROM expected_counts) OR (SELECT count(*) FROM public.task_email_outbox)<>(SELECT outbox FROM expected_counts) THEN RAISE EXCEPTION 'Scoped MQ-20 execution emitted notification/outbox rows'; END IF;
+ IF (SELECT count(*) FROM public.notifications)<>(SELECT notifications FROM public.mq20_test_expected_counts) OR (SELECT count(*) FROM public.task_email_outbox)<>(SELECT outbox FROM public.mq20_test_expected_counts) THEN RAISE EXCEPTION 'Scoped MQ-20 execution emitted notification/outbox rows'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.tasks WHERE id='20000000-0000-4000-8000-000000000009' AND status='todo') THEN RAISE EXCEPTION 'Unrelated task changed'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.tasks WHERE id='20000000-0000-4000-8000-000000000010' AND status='todo') THEN RAISE EXCEPTION 'Scoped completion activated a successor'; END IF;
 END $$;
@@ -168,9 +170,12 @@ DO $$ BEGIN
  IF NOT has_function_privilege('authenticated','public.execute_crm_contact_discussion_task(uuid,text,text,text)','EXECUTE') THEN RAISE EXCEPTION 'Authenticated execution grant missing'; END IF;
  IF has_function_privilege('authenticated','hrsys_private.valid_mq20_task_context(uuid,text,text)','EXECUTE') OR has_function_privilege('authenticated','hrsys_private.is_mq20_notification_suppressed(uuid)','EXECUTE') OR has_schema_privilege('authenticated','hrsys_private','USAGE') THEN RAISE EXCEPTION 'Private MQ-20 helper access is too broad'; END IF;
 END $$;
+DROP TABLE public.mq20_test_expected_counts;
 `;
 
+let dockerContainer;
 const run = (name, args, options = {}) => {
+  if (dockerMode) return postgresDocker.run(name, args, dockerContainer);
   const r = cp.spawnSync(bin(name), args, { encoding: 'utf8', windowsHide: true, ...options });
   if (r.error) throw r.error;
   if (r.status !== 0) throw new Error(`${name} failed (${r.status}):\n${r.stdout || ''}\n${r.stderr || ''}`);
@@ -178,34 +183,119 @@ const run = (name, args, options = {}) => {
 };
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+const startPsqlSession = (scriptPath, port) => {
+  const args = ['-X', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', String(port), '-U', 'postgres', '-d', 'postgres', '-f', scriptPath];
+  const child = dockerMode
+    ? postgresDocker.spawnPsql(dockerContainer, args)
+    : cp.spawn(bin('psql'), args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const session = { child, stdout: '', stderr: '', markerWaiters: [] };
+  child.stdout.on('data', chunk => {
+    session.stdout += chunk.toString();
+    for (const waiter of [...session.markerWaiters]) if (session.stdout.includes(waiter.marker)) {
+      session.markerWaiters.splice(session.markerWaiters.indexOf(waiter), 1);
+      waiter.resolve();
+    }
+  });
+  child.stderr.on('data', chunk => { session.stderr += chunk.toString(); });
+  session.done = new Promise(resolve => child.once('close', code => resolve(code)));
+  session.waitFor = marker => new Promise((resolve, reject) => {
+    if (session.stdout.includes(marker)) return resolve();
+    if (child.exitCode !== null) return reject(new Error(`psql exited before marker ${marker}: ${session.stdout}\n${session.stderr}`));
+    session.markerWaiters.push({ marker, resolve, reject });
+  });
+  return session;
+};
+
 (async () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'hrsys-mq20-pg-'));
   const data = path.join(temp, 'data'); const log = path.join(temp, 'postgres.log');
   const reserve = net.createServer(); let port; let started = false; let proc; let logFd;
   try {
-    await new Promise((resolve, reject) => reserve.listen(0, '127.0.0.1', resolve).once('error', reject));
-    port = reserve.address().port; await new Promise(resolve => reserve.close(resolve));
-    run('initdb', ['-D', data, '-U', 'postgres', '--auth=trust', '--no-locale', '-E', 'UTF8']);
-    logFd = fs.openSync(log, 'wx');
-    proc = cp.spawn(bin('postgres'), ['-D', data, '-h', '127.0.0.1', '-p', String(port), '-c', 'listen_addresses=127.0.0.1'], { windowsHide: true, stdio: ['ignore', logFd, logFd] });
-    let ready = false;
-    for (let i = 0; i < 80; i += 1) {
-      if (proc.exitCode !== null) throw new Error(`Disposable PostgreSQL exited early; log at ${log}`);
-      if (cp.spawnSync(bin('pg_isready'), ['-h','127.0.0.1','-p',String(port),'-U','postgres'], { windowsHide: true }).status === 0) { ready = true; break; }
-      await wait(250);
+    if (dockerMode) {
+      const disposable = await postgresDocker.start('hrsys-pg17-mq20-concurrency');
+      dockerContainer = disposable.name;
+      port = 5432;
+      started = true;
+      console.log(`Disposable Docker PostgreSQL ${disposable.version} (network=none; no published port).`);
+    } else {
+      await new Promise((resolve, reject) => reserve.listen(0, '127.0.0.1', resolve).once('error', reject));
+      port = reserve.address().port; await new Promise(resolve => reserve.close(resolve));
+      run('initdb', ['-D', data, '-U', 'postgres', '--auth=trust', '--no-locale', '-E', 'UTF8']);
+      logFd = fs.openSync(log, 'wx');
+      proc = cp.spawn(bin('postgres'), ['-D', data, '-h', '127.0.0.1', '-p', String(port), '-c', 'listen_addresses=127.0.0.1'], { windowsHide: true, stdio: ['ignore', logFd, logFd] });
+      let ready = false;
+      for (let i = 0; i < 80; i += 1) {
+        if (proc.exitCode !== null) throw new Error(`Disposable PostgreSQL exited early; log at ${log}`);
+        if (cp.spawnSync(bin('pg_isready'), ['-h','127.0.0.1','-p',String(port),'-U','postgres'], { windowsHide: true }).status === 0) { ready = true; break; }
+        await wait(250);
+      }
+      assert.ok(ready, `Disposable PostgreSQL did not start; log at ${log}`); started = true;
     }
-    assert.ok(ready, `Disposable PostgreSQL did not start; log at ${log}`); started = true;
-    const sql = path.join(temp, 'test.sql'); fs.writeFileSync(sql, `${baseline}\n${triggers}\n${migration}\n${assertions}`, 'utf8');
-    const result = run('psql', ['-X','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p',String(port),'-U','postgres','-d','postgres','-f',sql]);
+    const completionCall = "SELECT public.execute_crm_contact_discussion_task('20000000-0000-4000-8000-000000000001','COMPLETE');";
+    const completionIndex = assertions.indexOf(completionCall);
+    assert.ok(completionIndex > 0, 'Completion call anchor for multi-session race tests is missing.');
+    const beforeConcurrency = assertions.slice(0, completionIndex);
+    const afterConcurrency = assertions.slice(completionIndex);
+    const sql = path.join(temp, 'test.sql');
+    const beforeConcurrencyFile = path.join(temp, 'before-concurrency.sql');
+    const afterConcurrencyFile = path.join(temp, 'after-concurrency.sql');
+    fs.writeFileSync(sql, `${baseline}\n${triggers}\n${migration}`, 'utf8');
+    fs.writeFileSync(beforeConcurrencyFile, beforeConcurrency, 'utf8');
+    run('psql', ['-X','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p',String(port),'-U','postgres','-d','postgres','-f',sql]);
+    const afterPrefix = `SELECT set_config('test.mq20.deal_id','10000000-0000-4000-8000-000000000001',false);\nSELECT set_config('test.mq20.task_id','20000000-0000-4000-8000-000000000001',false);\nSELECT set_config('test.mq20.notifications_before',(SELECT notifications::text FROM public.mq20_test_expected_counts),false);\nSELECT set_config('test.mq20.outbox_before',(SELECT outbox::text FROM public.mq20_test_expected_counts),false);\nSET ROLE authenticated;\nSELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000004',false);\n`;
+    fs.writeFileSync(afterConcurrencyFile, `${afterPrefix}${afterConcurrency}`, 'utf8');
+    run('psql', ['-X','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p',String(port),'-U','postgres','-d','postgres','-f',beforeConcurrencyFile]);
+
+    const dealId = '10000000-0000-4000-8000-000000000001';
+    const taskId = '20000000-0000-4000-8000-000000000001';
+    const user1 = '00000000-0000-4000-8000-000000000004';
+    const user2 = '00000000-0000-4000-8000-000000000005';
+    const raceOneHolder = path.join(temp, 'race-one-holder.sql');
+    const raceOneCaller = path.join(temp, 'race-one-caller.sql');
+    fs.writeFileSync(raceOneHolder, `BEGIN; UPDATE public.crm_deals SET assigned_to='${user2}', assignee_ids=ARRAY['${user2}']::uuid[] WHERE id='${dealId}'; \\echo REASSIGNMENT_LOCK_HELD\nSELECT pg_sleep(1.5); COMMIT;`, 'utf8');
+    fs.writeFileSync(raceOneCaller, `SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','${user1}',false); SELECT public.execute_crm_contact_discussion_task('${taskId}','START');`, 'utf8');
+    const holderOne = startPsqlSession(raceOneHolder, port);
+    await holderOne.waitFor('REASSIGNMENT_LOCK_HELD');
+    const oldAssigneeCall = startPsqlSession(raceOneCaller, port);
+    await wait(250);
+    assert.equal(oldAssigneeCall.child.exitCode, null, 'Old assignee was not forced to wait for the concurrent deal reassignment.');
+    assert.equal(await holderOne.done, 0, `Reassignment holder failed:\n${holderOne.stdout}\n${holderOne.stderr}`);
+    const staleCallExit = await oldAssigneeCall.done;
+    assert.notEqual(staleCallExit, 0, `Concurrent old-assignee execution unexpectedly succeeded:\n${oldAssigneeCall.stdout}`);
+    assert.match(oldAssigneeCall.stderr, /Only a current CRM deal assignee may execute this task/i);
+
+    run('psql', ['-X','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p',String(port),'-U','postgres','-d','postgres','-c',
+      `UPDATE public.crm_deals SET assigned_to='${user1}', assignee_ids=ARRAY['${user1}','${user2}']::uuid[] WHERE id='${dealId}'`]);
+    const raceTwoExecutor = path.join(temp, 'race-two-executor.sql');
+    const raceTwoReassignment = path.join(temp, 'race-two-reassignment.sql');
+    fs.writeFileSync(raceTwoExecutor, `SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','${user1}',false); BEGIN; SELECT public.execute_crm_contact_discussion_task('${taskId}','START'); \\echo EXECUTION_LOCK_HELD\nSELECT pg_sleep(1.5); COMMIT;`, 'utf8');
+    fs.writeFileSync(raceTwoReassignment, `BEGIN; UPDATE public.crm_deals SET assigned_to='${user2}', assignee_ids=ARRAY['${user2}']::uuid[] WHERE id='${dealId}'; \\echo REASSIGNMENT_AFTER_EXECUTION\nCOMMIT;`, 'utf8');
+    const executor = startPsqlSession(raceTwoExecutor, port);
+    await executor.waitFor('EXECUTION_LOCK_HELD');
+    const reassignmentAfterExecution = startPsqlSession(raceTwoReassignment, port);
+    await wait(250);
+    assert.equal(reassignmentAfterExecution.child.exitCode, null, 'Concurrent reassignment did not wait for the authorized execution transaction.');
+    assert.equal(await executor.done, 0, `Authorized execution transaction failed:\n${executor.stdout}\n${executor.stderr}`);
+    assert.equal(await reassignmentAfterExecution.done, 0, `Reassignment after execution failed:\n${reassignmentAfterExecution.stdout}\n${reassignmentAfterExecution.stderr}`);
+    run('psql', ['-X','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p',String(port),'-U','postgres','-d','postgres','-c',
+      `UPDATE public.crm_deals SET assigned_to='${user1}', assignee_ids=ARRAY['${user1}','${user2}']::uuid[] WHERE id='${dealId}'`]);
+
+    const result = run('psql', ['-X','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p',String(port),'-U','postgres','-d','postgres','-f',afterConcurrencyFile]);
     const version = run('psql', ['-X','-A','-t','-h','127.0.0.1','-p',String(port),'-U','postgres','-d','postgres','-c','SHOW server_version']).trim();
-    console.log(`Disposable PostgreSQL ${version} (localhost-only).`);
-    console.log('PASS: synthetic MQ-20 action, direct-write denial, CRM assignment sync/revocation, notification/outbox suppression, and grant assertions.');
+    console.log(`Disposable PostgreSQL ${version} (${dockerMode ? 'isolated Docker; no network or published port' : 'localhost-only'}).`);
+    console.log('PASS: synthetic MQ-20 action, direct-write denial, CRM assignment sync/revocation, notification/outbox suppression, grant assertions, and two true concurrent session orders (reassignment-first revokes stale execution; execution-first holds locks before reassignment).');
     if (result.includes('ERROR')) throw new Error('Unexpected PostgreSQL error text in successful runtime output.');
   } finally {
     if (started) {
-      const stop = cp.spawnSync(bin('pg_ctl'), ['-D',data,'-m','fast','-w','stop'], { windowsHide: true, encoding: 'utf8' });
-      if (stop.status !== 0) console.error('Disposable test cluster did not stop; retained for review:', temp);
-      else started = false;
+      if (dockerMode) {
+        postgresDocker.stop(dockerContainer);
+        dockerContainer = undefined;
+        started = false;
+      } else {
+        const stop = cp.spawnSync(bin('pg_ctl'), ['-D',data,'-m','fast','-w','stop'], { windowsHide: true, encoding: 'utf8' });
+        if (stop.status !== 0) console.error('Disposable test cluster did not stop; retained for review:', temp);
+        else started = false;
+      }
     }
     if (!started) { try { fs.rmSync(temp, { recursive: true, force: true }); } catch (e) { console.error(`Could not remove only the test-created temp directory: ${e.message}`); } }
     if (logFd !== undefined) fs.closeSync(logFd);

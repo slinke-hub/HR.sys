@@ -1,5 +1,6 @@
--- Data-free function definitions copied from verified Staging catalog exports dated 2026-11-09.
--- SQL semicolons are appended because pg_get_functiondef exports function statements without them.
+-- Exported Staging definitions retain their catalog line endings for exact pg_get_functiondef fingerprints.
+-- The Nov 9 assignment-security export supplies is_mq20_profile's exact body
+-- and ACL; the later consolidated catalog omits this helper.
 CREATE OR REPLACE FUNCTION public.is_mq20_profile(p_user_id uuid DEFAULT auth.uid())
  RETURNS boolean
  LANGUAGE sql
@@ -109,3 +110,10 @@ BEGIN
     RETURN NEW;
 END;
 $function$;
+
+GRANT EXECUTE ON FUNCTION public.is_mq20_profile(uuid) TO PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.enforce_mq20_task_service_boundaries() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.enforce_mq20_task_service_boundaries() TO service_role;
+REVOKE ALL ON FUNCTION public.protect_crm_generated_task_identity() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.protect_crm_generated_task_identity() TO service_role;
+GRANT EXECUTE ON FUNCTION public.protect_task_access_fields() TO anon, authenticated, service_role;
