@@ -38,7 +38,11 @@ const mq20Migration = read('supabase/migrations/20261109110000_mq20_contact_disc
 const compatibilityMigration = read('supabase/migrations/20261110100000_crm_staging_compatibility_security.sql');
 const stagingMq20Functions = read('tests/fixtures/staging-mq20-security-functions.sql');
 const stagingCrmWorkflow = read('tests/fixtures/staging-crm-workflow-transition.sql');
-const stagingCrmExistingFunctions = read('tests/fixtures/staging-crm-existing-functions.sql');
+const stagingQueueDefinition = JSON.parse(read('tests/fixtures/staging-queue-task-notification.definition.json')).definition;
+const stagingCrmExistingFunctionsTemplate = read('tests/fixtures/staging-crm-existing-functions.sql');
+assert.ok(stagingCrmExistingFunctionsTemplate.includes('-- STAGING_QUEUE_TASK_NOTIFICATION_DEFINITION'), 'Verified Staging notification definition placeholder is missing');
+const stagingCrmExistingFunctions = stagingCrmExistingFunctionsTemplate.replace('-- STAGING_QUEUE_TASK_NOTIFICATION_DEFINITION', `${stagingQueueDefinition};`);
+const stagingCrmAttachmentHelpers = read('tests/fixtures/staging-crm-attachment-helpers.sql');
 const stagingCrmPrerequisiteStubs = String.raw`
 CREATE OR REPLACE FUNCTION public.is_ines_modani_task(uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 CREATE OR REPLACE FUNCTION public.is_ines_modani_task_list(uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
@@ -47,6 +51,7 @@ CREATE OR REPLACE FUNCTION public.can_marketing_manager_edit_task(uuid,uuid) RET
 CREATE OR REPLACE FUNCTION public.can_view_task_via_employee_grant(uuid,uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 CREATE OR REPLACE FUNCTION public.can_view_task_list(uuid,uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 CREATE OR REPLACE FUNCTION public.can_view_task_list_via_employee_grant(uuid,uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+CREATE OR REPLACE FUNCTION public.is_project_portfolio_admin(uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 `;
 const taskCreate = extractFunction(shared, 'create_task_secure');
 const stageChange = extractFunction(shared, 'change_crm_deal_stage');
@@ -114,7 +119,12 @@ CREATE TABLE public.crm_generated_tasks (
 ALTER TABLE public.crm_generated_tasks ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.crm_generated_tasks FROM PUBLIC, anon, authenticated;
 CREATE TABLE auth.users(id uuid PRIMARY KEY, email text);
-CREATE TABLE public.projects(id uuid PRIMARY KEY, assigned_people uuid[] DEFAULT '{}');
+CREATE TABLE public.projects(
+  id uuid PRIMARY KEY,
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  project_manager_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  assigned_people uuid[] DEFAULT '{}'
+);
 CREATE TABLE public.departments(name text, head_id uuid);
 CREATE TABLE public.task_comments(id bigserial PRIMARY KEY, task_id uuid NOT NULL, user_id uuid NOT NULL, content text NOT NULL, attachments jsonb DEFAULT '[]', created_at timestamptz DEFAULT now());
 CREATE TABLE public.notifications(
@@ -182,7 +192,7 @@ CREATE TRIGGER protect_crm_generated_task_identity BEFORE INSERT OR UPDATE ON pu
   FOR EACH ROW EXECUTE FUNCTION public.protect_crm_generated_task_identity();
 CREATE TRIGGER protect_task_access_fields_trigger BEFORE UPDATE ON public.tasks
   FOR EACH ROW EXECUTE FUNCTION public.protect_task_access_fields();
-` + '\n' + stagingCrmWorkflow + '\n' + stagingCrmPrerequisiteStubs + '\n' + stagingCrmExistingFunctions;
+` + '\n' + stagingCrmWorkflow + '\n' + stagingCrmPrerequisiteStubs + '\n' + stagingCrmExistingFunctions + '\n' + stagingCrmAttachmentHelpers;
 
 const assertions = String.raw`
 SET ROLE authenticated;

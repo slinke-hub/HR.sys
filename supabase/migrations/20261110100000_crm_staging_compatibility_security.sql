@@ -8,6 +8,8 @@ DO $preflight$
 DECLARE
   v_oid oid;
   v_mq20_profile_source text;
+  v_attachment_manage_source text;
+  v_attachment_read_source text;
 BEGIN
   IF current_user <> 'postgres' THEN
     RAISE EXCEPTION 'CRM compatibility migration must be run as postgres';
@@ -204,6 +206,57 @@ BEGIN
     RAISE EXCEPTION 'An anonymous-executable RPC can reach the MQ-20 membership helper';
   END IF;
 
+  -- These two live Staging attachment helpers are authenticated-executable
+  -- SECURITY DEFINER callers. Permit them only at the reviewed fingerprints
+  -- and only while they bind authenticated user IDs to auth.uid(). The
+  -- fingerprint checks also pin the attachment/task/project authorization
+  -- predicates to the exact Staging definitions reviewed on 2026-11-10.
+  SELECT regexp_replace(lower(routine.prosrc), '[[:space:]]+', '', 'g')
+    INTO v_attachment_manage_source
+    FROM pg_proc routine
+    JOIN pg_roles owner_role ON owner_role.oid = routine.proowner
+   WHERE routine.oid = to_regprocedure('public.can_manage_task_attachments(uuid,uuid)')
+     AND owner_role.rolname = 'postgres'
+     AND routine.prosecdef
+     AND 'search_path=public, pg_temp' = ANY(COALESCE(routine.proconfig, ARRAY[]::text[]));
+
+  SELECT regexp_replace(lower(routine.prosrc), '[[:space:]]+', '', 'g')
+    INTO v_attachment_read_source
+    FROM pg_proc routine
+    JOIN pg_roles owner_role ON owner_role.oid = routine.proowner
+   WHERE routine.oid = to_regprocedure('public.can_read_task_attachment_file(text,uuid)')
+     AND owner_role.rolname = 'postgres'
+     AND routine.prosecdef
+     AND 'search_path=public, pg_temp' = ANY(COALESCE(routine.proconfig, ARRAY[]::text[]));
+
+  IF v_attachment_manage_source IS NULL
+     OR md5(pg_get_functiondef(to_regprocedure('public.can_manage_task_attachments(uuid,uuid)'))) <> '6f6e252dcf1908ef50c33e7c1048a50f'
+     OR position('(auth.uid()isnullorp_user_id=auth.uid())' IN v_attachment_manage_source) = 0
+     OR position('(auth.uid()isnullornotpublic.is_mq20_profile(auth.uid()))' IN v_attachment_manage_source) = 0
+     OR has_function_privilege('anon', 'public.can_manage_task_attachments(uuid,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.can_manage_task_attachments(uuid,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.can_manage_task_attachments(uuid,uuid)', 'EXECUTE')
+     OR EXISTS (
+       SELECT 1 FROM aclexplode((SELECT routine.proacl FROM pg_proc routine WHERE routine.oid = 'public.can_manage_task_attachments(uuid,uuid)'::regprocedure)) acl
+        WHERE acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'
+     ) THEN
+    RAISE EXCEPTION 'Task attachment management helper fingerprint or caller scoping has drifted';
+  END IF;
+
+  IF v_attachment_read_source IS NULL
+     OR md5(pg_get_functiondef(to_regprocedure('public.can_read_task_attachment_file(text,uuid)'))) <> 'd0bbd53cff17e3914bf912b7e590b565'
+     OR position('ifp_user_idisnullor(auth.uid()isnotnullandp_user_id<>auth.uid())thenreturnfalse;endif;' IN v_attachment_read_source) = 0
+     OR position('(auth.uid()isnullornotpublic.is_mq20_profile(auth.uid()))' IN v_attachment_read_source) = 0
+     OR has_function_privilege('anon', 'public.can_read_task_attachment_file(text,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.can_read_task_attachment_file(text,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.can_read_task_attachment_file(text,uuid)', 'EXECUTE')
+     OR EXISTS (
+       SELECT 1 FROM aclexplode((SELECT routine.proacl FROM pg_proc routine WHERE routine.oid = 'public.can_read_task_attachment_file(text,uuid)'::regprocedure)) acl
+        WHERE acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'
+     ) THEN
+    RAISE EXCEPTION 'Task attachment reader helper fingerprint or caller scoping has drifted';
+  END IF;
+
   IF EXISTS (
     SELECT 1
       FROM pg_proc caller
@@ -219,6 +272,8 @@ BEGIN
            to_regprocedure('public.can_view_own_crm_contact_task(uuid,uuid)'),
            to_regprocedure('public.crm_is_own_generated_contact_task(uuid,uuid)'),
            to_regprocedure('public.execute_crm_contact_discussion_task(uuid,text,text,text)'),
+           to_regprocedure('public.can_manage_task_attachments(uuid,uuid)'),
+           to_regprocedure('public.can_read_task_attachment_file(text,uuid)'),
            to_regprocedure('public.get_task_employee_access_grants()'),
            to_regprocedure('public.set_task_employee_access_grant(uuid,uuid,boolean)')
          ]::oid[]) expected(oid)

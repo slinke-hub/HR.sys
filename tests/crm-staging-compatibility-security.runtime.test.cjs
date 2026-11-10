@@ -12,13 +12,17 @@ const dockerMode = process.env.HRSYS_PG_DOCKER === '1';
 const pgBin = process.env.PG_BIN || 'C:\\Program Files\\PostgreSQL\\18\\bin';
 const bin = name => path.join(pgBin, `${name}.exe`);
 if (!dockerMode) for (const name of ['initdb', 'pg_ctl', 'postgres', 'psql', 'pg_isready']) assert.ok(fs.existsSync(bin(name)), `Missing PostgreSQL utility ${name}`);
-const fixtureSource = fs.readFileSync(path.join(root, 'tests/fixtures/staging-crm-compatibility-schema.sql'), 'utf8');
+const queueDefinition = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/staging-queue-task-notification.definition.json'), 'utf8')).definition;
+const rawFixtureSource = fs.readFileSync(path.join(root, 'tests/fixtures/staging-crm-compatibility-schema.sql'), 'utf8');
+assert.ok(rawFixtureSource.includes('-- STAGING_QUEUE_TASK_NOTIFICATION_DEFINITION'), 'Verified Staging notification definition placeholder is missing');
+const fixtureSource = rawFixtureSource.replace('-- STAGING_QUEUE_TASK_NOTIFICATION_DEFINITION', `${queueDefinition};`);
+const attachmentHelpersSource = fs.readFileSync(path.join(root, 'tests/fixtures/staging-crm-attachment-helpers.sql'), 'utf8');
 const mq20Source = fs.readFileSync(path.join(root, 'supabase/migrations/20261109110000_mq20_contact_discussion_execution.sql'), 'utf8');
 const mq20ExecutionFunction = mq20Source.match(/CREATE OR REPLACE FUNCTION public\.execute_crm_contact_discussion_task\([\s\S]*?\$function\$;/i)?.[0];
 assert.ok(mq20ExecutionFunction, 'Could not extract the approved MQ-20 execution RPC from migration 2');
 const stubExecutionFunction = /CREATE OR REPLACE FUNCTION public\.execute_crm_contact_discussion_task\(uuid,text,text,text\) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path=public,pg_temp AS \$\$ SELECT '\{\}'::jsonb \$\$;/i;
 assert.match(fixtureSource, stubExecutionFunction, 'Expected compatibility fixture RPC placeholder was not found');
-const fixture = fixtureSource.replace(stubExecutionFunction, mq20ExecutionFunction);
+const fixture = fixtureSource.replace(stubExecutionFunction, mq20ExecutionFunction) + '\n' + attachmentHelpersSource;
 const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261110100000_crm_staging_compatibility_security.sql'), 'utf8');
 
 const assertions = String.raw`
@@ -52,6 +56,14 @@ VALUES ('20000000-0000-4000-8000-000000000003','Synthetic Design task','00000000
 COMMIT;
 INSERT INTO public.crm_design_task_approval_steps(id,task_id,deal_id,approver_id,status) VALUES
  ('30000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000005','PENDING');
+INSERT INTO public.projects(id,assigned_people) VALUES
+ ('50000000-0000-4000-8000-000000000001',ARRAY['00000000-0000-4000-8000-000000000005']::uuid[]);
+UPDATE public.tasks SET project_id='50000000-0000-4000-8000-000000000001'
+ WHERE id='20000000-0000-4000-8000-000000000003';
+INSERT INTO public.task_attachments(id,task_id,user_id,uploaded_by,file_url,file_name)
+VALUES ('40000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000003',
+        '00000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000005',
+        'storage://task-attachments/synthetic/design-proof.pdf','design-proof.pdf');
 
 -- NEGOTIATION remains a first-class stage; LOST still requires its reason.
 INSERT INTO public.crm_deals(id,stage,assigned_to,assignee_ids,title) VALUES
@@ -79,6 +91,36 @@ END $$;
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000004',false);
 DO $$ BEGIN
   IF (SELECT count(*) FROM public.tasks WHERE id='20000000-0000-4000-8000-000000000001') <> 0 THEN RAISE EXCEPTION 'Unassigned MQ-20 employee can read the generated task'; END IF;
+END $$;
+DO $$ DECLARE denied boolean := false; BEGIN
+  IF public.can_manage_task_attachments('20000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000005') THEN
+    RAISE EXCEPTION 'Unassigned user forged another employee ID to manage an attachment';
+  END IF;
+  IF public.can_manage_task_attachments('20000000-0000-4000-8000-000000000003',auth.uid()) THEN
+    RAISE EXCEPTION 'Unassigned user managed another employee task attachment';
+  END IF;
+  IF public.can_read_task_attachment_file('synthetic/design-proof.pdf','00000000-0000-4000-8000-000000000005') THEN
+    RAISE EXCEPTION 'Unassigned user forged another employee ID to read an attachment';
+  END IF;
+  IF public.can_read_task_attachment_file('synthetic/design-proof.pdf',auth.uid()) THEN
+    RAISE EXCEPTION 'Unassigned user read an unrelated task attachment';
+  END IF;
+  BEGIN
+    PERFORM public.is_mq20_profile('00000000-0000-4000-8000-000000000005');
+  EXCEPTION WHEN insufficient_privilege THEN denied := true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Attachment helper context retained direct arbitrary MQ-20 helper access'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000005',false);
+DO $$ BEGIN
+  IF NOT public.can_manage_task_attachments('20000000-0000-4000-8000-000000000003',auth.uid()) THEN
+    RAISE EXCEPTION 'Assigned employee lost task attachment management access';
+  END IF;
+  IF NOT public.can_read_task_attachment_file('synthetic/design-proof.pdf',auth.uid()) THEN
+    RAISE EXCEPTION 'Assigned employee lost read access to an existing task attachment';
+  END IF;
+  IF public.can_read_task_attachment_file('synthetic/design-proof.pdf','00000000-0000-4000-8000-000000000004') THEN
+    RAISE EXCEPTION 'Attachment reader accepted a mismatched employee ID';
+  END IF;
 END $$;
 RESET ROLE;
 UPDATE public.profiles SET is_active=false WHERE id='00000000-0000-4000-8000-000000000002';
@@ -204,6 +246,8 @@ const acceptsConnections = port => new Promise(resolve => {
     const psqlArgs = ['-X', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', String(port), '-U', 'postgres', '-d', 'postgres'];
     console.log('Importing the synthetic Staging catalog fixture, then capturing the 13 MQ-20 policy definitions.');
     run('psql', [...psqlArgs, '-f', fixtureFile]);
+    const fingerprintQuery = `SELECT jsonb_object_agg(signature, fingerprint ORDER BY signature)::text FROM (SELECT signature, md5(pg_get_functiondef(to_regprocedure(signature))) AS fingerprint FROM unnest(ARRAY['public.enforce_deal_workflow_transition()','public.can_view_own_crm_contact_task(uuid,uuid)','public.crm_is_own_generated_contact_task(uuid,uuid)','public.decide_crm_design_task_approval(uuid,text,text)','public.queue_task_notification(uuid,uuid,text,text)']) signature) functions`;
+    console.log(`Preflight Staging function fingerprints: ${run('psql', [...psqlArgs, '-A', '-t', '-c', fingerprintQuery]).trim()}`);
     const policyQuery = `SELECT COALESCE(jsonb_agg(jsonb_build_object('name',policyname,'table',tablename,'cmd',cmd,'roles',roles,'permissive',permissive,'qual',qual,'with_check',with_check) ORDER BY policyname),'[]'::jsonb)::text FROM pg_policies WHERE schemaname='public' AND policyname LIKE 'mq20_%'`;
     const beforePolicies = JSON.parse(run('psql', [...psqlArgs, '-A', '-t', '-c', policyQuery]).trim());
     assert.equal(beforePolicies.length, 13, 'The pre-migration fixture must contain all 13 exported restrictive MQ-20 policies.');
