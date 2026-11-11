@@ -395,6 +395,12 @@ const canMarketingManagerEditTask = task => {
     return isMarketingManagedTaskList(list);
 };
 const canEditTaskRecord = task => !!task && (isTaskAdmin() || task.created_by === currentUser?.id || canMarketingManagerEditTask(task));
+const canExecuteMq20ContactDiscussionTask = task => !!task
+    && isMq20Profile()
+    && task.crm_workflow_kind === 'CONTACT_DISCUSSION'
+    && !task.archived_at
+    && !!currentUser?.id
+    && (task.assignee_id === currentUser.id || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser.id)));
 const canChangeTaskStageRecord = task => {
     if (!task || isMq20Profile()) return false;
     const list = (window.taskListsCache || []).find(item => item.id === task.task_list_id);
@@ -8169,6 +8175,7 @@ function myDayActionButton(task, action, label, kind = '') {
 
 async function renderMyDay() {
     const tasks = await db.fetchMyDay();
+    window.myDayTaskById = Object.fromEntries((tasks || []).filter(task => task?.id).map(task => [task.id, task]));
     const groups = ['DO_NOW', 'DUE_TODAY', 'WAITING', 'BLOCKED', 'OVERDUE', 'NEXT', 'COMPLETED_TODAY'];
     const grouped = Object.fromEntries(groups.map(section => [section, []]));
     (tasks || []).forEach(task => {
@@ -8190,6 +8197,18 @@ async function renderMyDay() {
         let actions = '';
         if (dependencyBlocked) {
             actions = `<span class="my-day-dependency-note"><i data-lucide="lock-keyhole"></i>${escapeHTML(taskDetailText('Waiting for previous task', 'بانتظار المهمة السابقة'))}${task.blocking_task_title ? `: ${escapeHTML(task.blocking_task_title)}` : ''}</span>`;
+        } else if (canExecuteMq20ContactDiscussionTask(task)) {
+            const taskStatus = String(task.status || '').trim().toLowerCase();
+            if (taskStatus === 'pending approval' || !['todo', 'in_progress', 'review'].includes(taskStatus)) {
+                actions = '';
+            } else if (state === 'WAITING' || state === 'BLOCKED') {
+                actions = myDayActionButton(task, 'resume', taskDetailText('Resume', 'استئناف'), 'secondary');
+            } else if (state !== 'COMPLETED_TODAY') {
+                if (taskStatus === 'todo') actions += myDayActionButton(task, 'start', taskDetailText('Start', 'بدء'), 'primary');
+                actions += myDayActionButton(task, 'waiting', taskDetailText('Waiting', 'انتظار'), 'secondary');
+                actions += myDayActionButton(task, 'blocked', taskDetailText("I'm blocked", 'أنا متعطل'), 'warning');
+                actions += myDayActionButton(task, 'complete', taskDetailText('Complete', 'إكمال'), 'success');
+            }
         } else if (state === 'WAITING' || state === 'BLOCKED') {
             actions = myDayActionButton(task, 'resume', taskDetailText('Resume', 'استئناف'), 'secondary');
         } else if (state !== 'COMPLETED_TODAY' && String(task.status || '').toLowerCase() !== 'completed') {
@@ -8236,11 +8255,19 @@ async function renderMyDay() {
 
 window.handleMyDayAction = async function (taskId, action) {
     let result;
+    const task = window.myDayTaskById?.[taskId];
+    const scopedMq20Task = canExecuteMq20ContactDiscussionTask(task);
+    if (isMq20Profile() && (!scopedMq20Task || action === 'handoff')) {
+        return showToast(taskDetailText('This task action is not available.', 'إجراء المهمة هذا غير متاح.'), 'warning');
+    }
     if (action === 'waiting' || action === 'blocked') return window.openMyDayWorkStateModal(taskId, action);
-    if (action === 'start') result = await db.startTask(taskId);
-    if (action === 'resume') result = await db.resumeTaskProductivity(taskId);
-    if (action === 'complete') result = await db.completeTaskProductivity(taskId);
-    if (action === 'handoff') result = await db.completeAndHandOffTask(taskId);
+    if (scopedMq20Task) result = await db.executeCrmContactDiscussionTask(taskId, action.toUpperCase());
+    else {
+        if (action === 'start') result = await db.startTask(taskId);
+        if (action === 'resume') result = await db.resumeTaskProductivity(taskId);
+        if (action === 'complete') result = await db.completeTaskProductivity(taskId);
+        if (action === 'handoff') result = await db.completeAndHandOffTask(taskId);
+    }
     if (!result?.success) return showToast(result?.error?.message || taskDetailText('Unable to update task.', 'تعذر تحديث المهمة.'), 'danger');
     showToast(taskDetailText('Task updated.', 'تم تحديث المهمة.'), 'success');
     delete window.viewHTMLCache['my-day'];
@@ -8249,6 +8276,7 @@ window.handleMyDayAction = async function (taskId, action) {
 
 window.openMyDayWorkStateModal = async function (taskId, mode) {
     const blocked = mode === 'blocked';
+    const scopedMq20Task = canExecuteMq20ContactDiscussionTask(window.myDayTaskById?.[taskId]);
     const categories = blocked ? MY_DAY_BLOCKED_CATEGORIES : MY_DAY_WAITING_CATEGORIES;
     const title = blocked ? taskDetailText("I'm blocked", 'أنا متعطل') : taskDetailText('Mark as waiting', 'وضع في الانتظار');
     const existing = document.getElementById('myDayWorkStateModal');
@@ -8257,13 +8285,15 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
     modal.id = 'myDayWorkStateModal';
     modal.className = 'my-day-modal-backdrop';
     let employeeOptions = '';
-    try {
-        const employees = await db.fetchUsers(false);
-        employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>` + (employees || []).filter(employee => employee.id !== currentUser?.id).map(employee => `<option value="${escapeHTML(employee.id)}">${escapeHTML(window.formatEmployeeName?.(employee) || employee.full_name || employee.email || '')}</option>`).join('');
-    } catch (_) {
-        employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>`;
+    if (!scopedMq20Task) {
+        try {
+            const employees = await db.fetchUsers(false);
+            employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>` + (employees || []).filter(employee => employee.id !== currentUser?.id).map(employee => `<option value="${escapeHTML(employee.id)}">${escapeHTML(window.formatEmployeeName?.(employee) || employee.full_name || employee.email || '')}</option>`).join('');
+        } catch (_) {
+            employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>`;
+        }
     }
-    modal.innerHTML = `<div class="my-day-modal" role="dialog" aria-modal="true"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" title="${escapeHTML(taskDetailText('Close', 'إغلاق'))}"><i data-lucide="x" aria-hidden="true"></i></button><h2>${escapeHTML(title)}</h2><label>${escapeHTML(taskDetailText('Reason', 'السبب'))}<select id="myDayWorkCategory">${categories.map(([value, label]) => `<option value="${value}">${escapeHTML(currentLang === 'ar' ? ({CLIENT:'العميل',SUPPLIER:'المورد',MANAGEMENT:'الإدارة',APPROVAL:'الموافقة',DESIGN:'التصميم',PRODUCTION:'الإنتاج',ANOTHER_EMPLOYEE:'موظف آخر',MISSING_INFORMATION:'معلومات ناقصة',TECHNICAL_PROBLEM:'مشكلة تقنية',OTHER:'أخرى'}[value] || label) : label)}</option>`).join('')}</select></label><label>${escapeHTML(taskDetailText('Waiting for (optional)', 'بانتظار (اختياري)'))}<select id="myDayRelatedUser">${employeeOptions}</select></label><label>${escapeHTML(taskDetailText('Note (optional)', 'ملاحظة (اختيارية)'))}<textarea id="myDayWorkNote" rows="3"></textarea></label><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary my-day-modal-cancel">${escapeHTML(taskDetailText('Cancel', 'إلغاء'))}</button><button type="button" class="btn btn-primary my-day-modal-submit">${escapeHTML(taskDetailText('Save', 'حفظ'))}</button></div></div>`;
+    modal.innerHTML = `<div class="my-day-modal" role="dialog" aria-modal="true"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" title="${escapeHTML(taskDetailText('Close', 'إغلاق'))}"><i data-lucide="x" aria-hidden="true"></i></button><h2>${escapeHTML(title)}</h2><label>${escapeHTML(taskDetailText('Reason', 'السبب'))}<select id="myDayWorkCategory">${categories.map(([value, label]) => `<option value="${value}">${escapeHTML(currentLang === 'ar' ? ({CLIENT:'العميل',SUPPLIER:'المورد',MANAGEMENT:'الإدارة',APPROVAL:'الموافقة',DESIGN:'التصميم',PRODUCTION:'الإنتاج',ANOTHER_EMPLOYEE:'موظف آخر',MISSING_INFORMATION:'معلومات ناقصة',TECHNICAL_PROBLEM:'مشكلة تقنية',OTHER:'أخرى'}[value] || label) : label)}</option>`).join('')}</select></label>${scopedMq20Task ? '' : `<label>${escapeHTML(taskDetailText('Waiting for (optional)', 'بانتظار (اختياري)'))}<select id="myDayRelatedUser">${employeeOptions}</select></label>`}<label>${escapeHTML(taskDetailText('Note (optional)', 'ملاحظة (اختيارية)'))}<textarea id="myDayWorkNote" rows="3"></textarea></label><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary my-day-modal-cancel">${escapeHTML(taskDetailText('Cancel', 'إلغاء'))}</button><button type="button" class="btn btn-primary my-day-modal-submit">${escapeHTML(taskDetailText('Save', 'حفظ'))}</button></div></div>`;
     document.body.appendChild(modal);
     const close = () => modal.remove();
     modal.querySelector('.my-day-modal-close').onclick = close;
@@ -8271,9 +8301,11 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
     modal.addEventListener('click', event => { if (event.target === modal) close(); });
     modal.querySelector('.my-day-modal-submit').onclick = async () => {
         const category = modal.querySelector('#myDayWorkCategory').value;
-        const relatedUserId = modal.querySelector('#myDayRelatedUser').value || null;
+        const relatedUserId = modal.querySelector('#myDayRelatedUser')?.value || null;
         const note = modal.querySelector('#myDayWorkNote').value.trim() || null;
-        const result = blocked ? await db.markTaskBlocked(taskId, category, relatedUserId, note) : await db.markTaskWaiting(taskId, category, relatedUserId, note);
+        const result = scopedMq20Task
+            ? await db.executeCrmContactDiscussionTask(taskId, blocked ? 'BLOCK' : 'WAIT', category, note)
+            : (blocked ? await db.markTaskBlocked(taskId, category, relatedUserId, note) : await db.markTaskWaiting(taskId, category, relatedUserId, note));
         if (!result?.success) return showToast(result?.error?.message || taskDetailText('Unable to update task.', 'تعذر تحديث المهمة.'), 'danger');
         close();
         showToast(taskDetailText('Task updated.', 'تم تحديث المهمة.'), 'success');
@@ -15018,14 +15050,19 @@ window.openDealWorkflowModal = async function (dealId) {
     document.getElementById('workflowDealId').value = dealId;
     document.getElementById('dealWorkflowName').textContent = deal.title;
     const clientName = deal.crm_clients?.name || (t('crm_unassigned') || 'Unassigned');
-    const assignee = users.find(user => user.id === deal.assigned_to);
+    const assigneeIds = Array.isArray(deal.assignee_ids) && deal.assignee_ids.length
+        ? deal.assignee_ids.map(String)
+        : (deal.assigned_to ? [String(deal.assigned_to)] : []);
+    const assignees = assigneeIds.map(id => users.find(user => String(user.id) === id)).filter(Boolean);
     const dealStage = dealLifecycleLabel(deal.stage);
     const summaryFields = [
         [t('crm_client') || 'Client', clientName],
         [t('status') || 'Stage', dealStage],
         ...(canViewFinancials ? [[t('crm_amount_sar') || 'Amount (SAR)', Number(deal.amount || 0) > 0 ? `SAR ${Number(deal.amount).toLocaleString()}` : '—']] : []),
         [t('crm_closing_date') || 'Closing Date', deal.closing_date || '—'],
-        [t('crm_assigned_to') || 'Assigned To', dealEmployeeName(assignee) || (t('crm_unassigned') || 'Unassigned')],
+        [t('crm_assigned_to') || 'Assigned To', assignees.length
+            ? assignees.map(dealEmployeeName).filter(Boolean).join(', ')
+            : (t('crm_unassigned') || 'Unassigned')],
         [t('crm_event_type') || 'Event Type', deal.event_type || '—'],
         [t('crm_first_contact_date') || 'First Contact Date', deal.first_contact_date || '—'],
         [t('crm_contacted_via') || 'Contacted Via', deal.contact_method || '—'],
@@ -16050,7 +16087,11 @@ window.dropDeal = async (ev, newStage) => {
         void window.refreshCrmDashboardInBackground?.();
         return { success: true, dealId, oldStage, newStage };
     } else {
-        showToast(t('toast_failed_to_move_deal'), "danger");
+        const reason = String(res.error?.message || res.data?.message || '');
+        const assignmentRequired = /active deal owner|deal assignee|assignee must be active/i.test(reason);
+        showToast(assignmentRequired
+            ? (t('crm_contact_discussion_assignee_required') || 'Assign an active deal owner before moving this deal to Qualification.')
+            : (t('toast_failed_to_move_deal') || reason), "danger");
         if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
         return { success: false, reason: 'save_failed', dealId, oldStage, newStage };
     }
@@ -17111,8 +17152,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     const users = await db.fetchUsers();
     const assigneeSelect = document.getElementById('crmDealAssignee');
     if (assigneeSelect) {
-        assigneeSelect.innerHTML = `<option value="">${t('crm_select_assignee')}</option>` +
-            users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
+        assigneeSelect.innerHTML = users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
     }
 
     document.getElementById('crmDealId').value = id || '';
@@ -17155,7 +17195,12 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
             if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = deal.lead_source || '';
             document.getElementById('crmDealTechnicalDescription').value = deal.technical_description || '';
 
-            if (assigneeSelect) assigneeSelect.value = deal.assigned_to || '';
+            if (assigneeSelect) {
+                const selectedAssignees = new Set(Array.isArray(deal.assignee_ids) && deal.assignee_ids.length
+                    ? deal.assignee_ids.map(String)
+                    : (deal.assigned_to ? [String(deal.assigned_to)] : []));
+                Array.from(assigneeSelect.options).forEach(option => { option.selected = selectedAssignees.has(option.value); });
+            }
 
             if (deal.stage === 'LOST') {
                 document.getElementById('crmDealLostReasonGroup').style.display = 'block';
@@ -17174,7 +17219,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
         if (document.getElementById('crmDealContactMethod')) document.getElementById('crmDealContactMethod').value = '';
         if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = '';
         document.getElementById('crmDealTechnicalDescription').value = '';
-        if (assigneeSelect) assigneeSelect.value = '';
+        if (assigneeSelect) Array.from(assigneeSelect.options).forEach(option => { option.selected = false; });
         document.getElementById('crmDealLostReasonGroup').style.display = 'none';
     }
 
@@ -17188,7 +17233,8 @@ window.handleCreateDeal = async (e) => {
     e.preventDefault();
     const id = document.getElementById('crmDealId').value;
     const assigneeEl = document.getElementById('crmDealAssignee');
-    const assigneeVal = assigneeEl ? assigneeEl.value : null;
+    const assigneeIds = assigneeEl ? Array.from(assigneeEl.selectedOptions || []).map(option => option.value).filter(Boolean) : [];
+    const assigneeVal = assigneeIds[0] || null;
     const closingDateEl = document.getElementById('crmDealClosingDate');
 
     const eventTypeEl = document.getElementById('crmDealEventType');
@@ -17197,7 +17243,7 @@ window.handleCreateDeal = async (e) => {
     const leadSourceEl = document.getElementById('crmDealLeadSource');
     const amountValue = canCurrentUserViewBusinessFinancials() ? document.getElementById('crmDealAmount').value.trim() : '';
 
-    if (!firstContactDateEl?.value || !contactMethodEl?.value || !assigneeVal) {
+    if (!firstContactDateEl?.value || !contactMethodEl?.value || !assigneeIds.length) {
         return showToast(window.t('msg_toast_26') || 'Please fill in all required fields.', 'danger');
     }
 
@@ -17210,7 +17256,8 @@ window.handleCreateDeal = async (e) => {
         contact_method: (contactMethodEl && contactMethodEl.value) ? contactMethodEl.value : null,
         lead_source: (leadSourceEl && leadSourceEl.value) ? leadSourceEl.value : null,
         technical_description: document.getElementById('crmDealTechnicalDescription').value || null,
-        assigned_to: assigneeVal
+        assigned_to: assigneeVal,
+        assignee_ids: assigneeIds
     };
     if (canCurrentUserViewBusinessFinancials()) data.amount = amountValue === '' ? null : Number(amountValue);
     if (!id) {

@@ -90,7 +90,10 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals, canViewFinancial
   const text = COPY[lang];
   const clientName = deal.clientName || deal.crm_clients?.name || deal.title || (lang === 'ar' ? 'عميل' : 'Client');
   const details = deal.details || deal.technical_description || deal.event_type || deal.title;
-  const profile = deal.assignee || {};
+  const assignees = Array.isArray(deal.assignees) && deal.assignees.length
+    ? deal.assignees
+    : (deal.assignee ? [deal.assignee] : []);
+  const profile = assignees[0] || {};
   const isLost = normalizeStage(deal.stage) === 'LOST';
   const workflowStatus = String(deal.workflow_status || 'NOT_STARTED').toUpperCase();
   const designTaskStatus = String(deal.design_task_status || '').toUpperCase();
@@ -142,7 +145,9 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals, canViewFinancial
         {workflowBadge && <span className={`tw-mb-2 tw-inline-flex tw-rounded-full tw-px-2 tw-py-1 tw-text-[9px] tw-font-black ${workflowBadge.classes}`}>{workflowBadge.label}</span>}
         <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-slate-100 tw-pt-3">
           <span className="tw-flex tw-items-center tw-gap-1.5 tw-text-[11px] tw-font-semibold tw-text-slate-500"><CalendarDays size={13} />{dateLabel(deal.closing_date || deal.created_at, lang)}</span>
-          <span className="tw-flex tw-min-w-0 tw-flex-1 tw-justify-end"><EmployeeName profile={profile} lang={lang} /></span>
+          <span className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-wrap tw-justify-end tw-gap-x-2 tw-gap-y-1">
+            {assignees.length ? assignees.map(person => <EmployeeName key={person.id} profile={person} lang={lang} />) : <EmployeeName profile={profile} lang={lang} />}
+          </span>
         </div>
         {canViewFinancials && Number(deal.amount || 0) > 0 && <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-text-[11px] tw-font-bold tw-text-emerald-700"><CircleDollarSign size={13} />SAR {money(deal.amount)}</div>}
       </div>
@@ -272,11 +277,18 @@ function CrmDashboard({ payload = {} }) {
   );
   const canDeleteDeals = window.canCurrentUserDeleteCrmDeals?.() === true;
   const canViewFinancials = payload.canViewFinancials === true;
-  const sourceDeals = useMemo(() => (payload.deals || []).map(deal => ({
-    ...deal,
-    clientName: deal.crm_clients?.name,
-    assignee: payload.users?.find(user => user.id === deal.assigned_to)
-  })), [payload.deals, payload.users]);
+  const sourceDeals = useMemo(() => (payload.deals || []).map(deal => {
+    const ids = Array.isArray(deal.assignee_ids) && deal.assignee_ids.length
+      ? deal.assignee_ids.map(String)
+      : (deal.assigned_to ? [String(deal.assigned_to)] : []);
+    const assignees = ids.map(id => payload.users?.find(user => String(user.id) === id)).filter(Boolean);
+    return {
+      ...deal,
+      clientName: deal.crm_clients?.name,
+      assignee: assignees[0] || payload.users?.find(user => String(user.id) === String(deal.assigned_to)),
+      assignees
+    };
+  }), [payload.deals, payload.users]);
   const [deals, setDeals] = useState(sourceDeals);
   useEffect(() => setDeals(sourceDeals), [sourceDeals]);
   const handleDealStageChange = (dealId, stage) => {
