@@ -17,21 +17,57 @@ const rawFixtureSource = fs.readFileSync(path.join(root, 'tests/fixtures/staging
 assert.ok(rawFixtureSource.includes('-- STAGING_QUEUE_TASK_NOTIFICATION_DEFINITION'), 'Verified Staging notification definition placeholder is missing');
 const fixtureSource = rawFixtureSource.replace('-- STAGING_QUEUE_TASK_NOTIFICATION_DEFINITION', `${queueDefinition};`);
 const attachmentHelpersSource = fs.readFileSync(path.join(root, 'tests/fixtures/staging-crm-attachment-helpers.sql'), 'utf8');
+const employeeAccessMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20260908110000_marketing_manager_employee_task_access.sql'), 'utf8');
+const extractFunction = name => {
+  const start = employeeAccessMigration.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
+  assert.notEqual(start, -1, `Authentic Staging source is missing ${name}`);
+  const end = employeeAccessMigration.indexOf('$$;', start);
+  assert.notEqual(end, -1, `Could not extract authentic ${name} definition`);
+  // PostgreSQL preserves function-body line endings in pg_get_functiondef.
+  // The tracked migration is CRLF in this checkout while the reviewed
+  // Staging export is LF; normalize the authentic DDL so the disposable
+  // catalog reproduces the verified Staging definition fingerprints.
+  return employeeAccessMigration.slice(start, end + 3).replace(/\r\n/g, '\n');
+};
+const employeeAccessTable = employeeAccessMigration.match(/CREATE TABLE IF NOT EXISTS public\.task_employee_access_grants\s*\([\s\S]*?\n\);/i)?.[0];
+assert.ok(employeeAccessTable, 'Could not extract the authentic employee-access registry definition');
+const employeeAccessFixture = `
+ALTER TABLE public.profiles
+  ADD COLUMN job_title text,
+  ADD COLUMN department_id uuid,
+  ADD COLUMN full_name text,
+  ADD COLUMN display_name text,
+  ADD COLUMN display_name_ar text;
+ALTER TABLE public.departments ADD COLUMN id uuid, ADD COLUMN name_ar text;
+${employeeAccessTable}
+ALTER TABLE public.task_employee_access_grants ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.task_employee_access_grants TO authenticated;
+${['is_marketing_task_manager', 'is_sales_marketing_employee', 'is_ines_modani_profile', 'get_task_employee_access_grants', 'set_task_employee_access_grant'].map(extractFunction).join('\n')}
+REVOKE ALL ON FUNCTION public.get_task_employee_access_grants() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.set_task_employee_access_grant(uuid, uuid, boolean) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_task_employee_access_grants() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.set_task_employee_access_grant(uuid, uuid, boolean) TO authenticated, service_role;
+-- Reproduce the exact effective and explicit Staging ACL drift from the Nov 11 export.
+GRANT EXECUTE ON FUNCTION public.get_task_employee_access_grants() TO PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.set_task_employee_access_grant(uuid, uuid, boolean) TO PUBLIC, anon;
+`;
 const mq20Source = fs.readFileSync(path.join(root, 'supabase/migrations/20261109110000_mq20_contact_discussion_execution.sql'), 'utf8');
 const mq20ExecutionFunction = mq20Source.match(/CREATE OR REPLACE FUNCTION public\.execute_crm_contact_discussion_task\([\s\S]*?\$function\$;/i)?.[0];
 assert.ok(mq20ExecutionFunction, 'Could not extract the approved MQ-20 execution RPC from migration 2');
 const stubExecutionFunction = /CREATE OR REPLACE FUNCTION public\.execute_crm_contact_discussion_task\(uuid,text,text,text\) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path=public,pg_temp AS \$\$ SELECT '\{\}'::jsonb \$\$;/i;
 assert.match(fixtureSource, stubExecutionFunction, 'Expected compatibility fixture RPC placeholder was not found');
-const fixture = fixtureSource.replace(stubExecutionFunction, mq20ExecutionFunction) + '\n' + attachmentHelpersSource;
+const fixture = fixtureSource.replace(stubExecutionFunction, mq20ExecutionFunction) + '\n' + attachmentHelpersSource + '\n' + employeeAccessFixture;
 const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261110100000_crm_staging_compatibility_security.sql'), 'utf8');
 
 const assertions = String.raw`
-INSERT INTO public.profiles(id,employee_id,is_active,crm_access,role,task_email_notifications) VALUES
- ('00000000-0000-4000-8000-000000000001','MQ-20',true,false,'EMPLOYEE',false),
- ('00000000-0000-4000-8000-000000000002','MQ-20',true,false,'EMPLOYEE',false),
- ('00000000-0000-4000-8000-000000000003','EMP-3',true,true,'EMPLOYEE',false),
- ('00000000-0000-4000-8000-000000000004','MQ-20',true,false,'EMPLOYEE',false),
- ('00000000-0000-4000-8000-000000000005','APPROVER',true,false,'EMPLOYEE',false);
+INSERT INTO public.profiles(id,employee_id,is_active,crm_access,role,task_email_notifications,job_title) VALUES
+ ('00000000-0000-4000-8000-000000000001','MQ-20',true,false,'EMPLOYEE',false,NULL),
+ ('00000000-0000-4000-8000-000000000002','MQ-20',true,false,'EMPLOYEE',false,NULL),
+ ('00000000-0000-4000-8000-000000000003','EMP-3',true,true,'EMPLOYEE',false,NULL),
+ ('00000000-0000-4000-8000-000000000004','MQ-20',true,false,'EMPLOYEE',false,NULL),
+ ('00000000-0000-4000-8000-000000000005','APPROVER',true,false,'EMPLOYEE',false,NULL),
+ ('00000000-0000-4000-8000-000000000006','MGR-1',true,false,'EMPLOYEE',false,'Marketing Manager'),
+ ('00000000-0000-4000-8000-000000000007','MQ-08',true,false,'EMPLOYEE',false,NULL);
 INSERT INTO auth.users(id,email) SELECT id, 'synthetic-' || id || '@example.invalid' FROM public.profiles;
 INSERT INTO public.crm_deals(id,stage,assigned_to,assignee_ids,workflow_status,title,created_by) VALUES
  ('10000000-0000-4000-8000-000000000001','QUALIFICATION','00000000-0000-4000-8000-000000000001',ARRAY['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002']::uuid[],'CONTACT','Synthetic Contact','00000000-0000-4000-8000-000000000003'),
@@ -246,13 +282,22 @@ const acceptsConnections = port => new Promise(resolve => {
     const psqlArgs = ['-X', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', String(port), '-U', 'postgres', '-d', 'postgres'];
     console.log('Importing the synthetic Staging catalog fixture, then capturing the 13 MQ-20 policy definitions.');
     run('psql', [...psqlArgs, '-f', fixtureFile]);
+    const anonPreMigrationChecks = `SET ROLE anon; DO $anon_body$ DECLARE denied boolean := false; BEGIN IF EXISTS (SELECT 1 FROM public.get_task_employee_access_grants()) THEN RAISE EXCEPTION 'Anonymous grant reader returned rows without an authenticated identity'; END IF; BEGIN PERFORM public.set_task_employee_access_grant('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000007',true); EXCEPTION WHEN insufficient_privilege THEN denied := true; END; IF NOT denied THEN RAISE EXCEPTION 'Anonymous grant writer passed its Marketing Manager authorization guard'; END IF; END $anon_body$; RESET ROLE; DO $postgres_check$ BEGIN IF EXISTS (SELECT 1 FROM public.task_employee_access_grants) THEN RAISE EXCEPTION 'Anonymous grant writer modified access records'; END IF; END $postgres_check$;`;
+    run('psql', [...psqlArgs, '-c', anonPreMigrationChecks]);
+    console.log('PASS: with the observed pre-migration ACL, anonymous calls return no grant rows and the write RPC rejects before changing records.');
     const fingerprintQuery = `SELECT jsonb_object_agg(signature, fingerprint ORDER BY signature)::text FROM (SELECT signature, md5(pg_get_functiondef(to_regprocedure(signature))) AS fingerprint FROM unnest(ARRAY['public.enforce_deal_workflow_transition()','public.can_view_own_crm_contact_task(uuid,uuid)','public.crm_is_own_generated_contact_task(uuid,uuid)','public.decide_crm_design_task_approval(uuid,text,text)','public.queue_task_notification(uuid,uuid,text,text)']) signature) functions`;
     console.log(`Preflight Staging function fingerprints: ${run('psql', [...psqlArgs, '-A', '-t', '-c', fingerprintQuery]).trim()}`);
+    const grantFingerprintQuery = `SELECT jsonb_agg(jsonb_build_object('signature',p.oid::regprocedure::text,'md5',md5(pg_get_functiondef(p.oid)),'owner',r.rolname,'security_definer',p.prosecdef,'settings',p.proconfig,'anon_execute',has_function_privilege('anon',p.oid,'EXECUTE'),'authenticated_execute',has_function_privilege('authenticated',p.oid,'EXECUTE'),'service_role_execute',has_function_privilege('service_role',p.oid,'EXECUTE'),'acl',p.proacl::text) ORDER BY p.oid::regprocedure::text)::text FROM pg_proc p JOIN pg_roles r ON r.oid=p.proowner WHERE p.oid IN ('public.get_task_employee_access_grants()'::regprocedure,'public.set_task_employee_access_grant(uuid,uuid,boolean)'::regprocedure)`;
+    console.log(`Synthetic employee-access RPC preflight: ${run('psql', [...psqlArgs, '-A', '-t', '-c', grantFingerprintQuery]).trim()}`);
     const policyQuery = `SELECT COALESCE(jsonb_agg(jsonb_build_object('name',policyname,'table',tablename,'cmd',cmd,'roles',roles,'permissive',permissive,'qual',qual,'with_check',with_check) ORDER BY policyname),'[]'::jsonb)::text FROM pg_policies WHERE schemaname='public' AND policyname LIKE 'mq20_%'`;
     const beforePolicies = JSON.parse(run('psql', [...psqlArgs, '-A', '-t', '-c', policyQuery]).trim());
     assert.equal(beforePolicies.length, 13, 'The pre-migration fixture must contain all 13 exported restrictive MQ-20 policies.');
     console.log('Applying compatibility migration in the disposable database.');
     run('psql', [...psqlArgs, '-f', migrationFile]);
+    const accessAcl = run('psql', [...psqlArgs, '-A', '-t', '-c', `SELECT has_function_privilege('anon','public.get_task_employee_access_grants()','EXECUTE')::text || '|' || has_function_privilege('authenticated','public.get_task_employee_access_grants()','EXECUTE')::text || '|' || has_function_privilege('service_role','public.get_task_employee_access_grants()','EXECUTE')::text || '|' || has_function_privilege('anon','public.set_task_employee_access_grant(uuid,uuid,boolean)','EXECUTE')::text || '|' || has_function_privilege('authenticated','public.set_task_employee_access_grant(uuid,uuid,boolean)','EXECUTE')::text || '|' || has_function_privilege('service_role','public.set_task_employee_access_grant(uuid,uuid,boolean)','EXECUTE')::text || '|' || (SELECT EXISTS (SELECT 1 FROM pg_proc routine CROSS JOIN LATERAL aclexplode(COALESCE(routine.proacl, acldefault('f',routine.proowner))) acl WHERE routine.oid='public.get_task_employee_access_grants()'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE')::text) || '|' || (SELECT EXISTS (SELECT 1 FROM pg_proc routine CROSS JOIN LATERAL aclexplode(COALESCE(routine.proacl, acldefault('f',routine.proowner))) acl WHERE routine.oid='public.set_task_employee_access_grant(uuid,uuid,boolean)'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE')::text)`]).trim();
+    assert.equal(accessAcl, 'false|true|true|false|true|true|false|false', 'The migration must remove PUBLIC/anon execution and preserve authenticated/service_role access for both employee-access RPCs.');
+    run('psql', [...psqlArgs, '-c', `SET ROLE anon; DO $anon_after$ DECLARE denied boolean := false; BEGIN BEGIN PERFORM public.get_task_employee_access_grants(); EXCEPTION WHEN insufficient_privilege THEN denied := true; END; IF NOT denied THEN RAISE EXCEPTION 'Anonymous grant reader remains executable'; END IF; denied := false; BEGIN PERFORM public.set_task_employee_access_grant('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000007',true); EXCEPTION WHEN insufficient_privilege THEN denied := true; END; IF NOT denied THEN RAISE EXCEPTION 'Anonymous grant writer remains executable'; END IF; END $anon_after$; RESET ROLE;`]);
+    console.log('PASS: the compatibility migration removes anonymous/PUBLIC RPC execution without removing authenticated or service_role grants.');
     const afterPolicies = JSON.parse(run('psql', [...psqlArgs, '-A', '-t', '-c', policyQuery]).trim());
     assert.equal(afterPolicies.length, 13, 'Migration altered the MQ-20 policy inventory.');
     const helperCall = /(?:public\.)?is_mq20_profile\s*\(\s*auth\.uid\s*\(\s*\)\s*\)/gi;
@@ -261,6 +306,9 @@ const acceptsConnections = port => new Promise(resolve => {
     assert.ok(afterPolicies.every(policy => !/is_mq20_profile\s*\(/i.test(`${policy.qual || ''} ${policy.with_check || ''}`)), 'An MQ-20 policy still calls the UUID-taking helper.');
     fs.writeFileSync(sqlFile, assertions, 'utf8');
     run('psql', [...psqlArgs, '-f', assertionsFile]);
+    const authorizedGrantChecks = `SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000006',false); SELECT public.set_task_employee_access_grant('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000007',true); DO $manager_check$ DECLARE rows_found integer; denied boolean := false; BEGIN SELECT count(*) INTO rows_found FROM public.get_task_employee_access_grants() WHERE viewer_id='00000000-0000-4000-8000-000000000001' AND subject_id='00000000-0000-4000-8000-000000000007' AND is_locked; IF rows_found <> 1 THEN RAISE EXCEPTION 'Authorized Marketing Manager could not read the expected locked MQ-20 grant'; END IF; BEGIN PERFORM public.set_task_employee_access_grant('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000007',false); EXCEPTION WHEN insufficient_privilege THEN denied := true; END; IF NOT denied THEN RAISE EXCEPTION 'MQ-20 fixed grant was incorrectly removable'; END IF; END $manager_check$; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false); DO $non_manager$ DECLARE denied boolean := false; BEGIN BEGIN PERFORM public.set_task_employee_access_grant('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000007',true); EXCEPTION WHEN insufficient_privilege THEN denied := true; END; IF NOT denied THEN RAISE EXCEPTION 'Non-manager changed employee task access'; END IF; END $non_manager$; RESET ROLE;`;
+    run('psql', [...psqlArgs, '-c', authorizedGrantChecks]);
+    console.log('PASS: authenticated Marketing Manager grants remain functional; MQ-20 fixed access stays locked and non-managers remain denied.');
     const mq20ProbeChecks = `SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false); DO $probe$ DECLARE blocked boolean := false; BEGIN BEGIN PERFORM public.is_mq20_profile('00000000-0000-4000-8000-000000000002'); EXCEPTION WHEN insufficient_privilege THEN blocked := true; END; IF NOT blocked THEN RAISE EXCEPTION 'Authenticated user probed an arbitrary employee UUID'; END IF; IF public.is_mq20_current_user() IS DISTINCT FROM true THEN RAISE EXCEPTION 'MQ-20 current-user policy helper failed'; END IF; END $probe$; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false); DO $self$ BEGIN IF public.is_mq20_current_user() IS DISTINCT FROM false THEN RAISE EXCEPTION 'Non-MQ-20 self-check returned the wrong value'; END IF; END $self$; RESET ROLE; SET ROLE anon; DO $anon$ DECLARE blocked boolean := false; BEGIN BEGIN PERFORM public.is_mq20_profile('00000000-0000-4000-8000-000000000001'); EXCEPTION WHEN insufficient_privilege THEN blocked := true; END; IF NOT blocked THEN RAISE EXCEPTION 'Anonymous role probed MQ-20 membership'; END IF; END $anon$; RESET ROLE;`;
     run('psql', [...psqlArgs, '-c', mq20ProbeChecks]);
     console.log('PASS: anon and authenticated cannot invoke the arbitrary-UUID helper; authenticated current-user authorization remains available.');

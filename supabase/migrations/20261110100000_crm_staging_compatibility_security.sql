@@ -4,6 +4,55 @@ BEGIN;
 SET LOCAL lock_timeout = '15s';
 SET LOCAL statement_timeout = '120s';
 
+-- Staging's reviewed employee-access RPC bodies require authenticated
+-- callers, but the fresh catalog shows explicit PUBLIC and anon EXECUTE ACLs.
+-- Correct only those two exact, fingerprint-pinned RPCs before the general
+-- caller scan below. The enclosing transaction rolls this correction back if
+-- any later preflight check fails. Authenticated/service_role access remains.
+DO $employee_access_acl$
+DECLARE
+  v_oid oid;
+BEGIN
+  FOREACH v_oid IN ARRAY ARRAY[
+    to_regprocedure('public.get_task_employee_access_grants()'),
+    to_regprocedure('public.set_task_employee_access_grant(uuid,uuid,boolean)')
+  ]::oid[] LOOP
+    IF v_oid IS NULL
+       OR (v_oid = to_regprocedure('public.get_task_employee_access_grants()')
+           AND md5(pg_get_functiondef(v_oid)) <> '5f058c8d26e4c59aa2276d3935381bb4')
+       OR (v_oid = to_regprocedure('public.set_task_employee_access_grant(uuid,uuid,boolean)')
+           AND md5(pg_get_functiondef(v_oid)) <> '739e91d6a1fcba734b5e98846b1d0779')
+       OR NOT EXISTS (
+         SELECT 1
+         FROM pg_proc routine
+         WHERE routine.oid = v_oid
+           AND routine.proowner = 'postgres'::regrole
+           AND routine.prosecdef
+           AND 'search_path=public, pg_temp' = ANY(COALESCE(routine.proconfig, ARRAY[]::text[]))
+       )
+       OR NOT has_function_privilege('authenticated', v_oid, 'EXECUTE') THEN
+      RAISE EXCEPTION 'Employee task-access RPC fingerprint, owner, security, or authenticated grant differs from the reviewed Staging definition';
+    END IF;
+
+    IF v_oid = to_regprocedure('public.get_task_employee_access_grants()') THEN
+      EXECUTE 'REVOKE ALL ON FUNCTION public.get_task_employee_access_grants() FROM PUBLIC, anon';
+    ELSE
+      EXECUTE 'REVOKE ALL ON FUNCTION public.set_task_employee_access_grant(uuid, uuid, boolean) FROM PUBLIC, anon';
+    END IF;
+
+    IF has_function_privilege('anon', v_oid, 'EXECUTE')
+       OR NOT has_function_privilege('authenticated', v_oid, 'EXECUTE')
+       OR EXISTS (
+         SELECT 1
+         FROM aclexplode((SELECT routine.proacl FROM pg_proc routine WHERE routine.oid = v_oid)) acl
+         WHERE acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'
+       ) THEN
+      RAISE EXCEPTION 'Employee task-access RPC ACL correction did not preserve authenticated access while removing PUBLIC/anon execution';
+    END IF;
+  END LOOP;
+END;
+$employee_access_acl$;
+
 DO $preflight$
 DECLARE
   v_oid oid;
