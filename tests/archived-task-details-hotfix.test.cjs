@@ -20,7 +20,12 @@ assert.match(modal, /if \(!preserveArchivedTaskView && !\['tasks', 'tasks_v2'\]\
 assert.match(viewRenderer, /const isTaskDetailsView = viewId === 'tasks' \|\| viewId === 'archived_tasks'/,
   'The detail panel must remain available over both task views.');
 assert.match(archivedRenderer, /archivedTaskSearch/);
+assert.match(archivedRenderer, /archivedTaskDate/);
 assert.match(archivedRenderer, /archivedTaskStatus/);
+assert.match(archivedRenderer, /data-name=/);
+assert.match(archivedRenderer, /data-date=/);
+assert.match(app, /const name = String\(document\.getElementById\('archivedTaskSearch'\)/);
+assert.match(app, /const date = String\(document\.getElementById\('archivedTaskDate'\)/);
 assert.match(app, /window\.closeTaskDetailsModal = function \(\) \{[\s\S]*?classList\.remove\('active'\)/,
   'Closing details must close the overlay without navigating away.');
 assert.doesNotMatch(app.slice(app.lastIndexOf('window.closeTaskDetailsModal = function () {'), app.indexOf('\n};', app.lastIndexOf('window.closeTaskDetailsModal = function () {'))), /renderView\(/,

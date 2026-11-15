@@ -8449,14 +8449,14 @@ async function renderArchivedTasks() {
     const text = currentLang === 'ar' ? {
         title: 'المهام المؤرشفة',
         subtitle: 'تُنقل المهام المكتملة تلقائياً إلى الأرشيف يومياً بعد الساعة 11:00 مساءً.',
-        back: 'إدارة المهام', search: 'البحث في المهام المؤرشفة...', all: 'كل الحالات',
+        back: 'إدارة المهام', name: 'اسم المهمة', date: 'تاريخ الأرشفة', search: 'البحث في المهام المؤرشفة...', all: 'كل الحالات',
         task: 'المهمة', assigned: 'مُعيّنة إلى', creator: 'أنشأها', status: 'الحالة',
         due: 'تاريخ الاستحقاق', archived: 'تاريخ الأرشفة', open: 'فتح المهمة', empty: 'لا توجد مهام مؤرشفة بعد.',
         completed: 'مكتملة', approved: 'مُعتمدة', unknown: 'غير معروف', unassigned: 'غير معيّنة'
     } : {
         title: 'Archived Tasks',
         subtitle: 'Completed tasks are moved here automatically every day after 11:00 PM.',
-        back: 'Task Manager', search: 'Search archived tasks...', all: 'All statuses',
+        back: 'Task Manager', name: 'Task name', date: 'Archived date', search: 'Search archived tasks...', all: 'All statuses',
         task: 'Task', assigned: 'Assigned To', creator: 'Created By', status: 'Status',
         due: 'Due Date', archived: 'Archived At', open: 'Open task', empty: 'No archived tasks yet.',
         completed: 'Completed', approved: 'Approved', unknown: 'Unknown', unassigned: 'Unassigned'
@@ -8498,9 +8498,10 @@ async function renderArchivedTasks() {
         const normalizedStatus = String(task.status || 'completed').toLowerCase();
         const statusLabel = normalizedStatus === 'approved' ? text.approved : text.completed;
         const searchText = [title, assigneeNames.join(' '), creatorName, statusLabel].join(' ').toLowerCase();
+        const archivedDate = String(task.archived_at || '').slice(0, 10);
         const canOpen = canOpenTaskDetails(window.taskCache[String(task.id)]);
         return `
-            <tr class="archived-task-row" data-status="${escapeHTML(normalizedStatus)}" data-search="${escapeHTML(searchText)}">
+            <tr class="archived-task-row" data-status="${escapeHTML(normalizedStatus)}" data-search="${escapeHTML(searchText)}" data-name="${escapeHTML(String(title).toLowerCase())}" data-date="${escapeHTML(archivedDate)}">
                 <td data-label="${escapeHTML(text.task)}">${canOpen
                     ? `<button type="button" class="archived-task-open" onclick="window.openArchivedTaskDetails('${escapeHTML(task.id)}')" aria-label="${escapeHTML(text.open)}: ${escapeHTML(title)}">${escapeHTML(title)}</button>`
                     : `<strong>${escapeHTML(title)}</strong>`}</td>
@@ -8522,12 +8523,13 @@ async function renderArchivedTasks() {
         </div>
         <section class="card fade-in-up archived-tasks-card">
             <div class="archived-task-filters">
-                <label class="archived-task-search"><i data-lucide="search"></i><input id="archivedTaskSearch" class="form-control" type="search" placeholder="${escapeHTML(text.search)}" oninput="window.filterArchivedTasks()"></label>
-                <select id="archivedTaskStatus" class="form-control" onchange="window.filterArchivedTasks()">
+                <label class="archived-task-filter-field archived-task-search"><span>${escapeHTML(text.name)}</span><div><i data-lucide="search"></i><input id="archivedTaskSearch" class="form-control" type="search" placeholder="${escapeHTML(text.search)}" oninput="window.filterArchivedTasks()"></div></label>
+                <label class="archived-task-filter-field"><span>${escapeHTML(text.date)}</span><input id="archivedTaskDate" class="form-control" type="date" aria-label="${escapeHTML(text.date)}" onchange="window.filterArchivedTasks()"></label>
+                <label class="archived-task-filter-field"><span>${escapeHTML(text.status)}</span><select id="archivedTaskStatus" class="form-control" onchange="window.filterArchivedTasks()">
                     <option value="">${escapeHTML(text.all)}</option>
                     <option value="completed">${escapeHTML(text.completed)}</option>
                     <option value="approved">${escapeHTML(text.approved)}</option>
-                </select>
+                </select></label>
                 <span class="archived-task-count"><strong id="archivedTaskVisibleCount">${visibleArchivedTasks.length}</strong> / ${visibleArchivedTasks.length}</span>
             </div>
             <div class="table-responsive archived-task-table-wrap">
@@ -8551,11 +8553,15 @@ window.openArchivedTaskDetails = async function (taskId) {
 
 window.filterArchivedTasks = function () {
     const query = String(document.getElementById('archivedTaskSearch')?.value || '').trim().toLowerCase();
+    const name = String(document.getElementById('archivedTaskSearch')?.value || '').trim().toLowerCase();
+    const date = String(document.getElementById('archivedTaskDate')?.value || '').trim();
     const status = String(document.getElementById('archivedTaskStatus')?.value || '').toLowerCase();
     const rows = Array.from(document.querySelectorAll('.archived-task-row'));
     let visible = 0;
     rows.forEach(row => {
-        const matches = (!query || String(row.dataset.search || '').includes(query))
+        const matches = (!name || String(row.dataset.name || '').includes(name))
+            && (!query || String(row.dataset.search || '').includes(query))
+            && (!date || String(row.dataset.date || '') === date)
             && (!status || String(row.dataset.status || '') === status);
         row.hidden = !matches;
         if (matches) visible += 1;
