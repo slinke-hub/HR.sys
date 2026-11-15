@@ -2740,6 +2740,10 @@ async function canCurrentUserAccessView(viewId) {
     if (isAdmin) return true;
     if (viewId === 'dashboard') return true;
     if (viewId === 'my-day') return true;
+    if (viewId === 'archived_tasks') {
+        return String(currentUserRole || currentUserProfile?.role || '').trim().toUpperCase() === 'EMPLOYEE'
+            || canViewAllArchivedTaskRecords();
+    }
     if (viewId === 'project-command-center') return canViewFullProjectCommandCenter();
 
     if (viewId === 'users') return canCurrentUserManageUsers();
@@ -2852,6 +2856,8 @@ window.updateSidebarVisibility = async function () {
         const viewId = item.dataset.view;
         if (viewId === 'dashboard' || viewId === 'my-day') {
             item.style.display = 'flex';
+        } else if (viewId === 'archived_tasks') {
+            item.style.display = (normalizedRole === 'EMPLOYEE' || canViewAllArchivedTaskRecords()) ? 'flex' : 'none';
         } else if (isAdmin) {
             item.style.display = 'flex';
         } else if (window.appUserPermissions && window.appUserPermissions.includes(viewId)) {
@@ -2860,7 +2866,7 @@ window.updateSidebarVisibility = async function () {
             const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole);
             item.style.display = perm && perm.allowed_pages && perm.allowed_pages.includes(viewId) ? 'flex' : 'none';
         } else {
-            const employeeAllowedViews = new Set(['dashboard', 'my-day', 'requests', 'time', 'tasks', 'documents', 'employees']);
+            const employeeAllowedViews = new Set(['dashboard', 'my-day', 'requests', 'time', 'tasks', 'archived_tasks', 'documents', 'employees']);
             if (normalizedRole === 'EMPLOYEE') {
                 item.style.display = employeeAllowedViews.has(viewId) ? 'flex' : 'none';
             } else {
