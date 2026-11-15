@@ -418,8 +418,20 @@ const canViewEmployeesRadar = () => {
     const permittedValues = ['MANAGER', 'SUPERVISOR', 'GENERAL MANAGER', 'GM', 'CEO', 'CHIEF EXECUTIVE OFFICER'];
     return isTaskAdmin() || isITManagerProfile() || accessValues.some(value => permittedValues.includes(value));
 };
+const canViewAllArchivedTaskRecords = () => {
+    const accessValues = [currentUserRole, currentUserProfile?.role, currentUserProfile?.job_title]
+        .map(normalizeAccessValue)
+        .filter(Boolean);
+    return isTaskAdmin()
+        || isExecutiveAdminProfile()
+        || accessValues.includes('MANAGER')
+        || accessValues.includes('SUPERVISOR')
+        || accessValues.some(value => /(^|\s)(MANAGER|SUPERVISOR)(\s|$)/.test(value));
+};
 const canViewArchivedTaskRecord = task => !!task?.archived_at && !!currentUser?.id && (
-    task.created_by === currentUser.id
+    canViewAllArchivedTaskRecords()
+    || task.archiveReadAuthorized === true
+    || task.created_by === currentUser.id
     || task.assignee_id === currentUser.id
     || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser.id))
     || (Array.isArray(task.watchers) && task.watchers.includes(currentUser.id))
@@ -8422,13 +8434,10 @@ async function renderArchivedTasks() {
         db.fetchArchivedTasks(),
         db.fetchUsers()
     ]);
-    const isEmployee = String(currentUserRole || '').trim().toUpperCase() === 'EMPLOYEE';
-    const visibleArchivedTasks = isEmployee
-        ? (archivedTasks || []).filter(task => task.created_by === currentUser?.id
-            || task.assignee_id === currentUser?.id
-            || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser?.id))
-            || (Array.isArray(task.watchers) && task.watchers.includes(currentUser?.id)))
-        : (archivedTasks || []);
+    // The database RLS policy is the authority for which archived rows this
+    // session may read. Do not apply a narrower client-side role filter here:
+    // employees may also be authorized by the completion activity audit trail.
+    const visibleArchivedTasks = archivedTasks || [];
     const usersById = Object.fromEntries((allUsers || []).map(user => [String(user.id), user]));
     const locale = currentLang === 'ar' ? 'ar-SA' : undefined;
     const text = currentLang === 'ar' ? {
@@ -8464,6 +8473,7 @@ async function renderArchivedTasks() {
         const primaryAssignee = usersById[String(task.assignee_id || '')];
         window.taskCache[String(task.id)] = {
             ...task,
+            archiveReadAuthorized: true,
             assignee_ids: assigneeIds,
             displayTitle: title,
             assignee: primaryAssignee ? {
