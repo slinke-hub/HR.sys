@@ -2900,7 +2900,11 @@ window.updateSidebarVisibility = async function () {
     if (typeof currentUser !== 'undefined' && currentUser) {
         isHussain = (currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain')) || (currentUser.email && currentUser.email.toLowerCase().includes('hussain'));
     }
-    if (approvalsNav) approvalsNav.style.display = (isAdmin || ['MANAGER', 'SUPERVISOR'].includes(normalizedRole) || isHussain) ? 'flex' : 'none';
+    const hasGeneralApprovalAccess = isAdmin || ['MANAGER', 'SUPERVISOR'].includes(normalizedRole) || isHussain;
+    const ownPendingApprovals = !hasGeneralApprovalAccess && currentUser?.id
+        ? await db.fetchPendingCrmApprovals() : [];
+    const hasAssignedCrmApproval = ownPendingApprovals.some(step => String(step.approver_id) === String(currentUser?.id));
+    if (approvalsNav) approvalsNav.style.display = (hasGeneralApprovalAccess || hasAssignedCrmApproval) ? 'flex' : 'none';
 };
 
 window.handleLoginSubmit = async function (e) {
@@ -15042,6 +15046,44 @@ window.deleteCrmDeal = function (dealId = null) {
     );
 };
 
+// Assigned approvers use a caller-scoped read path and authenticated streaming.
+window.openAssignedCrmApprovalReview = async function (stepId) {
+    const [steps, documents] = await Promise.all([db.fetchPendingCrmApprovals(), db.fetchMyCrmApprovalDocuments()]);
+    const step = steps.find(item => String(item.id) === String(stepId) && String(item.approver_id) === String(currentUser?.id));
+    if (step && !documents.success && ['PGRST202', '42883'].includes(String(documents.error?.code || '')) && await canCurrentUserUseCRM()) {
+        return window.openDealWorkflowModal(step.deal_id);
+    }
+    if (!step || !documents.success) return showToast(taskDetailText('Approval is no longer available.', 'لم تعد الموافقة متاحة.'), 'warning');
+    const deal = step.deal || {};
+    const files = documents.data.filter(file => String(file.deal_id) === String(step.deal_id));
+    const modal = document.createElement('div');
+    modal.className = 'modal show';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    const amount = deal.amount == null ? '' : `<p>${escapeHTML(taskDetailText('Amount', 'المبلغ'))}: ${escapeHTML(String(deal.amount))}</p>`;
+    modal.innerHTML = `<div class="modal-content"><div class="modal-header"><h2>${escapeHTML(deal.title || taskDetailText('Approval', 'الموافقة'))}</h2><button type="button" data-close aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}">×</button></div><div class="modal-body"><p>${escapeHTML(deal.crm_clients?.name || '')}</p>${amount}<h3>${escapeHTML(taskDetailText('Approval documents', 'مستندات الموافقة'))}</h3><div data-documents></div></div></div>`;
+    modal.querySelector('[data-close]').addEventListener('click', () => modal.remove());
+    const container = modal.querySelector('[data-documents]');
+    if (!files.length) container.textContent = taskDetailText('No authorized documents are available.', 'لا توجد مستندات مصرح بها.');
+    for (const file of files) {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'btn btn-secondary';
+        button.textContent = file.file_name || taskDetailText('Download document', 'تنزيل المستند');
+        button.addEventListener('click', async () => {
+            button.disabled = true;
+            const result = await db.downloadMyCrmApprovalDocument(file.id, file.source);
+            button.disabled = false;
+            if (!result.success) return showToast(taskDetailText('Document is no longer available.', 'لم يعد المستند متاحاً.'), 'warning');
+            const objectUrl = URL.createObjectURL(result.data);
+            const link = document.createElement('a'); link.href = objectUrl; link.download = file.file_name || 'document';
+            document.body.appendChild(link); link.click(); link.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        });
+        container.appendChild(button);
+    }
+    document.body.appendChild(modal);
+};
+
 window.openDealWorkflowModal = async function (dealId) {
     const [deals, users, workflow, canViewFinancials] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDealWorkflow(dealId), ensureBusinessFinancialAccess()]);
     const deal = deals.find(item => item.id === dealId);
@@ -18885,10 +18927,13 @@ async function renderApprovals() {
     const profile_auth = currentUserProfile || {};
     const canUseApprovals = isTaskAdmin() || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile_auth?.job_title || '');
     if (!canUseApprovals) {
-        return `<div class="empty-state">
-                    <i data-lucide="shield-alert"></i>
-                    <p data-i18n="unauthorized_access">You are not authorized to view this page.</p>
-                </div>`;
+        // Ordinary assigned reviewers receive only their own pending CRM rows.
+        const own = (await db.fetchPendingCrmApprovals()).filter(step =>
+            String(step.approver_id) === String(currentUser?.id)
+            && /^[0-9a-f-]{36}$/i.test(String(step.id))
+            && /^[0-9a-f-]{36}$/i.test(String(step.deal_id)));
+        if (!own.length) return `<div class="empty-state"><i data-lucide="shield-alert"></i><p data-i18n="unauthorized_access">You are not authorized to view this page.</p></div>`;
+        return `<div class="page-header"><h1>${escapeHTML(taskDetailText('My CRM approvals', 'موافقات إدارة العملاء الخاصة بي'))}</h1></div><div class="table-container"><table><tbody>${own.map(step => `<tr><td>${escapeHTML(step.deal?.title || taskDetailText('Approval', 'الموافقة'))}</td><td><button class="btn-secondary" onclick="openAssignedCrmApprovalReview('${step.id}')">${escapeHTML(taskDetailText('View files', 'عرض الملفات'))}</button><button class="btn-primary" onclick="handleCrmApprovalDecision('${step.deal_id}','${step.id}','APPROVED')">${escapeHTML(taskDetailText('Approve', 'موافقة'))}</button><button class="btn-secondary" onclick="handleCrmApprovalDecision('${step.deal_id}','${step.id}','REJECTED')">${escapeHTML(taskDetailText('Reject', 'رفض'))}</button></td></tr>`).join('')}</tbody></table></div>`;
     }
     const [allTasks, allUsers, allProjects, departments, workflows, leaves, documents, expenses, genericRequests, crmApprovalSteps, crmDesignApprovalSteps, canViewFinancials] = await Promise.all([
         db.fetchTasks(), db.fetchUsers(), db.fetchProjects(), db.fetchDepartments(),
@@ -18959,7 +19004,7 @@ async function renderApprovals() {
         const stageLabel = t(dealApprovalStageLabels[step.stage_key]) || String(step.stage_key || 'Approval').replace(/_/g, ' ');
         const canDecide = isAdmin || step.approver_id === currentUser?.id;
         const submittedAt = deal.proposal_sent_at || step.created_at;
-        return `<tr><td><strong>${escapeHTML(deal.title || 'Untitled deal')}</strong></td><td>${escapeHTML(clientName)}</td>${canViewFinancials ? `<td>SAR ${Number(deal.amount || 0).toLocaleString()}</td>` : ''}<td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${submittedAt ? new Date(submittedAt).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-SA') : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
+        return `<tr><td><strong>${escapeHTML(deal.title || 'Untitled deal')}</strong></td><td>${escapeHTML(clientName)}</td>${canViewFinancials ? `<td>SAR ${Number(deal.amount || 0).toLocaleString()}</td>` : ''}<td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${submittedAt ? new Date(submittedAt).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-SA') : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="${step.approver_id === currentUser?.id ? `openAssignedCrmApprovalReview(\'${step.id}\')` : `openDealWorkflowModal(\'${deal.id}\')`}">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
     }).join('');
     const pendingCrmDesignApprovals = (crmDesignApprovalSteps || []).filter(step => isAdmin || step.approver_id === currentUser?.id);
     const renderedAdminDesignTasks = new Set();

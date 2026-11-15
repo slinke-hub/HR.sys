@@ -223,7 +223,7 @@ ALTER FUNCTION public.record_task_activity() OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.record_task_activity() FROM PUBLIC, anon, authenticated, service_role;
 DO $activity_guard_postcheck$
 BEGIN
-  IF md5(pg_get_functiondef('public.record_task_activity()'::regprocedure)) <> '564aa16803893f7f33c867444367f2ae'
+  IF md5(replace(replace(pg_get_functiondef('public.record_task_activity()'::regprocedure), E'\r\n', E'\n'), E'\r', E'\n')) <> '4ecdd7bd9a8d6e30cdff2f3fc5bb7a3e'
      OR (SELECT proowner FROM pg_proc WHERE oid='public.record_task_activity()'::regprocedure) <> 'postgres'::regrole
      OR (SELECT prosecdef FROM pg_proc WHERE oid='public.record_task_activity()'::regprocedure) IS DISTINCT FROM true
      OR NOT EXISTS (SELECT 1 FROM pg_proc WHERE oid='public.record_task_activity()'::regprocedure

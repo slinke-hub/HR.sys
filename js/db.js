@@ -4118,18 +4118,34 @@ const db = {
     async fetchPendingCrmApprovals() {
         if (!supabaseClient) return [];
         try {
-            const [{ data: steps, error: stepsError }, { data: deals, error: dealsError }] = await Promise.all([
+            const [{ data: steps, error: stepsError }, { data: deals, error: dealsError }, { data: assigned, error: assignedError }] = await Promise.all([
                 supabaseClient.from('crm_deal_approval_steps').select('*').eq('status', 'PENDING').order('step_order', { ascending: true }),
-                supabaseClient.rpc('list_crm_deals_secure')
+                supabaseClient.rpc('list_crm_deals_secure'),
+                supabaseClient.rpc('list_my_pending_crm_approval_context')
             ]);
             if (stepsError) throw stepsError;
             if (dealsError) throw dealsError;
+            // Preserve the existing approval list during a staged rollout before
+            // the new RPC is installed. Other errors remain visible failures.
+            if (assignedError && !['PGRST202', '42883'].includes(String(assignedError.code || ''))) throw assignedError;
             const dealMap = new Map((deals || []).filter(deal => deal.workflow_status === 'PENDING_APPROVAL').map(deal => [deal.id, deal]));
-            return (steps || []).filter(step => dealMap.has(step.deal_id)).map(step => ({ ...step, deal: dealMap.get(step.deal_id) }));
+            const combined = new Map((steps || []).filter(step => dealMap.has(step.deal_id)).map(step => [step.id, { ...step, deal: dealMap.get(step.deal_id) }]));
+            for (const step of assigned || []) if (step?.id && step?.deal?.id === step.deal_id && !combined.has(step.id)) combined.set(step.id, step);
+            return [...combined.values()];
         } catch (error) {
             console.error('fetchPendingCrmApprovals Error:', error);
             return [];
         }
+    },
+    async fetchMyCrmApprovalDocuments() {
+        if (!supabaseClient) return { success: false, data: [] };
+        const { data, error } = await supabaseClient.rpc('list_my_pending_crm_approval_documents');
+        return error ? { success: false, data: [], error } : { success: true, data: data || [] };
+    },
+    async downloadMyCrmApprovalDocument(documentId, source) {
+        if (!supabaseClient) return { success: false };
+        const { data, error } = await supabaseClient.functions.invoke('approval-document-stream', { body: { document_id: documentId, source } });
+        return error || !(data instanceof Blob) ? { success: false, error } : { success: true, data };
     },
     async fetchPendingCrmDesignTaskApprovals() {
         if (!supabaseClient) return [];
