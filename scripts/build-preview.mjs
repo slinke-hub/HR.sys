@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { renderRuntimeDbBundle, resolveBuildOutput } from './runtime-db-bundle.mjs';
 
-const stagingRef = 'jcfyyxsuspukcmybyhjj';
+const stagingRef = 'cqggintzbsvlcxyiihjk';
 const productionRef = 'bbbetcdioiaozdjkvwxu';
 const productionOrigin = `https://${productionRef}.supabase.co`;
 const stagingOrigin = `https://${stagingRef}.supabase.co`;

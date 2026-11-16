@@ -1,7 +1,7 @@
 import { relative, resolve, sep } from 'node:path';
 
 const PRODUCTION_REF = 'bbbetcdioiaozdjkvwxu';
-const STAGING_REF = 'jcfyyxsuspukcmybyhjj';
+const STAGING_REF = 'cqggintzbsvlcxyiihjk';
 const PRODUCTION_ORIGIN = `https://${PRODUCTION_REF}.supabase.co`;
 const STAGING_ORIGIN = `https://${STAGING_REF}.supabase.co`;
 const DB_BODY_MARKER = 'const SUPABASE_REQUEST_TIMEOUT_MS = 10000;';
