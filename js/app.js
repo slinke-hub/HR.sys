@@ -8708,7 +8708,7 @@ async function renderTasksV2() {
     
     const projects = window.projectsCache || [];
     const taskLists = window.taskListsCache || [];
-    const taskViewMode = window.taskV2Mode === 'list' ? 'list' : 'focus';
+    const taskViewMode = ['focus', 'board', 'list'].includes(window.taskV2Mode) ? window.taskV2Mode : 'focus';
     window.taskV2Mode = taskViewMode;
     const taskFocusCount = selectedScopeTasks.filter(task => {
         if (['completed', 'Approved', 'canceled', 'cancelled'].includes(String(task.status || ''))) return false;
@@ -9393,6 +9393,9 @@ async function renderTasksV2() {
                             <button class="view-toggle-btn ${taskViewMode === 'focus' ? 'active' : ''}" id="btn-v2-focus" onclick="window.setTaskV2Mode('focus')">
                                 <i data-lucide="circle-alert"></i> Focus
                             </button>
+                            <button class="view-toggle-btn ${taskViewMode === 'board' ? 'active' : ''}" id="btn-v2-board" onclick="window.setTaskV2Mode('board')">
+                                <i data-lucide="kanban"></i> ${taskDetailText('Pipeline', 'مسار العمل')}
+                            </button>
                             <button class="view-toggle-btn ${taskViewMode === 'list' ? 'active' : ''}" id="btn-v2-list" onclick="window.setTaskV2Mode('list')">
                                 <i data-lucide="rows-3"></i> List
                             </button>
@@ -10024,9 +10027,10 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus, options = {}
 };
 
 window.setTaskV2Mode = function (mode) {
-    if (!['focus', 'list'].includes(mode)) mode = 'focus';
+    if (!['focus', 'board', 'list'].includes(mode)) mode = 'focus';
     window.taskV2Mode = mode;
     document.getElementById('btn-v2-focus')?.classList.toggle('active', mode === 'focus');
+    document.getElementById('btn-v2-board')?.classList.toggle('active', mode === 'board');
     document.getElementById('btn-v2-list')?.classList.toggle('active', mode === 'list');
     
     const listContainer = document.getElementById('task-v2-rows-container');
@@ -10034,11 +10038,11 @@ window.setTaskV2Mode = function (mode) {
     listContainer?.classList.toggle('task-v2-register-view', mode === 'list');
     const focusKicker = listContainer?.querySelector('.task-focus-kicker');
     const focusTitle = listContainer?.querySelector('.task-focus-header h3');
-    if (focusKicker) focusKicker.textContent = mode === 'list' ? 'Execution register' : 'Needs attention';
-    if (focusTitle) focusTitle.textContent = mode === 'list' ? 'Tasks list' : 'Focus view';
+    if (focusKicker) focusKicker.textContent = mode === 'list' ? 'Execution register' : mode === 'board' ? 'Status stages' : 'Needs attention';
+    if (focusTitle) focusTitle.textContent = mode === 'list' ? 'Tasks list' : mode === 'board' ? 'Task pipeline' : 'Focus view';
     
-    if (listContainer) listContainer.style.display = '';
-    if (boardContainer) boardContainer.style.display = 'none';
+    if (listContainer) listContainer.style.display = mode === 'board' ? 'none' : '';
+    if (boardContainer) boardContainer.style.display = mode === 'board' ? 'block' : 'none';
     window.filterTasksV2();
 };
 

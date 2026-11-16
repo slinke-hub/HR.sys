@@ -36,5 +36,9 @@ assert.match(app, /setAttribute\('aria-hidden', String\(!matches\)\)/);
 assert.match(app, /classList\.toggle\('task-v2-filtered-out', !matches\)/);
 assert.match(app, /data-task-v2-visible-count/);
 assert.match(css, /task-v2-filtered-out\[style\][\s\S]*display: none !important/);
+assert.match(app, /id="btn-v2-board"[\s\S]*setTaskV2Mode\('board'\)/, 'Task Manager must expose the Pipeline view option');
+assert.match(app, /\['focus', 'board', 'list'\]\.includes\(window\.taskV2Mode\)/, 'Pipeline mode must survive Task Manager rendering');
+assert.match(app, /if \(!\['focus', 'board', 'list'\]\.includes\(mode\)\)/, 'Pipeline mode must be accepted by the view switcher');
+assert.match(app, /boardContainer\.style\.display = mode === 'board' \? 'block' : 'none'/, 'Pipeline mode must show the board and hide the list');
 
-console.log('Task V2 List/Focus filter regression coverage passed.');
+console.log('Task V2 List/Focus/Pipeline filter regression coverage passed.');
