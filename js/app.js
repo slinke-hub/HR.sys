@@ -572,7 +572,8 @@ function crmDesignDealStatusFromTask(task) {
 }
 
 function canMq08ChangeCrmDesignDealStatus(task) {
-    if (!task || !['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task.crm_workflow_kind) || !task.crm_deal_id || !isMq08Profile()) return false;
+    if (!task || !['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task.crm_workflow_kind) || !task.crm_deal_id
+        || (task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN' && !isMq08Profile())) return false;
     const assigneeIds = Array.isArray(task.assignee_ids) ? task.assignee_ids : [];
     return task.assignee_id === currentUser?.id || assigneeIds.includes(currentUser?.id);
 }
@@ -4976,7 +4977,7 @@ window.handleCrmDesignDealStatusChange = async function (select) {
     const task = window.taskCache?.[taskId];
     if (!task || task.archived_at || !canMq08ChangeCrmDesignDealStatus(task)) {
         if (select && task) select.value = crmDesignDealStatusFromTask(task);
-        showToast(taskDetailText('Only the assigned employee MQ-08 can change this deal status.', 'يمكن فقط للموظفة المعيّنة MQ-08 تغيير حالة الصفقة.'), 'warning');
+        showToast(taskDetailText('Only the assigned Design employee can change this deal status.', 'يمكن لموظف التصميم المعيّن فقط تغيير حالة الصفقة.'), 'warning');
         return;
     }
 
@@ -15465,7 +15466,7 @@ function renderDealWorkflowDesignTaskStatus(workflow, isMq08Viewer) {
     if (!container) return;
     const workflowTask = workflow?.designTask;
     const task = workflowTask?.id ? cacheTaskRecord(workflowTask) : null;
-    const canManageStatus = Boolean(isMq08Viewer && task && canMq08ChangeCrmDesignDealStatus(task));
+    const canManageStatus = Boolean(task && (isMq08Viewer || task.crm_workflow_kind === 'QUOTE_PROPOSAL') && canMq08ChangeCrmDesignDealStatus(task));
     container.hidden = !canManageStatus;
     if (!canManageStatus) {
         container.innerHTML = '';
@@ -18416,9 +18417,9 @@ function isOperationsManagerProjectProfile(profile = currentUserProfile) {
 window.handleDealWorkflowDesignTaskStatusChange = async function (select) {
     const workflowTask = activeDealWorkflowContext?.workflow?.designTask;
     const task = workflowTask?.id ? cacheTaskRecord(workflowTask) : null;
-    if (!task || !isMq08Profile() || !canMq08ChangeCrmDesignDealStatus(task)) {
+    if (!task || !canMq08ChangeCrmDesignDealStatus(task)) {
         if (select && task) select.value = crmDesignDealStatusFromTask(task);
-        return showToast(taskDetailText('Only the assigned employee MQ-08 can change this Design task status.', 'يمكن فقط للموظفة المعيّنة MQ-08 تغيير حالة مهمة التصميم.'), 'warning');
+        return showToast(taskDetailText('Only the assigned Design employee can change this Design task status.', 'يمكن لموظف التصميم المعيّن فقط تغيير حالة مهمة التصميم.'), 'warning');
     }
 
     const previousStatus = crmDesignDealStatusFromTask(task);
