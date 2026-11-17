@@ -1,0 +1,9 @@
+{
+  "advisory": "GHSA-fc5q-39xc-vjpf",
+  "npmAdvisoryId": 1247710,
+  "package": "picomatch",
+  "allowedVersions": ["2.3.2", "4.0.7"],
+  "latestUnpatchedVersion": "4.0.7",
+  "expiresAt": "2026-11-24T00:00:00Z",
+  "owner": "HR.sys release/security owner"
+}
