@@ -2164,6 +2164,23 @@ const db = {
             return [];
         }
     },
+    async executeCrmContactDiscussionTask(taskId, action, category = null, note = null) {
+        if (!supabaseClient || !taskId) return { success: false, error: new Error('Task is required.') };
+        try {
+            const { data, error } = await supabaseClient.rpc('execute_crm_contact_discussion_task', {
+                p_task_id: taskId,
+                p_action: action,
+                p_category: category,
+                p_note: note
+            });
+            if (error) throw error;
+            // This scoped RPC intentionally suppresses task notification emails.
+            return { success: true, data };
+        } catch (error) {
+            console.error('executeCrmContactDiscussionTask Error:', error);
+            return { success: false, error };
+        }
+    },
     async startTask(taskId) {
         if (!supabaseClient || !taskId) return { success: false, error: new Error('Task is required.') };
         try {
@@ -2360,6 +2377,13 @@ const db = {
             console.error('assignTask Error:', error);
             return { success: false, error };
         }
+    },
+    async submitCrmQuoteProposalFiles(taskId, links) {
+        if (!supabaseClient) return { success: false };
+        const { error } = await supabaseClient.rpc('submit_crm_quote_proposal_files', {
+            p_task_id: taskId, p_links: links
+        });
+        return error ? { success: false, error } : { success: true };
     },
     async updateTask(taskId, updates) {
         if (!supabaseClient) return { success: false };
@@ -4101,18 +4125,34 @@ const db = {
     async fetchPendingCrmApprovals() {
         if (!supabaseClient) return [];
         try {
-            const [{ data: steps, error: stepsError }, { data: deals, error: dealsError }] = await Promise.all([
+            const [{ data: steps, error: stepsError }, { data: deals, error: dealsError }, { data: assigned, error: assignedError }] = await Promise.all([
                 supabaseClient.from('crm_deal_approval_steps').select('*').eq('status', 'PENDING').order('step_order', { ascending: true }),
-                supabaseClient.rpc('list_crm_deals_secure')
+                supabaseClient.rpc('list_crm_deals_secure'),
+                supabaseClient.rpc('list_my_pending_crm_approval_context')
             ]);
             if (stepsError) throw stepsError;
             if (dealsError) throw dealsError;
+            // Preserve the existing approval list during a staged rollout before
+            // the new RPC is installed. Other errors remain visible failures.
+            if (assignedError && !['PGRST202', '42883'].includes(String(assignedError.code || ''))) throw assignedError;
             const dealMap = new Map((deals || []).filter(deal => deal.workflow_status === 'PENDING_APPROVAL').map(deal => [deal.id, deal]));
-            return (steps || []).filter(step => dealMap.has(step.deal_id)).map(step => ({ ...step, deal: dealMap.get(step.deal_id) }));
+            const combined = new Map((steps || []).filter(step => dealMap.has(step.deal_id)).map(step => [step.id, { ...step, deal: dealMap.get(step.deal_id) }]));
+            for (const step of assigned || []) if (step?.id && step?.deal?.id === step.deal_id && !combined.has(step.id)) combined.set(step.id, step);
+            return [...combined.values()];
         } catch (error) {
             console.error('fetchPendingCrmApprovals Error:', error);
             return [];
         }
+    },
+    async fetchMyCrmApprovalDocuments() {
+        if (!supabaseClient) return { success: false, data: [] };
+        const { data, error } = await supabaseClient.rpc('list_my_pending_crm_approval_documents');
+        return error ? { success: false, data: [], error } : { success: true, data: data || [] };
+    },
+    async downloadMyCrmApprovalDocument(documentId, source) {
+        if (!supabaseClient) return { success: false };
+        const { data, error } = await supabaseClient.functions.invoke('approval-document-stream', { body: { document_id: documentId, source } });
+        return error || !(data instanceof Blob) ? { success: false, error } : { success: true, data };
     },
     async fetchPendingCrmDesignTaskApprovals() {
         if (!supabaseClient) return [];
@@ -4138,7 +4178,7 @@ const db = {
                 supabaseClient.rpc('list_crm_deal_attachments_secure', { p_deal_id: dealId }),
                 supabaseClient.rpc('list_crm_deal_activity_secure', { p_deal_id: dealId }),
                 this.fetchProjects(),
-                supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids').eq('crm_deal_id', dealId).eq('crm_workflow_kind', 'QUOTE_PROPOSAL_DESIGN').order('created_at', { ascending: false }).limit(1).maybeSingle()
+                supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids').eq('crm_deal_id', dealId).in('crm_workflow_kind', ['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL']).order('created_at', { ascending: false }).limit(1).maybeSingle()
             ]);
             const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || designTask.error;
             if (firstError) throw firstError;
@@ -4230,17 +4270,14 @@ const db = {
             return { success: false, error };
         }
     },
-    async startCrmPresentationApproval(dealId, requestType) {
+    async startCrmQuoteProposal(dealId) {
         if (!supabaseClient) return { success: false };
         try {
-            const { error } = await supabaseClient.rpc('start_crm_presentation_approval', {
-                p_deal_id: dealId,
-                p_request_type: requestType
-            });
+            const { error } = await supabaseClient.rpc('start_crm_quote_proposal', { p_deal_id: dealId });
             if (error) throw error;
             return { success: true };
         } catch (error) {
-            console.error('startCrmPresentationApproval Error:', {
+            console.error('startCrmQuoteProposal Error:', {
                 code: error?.code,
                 message: error?.message,
                 details: error?.details,

@@ -5,6 +5,31 @@ let currentTheme = 'light';
 let currentView = 'login';
 let loginMode = 'login';
 let currentUser = null;
+let viewSessionEpoch = 0;
+const pristineTaskPanelMarkup = document.getElementById('taskSidePanel')?.innerHTML || '';
+function clearSessionViewState() {
+    viewSessionEpoch += 1;
+    window.viewHTMLCache = {};
+    window.taskCache = {};
+    window.visibleTaskIds = [];
+    window.taskListsCache = [];
+    window.taskEmployeeAccessGrants = [];
+    window.myDayTaskById = {};
+    window.activeTaskDetail = null;
+    window.taskV2SelectedProject = 'all';
+    window.taskV2HealthFilter = 'all';
+    window.MogamCrmDashboard?.unmount?.();
+    const panel = document.getElementById('taskSidePanel');
+    if (panel) {
+        panel.innerHTML = pristineTaskPanelMarkup;
+        panel.classList.remove('active', 'teamwork-task-detail', 'task-v2-detail');
+        panel.hidden = true;
+    }
+    const overlay = document.getElementById('taskSidePanelOverlay');
+    if (overlay) { overlay.classList.remove('active'); overlay.hidden = true; }
+    const container = document.getElementById('viewContainer');
+    if (container) container.innerHTML = '';
+}
 let viewHistory = [];
 const APP_HISTORY_VIEW_KEY = 'muqamView';
 let appHistoryInitialized = false;
@@ -395,6 +420,12 @@ const canMarketingManagerEditTask = task => {
     return isMarketingManagedTaskList(list);
 };
 const canEditTaskRecord = task => !!task && (isTaskAdmin() || task.created_by === currentUser?.id || canMarketingManagerEditTask(task));
+const canExecuteMq20ContactDiscussionTask = task => !!task
+    && isMq20Profile()
+    && task.crm_workflow_kind === 'CONTACT_DISCUSSION'
+    && !task.archived_at
+    && !!currentUser?.id
+    && (task.assignee_id === currentUser.id || (Array.isArray(task.assignee_ids) && task.assignee_ids.includes(currentUser.id)));
 const canChangeTaskStageRecord = task => {
     if (!task || isMq20Profile()) return false;
     const list = (window.taskListsCache || []).find(item => item.id === task.task_list_id);
@@ -553,7 +584,8 @@ function crmDesignDealStatusFromTask(task) {
 }
 
 function canMq08ChangeCrmDesignDealStatus(task) {
-    if (!task || task.crm_workflow_kind !== 'QUOTE_PROPOSAL_DESIGN' || !task.crm_deal_id || !isMq08Profile()) return false;
+    if (!task || !['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task.crm_workflow_kind) || !task.crm_deal_id
+        || (task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN' && !isMq08Profile())) return false;
     const assigneeIds = Array.isArray(task.assignee_ids) ? task.assignee_ids : [];
     return task.assignee_id === currentUser?.id || assigneeIds.includes(currentUser?.id);
 }
@@ -2621,6 +2653,7 @@ window.handlePostCommunityMessage = async (e) => {
 };
 
 window.handleLogout = async function () {
+    clearSessionViewState();
     try {
         await db.logout();
     } catch (error) {
@@ -2912,7 +2945,11 @@ window.updateSidebarVisibility = async function () {
     if (typeof currentUser !== 'undefined' && currentUser) {
         isHussain = (currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain')) || (currentUser.email && currentUser.email.toLowerCase().includes('hussain'));
     }
-    if (approvalsNav) approvalsNav.style.display = (isAdmin || ['MANAGER', 'SUPERVISOR'].includes(normalizedRole) || isHussain) ? 'flex' : 'none';
+    const hasGeneralApprovalAccess = isAdmin || ['MANAGER', 'SUPERVISOR'].includes(normalizedRole) || isHussain;
+    const ownPendingApprovals = !hasGeneralApprovalAccess && currentUser?.id
+        ? await db.fetchPendingCrmApprovals() : [];
+    const hasAssignedCrmApproval = ownPendingApprovals.some(step => String(step.approver_id) === String(currentUser?.id));
+    if (approvalsNav) approvalsNav.style.display = (hasGeneralApprovalAccess || hasAssignedCrmApproval) ? 'flex' : 'none';
 };
 
 window.handleLoginSubmit = async function (e) {
@@ -2945,6 +2982,7 @@ window.handleLoginSubmit = async function (e) {
 
     await db.resetLoginLockout(email);
 
+    clearSessionViewState();
     currentUser = user;
 
     // Update last_login
@@ -4601,11 +4639,13 @@ function renderTaskCommentAttachments(attachments) {
 }
 
 window.openTaskDetailsModal = async function (id) {
+    const taskSessionEpoch = viewSessionEpoch;
     let task = window.taskCache?.[id];
     // The action can be clicked before the task cache finishes hydrating.
     // Resolve the task once more instead of silently doing nothing.
     if (!task) {
         const fetchedTasks = await db.fetchTasksWithProfiles();
+        if (taskSessionEpoch !== viewSessionEpoch) return;
         task = (fetchedTasks || []).find(item => String(item.id) === String(id));
         if (task) {
             window.taskCache = window.taskCache || {};
@@ -4624,6 +4664,7 @@ window.openTaskDetailsModal = async function (id) {
     const preserveArchivedTaskView = currentView === 'archived_tasks' && !!task.archived_at;
     if (!preserveArchivedTaskView && !['tasks', 'tasks_v2'].includes(currentView)) {
         await renderView('tasks');
+        if (taskSessionEpoch !== viewSessionEpoch) return;
     }
 
     const taskPanel = document.getElementById('taskSidePanel');
@@ -4691,6 +4732,7 @@ window.openTaskDetailsModal = async function (id) {
     }
 
     const comments = await db.fetchTaskComments(task.id);
+    if (taskSessionEpoch !== viewSessionEpoch) return;
     if (comments.length === 0) {
         list.innerHTML = `<div style="color: var(--color-text-secondary); font-style: italic;">${taskDetailText('No comments yet.', 'لا توجد تعليقات بعد.')}</div>`;
     } else {
@@ -4776,6 +4818,7 @@ window.handleTaskAssigneeClick = function (event, taskId) {
 };
 
 async function prepareTeamworkTaskDetail(task) {
+    const taskSessionEpoch = viewSessionEpoch;
     window.activeTaskDetail = task;
     const panel = document.getElementById('taskSidePanel');
     if (!panel) return;
@@ -4817,6 +4860,7 @@ async function prepareTeamworkTaskDetail(task) {
                 : Promise.resolve([]),
             db.fetchTaskDependencies ? db.fetchTaskDependencies(task.id) : Promise.resolve([])
         ]);
+        if (taskSessionEpoch !== viewSessionEpoch) return;
         task._dependencies = taskDependencies || [];
         window.activeTaskDependencies = task._dependencies;
         const canManageDependencies = !task.archived_at && canManageTaskDependencies(task);
@@ -4855,7 +4899,7 @@ async function prepareTeamworkTaskDetail(task) {
                 ? `<button type="button" class="task-detail-image-attachment" data-image-url="${safeLink}" data-image-name="${label}" onclick="openDealImagePreview(this)" title="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}" aria-label="${escapeHTML(taskDetailText('Open image preview', 'فتح معاينة الصورة'))}: ${label}"><img src="${safeLink}" alt="${label}" loading="lazy"><span>${label}</span></button>`
                 : `<a href="${safeLink}" target="_blank" rel="noopener"><i data-lucide="download"></i>${label}</a>`;
         }).join('');
-        const isDesignTask = task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN';
+        const isDesignTask = ['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task.crm_workflow_kind);
         const crmQuoteFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'QUOTATION' && safeExternalUrl(file.file_url) && (isDesignTask || file.visible_to_project_assignee));
         const crmClientIdentityFiles = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'CLIENT_IDENTITY' && safeExternalUrl(file.file_url) && (isDesignTask || file.visible_to_project_assignee));
         const crmProposalImages = crmPresentationAttachments.filter(file => String(file.category || '').toUpperCase() === 'PROPOSAL' && safeExternalUrl(file.file_url) && (isDesignTask || file.visible_to_project_assignee));
@@ -4878,7 +4922,7 @@ async function prepareTeamworkTaskDetail(task) {
         const crmDesignDealStatus = crmDesignDealStatusFromTask(task);
         const crmDesignStatusLocked = ['completed', 'approved', 'pending approval'].includes(String(task.status || '').trim().toLowerCase());
         const crmDesignDealStatusHTML = showCrmDesignDealStatus ? `<section class="task-crm-design-status-control" aria-labelledby="crmDesignDealStatusLabel">
-            <div class="task-crm-design-status-copy"><span class="task-crm-design-status-icon"><i data-lucide="gauge"></i></span><div><label id="crmDesignDealStatusLabel" for="crmDesignDealStatusSelect">${taskDetailText('Deal status', 'حالة الصفقة')}</label><small>${crmDesignStatusLocked ? taskDetailText('The completed Design is awaiting or has received approval.', 'التصميم المكتمل بانتظار الاعتماد أو تم اعتماده.') : taskDetailText('This status also updates the linked deal in CRM.', 'تُحدّث هذه الحالة الصفقة المرتبطة في إدارة علاقات العملاء أيضاً.')}</small></div></div>
+            <div class="task-crm-design-status-copy"><span class="task-crm-design-status-icon"><i data-lucide="gauge"></i></span><div><label id="crmDesignDealStatusLabel" for="crmDesignDealStatusSelect">${taskDetailText('Deal status', 'حالة الصفقة')}</label><small>${crmDesignStatusLocked ? (task.crm_workflow_kind === 'QUOTE_PROPOSAL' ? taskDetailText('Design completed.', 'اكتمل التصميم.') : taskDetailText('The completed Design is awaiting or has received approval.', 'التصميم المكتمل بانتظار الاعتماد أو تم اعتماده.')) : taskDetailText('This status also updates the linked deal in CRM.', 'تُحدّث هذه الحالة الصفقة المرتبطة في إدارة علاقات العملاء أيضاً.')}</small></div></div>
             <select id="crmDesignDealStatusSelect" class="form-control task-crm-design-status-select" data-task-id="${escapeHTML(task.id)}" onchange="handleCrmDesignDealStatusChange(this)" ${crmDesignStatusLocked ? 'disabled' : ''}>
                 <option value="IN_PROGRESS" ${crmDesignDealStatus === 'IN_PROGRESS' ? 'selected' : ''}>${taskDetailText('In progress', 'قيد التنفيذ')}</option>
                 <option value="LATE" ${crmDesignDealStatus === 'LATE' ? 'selected' : ''}>${taskDetailText('Late', 'متأخرة')}</option>
@@ -4951,7 +4995,7 @@ window.handleCrmDesignDealStatusChange = async function (select) {
     const task = window.taskCache?.[taskId];
     if (!task || task.archived_at || !canMq08ChangeCrmDesignDealStatus(task)) {
         if (select && task) select.value = crmDesignDealStatusFromTask(task);
-        showToast(taskDetailText('Only the assigned employee MQ-08 can change this deal status.', 'يمكن فقط للموظفة المعيّنة MQ-08 تغيير حالة الصفقة.'), 'warning');
+        showToast(taskDetailText('Only the assigned Design employee can change this deal status.', 'يمكن لموظف التصميم المعيّن فقط تغيير حالة الصفقة.'), 'warning');
         return;
     }
 
@@ -7177,6 +7221,16 @@ window.handleCompleteAndHandOffTask = async function (taskId) {
     }
     const completionNote = String(await window.requestTaskCompletionNote(taskId) || '').trim();
     if (!completionNote) return;
+    if (task.crm_workflow_kind === 'QUOTE_PROPOSAL') {
+        const result = await window.handleUpdateTaskStatus(taskId, 'completed');
+        if (result?.error) return;
+        const commentResult = await db.addTaskComment(taskId, currentUser?.id, completionNote);
+        if (!commentResult?.success) showToast(taskDetailText('Task completed, but the completion note could not be saved.', 'اكتملت المهمة، لكن تعذر حفظ ملخص الإنجاز.'), 'warning');
+        window.closeTaskDetailsModal?.();
+        delete window.viewHTMLCache['my-day'];
+        if (typeof renderView === 'function') await renderView(currentView === 'my-day' ? 'my-day' : 'tasks');
+        return;
+    }
     const result = await db.completeAndHandOffTask(taskId);
     if (!result?.success) {
         showToast(result?.error?.message || taskDetailText('Unable to complete and hand off this task.', 'تعذر إنهاء وتسليم هذه المهمة.'), 'danger');
@@ -8187,6 +8241,7 @@ function myDayActionButton(task, action, label, kind = '') {
 
 async function renderMyDay() {
     const tasks = await db.fetchMyDay();
+    window.myDayTaskById = Object.fromEntries((tasks || []).filter(task => task?.id).map(task => [task.id, task]));
     const groups = ['DO_NOW', 'DUE_TODAY', 'WAITING', 'BLOCKED', 'OVERDUE', 'NEXT', 'COMPLETED_TODAY'];
     const grouped = Object.fromEntries(groups.map(section => [section, []]));
     (tasks || []).forEach(task => {
@@ -8208,6 +8263,18 @@ async function renderMyDay() {
         let actions = '';
         if (dependencyBlocked) {
             actions = `<span class="my-day-dependency-note"><i data-lucide="lock-keyhole"></i>${escapeHTML(taskDetailText('Waiting for previous task', 'بانتظار المهمة السابقة'))}${task.blocking_task_title ? `: ${escapeHTML(task.blocking_task_title)}` : ''}</span>`;
+        } else if (canExecuteMq20ContactDiscussionTask(task)) {
+            const taskStatus = String(task.status || '').trim().toLowerCase();
+            if (taskStatus === 'pending approval' || !['todo', 'in_progress', 'review'].includes(taskStatus)) {
+                actions = '';
+            } else if (state === 'WAITING' || state === 'BLOCKED') {
+                actions = myDayActionButton(task, 'resume', taskDetailText('Resume', 'استئناف'), 'secondary');
+            } else if (state !== 'COMPLETED_TODAY') {
+                if (taskStatus === 'todo') actions += myDayActionButton(task, 'start', taskDetailText('Start', 'بدء'), 'primary');
+                actions += myDayActionButton(task, 'waiting', taskDetailText('Waiting', 'انتظار'), 'secondary');
+                actions += myDayActionButton(task, 'blocked', taskDetailText("I'm blocked", 'أنا متعطل'), 'warning');
+                actions += myDayActionButton(task, 'complete', taskDetailText('Complete', 'إكمال'), 'success');
+            }
         } else if (state === 'WAITING' || state === 'BLOCKED') {
             actions = myDayActionButton(task, 'resume', taskDetailText('Resume', 'استئناف'), 'secondary');
         } else if (state !== 'COMPLETED_TODAY' && String(task.status || '').toLowerCase() !== 'completed') {
@@ -8254,11 +8321,19 @@ async function renderMyDay() {
 
 window.handleMyDayAction = async function (taskId, action) {
     let result;
+    const task = window.myDayTaskById?.[taskId];
+    const scopedMq20Task = canExecuteMq20ContactDiscussionTask(task);
+    if (isMq20Profile() && (!scopedMq20Task || action === 'handoff')) {
+        return showToast(taskDetailText('This task action is not available.', 'إجراء المهمة هذا غير متاح.'), 'warning');
+    }
     if (action === 'waiting' || action === 'blocked') return window.openMyDayWorkStateModal(taskId, action);
-    if (action === 'start') result = await db.startTask(taskId);
-    if (action === 'resume') result = await db.resumeTaskProductivity(taskId);
-    if (action === 'complete') result = await db.completeTaskProductivity(taskId);
-    if (action === 'handoff') result = await db.completeAndHandOffTask(taskId);
+    if (scopedMq20Task) result = await db.executeCrmContactDiscussionTask(taskId, action.toUpperCase());
+    else {
+        if (action === 'start') result = await db.startTask(taskId);
+        if (action === 'resume') result = await db.resumeTaskProductivity(taskId);
+        if (action === 'complete') result = await db.completeTaskProductivity(taskId);
+        if (action === 'handoff') result = await db.completeAndHandOffTask(taskId);
+    }
     if (!result?.success) return showToast(result?.error?.message || taskDetailText('Unable to update task.', 'تعذر تحديث المهمة.'), 'danger');
     showToast(taskDetailText('Task updated.', 'تم تحديث المهمة.'), 'success');
     delete window.viewHTMLCache['my-day'];
@@ -8267,6 +8342,7 @@ window.handleMyDayAction = async function (taskId, action) {
 
 window.openMyDayWorkStateModal = async function (taskId, mode) {
     const blocked = mode === 'blocked';
+    const scopedMq20Task = canExecuteMq20ContactDiscussionTask(window.myDayTaskById?.[taskId]);
     const categories = blocked ? MY_DAY_BLOCKED_CATEGORIES : MY_DAY_WAITING_CATEGORIES;
     const title = blocked ? taskDetailText("I'm blocked", 'أنا متعطل') : taskDetailText('Mark as waiting', 'وضع في الانتظار');
     const existing = document.getElementById('myDayWorkStateModal');
@@ -8275,13 +8351,15 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
     modal.id = 'myDayWorkStateModal';
     modal.className = 'my-day-modal-backdrop';
     let employeeOptions = '';
-    try {
-        const employees = await db.fetchUsers(false);
-        employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>` + (employees || []).filter(employee => employee.id !== currentUser?.id).map(employee => `<option value="${escapeHTML(employee.id)}">${escapeHTML(window.formatEmployeeName?.(employee) || employee.full_name || employee.email || '')}</option>`).join('');
-    } catch (_) {
-        employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>`;
+    if (!scopedMq20Task) {
+        try {
+            const employees = await db.fetchUsers(false);
+            employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>` + (employees || []).filter(employee => employee.id !== currentUser?.id).map(employee => `<option value="${escapeHTML(employee.id)}">${escapeHTML(window.formatEmployeeName?.(employee) || employee.full_name || employee.email || '')}</option>`).join('');
+        } catch (_) {
+            employeeOptions = `<option value="">${escapeHTML(taskDetailText('No specific person', 'لا يوجد شخص محدد'))}</option>`;
+        }
     }
-    modal.innerHTML = `<div class="my-day-modal" role="dialog" aria-modal="true"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" title="${escapeHTML(taskDetailText('Close', 'إغلاق'))}"><i data-lucide="x" aria-hidden="true"></i></button><h2>${escapeHTML(title)}</h2><label>${escapeHTML(taskDetailText('Reason', 'السبب'))}<select id="myDayWorkCategory">${categories.map(([value, label]) => `<option value="${value}">${escapeHTML(currentLang === 'ar' ? ({CLIENT:'العميل',SUPPLIER:'المورد',MANAGEMENT:'الإدارة',APPROVAL:'الموافقة',DESIGN:'التصميم',PRODUCTION:'الإنتاج',ANOTHER_EMPLOYEE:'موظف آخر',MISSING_INFORMATION:'معلومات ناقصة',TECHNICAL_PROBLEM:'مشكلة تقنية',OTHER:'أخرى'}[value] || label) : label)}</option>`).join('')}</select></label><label>${escapeHTML(taskDetailText('Waiting for (optional)', 'بانتظار (اختياري)'))}<select id="myDayRelatedUser">${employeeOptions}</select></label><label>${escapeHTML(taskDetailText('Note (optional)', 'ملاحظة (اختيارية)'))}<textarea id="myDayWorkNote" rows="3"></textarea></label><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary my-day-modal-cancel">${escapeHTML(taskDetailText('Cancel', 'إلغاء'))}</button><button type="button" class="btn btn-primary my-day-modal-submit">${escapeHTML(taskDetailText('Save', 'حفظ'))}</button></div></div>`;
+    modal.innerHTML = `<div class="my-day-modal" role="dialog" aria-modal="true"><button type="button" class="my-day-modal-close" aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}" title="${escapeHTML(taskDetailText('Close', 'إغلاق'))}"><i data-lucide="x" aria-hidden="true"></i></button><h2>${escapeHTML(title)}</h2><label>${escapeHTML(taskDetailText('Reason', 'السبب'))}<select id="myDayWorkCategory">${categories.map(([value, label]) => `<option value="${value}">${escapeHTML(currentLang === 'ar' ? ({CLIENT:'العميل',SUPPLIER:'المورد',MANAGEMENT:'الإدارة',APPROVAL:'الموافقة',DESIGN:'التصميم',PRODUCTION:'الإنتاج',ANOTHER_EMPLOYEE:'موظف آخر',MISSING_INFORMATION:'معلومات ناقصة',TECHNICAL_PROBLEM:'مشكلة تقنية',OTHER:'أخرى'}[value] || label) : label)}</option>`).join('')}</select></label>${scopedMq20Task ? '' : `<label>${escapeHTML(taskDetailText('Waiting for (optional)', 'بانتظار (اختياري)'))}<select id="myDayRelatedUser">${employeeOptions}</select></label>`}<label>${escapeHTML(taskDetailText('Note (optional)', 'ملاحظة (اختيارية)'))}<textarea id="myDayWorkNote" rows="3"></textarea></label><div class="my-day-modal-actions"><button type="button" class="btn btn-secondary my-day-modal-cancel">${escapeHTML(taskDetailText('Cancel', 'إلغاء'))}</button><button type="button" class="btn btn-primary my-day-modal-submit">${escapeHTML(taskDetailText('Save', 'حفظ'))}</button></div></div>`;
     document.body.appendChild(modal);
     const close = () => modal.remove();
     modal.querySelector('.my-day-modal-close').onclick = close;
@@ -8289,9 +8367,11 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
     modal.addEventListener('click', event => { if (event.target === modal) close(); });
     modal.querySelector('.my-day-modal-submit').onclick = async () => {
         const category = modal.querySelector('#myDayWorkCategory').value;
-        const relatedUserId = modal.querySelector('#myDayRelatedUser').value || null;
+        const relatedUserId = modal.querySelector('#myDayRelatedUser')?.value || null;
         const note = modal.querySelector('#myDayWorkNote').value.trim() || null;
-        const result = blocked ? await db.markTaskBlocked(taskId, category, relatedUserId, note) : await db.markTaskWaiting(taskId, category, relatedUserId, note);
+        const result = scopedMq20Task
+            ? await db.executeCrmContactDiscussionTask(taskId, blocked ? 'BLOCK' : 'WAIT', category, note)
+            : (blocked ? await db.markTaskBlocked(taskId, category, relatedUserId, note) : await db.markTaskWaiting(taskId, category, relatedUserId, note));
         if (!result?.success) return showToast(result?.error?.message || taskDetailText('Unable to update task.', 'تعذر تحديث المهمة.'), 'danger');
         close();
         showToast(taskDetailText('Task updated.', 'تم تحديث المهمة.'), 'success');
@@ -8301,6 +8381,7 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
 };
 
 async function renderTasks() {
+    const taskSessionEpoch = viewSessionEpoch;
     const tasksPromise = db.fetchTasks();
     const taskUsersPromise = canAssignTasksCompanyWide() ? db.fetchAllProfiles(true) : db.fetchUsers();
     const [fetchedUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists, watcherDirectory, taskListDirectory, projects, employeeAccessGrants] = await Promise.all([
@@ -8314,6 +8395,7 @@ async function renderTasks() {
         db.fetchProjects(currentUser.id),
         db.fetchTaskEmployeeAccessGrants()
     ]);
+    if (taskSessionEpoch !== viewSessionEpoch) return '';
     const allUsers = canAssignTasksCompanyWide()
         ? [...new Map([...(window.companyEmployeeNameDirectory || []), ...(fetchedUsers || [])]
             .filter(user => user?.id && user.is_active !== false)
@@ -8377,7 +8459,7 @@ async function renderTasks() {
     }
 
     window.visibleTaskIds = tasks.filter(task => {
-        if (isMq20Profile(viewerProfile)) return canViewTaskViaEmployeeGrant(task);
+        if (isMq20Profile(viewerProfile)) return canExecuteMq20ContactDiscussionTask(task) || canViewTaskViaEmployeeGrant(task);
         if (currentUserRole === 'ADMIN') return true;
         if (canMarketingManagerEditTask(task)) return true;
         if (canViewTaskViaEmployeeGrant(task)) return true;
@@ -8592,7 +8674,7 @@ function renderTaskCard(task) {
     const assigneeName = window.formatEmployeeName(task.assignee) || (assignedUsers[0] ? window.formatEmployeeName(assignedUsers[0]) : '') || t('task_unknown') || 'Unassigned';
     const assigneeProfiles = assignedUsers.length ? assignedUsers : [task.assignee].filter(Boolean);
     const assigneeLabel = assigneeProfiles.map(user => window.formatEmployeeName(user)).filter(Boolean).join(', ') || assigneeName;
-    const isCrmProposalDesignTask = task.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN';
+    const isCrmProposalDesignTask = ['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task.crm_workflow_kind);
     const isOverdue = task.status === 'late' || (task.due_date && !['completed', 'Approved'].includes(task.status) && new Date(`${task.due_date}T23:59:59`) < new Date());
     const dueLabel = task.due_date
         ? new Intl.DateTimeFormat(currentLang === 'ar' ? 'ar-SA' : 'en', { month: 'short', day: 'numeric' }).format(new Date(`${task.due_date}T12:00:00`))
@@ -8674,7 +8756,9 @@ window.addEventListener('resize', closeTaskContextMenu);
 window.addEventListener('scroll', closeTaskContextMenu, true);
 
 async function renderTasksV2() {
+    const taskSessionEpoch = viewSessionEpoch;
     await renderTasks();
+    if (taskSessionEpoch !== viewSessionEpoch) return '';
 
     window.taskV2HealthFilter = window.taskV2HealthFilter || 'all';
 
@@ -9522,6 +9606,7 @@ function isTaskWorkspaceActive() {
 }
 
 async function refreshTaskWorkspaceInBackground() {
+    const taskSessionEpoch = viewSessionEpoch;
     // Realtime events can arrive while another view is open. Do not start a
     // hidden full workspace fetch; renderView() schedules an authoritative
     // refresh when the user returns to Task Manager.
@@ -9543,6 +9628,7 @@ async function refreshTaskWorkspaceInBackground() {
     };
     try {
         const content = await renderTasksV2();
+        if (taskSessionEpoch !== viewSessionEpoch) return;
         const previousContent = window.viewHTMLCache.tasks;
         window.viewHTMLCache.tasks = content;
         // Realtime events can arrive in bursts. If the rendered result did not
@@ -10727,7 +10813,7 @@ function isDailyRepeatingTask(task) {
 
 function bypassesTaskCompletionApproval(task) {
     return isTaskAdmin() || task?.created_by === currentUser?.id || isDailyRepeatingTask(task)
-        || task?.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN';
+        || ['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task?.crm_workflow_kind);
 }
 
 let crmDesignCompletionResolver = null;
@@ -10784,15 +10870,15 @@ window.openCrmDesignCompletionModal = function (task) {
         selection.hidden = true;
         selection.innerHTML = '';
     }
-    modal.querySelector('.crm-design-completion-kicker').textContent = taskDetailText('DESIGN APPROVAL', 'اعتماد التصميم');
+    modal.querySelector('.crm-design-completion-kicker').textContent = taskDetailText('QUOTE & PROPOSAL', 'عرض السعر والمقترح');
     modal.querySelector('#crmDesignCompletionTitle').textContent = taskDetailText('Submit completed design', 'إرسال التصميم المكتمل');
     modal.querySelector('.modal-header p').textContent = taskDetailText('Upload the final PDF files or images. They will also be shared in the task comments.', 'ارفع ملفات PDF النهائية أو الصور. وستتم مشاركتها أيضاً في تعليقات المهمة.');
     modal.querySelector('.crm-design-completion-dropzone strong').textContent = taskDetailText('Choose completed design files', 'اختر ملفات التصميم المكتمل');
     modal.querySelector('.crm-design-completion-dropzone > span').textContent = taskDetailText('PDF, PNG, JPG or WEBP · maximum 15 MB per file', 'PDF أو PNG أو JPG أو WEBP · بحد أقصى 15 ميجابايت لكل ملف');
-    modal.querySelector('.crm-design-completion-reviewers span').textContent = taskDetailText('Submitting sends approval to CEO, GM, MQ-04, MQ-05 and Marketing Manager.', 'سيتم إرسال الطلب إلى الرئيس التنفيذي والمدير العام وMQ-04 وMQ-05 ومدير التسويق.');
+    modal.querySelector('.crm-design-completion-reviewers span').textContent = taskDetailText('Submit the completed files with this task.', 'أرسل الملفات المكتملة مع هذه المهمة.');
     modal.querySelector('.modal-actions .btn-secondary').textContent = taskDetailText('Cancel', 'إلغاء');
     const submitButton = modal.querySelector('#crmDesignCompletionSubmit');
-    if (submitButton) submitButton.innerHTML = `<i data-lucide="send"></i> ${taskDetailText('Send for approval', 'إرسال للاعتماد')}`;
+    if (submitButton) submitButton.innerHTML = `<i data-lucide="send"></i> ${taskDetailText('Submit files', 'إرسال الملفات')}`;
     modal.querySelector('.task-detail-close')?.setAttribute('aria-label', taskDetailText('Close', 'إغلاق'));
     modal.classList.add('show');
     updateTranslations();
@@ -10816,7 +10902,7 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
     const task = window.taskCache?.[taskId];
     const files = [...crmDesignCompletionSelectedFiles];
     const submitButton = document.getElementById('crmDesignCompletionSubmit');
-    if (!task || task.crm_workflow_kind !== 'QUOTE_PROPOSAL_DESIGN') {
+    if (!task || !['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task.crm_workflow_kind)) {
         return showToast(taskDetailText('The CRM Design task is unavailable.', 'مهمة تصميم إدارة علاقات العملاء غير متاحة.'), 'danger');
     }
     if (!files.length) return showToast(taskDetailText('Upload at least one PDF file or image.', 'ارفع ملف PDF أو صورة واحدة على الأقل.'), 'warning');
@@ -10839,10 +10925,9 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
             uploadedReferences.push(upload.url);
             if (upload.data?.id) uploadedAttachmentIds.push(upload.data.id);
         }
-        const update = await db.updateTask(task.id, {
-            submission_links: uploadedReferences,
-            upload_link: uploadedReferences[0] || null
-        });
+        const update = task.crm_workflow_kind === 'QUOTE_PROPOSAL'
+            ? await db.submitCrmQuoteProposalFiles(task.id, uploadedReferences)
+            : await db.updateTask(task.id, { submission_links: uploadedReferences, upload_link: uploadedReferences[0] || null });
         if (!update.success) throw update.error || new Error(taskDetailText('The uploaded files could not be linked to the task.', 'تعذر ربط الملفات المرفوعة بالمهمة.'));
         taskLinksUpdated = true;
         const commentAttachments = uploadedReferences.map((url, index) => ({
@@ -10854,7 +10939,7 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
         const comment = await db.addTaskComment(
             task.id,
             currentUser.id,
-            taskDetailText('Completed Design files submitted for CRM approval.', 'تم إرسال ملفات التصميم المكتمل لاعتماد إدارة علاقات العملاء.'),
+            taskDetailText('Completed Quote & Proposal files submitted.', 'تم إرسال ملفات عرض السعر والمقترح المكتملة.'),
             commentAttachments
         );
         if (!comment.success) throw comment.error || new Error(taskDetailText('The Design files could not be shared in the task comments.', 'تعذرت مشاركة ملفات التصميم في تعليقات المهمة.'));
@@ -10864,13 +10949,14 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
         task.upload_link = uploadedReferences[0] || null;
         window.closeCrmDesignCompletionModal(true);
     } catch (error) {
+        let linksRestored = !taskLinksUpdated;
         if (taskLinksUpdated) {
-            await db.updateTask(task.id, {
-                submission_links: previousReferences,
-                upload_link: previousReferences[0] || null
-            });
+            const restore = task.crm_workflow_kind === 'QUOTE_PROPOSAL'
+                ? await db.submitCrmQuoteProposalFiles(task.id, previousReferences)
+                : await db.updateTask(task.id, { submission_links: previousReferences, upload_link: previousReferences[0] || null });
+            linksRestored = restore.success;
         }
-        if (uploadedReferences.length) await db.deleteTaskAttachmentObjects(uploadedReferences);
+        if (linksRestored && uploadedReferences.length) await db.deleteTaskAttachmentObjects(uploadedReferences);
         showToast(error?.message || taskDetailText('Unable to upload the completed Design files.', 'تعذر رفع ملفات التصميم المكتمل.'), 'danger');
     } finally {
         if (submitButton) submitButton.disabled = false;
@@ -10887,7 +10973,7 @@ window.handleUpdateTaskStatus = async function (id, status) {
     let needsManagerApproval = false;
 
     const needsCrmDesignSubmission = status === 'completed'
-        && task?.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN'
+        && ['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task?.crm_workflow_kind)
         && !['completed', 'Approved', 'Pending Approval'].includes(String(task.status || ''));
     if (needsCrmDesignSubmission) {
         const submitted = await window.openCrmDesignCompletionModal(task);
@@ -13103,6 +13189,7 @@ window.switchTransTab = function (tabId, btn) {
 window.viewHTMLCache = window.viewHTMLCache || {};
 
 window.renderView = async function (viewId, isBack = false) {
+    const renderSessionEpoch = viewSessionEpoch;
     if (!viewId) return;
     if (viewId === 'null') {
         viewId = 'dashboard';
@@ -13132,6 +13219,7 @@ window.renderView = async function (viewId, isBack = false) {
         viewId = 'dashboard';
         currentView = 'dashboard';
     }
+    if (renderSessionEpoch !== viewSessionEpoch) return;
     // Give every in-app page a real browser history entry. Android's system
     // Back button and mobile browser Back controls can now traverse app views.
     if (!isBack) syncAppBrowserHistory(viewId, viewId === 'login');
@@ -13257,6 +13345,7 @@ window.renderView = async function (viewId, isBack = false) {
             : `<div class="card" style="color:red; padding: 2rem;"><h3>${t('ui_error_loading_page')}</h3><p>${escapeHTML(err.message || '')}</p><pre>${escapeHTML(err.stack || '')}</pre></div>`;
     }
 
+    if (renderSessionEpoch !== viewSessionEpoch) return;
     console.log("renderView: finished switch for", viewId, "currentView:", currentView, "content length:", content.length);
 
     if (currentView === viewId || viewId === 'login') {
@@ -14920,8 +15009,8 @@ const dealApprovalStageLabels = {
 const dealLifecycleStages = [
     { stage: 'LEAD', label: 'crm_lead' },
     { stage: 'QUALIFICATION', label: 'crm_contact' },
-    { stage: 'PITCH', label: 'crm_presentation' },
-    { stage: 'NEGOTIATION', label: 'crm_discussion' },
+    { stage: 'DISCUSSION', label: 'crm_discussion' },
+    { stage: 'NEGOTIATION', label: 'crm_negotiation' },
     { stage: 'WON', label: 'crm_won' },
     { stage: 'LOST', label: 'crm_lost' }
 ];
@@ -14936,6 +15025,8 @@ function canonicalDealLifecycleStage(stage) {
 }
 
 function dealLifecycleLabel(stage) {
+    if (canonicalDealLifecycleStage(stage) === 'QUALIFICATION') return taskDetailText('Qualification', 'التأهيل');
+    if (['PITCH', 'PROPOSAL'].includes(String(stage || '').toUpperCase())) return taskDetailText('Historical presentation', 'العرض السابق');
     const item = dealLifecycleStages.find(entry => entry.stage === canonicalDealLifecycleStage(stage));
     return item ? (t(item.label) || item.stage) : String(stage || 'LEAD').replace(/_/g, ' ');
 }
@@ -14984,7 +15075,7 @@ function renderDealLifecycle(deal) {
         const complete = !isLost && currentStage !== 'LOST' && index < currentIndex;
         return `<div class="deal-lifecycle-step ${active ? 'active' : ''} ${complete ? 'complete' : ''} ${isLost ? 'lost' : ''}">
             <span>${complete ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : index + 1}</span>
-            <strong>${escapeHTML(t(entry.label) || entry.stage)}</strong>
+            <strong>${escapeHTML(dealLifecycleLabel(entry.stage))}</strong>
         </div>`;
     }).join('');
 }
@@ -15036,22 +15127,64 @@ window.deleteCrmDeal = function (dealId = null) {
     );
 };
 
+// Assigned approvers use a caller-scoped read path and authenticated streaming.
+window.openAssignedCrmApprovalReview = async function (stepId) {
+    const [steps, documents] = await Promise.all([db.fetchPendingCrmApprovals(), db.fetchMyCrmApprovalDocuments()]);
+    const step = steps.find(item => String(item.id) === String(stepId) && String(item.approver_id) === String(currentUser?.id));
+    if (step && !documents.success && ['PGRST202', '42883'].includes(String(documents.error?.code || '')) && await canCurrentUserUseCRM()) {
+        return window.openDealWorkflowModal(step.deal_id);
+    }
+    if (!step || !documents.success) return showToast(taskDetailText('Approval is no longer available.', 'لم تعد الموافقة متاحة.'), 'warning');
+    const deal = step.deal || {};
+    const files = documents.data.filter(file => String(file.deal_id) === String(step.deal_id));
+    const modal = document.createElement('div');
+    modal.className = 'modal show';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    const amount = deal.amount == null ? '' : `<p>${escapeHTML(taskDetailText('Amount', 'المبلغ'))}: ${escapeHTML(String(deal.amount))}</p>`;
+    modal.innerHTML = `<div class="modal-content"><div class="modal-header"><h2>${escapeHTML(deal.title || taskDetailText('Approval', 'الموافقة'))}</h2><button type="button" data-close aria-label="${escapeHTML(taskDetailText('Close', 'إغلاق'))}">×</button></div><div class="modal-body"><p>${escapeHTML(deal.crm_clients?.name || '')}</p>${amount}<h3>${escapeHTML(taskDetailText('Approval documents', 'مستندات الموافقة'))}</h3><div data-documents></div></div></div>`;
+    modal.querySelector('[data-close]').addEventListener('click', () => modal.remove());
+    const container = modal.querySelector('[data-documents]');
+    if (!files.length) container.textContent = taskDetailText('No authorized documents are available.', 'لا توجد مستندات مصرح بها.');
+    for (const file of files) {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'btn btn-secondary';
+        button.textContent = file.file_name || taskDetailText('Download document', 'تنزيل المستند');
+        button.addEventListener('click', async () => {
+            button.disabled = true;
+            const result = await db.downloadMyCrmApprovalDocument(file.id, file.source);
+            button.disabled = false;
+            if (!result.success) return showToast(taskDetailText('Document is no longer available.', 'لم يعد المستند متاحاً.'), 'warning');
+            const objectUrl = URL.createObjectURL(result.data);
+            const link = document.createElement('a'); link.href = objectUrl; link.download = file.file_name || 'document';
+            document.body.appendChild(link); link.click(); link.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        });
+        container.appendChild(button);
+    }
+    document.body.appendChild(modal);
+};
+
 window.openDealWorkflowModal = async function (dealId) {
     const [deals, users, workflow, canViewFinancials] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDealWorkflow(dealId), ensureBusinessFinancialAccess()]);
     const deal = deals.find(item => item.id === dealId);
     if (!deal) return showToast(t('crm_deal_not_found') || 'Deal not found.', 'danger');
-    await ensureApprovedDealIsInDiscussion(deal, workflow);
     document.getElementById('workflowDealId').value = dealId;
     document.getElementById('dealWorkflowName').textContent = deal.title;
     const clientName = deal.crm_clients?.name || (t('crm_unassigned') || 'Unassigned');
-    const assignee = users.find(user => user.id === deal.assigned_to);
+    const assigneeIds = Array.isArray(deal.assignee_ids) && deal.assignee_ids.length
+        ? deal.assignee_ids.map(String)
+        : (deal.assigned_to ? [String(deal.assigned_to)] : []);
+    const assignees = assigneeIds.map(id => users.find(user => String(user.id) === id)).filter(Boolean);
     const dealStage = dealLifecycleLabel(deal.stage);
     const summaryFields = [
         [t('crm_client') || 'Client', clientName],
         [t('status') || 'Stage', dealStage],
         ...(canViewFinancials ? [[t('crm_amount_sar') || 'Amount (SAR)', Number(deal.amount || 0) > 0 ? `SAR ${Number(deal.amount).toLocaleString()}` : '—']] : []),
         [t('crm_closing_date') || 'Closing Date', deal.closing_date || '—'],
-        [t('crm_assigned_to') || 'Assigned To', dealEmployeeName(assignee) || (t('crm_unassigned') || 'Unassigned')],
+        [t('crm_assigned_to') || 'Assigned To', assignees.length
+            ? assignees.map(dealEmployeeName).filter(Boolean).join(', ')
+            : (t('crm_unassigned') || 'Unassigned')],
         [t('crm_event_type') || 'Event Type', deal.event_type || '—'],
         [t('crm_first_contact_date') || 'First Contact Date', deal.first_contact_date || '—'],
         [t('crm_contacted_via') || 'Contacted Via', deal.contact_method || '—'],
@@ -15359,7 +15492,7 @@ function renderDealWorkflowDesignTaskStatus(workflow, isMq08Viewer) {
     if (!container) return;
     const workflowTask = workflow?.designTask;
     const task = workflowTask?.id ? cacheTaskRecord(workflowTask) : null;
-    const canManageStatus = Boolean(isMq08Viewer && task && canMq08ChangeCrmDesignDealStatus(task));
+    const canManageStatus = Boolean(task && (isMq08Viewer || task.crm_workflow_kind === 'QUOTE_PROPOSAL') && canMq08ChangeCrmDesignDealStatus(task));
     container.hidden = !canManageStatus;
     if (!canManageStatus) {
         container.innerHTML = '';
@@ -15380,9 +15513,9 @@ function renderDealWorkflowDesignTaskStatus(workflow, isMq08Viewer) {
 
     container.innerHTML = `<div class="task-crm-design-status-copy">
             <span class="task-crm-design-status-icon"><i data-lucide="gauge"></i></span>
-            <div><label for="dealWorkflowDesignTaskStatusSelect">${taskDetailText("Deal's task status", 'حالة مهمة الصفقة')}</label><small>${awaitingApproval
-                ? taskDetailText('The completed Design is waiting for the approval team.', 'التصميم المكتمل بانتظار اعتماد فريق الموافقات.')
-                : taskDetailText('Completing the task starts the Design approval cycle.', 'إكمال المهمة يبدأ دورة اعتماد التصميم.')}</small></div>
+            <div><label for="dealWorkflowDesignTaskStatusSelect">${taskDetailText("Deal's task status", 'حالة مهمة الصفقة')}</label><small>${task.crm_workflow_kind === 'QUOTE_PROPOSAL'
+                ? taskDetailText('Complete this task before moving the deal to Negotiation.', 'أكمل هذه المهمة قبل نقل الصفقة إلى التفاوض.')
+                : (awaitingApproval ? taskDetailText('Historical Design approval pending.', 'اعتماد تصميم سابق قيد الانتظار.') : taskDetailText('Historical Design task.', 'مهمة تصميم سابقة.'))}</small></div>
         </div>
         <div class="deal-workflow-design-status-actions">
             <span class="status-badge ${badgeClass}">${escapeHTML(badgeLabel)}</span>
@@ -15418,21 +15551,9 @@ function renderDealWorkflowContents(workflow) {
         if (isMq08Viewer) documentsSection.hidden = false;
     }
     const setupSection = document.getElementById('workflowSetupSection');
-    const canRestartApproval = !workflow.approvals.length || workflow.approvals.some(step => step.status === 'REJECTED');
     if (setupSection) {
-        setupSection.hidden = isMq08Viewer;
-        setupSection.style.display = !isMq08Viewer && canRestartApproval ? 'block' : 'none';
-    }
-    const approverGrid = setupSection?.querySelector('.workflow-approver-grid');
-    const setupHelp = setupSection?.querySelector('.page-subtitle');
-    const setupButton = setupSection?.querySelector('button.btn-primary');
-    const isPresentationWorkflow = Boolean(activeDealWorkflowContext?.deal?.approval_type);
-    if (approverGrid) approverGrid.style.display = isPresentationWorkflow ? 'none' : '';
-    if (setupHelp && isPresentationWorkflow) setupHelp.textContent = t('crm_edit_resend_help') || 'Upload the revised files and resend the request to the same approval group.';
-    if (setupButton) {
-        setupButton.onclick = isPresentationWorkflow ? window.openPresentationRequestFromWorkflow : window.startDealApprovalWorkflow;
-        setupButton.dataset.i18n = isPresentationWorkflow ? 'crm_edit_resend' : 'crm_start_approval';
-        setupButton.textContent = isPresentationWorkflow ? (t('crm_edit_resend') || 'Edit files and resend') : (t('crm_start_approval') || 'Start Approval');
+        setupSection.hidden = true;
+        setupSection.style.display = 'none';
     }
 
     const attachmentCategories = new Set(workflow.attachments.map(file => String(file.category || '').toUpperCase()));
@@ -15447,8 +15568,14 @@ function renderDealWorkflowContents(workflow) {
     }
 
     const approvalsEl = document.getElementById('dealApprovalSteps');
+    const approvalHistory = document.getElementById('dealApprovalProgressSection');
+    if (approvalHistory) {
+        approvalHistory.hidden = !workflow.approvals.length;
+        const heading = approvalHistory.querySelector('h3');
+        if (heading) heading.textContent = taskDetailText('Historical approval decisions', 'قرارات الموافقة السابقة');
+    }
     approvalsEl.innerHTML = workflow.approvals.length ? workflow.approvals.map(step => {
-        const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
+        const canDecide = false;
         const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
         return `<article class="deal-approval-step ${step.status.toLowerCase()}">
             <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
@@ -15476,7 +15603,7 @@ function renderDealWorkflowContents(workflow) {
     }
     if (workflow.designApprovals?.length) {
         approvalsEl.innerHTML += `<h4 class="deal-design-approval-title">${escapeHTML(t('crm_design_approval') || 'Design task approval')}</h4>` + workflow.designApprovals.map(step => {
-            const canDecide = !isMq08Viewer && step.status === 'PENDING' && (step.approver_id === currentUser?.id || isTaskAdmin());
+            const canDecide = false;
             const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
             return `<article class="deal-approval-step ${step.status.toLowerCase()}">
                 <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
@@ -15832,7 +15959,7 @@ window.closeCrmPresentationRequestModal = function () {
 };
 
 window.openCrmPresentationRequest = function (requestType, dealId = null) {
-    const normalizedType = requestType === 'QUOTE_PROPOSAL' ? 'QUOTE_PROPOSAL' : 'QUOTE';
+    const normalizedType = 'QUOTE_PROPOSAL';
     const selectedDealId = dealId || document.getElementById('presentationChoiceDealId').value;
     window.closeCrmPresentationChoiceModal();
     document.getElementById('presentationRequestDealId').value = selectedDealId;
@@ -15843,9 +15970,8 @@ window.openCrmPresentationRequest = function (requestType, dealId = null) {
     document.getElementById('crmPresentationRequestTitle').textContent = normalizedType === 'QUOTE_PROPOSAL'
         ? (t('crm_quote_and_proposal') || 'Quote and proposal')
         : (t('crm_quote_only') || 'Quote');
-    document.getElementById('crmPresentationRequestHelp').textContent = normalizedType === 'QUOTE_PROPOSAL'
-        ? (t('crm_quote_proposal_approvers') || 'CEO, GM, MQ-04, MQ-05 and Marketing Manager approval')
-        : (t('crm_quote_approvers') || 'CEO, GM and Marketing Manager approval');
+    document.getElementById('crmPresentationRequestHelp').textContent = taskDetailText('Create the Quote & Proposal task for Design.', 'إنشاء مهمة عرض السعر والمقترح للتصميم.');
+    document.querySelector('#sendPresentationApprovalBtn span').textContent = taskDetailText('Create task', 'إنشاء المهمة');
     document.getElementById('crmPresentationRequestModal').classList.add('show');
     updateTranslations();
     if (window.lucide) window.lucide.createIcons();
@@ -15854,7 +15980,7 @@ window.openCrmPresentationRequest = function (requestType, dealId = null) {
 window.openPresentationRequestFromWorkflow = function () {
     const deal = activeDealWorkflowContext?.deal;
     if (!deal) return;
-    const requestType = deal.approval_type || 'QUOTE';
+    const requestType = 'QUOTE_PROPOSAL';
     const dealId = deal.id;
     window.closeDealWorkflowModal();
     window.openCrmPresentationRequest(requestType, dealId);
@@ -15981,11 +16107,11 @@ window.handleCrmPresentationRequestSubmit = async function (event) {
             replaceProposal: requestType === 'QUOTE_PROPOSAL'
         });
         if (!replacement.success) throw replacement.error || new Error(t('crm_upload_failed') || 'Upload failed');
-        const result = await db.startCrmPresentationApproval(dealId, requestType);
-        if (!result.success) throw result.error || new Error(t('crm_approval_start_failed') || 'Unable to start approval');
-        window.setCrmDealStageLocally?.(dealId, 'PITCH');
+        const result = await db.startCrmQuoteProposal(dealId);
+        if (!result.success) throw result.error || new Error('Unable to create the Quote & Proposal task');
+        window.setCrmDealStageLocally?.(dealId, 'DISCUSSION');
         window.closeCrmPresentationRequestModal();
-        showToast(t('crm_approval_started') || 'Approval workflow started.', 'success');
+        showToast(taskDetailText('Quote & Proposal task created.', 'تم إنشاء مهمة عرض السعر والمقترح.'), 'success');
         void window.refreshCrmDashboardInBackground?.();
     } catch (error) {
         showToast(error?.message || t('crm_approval_start_failed') || 'Unable to start approval.', 'danger');
@@ -16040,16 +16166,7 @@ window.dropDeal = async (ev, newStage) => {
     const oldStage = ev.dataTransfer.getData('oldStage') || (card ? card.getAttribute('data-stage') : null);
     if (oldStage === newStage) return { success: true, reason: 'same_stage', dealId, oldStage, newStage };
 
-    if ((newStage === 'NEGOTIATION' || newStage === 'WON') && card?.getAttribute('data-workflow-status') !== 'APPROVED') {
-        showToast(t('crm_approval_required') || 'Complete all internal approvals before advancing this deal.', 'warning');
-        await window.openDealWorkflowModal(dealId);
-        return { success: false, reason: 'approval_required', dealId, oldStage, newStage };
-    }
-
-    if (newStage === 'PITCH') {
-        window.openCrmPresentationChoiceModal(dealId, oldStage);
-        return { success: false, reason: 'presentation_type_required', dealId, oldStage, newStage };
-    }
+    if (newStage === 'PITCH' || newStage === 'PROPOSAL') return { success: false, reason: 'historical_stage', dealId, oldStage, newStage };
 
     if (newStage === 'LOST') {
         document.getElementById('lostDealId').value = dealId;
@@ -16071,12 +16188,16 @@ window.dropDeal = async (ev, newStage) => {
         ? window.hrDomainServices.deals.changeStage(dealId, newStage)
         : db.updateDealStage(dealId, newStage));
     if (res.success) {
-        await db.logDealActivity(dealId, 'STAGE_CHANGED', oldStage, newStage, null);
+        if (newStage === 'DISCUSSION') window.openCrmPresentationRequest('QUOTE_PROPOSAL', dealId);
         showToast(t('toast_deal_moved_to') + newStage, "success");
         void window.refreshCrmDashboardInBackground?.();
         return { success: true, dealId, oldStage, newStage };
     } else {
-        showToast(t('toast_failed_to_move_deal'), "danger");
+        const reason = String(res.error?.message || res.data?.message || '');
+        const assignmentRequired = /active deal owner|deal assignee|assignee must be active/i.test(reason);
+        showToast(assignmentRequired
+            ? (t('crm_contact_discussion_assignee_required') || 'Assign an active deal owner before moving this deal to Qualification.')
+            : (t('toast_failed_to_move_deal') || reason), "danger");
         if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
         return { success: false, reason: 'save_failed', dealId, oldStage, newStage };
     }
@@ -17137,8 +17258,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
     const users = await db.fetchUsers();
     const assigneeSelect = document.getElementById('crmDealAssignee');
     if (assigneeSelect) {
-        assigneeSelect.innerHTML = `<option value="">${t('crm_select_assignee')}</option>` +
-            users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
+        assigneeSelect.innerHTML = users.map(u => `<option value="${u.id}">${window.formatEmployeeName(u)} (${u.role})</option>`).join('');
     }
 
     document.getElementById('crmDealId').value = id || '';
@@ -17181,7 +17301,12 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
             if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = deal.lead_source || '';
             document.getElementById('crmDealTechnicalDescription').value = deal.technical_description || '';
 
-            if (assigneeSelect) assigneeSelect.value = deal.assigned_to || '';
+            if (assigneeSelect) {
+                const selectedAssignees = new Set(Array.isArray(deal.assignee_ids) && deal.assignee_ids.length
+                    ? deal.assignee_ids.map(String)
+                    : (deal.assigned_to ? [String(deal.assigned_to)] : []));
+                Array.from(assigneeSelect.options).forEach(option => { option.selected = selectedAssignees.has(option.value); });
+            }
 
             if (deal.stage === 'LOST') {
                 document.getElementById('crmDealLostReasonGroup').style.display = 'block';
@@ -17200,7 +17325,7 @@ window.showCRMDealModal = async (id = null, isViewOnly = false) => {
         if (document.getElementById('crmDealContactMethod')) document.getElementById('crmDealContactMethod').value = '';
         if (document.getElementById('crmDealLeadSource')) document.getElementById('crmDealLeadSource').value = '';
         document.getElementById('crmDealTechnicalDescription').value = '';
-        if (assigneeSelect) assigneeSelect.value = '';
+        if (assigneeSelect) Array.from(assigneeSelect.options).forEach(option => { option.selected = false; });
         document.getElementById('crmDealLostReasonGroup').style.display = 'none';
     }
 
@@ -17214,7 +17339,8 @@ window.handleCreateDeal = async (e) => {
     e.preventDefault();
     const id = document.getElementById('crmDealId').value;
     const assigneeEl = document.getElementById('crmDealAssignee');
-    const assigneeVal = assigneeEl ? assigneeEl.value : null;
+    const assigneeIds = assigneeEl ? Array.from(assigneeEl.selectedOptions || []).map(option => option.value).filter(Boolean) : [];
+    const assigneeVal = assigneeIds[0] || null;
     const closingDateEl = document.getElementById('crmDealClosingDate');
 
     const eventTypeEl = document.getElementById('crmDealEventType');
@@ -17223,7 +17349,7 @@ window.handleCreateDeal = async (e) => {
     const leadSourceEl = document.getElementById('crmDealLeadSource');
     const amountValue = canCurrentUserViewBusinessFinancials() ? document.getElementById('crmDealAmount').value.trim() : '';
 
-    if (!firstContactDateEl?.value || !contactMethodEl?.value || !assigneeVal) {
+    if (!firstContactDateEl?.value || !contactMethodEl?.value || !assigneeIds.length) {
         return showToast(window.t('msg_toast_26') || 'Please fill in all required fields.', 'danger');
     }
 
@@ -17236,7 +17362,8 @@ window.handleCreateDeal = async (e) => {
         contact_method: (contactMethodEl && contactMethodEl.value) ? contactMethodEl.value : null,
         lead_source: (leadSourceEl && leadSourceEl.value) ? leadSourceEl.value : null,
         technical_description: document.getElementById('crmDealTechnicalDescription').value || null,
-        assigned_to: assigneeVal
+        assigned_to: assigneeVal,
+        assignee_ids: assigneeIds
     };
     if (canCurrentUserViewBusinessFinancials()) data.amount = amountValue === '' ? null : Number(amountValue);
     if (!id) {
@@ -17446,6 +17573,7 @@ async function initApp() {
     // Listen for session expiration or logout
     db.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT' || !session) {
+            clearSessionViewState();
             stopNotificationsRealtime();
             stopTasksRealtime();
             currentUser = null;
@@ -17455,10 +17583,8 @@ async function initApp() {
             appHistoryInitialized = false;
             document.querySelector('.sidebar').style.display = 'none';
             document.querySelector('.topbar').style.display = 'none';
-            if (currentView !== 'login') {
-                currentView = 'login';
-                renderView('login');
-            }
+            currentView = 'login';
+            renderView('login');
         }
     });
 
@@ -18317,9 +18443,9 @@ function isOperationsManagerProjectProfile(profile = currentUserProfile) {
 window.handleDealWorkflowDesignTaskStatusChange = async function (select) {
     const workflowTask = activeDealWorkflowContext?.workflow?.designTask;
     const task = workflowTask?.id ? cacheTaskRecord(workflowTask) : null;
-    if (!task || !isMq08Profile() || !canMq08ChangeCrmDesignDealStatus(task)) {
+    if (!task || !canMq08ChangeCrmDesignDealStatus(task)) {
         if (select && task) select.value = crmDesignDealStatusFromTask(task);
-        return showToast(taskDetailText('Only the assigned employee MQ-08 can change this Design task status.', 'يمكن فقط للموظفة المعيّنة MQ-08 تغيير حالة مهمة التصميم.'), 'warning');
+        return showToast(taskDetailText('Only the assigned Design employee can change this Design task status.', 'يمكن لموظف التصميم المعيّن فقط تغيير حالة مهمة التصميم.'), 'warning');
     }
 
     const previousStatus = crmDesignDealStatusFromTask(task);
@@ -18864,15 +18990,12 @@ async function renderApprovals() {
     const profile_auth = currentUserProfile || {};
     const canUseApprovals = isTaskAdmin() || currentUserRole === 'MANAGER' || currentUserRole === 'SUPERVISOR' || /manager|supervisor/i.test(profile_auth?.job_title || '');
     if (!canUseApprovals) {
-        return `<div class="empty-state">
-                    <i data-lucide="shield-alert"></i>
-                    <p data-i18n="unauthorized_access">You are not authorized to view this page.</p>
-                </div>`;
+        return `<div class="empty-state"><i data-lucide="shield-alert"></i><p data-i18n="unauthorized_access">You are not authorized to view this page.</p></div>`;
     }
-    const [allTasks, allUsers, allProjects, departments, workflows, leaves, documents, expenses, genericRequests, crmApprovalSteps, crmDesignApprovalSteps, canViewFinancials] = await Promise.all([
+    const [allTasks, allUsers, allProjects, departments, workflows, leaves, documents, expenses, genericRequests] = await Promise.all([
         db.fetchTasks(), db.fetchUsers(), db.fetchProjects(), db.fetchDepartments(),
         db.fetchRequestApprovalWorkflows(), db.fetchLeaveRequests(), db.fetchDocuments(),
-        db.fetchExpenses(), db.fetchGenericRequests(), db.fetchPendingCrmApprovals(), db.fetchPendingCrmDesignTaskApprovals(), ensureBusinessFinancialAccess()
+        db.fetchExpenses(), db.fetchGenericRequests()
     ]);
     const profile = (allUsers || []).find(user => user.id === currentUser?.id) || currentUserProfile || {};
     const isAdmin = isTaskAdmin();
@@ -18912,7 +19035,7 @@ async function renderApprovals() {
         const ownDepartment = (departments || []).find(department => department.id === profile.department_id);
         if (ownDepartment && /manager|supervisor/i.test(profile.job_title || '') || ownDepartment && ['MANAGER', 'SUPERVISOR'].includes(currentUserRole)) departmentNames.add(ownDepartment.name);
     }
-    const pendingTasks = (allTasks || []).filter(task => task.crm_workflow_kind !== 'QUOTE_PROPOSAL_DESIGN' && String(task.status || '').trim().toLowerCase() === 'pending approval').filter(task =>
+    const pendingTasks = (allTasks || []).filter(task => !['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task.crm_workflow_kind) && String(task.status || '').trim().toLowerCase() === 'pending approval').filter(task =>
         isAdmin || departmentNames.has(task.department) || (task.watchers || []).includes(currentUser?.id)
     );
     const taskRows = pendingTasks.map(task => {
@@ -18930,38 +19053,13 @@ async function renderApprovals() {
         return `<tr><td><strong>${escapeHTML(title)}</strong>${task.parent_task_id ? '<br><span class="status-badge info">Subtask</span>' : ''}</td><td>${escapeHTML(task.department || 'No department')}</td><td>${escapeHTML(project?.project_name || 'No project')}</td><td>${escapeHTML(window.formatEmployeeName(assignee) || 'Unassigned')}</td><td>${task.completion_requested_at ? new Date(task.completion_requested_at).toLocaleString() : '—'}</td><td>${taskActions ? `<div style="display:flex;gap:.5rem">${taskActions}</div>` : '<span class="status-badge info">Watcher access · View only</span>'}</td></tr>`;
     }).join('');
 
-    const pendingCrmApprovals = (crmApprovalSteps || []).filter(step => isAdmin || step.approver_id === currentUser?.id);
-    const dealApprovalRows = pendingCrmApprovals.map(step => {
-        const deal = step.deal || {};
-        const clientName = deal.crm_clients?.name || 'No client';
-        const approver = userMap.get(step.approver_id);
-        const stageLabel = t(dealApprovalStageLabels[step.stage_key]) || String(step.stage_key || 'Approval').replace(/_/g, ' ');
-        const canDecide = isAdmin || step.approver_id === currentUser?.id;
-        const submittedAt = deal.proposal_sent_at || step.created_at;
-        return `<tr><td><strong>${escapeHTML(deal.title || 'Untitled deal')}</strong></td><td>${escapeHTML(clientName)}</td>${canViewFinancials ? `<td>SAR ${Number(deal.amount || 0).toLocaleString()}</td>` : ''}<td><span class="status-badge warning">${escapeHTML(stageLabel)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${submittedAt ? new Date(submittedAt).toLocaleString(currentLang === 'ar' ? 'ar-SA' : 'en-SA') : '—'}</td><td>${canDecide ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : '<span class="status-badge info">Assigned to another approver</span>'}</td></tr>`;
-    }).join('');
-    const pendingCrmDesignApprovals = (crmDesignApprovalSteps || []).filter(step => isAdmin || step.approver_id === currentUser?.id);
-    const renderedAdminDesignTasks = new Set();
-    const designApprovalRows = pendingCrmDesignApprovals.map(step => {
-        const deal = step.deal || {};
-        const task = step.task || {};
-        const clientName = deal.crm_clients?.name || 'No client';
-        const approver = step.profiles || userMap.get(step.approver_id);
-        const showApproveAll = isAdmin && task.id && !renderedAdminDesignTasks.has(task.id);
-        if (showApproveAll) renderedAdminDesignTasks.add(task.id);
-        return `<tr><td><strong>${escapeHTML(task.title || deal.title || 'Design task')}</strong><br><span class="status-badge info">${escapeHTML(t('crm_design_approval') || 'Design approval')}</span></td><td>${escapeHTML(clientName)}</td>${canViewFinancials ? '<td>—</td>' : ''}<td><span class="status-badge warning">${escapeHTML(t(dealApprovalStageLabels[step.stage_key]) || step.stage_key)}</span></td><td>${escapeHTML(dealEmployeeName(approver) || 'Unassigned')}</td><td>${step.created_at ? new Date(step.created_at).toLocaleDateString() : '—'}</td><td><div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn-secondary" onclick="openDealWorkflowModal('${deal.id}')">${t('crm_view_files') || 'View files'}</button><button class="btn-primary" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn-secondary" style="color:var(--color-danger)" onclick="handleCrmDesignApprovalDecision('${deal.id}','${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button>${showApproveAll ? `<button class="btn-primary crm-admin-approve-all" onclick="handleCrmDesignAdminApproveAll('${deal.id}','${task.id}')"><i data-lucide="badge-check"></i>${taskDetailText('Approve all remaining', 'اعتماد جميع الموافقات المتبقية')}</button>` : ''}</div></td></tr>`;
-    }).join('');
-    const crmRows = dealApprovalRows + designApprovalRows;
-
     return `<div class="page-header"><div><h1 class="page-title">${t('ui_approvals_dashboard')}</h1><p class="page-subtitle">${t('approvals_subtitle')}</p></div></div>
         <div class="card" style="padding:.5rem;margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
             <button class="btn-primary" data-approval-tab="requests" onclick="setApprovalsTab('requests')">${t('approvals_employee_requests')} <span class="status-badge">${pendingRequests.length}</span></button>
             <button class="btn-secondary" data-approval-tab="tasks" onclick="setApprovalsTab('tasks')">${t('approvals_tasks')} <span class="status-badge">${pendingTasks.length}</span></button>
-            <button class="btn-secondary" data-approval-tab="crm" onclick="setApprovalsTab('crm')">${t('nav_crm') || 'CRM'} <span class="status-badge">${pendingCrmApprovals.length + pendingCrmDesignApprovals.length}</span></button>
         </div>
         <section data-approval-panel="requests" class="card"><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('leave_employee')}</th><th>${t('ui_request')}</th><th>${t('req_details')}</th><th>${t('approvals_current_stage')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${requestRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_employee_requests')}</td></tr>`}</tbody></table></div></section>
-        <section data-approval-panel="tasks" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('nav_tasks')}</th><th>${t('custody_department')}</th><th>${t('ui_project')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${taskRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_tasks')}</td></tr>`}</tbody></table></div></section>
-        <section data-approval-panel="crm" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('ui_deal') || 'Deal'}</th><th>${t('ui_client') || 'Client'}</th>${canViewFinancials ? `<th>${t('ui_amount') || 'Amount'}</th>` : ''}<th>${t('approvals_current_stage')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${crmRows || `<tr><td colspan="${canViewFinancials ? 7 : 6}" style="text-align:center;padding:2rem">${t('crm_no_pending_approvals') || 'No pending CRM approvals.'}</td></tr>`}</tbody></table></div></section>`;
+        <section data-approval-panel="tasks" class="card" hidden><div class="table-responsive"><table class="data-table"><thead><tr><th>${t('nav_tasks')}</th><th>${t('custody_department')}</th><th>${t('ui_project')}</th><th>${t('task_assign_to')}</th><th>${t('approvals_submitted')}</th><th>${t('leave_actions')}</th></tr></thead><tbody>${taskRows || `<tr><td colspan="6" style="text-align:center;padding:2rem">${t('approvals_no_tasks')}</td></tr>`}</tbody></table></div></section>`;
 };
 
 window.setApprovalsTab = function (tab) {
