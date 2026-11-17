@@ -8337,6 +8337,7 @@ window.openMyDayWorkStateModal = async function (taskId, mode) {
 };
 
 async function renderTasks() {
+    const taskSessionEpoch = viewSessionEpoch;
     const tasksPromise = db.fetchTasks();
     const taskUsersPromise = canAssignTasksCompanyWide() ? db.fetchAllProfiles(true) : db.fetchUsers();
     const [fetchedUsers, fetchedTasks, departmentSupervisors, allDepartments, fetchedTaskLists, watcherDirectory, taskListDirectory, projects, employeeAccessGrants] = await Promise.all([
@@ -8350,6 +8351,7 @@ async function renderTasks() {
         db.fetchProjects(currentUser.id),
         db.fetchTaskEmployeeAccessGrants()
     ]);
+    if (taskSessionEpoch !== viewSessionEpoch) return '';
     const allUsers = canAssignTasksCompanyWide()
         ? [...new Map([...(window.companyEmployeeNameDirectory || []), ...(fetchedUsers || [])]
             .filter(user => user?.id && user.is_active !== false)
@@ -8706,7 +8708,9 @@ window.addEventListener('resize', closeTaskContextMenu);
 window.addEventListener('scroll', closeTaskContextMenu, true);
 
 async function renderTasksV2() {
+    const taskSessionEpoch = viewSessionEpoch;
     await renderTasks();
+    if (taskSessionEpoch !== viewSessionEpoch) return '';
 
     window.taskV2HealthFilter = window.taskV2HealthFilter || 'all';
 
@@ -9551,6 +9555,7 @@ function isTaskWorkspaceActive() {
 }
 
 async function refreshTaskWorkspaceInBackground() {
+    const taskSessionEpoch = viewSessionEpoch;
     // Realtime events can arrive while another view is open. Do not start a
     // hidden full workspace fetch; renderView() schedules an authoritative
     // refresh when the user returns to Task Manager.
@@ -9572,6 +9577,7 @@ async function refreshTaskWorkspaceInBackground() {
     };
     try {
         const content = await renderTasksV2();
+        if (taskSessionEpoch !== viewSessionEpoch) return;
         const previousContent = window.viewHTMLCache.tasks;
         window.viewHTMLCache.tasks = content;
         // Realtime events can arrive in bursts. If the rendered result did not
