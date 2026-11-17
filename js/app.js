@@ -8395,7 +8395,7 @@ async function renderTasks() {
     }
 
     window.visibleTaskIds = tasks.filter(task => {
-        if (isMq20Profile(viewerProfile)) return canViewTaskViaEmployeeGrant(task);
+        if (isMq20Profile(viewerProfile)) return canExecuteMq20ContactDiscussionTask(task) || canViewTaskViaEmployeeGrant(task);
         if (currentUserRole === 'ADMIN') return true;
         if (canMarketingManagerEditTask(task)) return true;
         if (canViewTaskViaEmployeeGrant(task)) return true;
