@@ -30,8 +30,8 @@ BEGIN
  IF (SELECT count(*) FROM public.crm_deal_approval_steps s JOIN public.crm_deals d ON d.id=s.deal_id WHERE d.stage='PITCH')<>36 THEN
   RAISE EXCEPTION 'Historical approval count differs; review before migration';
  END IF;
- IF (SELECT count(*) FROM public.crm_deal_attachments a JOIN public.crm_deals d ON d.id=a.deal_id WHERE d.stage='PITCH')<>12 OR
-    (SELECT count(*) FROM public.crm_deal_attachments a JOIN public.crm_deals d ON d.id=a.deal_id WHERE d.stage='PITCH' AND a.category='QUOTATION')<>12 THEN
+ IF (SELECT count(*) FROM public.crm_deal_attachments a JOIN public.crm_deals d ON d.id=a.deal_id WHERE d.stage='PITCH')<>15 OR
+    (SELECT count(*) FROM public.crm_deal_attachments a JOIN public.crm_deals d ON d.id=a.deal_id WHERE d.stage='PITCH' AND a.category='QUOTATION')<>14 THEN
   RAISE EXCEPTION 'Historical document baseline differs; review before migration';
  END IF;
  IF (SELECT count(*) FROM public.crm_deal_activity a JOIN public.crm_deals d ON d.id=a.deal_id WHERE d.stage='PITCH')<>52 THEN
@@ -39,6 +39,16 @@ BEGIN
  END IF;
  IF EXISTS (SELECT 1 FROM public.crm_generated_tasks m JOIN public.crm_deals d ON d.id=m.deal_id WHERE d.stage='PITCH' AND m.kind IN ('QUOTE_PROPOSAL','QUOTE_PROPOSAL_DESIGN')) THEN
   RAISE EXCEPTION 'Historical Design task mapping requires review';
+ END IF;
+ IF EXISTS (SELECT 1 FROM public.crm_deals WHERE stage='PITCH' AND assignee_ids IS DISTINCT FROM CASE WHEN assigned_to IS NULL THEN '{}'::uuid[] ELSE ARRAY[assigned_to]::uuid[] END) THEN
+  RAISE EXCEPTION 'Historical assignment backfill differs';
+ END IF;
+ IF (WITH p AS (SELECT id,assigned_to,created_by FROM public.crm_deals WHERE stage='PITCH'),
+ d AS (SELECT a.id,a.deal_id,a.category,a.is_archived,(SELECT count(*) FROM storage.objects s WHERE s.bucket_id='crm-deal-files' AND a.file_url='storage://crm-deal-files/'||s.name) AS storage_matches FROM public.crm_deal_attachments a JOIN p ON p.id=a.deal_id),
+ s AS (SELECT a.id,a.deal_id,a.approver_id,a.stage_key,a.step_order FROM public.crm_deal_approval_steps a JOIN p ON p.id=a.deal_id),
+ a AS (SELECT a.id,a.deal_id,a.actor_id FROM public.crm_deal_activity a JOIN p ON p.id=a.deal_id)
+ SELECT md5(jsonb_build_object('deals',coalesce((SELECT jsonb_agg(to_jsonb(p) ORDER BY p.id) FROM p),'[]'::jsonb),'documents',coalesce((SELECT jsonb_agg(to_jsonb(d) ORDER BY d.id) FROM d),'[]'::jsonb),'approvals',coalesce((SELECT jsonb_agg(to_jsonb(s) ORDER BY s.id) FROM s),'[]'::jsonb),'activities',coalesce((SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM a),'[]'::jsonb))::text))<>'670614517392c5ffd1f459f6ae75d8c6' THEN
+  RAISE EXCEPTION 'Historical relationship manifest differs; review before migration';
  END IF;
  SELECT array_agg(id ORDER BY id), md5(coalesce(string_agg(md5((to_jsonb(d)-'stage'-'workflow_status')::text),'' ORDER BY id),'')) INTO target_ids,deal_hash FROM public.crm_deals d WHERE stage='PITCH';
  SELECT array_agg(id ORDER BY id), md5(coalesce(string_agg(md5(to_jsonb(a)::text),'' ORDER BY id),'')) INTO activity_ids, activity_hash FROM public.crm_deal_activity a WHERE deal_id=ANY(target_ids);
