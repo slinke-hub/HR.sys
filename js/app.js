@@ -5,6 +5,22 @@ let currentTheme = 'light';
 let currentView = 'login';
 let loginMode = 'login';
 let currentUser = null;
+let viewSessionEpoch = 0;
+function clearSessionViewState() {
+    viewSessionEpoch += 1;
+    window.viewHTMLCache = {};
+    window.taskCache = {};
+    window.visibleTaskIds = [];
+    window.taskListsCache = [];
+    window.taskEmployeeAccessGrants = [];
+    window.myDayTaskById = {};
+    window.activeTaskDetail = null;
+    window.taskV2SelectedProject = 'all';
+    window.taskV2HealthFilter = 'all';
+    window.MogamCrmDashboard?.unmount?.();
+    const container = document.getElementById('viewContainer');
+    if (container) container.innerHTML = '';
+}
 let viewHistory = [];
 const APP_HISTORY_VIEW_KEY = 'muqamView';
 let appHistoryInitialized = false;
@@ -2615,6 +2631,7 @@ window.handlePostCommunityMessage = async (e) => {
 };
 
 window.handleLogout = async function () {
+    clearSessionViewState();
     try {
         await db.logout();
     } catch (error) {
@@ -2937,6 +2954,7 @@ window.handleLoginSubmit = async function (e) {
 
     await db.resetLoginLockout(email);
 
+    clearSessionViewState();
     currentUser = user;
 
     // Update last_login
@@ -13113,6 +13131,7 @@ window.switchTransTab = function (tabId, btn) {
 window.viewHTMLCache = window.viewHTMLCache || {};
 
 window.renderView = async function (viewId, isBack = false) {
+    const renderSessionEpoch = viewSessionEpoch;
     if (!viewId) return;
     if (viewId === 'null') {
         viewId = 'dashboard';
@@ -13142,6 +13161,7 @@ window.renderView = async function (viewId, isBack = false) {
         viewId = 'dashboard';
         currentView = 'dashboard';
     }
+    if (renderSessionEpoch !== viewSessionEpoch) return;
     // Give every in-app page a real browser history entry. Android's system
     // Back button and mobile browser Back controls can now traverse app views.
     if (!isBack) syncAppBrowserHistory(viewId, viewId === 'login');
@@ -13267,6 +13287,7 @@ window.renderView = async function (viewId, isBack = false) {
             : `<div class="card" style="color:red; padding: 2rem;"><h3>${t('ui_error_loading_page')}</h3><p>${escapeHTML(err.message || '')}</p><pre>${escapeHTML(err.stack || '')}</pre></div>`;
     }
 
+    if (renderSessionEpoch !== viewSessionEpoch) return;
     console.log("renderView: finished switch for", viewId, "currentView:", currentView, "content length:", content.length);
 
     if (currentView === viewId || viewId === 'login') {
@@ -17494,6 +17515,7 @@ async function initApp() {
     // Listen for session expiration or logout
     db.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT' || !session) {
+            clearSessionViewState();
             stopNotificationsRealtime();
             stopTasksRealtime();
             currentUser = null;
