@@ -4620,11 +4620,13 @@ function renderTaskCommentAttachments(attachments) {
 }
 
 window.openTaskDetailsModal = async function (id) {
+    const taskSessionEpoch = viewSessionEpoch;
     let task = window.taskCache?.[id];
     // The action can be clicked before the task cache finishes hydrating.
     // Resolve the task once more instead of silently doing nothing.
     if (!task) {
         const fetchedTasks = await db.fetchTasksWithProfiles();
+        if (taskSessionEpoch !== viewSessionEpoch) return;
         task = (fetchedTasks || []).find(item => String(item.id) === String(id));
         if (task) {
             window.taskCache = window.taskCache || {};
@@ -4643,6 +4645,7 @@ window.openTaskDetailsModal = async function (id) {
     const preserveArchivedTaskView = currentView === 'archived_tasks' && !!task.archived_at;
     if (!preserveArchivedTaskView && !['tasks', 'tasks_v2'].includes(currentView)) {
         await renderView('tasks');
+        if (taskSessionEpoch !== viewSessionEpoch) return;
     }
 
     const taskPanel = document.getElementById('taskSidePanel');
@@ -4710,6 +4713,7 @@ window.openTaskDetailsModal = async function (id) {
     }
 
     const comments = await db.fetchTaskComments(task.id);
+    if (taskSessionEpoch !== viewSessionEpoch) return;
     if (comments.length === 0) {
         list.innerHTML = `<div style="color: var(--color-text-secondary); font-style: italic;">${taskDetailText('No comments yet.', 'لا توجد تعليقات بعد.')}</div>`;
     } else {
@@ -4795,6 +4799,7 @@ window.handleTaskAssigneeClick = function (event, taskId) {
 };
 
 async function prepareTeamworkTaskDetail(task) {
+    const taskSessionEpoch = viewSessionEpoch;
     window.activeTaskDetail = task;
     const panel = document.getElementById('taskSidePanel');
     if (!panel) return;
@@ -4836,6 +4841,7 @@ async function prepareTeamworkTaskDetail(task) {
                 : Promise.resolve([]),
             db.fetchTaskDependencies ? db.fetchTaskDependencies(task.id) : Promise.resolve([])
         ]);
+        if (taskSessionEpoch !== viewSessionEpoch) return;
         task._dependencies = taskDependencies || [];
         window.activeTaskDependencies = task._dependencies;
         const canManageDependencies = !task.archived_at && canManageTaskDependencies(task);
@@ -4897,7 +4903,7 @@ async function prepareTeamworkTaskDetail(task) {
         const crmDesignDealStatus = crmDesignDealStatusFromTask(task);
         const crmDesignStatusLocked = ['completed', 'approved', 'pending approval'].includes(String(task.status || '').trim().toLowerCase());
         const crmDesignDealStatusHTML = showCrmDesignDealStatus ? `<section class="task-crm-design-status-control" aria-labelledby="crmDesignDealStatusLabel">
-            <div class="task-crm-design-status-copy"><span class="task-crm-design-status-icon"><i data-lucide="gauge"></i></span><div><label id="crmDesignDealStatusLabel" for="crmDesignDealStatusSelect">${taskDetailText('Deal status', 'حالة الصفقة')}</label><small>${crmDesignStatusLocked ? taskDetailText('The completed Design is awaiting or has received approval.', 'التصميم المكتمل بانتظار الاعتماد أو تم اعتماده.') : taskDetailText('This status also updates the linked deal in CRM.', 'تُحدّث هذه الحالة الصفقة المرتبطة في إدارة علاقات العملاء أيضاً.')}</small></div></div>
+            <div class="task-crm-design-status-copy"><span class="task-crm-design-status-icon"><i data-lucide="gauge"></i></span><div><label id="crmDesignDealStatusLabel" for="crmDesignDealStatusSelect">${taskDetailText('Deal status', 'حالة الصفقة')}</label><small>${crmDesignStatusLocked ? (task.crm_workflow_kind === 'QUOTE_PROPOSAL' ? taskDetailText('Design completed.', 'اكتمل التصميم.') : taskDetailText('The completed Design is awaiting or has received approval.', 'التصميم المكتمل بانتظار الاعتماد أو تم اعتماده.')) : taskDetailText('This status also updates the linked deal in CRM.', 'تُحدّث هذه الحالة الصفقة المرتبطة في إدارة علاقات العملاء أيضاً.')}</small></div></div>
             <select id="crmDesignDealStatusSelect" class="form-control task-crm-design-status-select" data-task-id="${escapeHTML(task.id)}" onchange="handleCrmDesignDealStatusChange(this)" ${crmDesignStatusLocked ? 'disabled' : ''}>
                 <option value="IN_PROGRESS" ${crmDesignDealStatus === 'IN_PROGRESS' ? 'selected' : ''}>${taskDetailText('In progress', 'قيد التنفيذ')}</option>
                 <option value="LATE" ${crmDesignDealStatus === 'LATE' ? 'selected' : ''}>${taskDetailText('Late', 'متأخرة')}</option>
