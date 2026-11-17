@@ -12,3 +12,12 @@ and compatibility migrations in their validated order; it does not install the
 old approval migration as a prerequisite. The staging correction requires the
 post-Migration-7 staging baseline. Both files fail closed on their expected
 database state.
+
+Quote & Proposal uses `hrsys_private.crm_quote_proposal_routes`. A database
+administrator manages the active list and assignee there; application roles
+have no direct privileges on this table. The workflow rejects zero or multiple
+active routes, inactive assignees, inactive departments, and mismatched or
+non-Design lists. Change a route transactionally by deactivating the old row
+and inserting the new list/assignee pair. The Production migration seeds the
+current legacy destination only when it is uniquely identifiable; Staging is
+configured separately with a test-owned identity and list.

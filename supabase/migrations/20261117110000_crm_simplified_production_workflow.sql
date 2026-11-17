@@ -611,6 +611,21 @@ ALTER TABLE public.crm_generated_tasks ADD CONSTRAINT crm_generated_tasks_kind_c
 
 -- This private, transaction-bound capability can only be minted by the
 -- authenticated CRM RPC below. It does not grant list permissions to callers.
+-- Managed by the database administrator; no application role may write routes.
+CREATE TABLE hrsys_private.crm_quote_proposal_routes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  list_id uuid NOT NULL REFERENCES public.task_lists(id),
+  assignee_id uuid NOT NULL REFERENCES public.profiles(id),
+  is_active boolean NOT NULL DEFAULT true
+);
+REVOKE ALL ON hrsys_private.crm_quote_proposal_routes FROM PUBLIC,anon,authenticated,service_role;
+-- Seed only a uniquely verified current Production route; ambiguity leaves no route.
+INSERT INTO hrsys_private.crm_quote_proposal_routes(list_id,assignee_id)
+SELECT l.id,p.id FROM public.task_lists l JOIN public.departments d ON d.id=l.department_id
+JOIN public.profiles p ON p.department_id=d.id
+WHERE l.name ~* '(design|تصميم)' AND d.is_active IS TRUE AND p.emp_index=8 AND p.is_active IS TRUE
+AND (SELECT count(*) FROM public.task_lists WHERE name ~* '(design|تصميم)')=1
+AND (SELECT count(*) FROM public.profiles WHERE emp_index=8 AND is_active IS TRUE)=1;
 CREATE TABLE hrsys_private.crm_quote_proposal_context (
   backend_pid integer NOT NULL, transaction_id bigint NOT NULL,
   actor_id uuid NOT NULL, deal_id uuid NOT NULL, list_id uuid NOT NULL,
@@ -626,7 +641,9 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
      JOIN public.profiles designer ON designer.id=c.designer_id
     WHERE c.backend_pid=pg_backend_pid() AND c.transaction_id=txid_current()
       AND c.actor_id=auth.uid() AND c.deal_id=p_deal_id AND c.list_id=p_list_id
-      AND designer.is_active IS DISTINCT FROM false AND designer.emp_index=8
+      AND designer.is_active IS TRUE
+      AND (SELECT count(*) FROM hrsys_private.crm_quote_proposal_routes r WHERE r.is_active)=1
+      AND EXISTS (SELECT 1 FROM hrsys_private.crm_quote_proposal_routes r WHERE r.is_active AND r.list_id=c.list_id AND r.assignee_id=c.designer_id)
       AND designer.department_id=l.department_id AND department.is_active IS DISTINCT FROM false
       AND coalesce(l.name,'') ~* '(design|تصميم)'
       AND (p_task_id IS NULL OR EXISTS (SELECT 1 FROM public.crm_generated_tasks m
@@ -690,6 +707,32 @@ BEGIN
        AND NEW.assignee_id IS NOT DISTINCT FROM (coalesce(NEW.assignee_ids,'{}'::uuid[]))[1]
        AND (to_jsonb(NEW)-ARRAY['assignee_id','assignee_ids','updated_at'])=(to_jsonb(OLD)-ARRAY['assignee_id','assignee_ids','updated_at'])
        AND hrsys_private.valid_crm_quote_proposal_reassignment(OLD.id,OLD.task_list_id,NEW.assignee_ids) THEN RETURN NEW; END IF;$$),
+    ('public.ensure_crm_generated_task(uuid,text)', $oldroute$    SELECT count(*) INTO v_list_count FROM public.profiles WHERE emp_index = 8 AND is_active IS DISTINCT FROM false;
+    IF v_list_count <> 1 THEN RAISE EXCEPTION 'Configure exactly one active MQ-08 employee' USING ERRCODE = '23514'; END IF;
+    SELECT id INTO v_assignee FROM public.profiles WHERE emp_index = 8 AND is_active IS DISTINCT FROM false;
+    IF v_assignee IS NULL THEN RAISE EXCEPTION 'Employee MQ-08 must be configured' USING ERRCODE = '23514'; END IF;
+    SELECT count(*) INTO v_list_count FROM public.task_lists WHERE COALESCE(name, '') ~* '(design|تصميم)';
+    IF v_list_count <> 1 THEN RAISE EXCEPTION 'Configure exactly one Design task list' USING ERRCODE = '23514'; END IF;
+    SELECT list.id, department.name INTO v_list, v_department FROM public.task_lists list
+      JOIN public.departments department ON department.id = list.department_id
+      WHERE COALESCE(list.name, '') ~* '(design|تصميم)';$oldroute$, $newroute$    IF p_kind = 'QUOTE_PROPOSAL' THEN
+      SELECT c.list_id,c.designer_id,department.name INTO v_list,v_assignee,v_department
+      FROM hrsys_private.crm_quote_proposal_context c JOIN public.task_lists l ON l.id=c.list_id
+      JOIN public.departments department ON department.id=l.department_id
+      WHERE c.backend_pid=pg_backend_pid() AND c.transaction_id=txid_current()
+        AND hrsys_private.valid_crm_quote_proposal_context(p_deal_id,c.list_id,NULL);
+      IF v_list IS NULL OR v_assignee IS NULL THEN RAISE EXCEPTION 'Invalid Design routing context' USING ERRCODE='42501'; END IF;
+    ELSE
+    SELECT count(*) INTO v_list_count FROM public.profiles WHERE emp_index = 8 AND is_active IS DISTINCT FROM false;
+    IF v_list_count <> 1 THEN RAISE EXCEPTION 'Configure exactly one active MQ-08 employee' USING ERRCODE = '23514'; END IF;
+    SELECT id INTO v_assignee FROM public.profiles WHERE emp_index = 8 AND is_active IS DISTINCT FROM false;
+    IF v_assignee IS NULL THEN RAISE EXCEPTION 'Employee MQ-08 must be configured' USING ERRCODE = '23514'; END IF;
+    SELECT count(*) INTO v_list_count FROM public.task_lists WHERE COALESCE(name, '') ~* '(design|تصميم)';
+    IF v_list_count <> 1 THEN RAISE EXCEPTION 'Configure exactly one Design task list' USING ERRCODE = '23514'; END IF;
+    SELECT list.id, department.name INTO v_list, v_department FROM public.task_lists list
+      JOIN public.departments department ON department.id = list.department_id
+      WHERE COALESCE(list.name, '') ~* '(design|تصميم)';
+    END IF;$newroute$),
     ('public.ensure_crm_generated_task(uuid,text)', $$p_kind = 'QUOTE_PROPOSAL_DESIGN'$$, $$p_kind IN ('QUOTE_PROPOSAL_DESIGN','QUOTE_PROPOSAL')$$),
     ('public.ensure_crm_generated_task(uuid,text)', $$NOT COALESCE(public.can_add_task_to_list(v_list, auth.uid()), false)$$, $$(NOT COALESCE(public.can_add_task_to_list(v_list, auth.uid()), false) AND NOT (p_kind='QUOTE_PROPOSAL' AND hrsys_private.valid_crm_quote_proposal_context(p_deal_id,v_list,NULL)))$$),
     ('public.protect_crm_generated_task_identity()', $$'CONTACT_DISCUSSION', 'QUOTE_PROPOSAL_DESIGN'$$, $$'CONTACT_DISCUSSION', 'QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'$$),
@@ -798,14 +841,11 @@ BEGIN
     RAISE EXCEPTION 'Quote and described proposal image are required' USING ERRCODE='23514'; END IF;
   IF EXISTS (SELECT 1 FROM public.crm_generated_tasks WHERE deal_id=p_deal_id AND kind='QUOTE_PROPOSAL_DESIGN') THEN
     RAISE EXCEPTION 'Historical Design mapping requires review' USING ERRCODE='23514'; END IF;
-  SELECT count(*) INTO n FROM public.task_lists WHERE coalesce(name,'') ~* '(design|تصميم)';
-  IF n<>1 THEN RAISE EXCEPTION 'Configure exactly one Design task list' USING ERRCODE='23514'; END IF;
-  SELECT id INTO list_id FROM public.task_lists WHERE coalesce(name,'') ~* '(design|تصميم)';
-  SELECT count(*) INTO n FROM public.profiles WHERE emp_index=8 AND is_active IS DISTINCT FROM false;
-  IF n<>1 THEN RAISE EXCEPTION 'Configure exactly one active MQ-08 employee' USING ERRCODE='23514'; END IF;
-  SELECT id INTO designer_id FROM public.profiles WHERE emp_index=8 AND is_active IS DISTINCT FROM false;
+  SELECT count(*) INTO n FROM hrsys_private.crm_quote_proposal_routes WHERE is_active;
+  IF n<>1 THEN RAISE EXCEPTION 'Configure exactly one active Design route' USING ERRCODE='23514'; END IF;
+  SELECT r.list_id,r.assignee_id INTO list_id,designer_id FROM hrsys_private.crm_quote_proposal_routes r WHERE r.is_active;
   IF NOT EXISTS (SELECT 1 FROM public.task_lists l JOIN public.profiles p ON p.id=designer_id JOIN public.departments department ON department.id=l.department_id
-    WHERE l.id=list_id AND p.department_id=l.department_id AND department.is_active IS DISTINCT FROM false) THEN
+    WHERE l.id=list_id AND p.is_active IS TRUE AND p.department_id=l.department_id AND department.is_active IS TRUE AND coalesce(l.name,'') ~* '(design|تصميم)') THEN
     RAISE EXCEPTION 'Design list and designer department mismatch' USING ERRCODE='23514'; END IF;
   SELECT EXISTS(SELECT 1 FROM public.crm_generated_tasks WHERE deal_id=p_deal_id AND kind='QUOTE_PROPOSAL') INTO already_registered;
   INSERT INTO hrsys_private.crm_quote_proposal_context(backend_pid,transaction_id,actor_id,deal_id,list_id,designer_id)

@@ -10,6 +10,7 @@ if (container, database) not in {('hrsys-postm7-fidelity-20261116', 'hrsys_simpl
                                   ('hrsys-postm7-fidelity-20261116', 'hrsys_simplified_staging_clean_20261117'),
                                   ('hrsys-postm7-fidelity-20261116', 'hrsys_simplified_mq20_new_20261117'),
                                   ('hrsys-postm7-fidelity-20261116', 'hrsys_simplified_mq20_reassign_20261117'),
+                                  ('hrsys-postm7-fidelity-20261116', 'hrsys_configured_route_20261117'),
                                   ('hrsys-simplified-runtime-check', 'postgres'),
                                   ('hrsys-production-simplified-checkpoint', 'postgres')}:
     raise SystemExit('Refusing an unapproved test target')

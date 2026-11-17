@@ -2,16 +2,28 @@
 BEGIN;
 GRANT USAGE ON SCHEMA auth TO authenticated;
 INSERT INTO auth.users(id) VALUES
- ('a0000000-0000-4000-8000-000000000101'),('a0000000-0000-4000-8000-000000000008'),('a0000000-0000-4000-8000-000000000102'),('a0000000-0000-4000-8000-000000000103');
+ ('a0000000-0000-4000-8000-000000000101'),('a0000000-0000-4000-8000-000000000008'),('a0000000-0000-4000-8000-000000000102'),('a0000000-0000-4000-8000-000000000103'),('a0000000-0000-4000-8000-000000000105');
 INSERT INTO public.departments(id,name) VALUES
  ('b0000000-0000-4000-8000-000000000001','Synthetic Sales'),('b0000000-0000-4000-8000-000000000002','Synthetic Marketing Design'),('b0000000-0000-4000-8000-000000000003','Synthetic Other');
 INSERT INTO public.profiles(id,full_name,department_id,role,is_active,task_email_notifications,employee_id,emp_index) VALUES
  ('a0000000-0000-4000-8000-000000000101','Synthetic Sales','b0000000-0000-4000-8000-000000000002','EMPLOYEE',true,false,'MQ-20',101),
- ('a0000000-0000-4000-8000-000000000008','Synthetic Designer','b0000000-0000-4000-8000-000000000002','EMPLOYEE',true,false,'MQ-08',8),
+ ('a0000000-0000-4000-8000-000000000008','Synthetic Designer','b0000000-0000-4000-8000-000000000002','EMPLOYEE',true,false,'TEST-DESIGN',44),
  ('a0000000-0000-4000-8000-000000000102','Synthetic Other','b0000000-0000-4000-8000-000000000003','EMPLOYEE',true,false,NULL,102),
- ('a0000000-0000-4000-8000-000000000103','Synthetic Unassigned Sales','b0000000-0000-4000-8000-000000000001','EMPLOYEE',true,false,NULL,103);
+ ('a0000000-0000-4000-8000-000000000103','Synthetic Unassigned Sales','b0000000-0000-4000-8000-000000000001','EMPLOYEE',true,false,NULL,103),
+ ('a0000000-0000-4000-8000-000000000105','Synthetic Inactive Designer','b0000000-0000-4000-8000-000000000002','EMPLOYEE',false,false,NULL,105);
 INSERT INTO public.task_lists(id,owner_id,name,department_id,can_add_users) VALUES
  ('c0000000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000008','Design','b0000000-0000-4000-8000-000000000002','{}'::uuid[]);
+INSERT INTO hrsys_private.crm_quote_proposal_routes(list_id,assignee_id) VALUES
+ ('c0000000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000008');
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM unnest(ARRAY['anon','authenticated','service_role']) r
+   WHERE has_table_privilege(r,'hrsys_private.crm_quote_proposal_routes','SELECT')
+      OR has_table_privilege(r,'hrsys_private.crm_quote_proposal_routes','INSERT')
+      OR has_table_privilege(r,'hrsys_private.crm_quote_proposal_routes','UPDATE')
+      OR has_table_privilege(r,'hrsys_private.crm_quote_proposal_routes','DELETE')) THEN
+   RAISE EXCEPTION 'Application role can access private Design routing';
+ END IF;
+END $$;
 INSERT INTO public.crm_clients(id,name) VALUES ('d0000000-0000-4000-8000-000000000001','Synthetic client');
 INSERT INTO public.crm_deals(id,title,client_id,stage,workflow_status,first_contact_date,contact_method,created_by,assigned_to) VALUES
  ('e0000000-0000-4000-8000-000000000001','Synthetic simplified','d0000000-0000-4000-8000-000000000001','LEAD','NOT_STARTED','2026-11-01','PHONE','a0000000-0000-4000-8000-000000000101','a0000000-0000-4000-8000-000000000101');
@@ -57,6 +69,37 @@ DO $$ DECLARE denied boolean:=false; BEGIN
 END $$;
 RESET ROLE;
 UPDATE public.departments SET is_active=true WHERE id='b0000000-0000-4000-8000-000000000002';
+UPDATE hrsys_private.crm_quote_proposal_routes SET is_active=false;
+SET ROLE authenticated;
+DO $$ DECLARE denied boolean:=false; BEGIN
+ BEGIN PERFORM public.start_crm_quote_proposal('e0000000-0000-4000-8000-000000000001'); EXCEPTION WHEN check_violation THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'Missing route accepted'; END IF;
+END $$;
+RESET ROLE;
+UPDATE hrsys_private.crm_quote_proposal_routes SET is_active=true;
+INSERT INTO hrsys_private.crm_quote_proposal_routes(list_id,assignee_id) VALUES ('c0000000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000008');
+SET ROLE authenticated;
+DO $$ DECLARE denied boolean:=false; BEGIN
+ BEGIN PERFORM public.start_crm_quote_proposal('e0000000-0000-4000-8000-000000000001'); EXCEPTION WHEN check_violation THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'Multiple active routes accepted'; END IF;
+END $$;
+RESET ROLE;
+DELETE FROM hrsys_private.crm_quote_proposal_routes WHERE id=(SELECT max(id::text)::uuid FROM hrsys_private.crm_quote_proposal_routes);
+UPDATE hrsys_private.crm_quote_proposal_routes SET assignee_id='a0000000-0000-4000-8000-000000000105';
+SET ROLE authenticated;
+DO $$ DECLARE denied boolean:=false; BEGIN
+ BEGIN PERFORM public.start_crm_quote_proposal('e0000000-0000-4000-8000-000000000001'); EXCEPTION WHEN check_violation THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'Inactive Design assignee accepted'; END IF;
+END $$;
+RESET ROLE;
+UPDATE hrsys_private.crm_quote_proposal_routes SET assignee_id='a0000000-0000-4000-8000-000000000102';
+SET ROLE authenticated;
+DO $$ DECLARE denied boolean:=false; BEGIN
+ BEGIN PERFORM public.start_crm_quote_proposal('e0000000-0000-4000-8000-000000000001'); EXCEPTION WHEN check_violation THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'Cross-department Design assignee accepted'; END IF;
+END $$;
+RESET ROLE;
+UPDATE hrsys_private.crm_quote_proposal_routes SET assignee_id='a0000000-0000-4000-8000-000000000008';
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-4000-8000-000000000101',true);
 SELECT public.start_crm_quote_proposal('e0000000-0000-4000-8000-000000000001');
