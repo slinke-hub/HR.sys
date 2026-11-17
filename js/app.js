@@ -7187,6 +7187,16 @@ window.handleCompleteAndHandOffTask = async function (taskId) {
     }
     const completionNote = String(await window.requestTaskCompletionNote(taskId) || '').trim();
     if (!completionNote) return;
+    if (task.crm_workflow_kind === 'QUOTE_PROPOSAL') {
+        const result = await window.handleUpdateTaskStatus(taskId, 'completed');
+        if (result?.error) return;
+        const commentResult = await db.addTaskComment(taskId, currentUser?.id, completionNote);
+        if (!commentResult?.success) showToast(taskDetailText('Task completed, but the completion note could not be saved.', 'اكتملت المهمة، لكن تعذر حفظ ملخص الإنجاز.'), 'warning');
+        window.closeTaskDetailsModal?.();
+        delete window.viewHTMLCache['my-day'];
+        if (typeof renderView === 'function') await renderView(currentView === 'my-day' ? 'my-day' : 'tasks');
+        return;
+    }
     const result = await db.completeAndHandOffTask(taskId);
     if (!result?.success) {
         showToast(result?.error?.message || taskDetailText('Unable to complete and hand off this task.', 'تعذر إنهاء وتسليم هذه المهمة.'), 'danger');
