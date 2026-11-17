@@ -2378,6 +2378,13 @@ const db = {
             return { success: false, error };
         }
     },
+    async submitCrmQuoteProposalFiles(taskId, links) {
+        if (!supabaseClient) return { success: false };
+        const { error } = await supabaseClient.rpc('submit_crm_quote_proposal_files', {
+            p_task_id: taskId, p_links: links
+        });
+        return error ? { success: false, error } : { success: true };
+    },
     async updateTask(taskId, updates) {
         if (!supabaseClient) return { success: false };
         try {
@@ -4171,7 +4178,7 @@ const db = {
                 supabaseClient.rpc('list_crm_deal_attachments_secure', { p_deal_id: dealId }),
                 supabaseClient.rpc('list_crm_deal_activity_secure', { p_deal_id: dealId }),
                 this.fetchProjects(),
-                supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids').eq('crm_deal_id', dealId).eq('crm_workflow_kind', 'QUOTE_PROPOSAL_DESIGN').order('created_at', { ascending: false }).limit(1).maybeSingle()
+                supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids').eq('crm_deal_id', dealId).in('crm_workflow_kind', ['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL']).order('created_at', { ascending: false }).limit(1).maybeSingle()
             ]);
             const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || designTask.error;
             if (firstError) throw firstError;
@@ -4263,17 +4270,14 @@ const db = {
             return { success: false, error };
         }
     },
-    async startCrmPresentationApproval(dealId, requestType) {
+    async startCrmQuoteProposal(dealId) {
         if (!supabaseClient) return { success: false };
         try {
-            const { error } = await supabaseClient.rpc('start_crm_presentation_approval', {
-                p_deal_id: dealId,
-                p_request_type: requestType
-            });
+            const { error } = await supabaseClient.rpc('start_crm_quote_proposal', { p_deal_id: dealId });
             if (error) throw error;
             return { success: true };
         } catch (error) {
-            console.error('startCrmPresentationApproval Error:', {
+            console.error('startCrmQuoteProposal Error:', {
                 code: error?.code,
                 message: error?.message,
                 details: error?.details,

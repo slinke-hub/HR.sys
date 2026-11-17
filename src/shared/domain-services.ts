@@ -73,7 +73,7 @@ export interface HrDomainAdapter {
   updateDealStage?: (id: string, stage: string) => Promise<ServiceResult>;
   markDealLost?: (id: string, reason: string) => Promise<ServiceResult>;
   finalizeCrmDealApproval?: (id: string) => Promise<ServiceResult>;
-  startCrmPresentationApproval?: (id: string, requestType: string) => Promise<ServiceResult>;
+  startCrmQuoteProposal?: (id: string) => Promise<ServiceResult>;
   startDealApproval?: (id: string, approvers: Record<string, string>) => Promise<ServiceResult>;
   decideDealApproval?: (id: string, decision: string, note?: string) => Promise<ServiceResult>;
   decideCrmDesignTaskApproval?: (id: string, decision: string, note?: string) => Promise<ServiceResult>;
@@ -179,7 +179,7 @@ export const createHrDomainServices = (adapter: HrDomainAdapter) => ({
     changeStage: (id: string, stage: string) => requireAdapter(adapter, 'updateDealStage')(requireId(id, 'Deal'), String(stage || '').trim()),
     markLost: (id: string, reason: string) => requireAdapter(adapter, 'markDealLost')(requireId(id, 'Deal'), String(reason || '').trim()),
     finalizeApproval: (id: string) => requireAdapter(adapter, 'finalizeCrmDealApproval')(requireId(id, 'Deal')),
-    startPresentationApproval: (id: string, requestType: string) => requireAdapter(adapter, 'startCrmPresentationApproval')(requireId(id, 'Deal'), requestType),
+    startQuoteProposal: (id: string) => requireAdapter(adapter, 'startCrmQuoteProposal')(requireId(id, 'Deal')),
     startApproval: (id: string, approvers: Record<string, string>) => requireAdapter(adapter, 'startDealApproval')(requireId(id, 'Deal'), approvers || {}),
     decideApproval: (id: string, decision: string, note?: string) => requireAdapter(adapter, 'decideDealApproval')(requireId(id, 'Deal'), decision, note),
     decideDesignApproval: (id: string, decision: string, note?: string) => requireAdapter(adapter, 'decideCrmDesignTaskApproval')(requireId(id, 'Deal'), decision, note),

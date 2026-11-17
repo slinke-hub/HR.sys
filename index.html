@@ -338,11 +338,8 @@
             <input type="hidden" id="presentationChoiceDealId">
             <input type="hidden" id="presentationChoiceOldStage">
             <div class="crm-presentation-options">
-                <button type="button" class="crm-presentation-option" onclick="openCrmPresentationRequest('QUOTE')">
-                    <i data-lucide="file-text"></i><strong data-i18n="crm_quote_only">Quote</strong><span data-i18n="crm_quote_approvers">CEO, GM and Marketing Manager approval</span>
-                </button>
                 <button type="button" class="crm-presentation-option" onclick="openCrmPresentationRequest('QUOTE_PROPOSAL')">
-                    <i data-lucide="images"></i><strong data-i18n="crm_quote_and_proposal">Quote and proposal</strong><span data-i18n="crm_quote_proposal_approvers">CEO, GM, MQ-04, MQ-05 and Marketing Manager approval</span>
+                    <i data-lucide="images"></i><strong data-i18n="crm_quote_and_proposal">Quote and proposal</strong>
                 </button>
             </div>
         </div>
@@ -379,7 +376,7 @@
                         <i data-lucide="plus"></i><span data-i18n="crm_add_proposal_image">Add proposal image</span>
                     </button>
                 </section>
-                <button id="sendPresentationApprovalBtn" type="submit" class="btn btn-primary crm-request-submit"><i data-lucide="send"></i><span data-i18n="crm_send_approval_request">Send approval request</span></button>
+                <button id="sendPresentationApprovalBtn" type="submit" class="btn btn-primary crm-request-submit"><i data-lucide="send"></i><span>Create task</span></button>
             </form>
         </div>
     </div>
@@ -521,7 +518,7 @@
                 <dl id="dealWorkflowSummary" class="deal-workflow-summary"></dl>
                 <div id="dealWorkflowDesignTaskStatus" class="task-crm-design-status-control deal-workflow-design-status-control" hidden></div>
             </section>
-            <section class="deal-workflow-section" id="workflowSetupSection">
+            <section class="deal-workflow-section" id="workflowSetupSection" hidden style="display:none">
                 <h3 data-i18n="crm_approval_setup">Approval Setup</h3>
                 <p class="page-subtitle" data-i18n="crm_approval_sequence_help">Select the approvers in sequence. The next approver is unlocked only after the previous approval.</p>
                 <div id="dealProposalChecklist" class="deal-readiness-checklist"></div>
@@ -532,8 +529,8 @@
                 </div>
                 <button type="button" class="btn btn-primary" onclick="startDealApprovalWorkflow()" data-i18n="crm_start_approval">Start Approval</button>
             </section>
-            <section class="deal-workflow-section" id="dealApprovalProgressSection">
-                <h3 data-i18n="crm_approval_progress">Approval Progress</h3>
+            <section class="deal-workflow-section" id="dealApprovalProgressSection" hidden>
+                <h3>Historical approval decisions</h3>
                 <div id="dealApprovalSteps" class="deal-approval-steps"></div>
             </section>
             <section class="deal-workflow-section" id="dealDocumentsSection">
