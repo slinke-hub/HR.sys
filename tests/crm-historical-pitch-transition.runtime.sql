@@ -1,0 +1,41 @@
+\set ON_ERROR_STOP on
+BEGIN;
+GRANT USAGE ON SCHEMA auth TO authenticated;
+INSERT INTO auth.users(id) VALUES ('e2000000-0000-4000-8000-000000000002');
+INSERT INTO public.departments(id,name) VALUES ('e3000000-0000-4000-8000-000000000002','Synthetic Design');
+INSERT INTO public.profiles(id,full_name,department_id,role,is_active,task_email_notifications,employee_id,emp_index) VALUES ('e2000000-0000-4000-8000-000000000002','Synthetic Designer','e3000000-0000-4000-8000-000000000002','EMPLOYEE',true,false,'SYNTHETIC-DESIGN',997);
+INSERT INTO public.task_lists(id,owner_id,name,department_id,can_add_users) VALUES ('e4000000-0000-4000-8000-000000000001','e2000000-0000-4000-8000-000000000002','Design','e3000000-0000-4000-8000-000000000002','{}'::uuid[]);
+INSERT INTO hrsys_private.crm_quote_proposal_routes(list_id,assignee_id) VALUES ('e4000000-0000-4000-8000-000000000001','e2000000-0000-4000-8000-000000000002');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','e2000000-0000-4000-8000-000000000001',true);
+DO $$ DECLARE denied boolean:=false; BEGIN
+ IF (SELECT count(*) FROM public.crm_deal_activity WHERE deal_id='e1000000-0000-4000-8000-000000000001' AND note='historical')<>5 THEN RAISE EXCEPTION 'Historical activity is not readable'; END IF;
+ BEGIN PERFORM public.change_crm_deal_stage('e1000000-0000-4000-8000-000000000001','NEGOTIATION'); EXCEPTION WHEN check_violation THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'Legacy deal bypassed Quote & Proposal'; END IF;
+END $$;
+RESET ROLE;
+INSERT INTO public.crm_deal_attachments(deal_id,category,file_name,file_url,file_type,description) VALUES ('e1000000-0000-4000-8000-000000000001','PROPOSAL','synthetic.png','storage://crm-deal-files/synthetic/proposal.png','image/png','synthetic proposal');
+SET LOCAL ROLE authenticated;
+SELECT public.start_crm_quote_proposal('e1000000-0000-4000-8000-000000000001');
+SELECT public.start_crm_quote_proposal('e1000000-0000-4000-8000-000000000001');
+RESET ROLE;
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.crm_generated_tasks WHERE deal_id='e1000000-0000-4000-8000-000000000001' AND kind='QUOTE_PROPOSAL')<>1 THEN RAISE EXCEPTION 'Generated task is not unique'; END IF;
+ IF (SELECT count(*) FROM public.crm_deal_approval_steps)<>36 THEN RAISE EXCEPTION 'Approval history changed'; END IF;
+END $$;
+SELECT set_config('test.pitch_task',(SELECT task_id::text FROM public.crm_generated_tasks WHERE deal_id='e1000000-0000-4000-8000-000000000001' AND kind='QUOTE_PROPOSAL'),true);
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','e2000000-0000-4000-8000-000000000002',true);
+SELECT public.register_task_attachment(current_setting('test.pitch_task')::uuid,'storage://task-attachments/synthetic/design.png','design.png','image/png',8,'TASK',false);
+SELECT public.submit_crm_quote_proposal_files(current_setting('test.pitch_task')::uuid,ARRAY['storage://task-attachments/synthetic/design.png']);
+SELECT public.change_task_status(current_setting('test.pitch_task')::uuid,'completed');
+SELECT set_config('request.jwt.claim.sub','e2000000-0000-4000-8000-000000000001',true);
+SELECT public.change_crm_deal_stage('e1000000-0000-4000-8000-000000000001','NEGOTIATION');
+SAVEPOINT before_won;
+SELECT public.create_project_from_won_deal_v2('e1000000-0000-4000-8000-000000000001', '{"event_date":"2026-12-01","event_start_time":"10:00","client":{"name":"Synthetic client"},"installation_type":"INDOOR","assigned_people":["e2000000-0000-4000-8000-000000000001"]}'::jsonb);
+DO $$ BEGIN IF (SELECT stage FROM public.crm_deals WHERE id='e1000000-0000-4000-8000-000000000001') <> 'WON' THEN RAISE EXCEPTION 'Won transition failed'; END IF; END $$;
+ROLLBACK TO before_won;
+SELECT public.mark_crm_deal_lost('e1000000-0000-4000-8000-000000000001','Synthetic reason');
+RESET ROLE;
+DO $$ BEGIN IF (SELECT stage FROM public.crm_deals WHERE id='e1000000-0000-4000-8000-000000000001') <> 'LOST' THEN RAISE EXCEPTION 'Lost transition failed'; END IF; END $$;
+ROLLBACK;
