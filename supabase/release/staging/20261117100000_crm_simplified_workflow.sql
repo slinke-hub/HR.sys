@@ -1,4 +1,4 @@
--- LOCAL DRAFT: Staging-derived baseline only. Do not apply to hosted databases.
+-- Post-Migration-7 Security Staging baseline only. Verify release gates before execution.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';

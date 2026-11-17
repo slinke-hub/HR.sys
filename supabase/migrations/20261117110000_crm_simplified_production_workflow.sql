@@ -1,4 +1,4 @@
--- LOCAL PRODUCTION DRAFT. Atomic generic bridge + simplified workflow; no hosted execution.
+-- Production baseline only: atomic generic bridge and simplified workflow. Verify release gates before execution.
 BEGIN;
 SET LOCAL lock_timeout='5s';
 SET LOCAL statement_timeout='60s';
@@ -527,7 +527,7 @@ ALTER FUNCTION public.crm_current_user_can_read_project_shared_attachment(uuid) 
 REVOKE ALL ON FUNCTION public.crm_current_user_can_read_project_shared_attachment(uuid) FROM PUBLIC,anon,authenticated,service_role;
 GRANT EXECUTE ON FUNCTION public.crm_current_user_can_read_project_shared_attachment(uuid) TO authenticated;
 ALTER POLICY crm_project_shared_attachments_select ON public.crm_deal_attachments USING (public.crm_current_user_can_read_project_shared_attachment(id));
--- LOCAL DRAFT: Staging-derived baseline only. Do not apply to hosted databases.
+-- Shared simplified-workflow section following the Production compatibility bridge.
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
 
