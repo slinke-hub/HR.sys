@@ -13,7 +13,8 @@ for (const mapping of [
   ["key: 'LEAD'", "dbStage: 'LEAD'"],
   ["key: 'CONTACT'", "dbStage: 'QUALIFICATION'"],
   ["key: 'PRESENTATION'", "dbStage: 'PITCH'"],
-  ["key: 'DISCUSSION'", "dbStage: 'NEGOTIATION'"],
+  ["key: 'DISCUSSION'", "dbStage: 'DISCUSSION'"],
+  ["key: 'NEGOTIATION'", "dbStage: 'NEGOTIATION'"],
   ["key: 'WON'", "dbStage: 'WON'"],
   ["key: 'LOST'", "dbStage: 'LOST'"]
 ]) {
@@ -21,10 +22,12 @@ for (const mapping of [
 }
 
 assert.match(source, /\['PITCH', 'PROPOSAL'\]\.includes\(value\).*'PRESENTATION'/s);
-assert.match(source, /\['NEGOTIATION', 'WON'\]\.includes\(stage\.dbStage\)/);
-assert.match(source, /requiresDetails = \['PITCH', 'WON', 'LOST'\]/);
-assert.match(source, /approvalPending: 'Approval pending'/);
-assert.match(source, /approvalRejected: 'Needs revision'/);
+assert.match(source, /dbStage: 'PITCH'[^\n]*historical: true/);
+assert.match(source, /if \(stage\.historical\) return/);
+assert.match(source, /requiresDetails = \['DISCUSSION', 'WON', 'LOST'\]/);
+assert.match(app, /newStage === 'PITCH' \|\| newStage === 'PROPOSAL'.*historical_stage/);
+assert.match(app, /newStage === 'DISCUSSION'\) window\.openCrmPresentationRequest\('QUOTE_PROPOSAL'/);
+assert.match(html, /id="dealQuoteProposalContinue"/);
 
 assert.match(html, /id="dealLifecycleStepper"/);
 assert.match(html, /id="dealProposalChecklist"/);
@@ -33,9 +36,8 @@ assert.match(html, /id="closeDealProjectBtn"/);
 
 assert.match(app, /const dealLifecycleStages = \[/);
 assert.match(app, /categories\.has\('QUOTATION'\).*categories\.has\('PROPOSAL'\)/s);
-assert.match(app, /workflow\.approvals\.some\(step => step\.status === 'REJECTED'\)/);
-assert.match(app, /approvals\.every\(step => String\(step\.status \|\| ''\)\.toUpperCase\(\) === 'APPROVED'\)/);
-assert.match(app, /finalizeCrmDealApproval|finalizeApproval/);
+assert.match(app, /db\.startCrmQuoteProposal\(dealId\)/);
+assert.match(db, /rpc\('start_crm_quote_proposal'/);
 assert.match(app, /newStage === 'LOST'/);
 assert.match(app, /newStage === 'WON'/);
 assert.match(app, /closeWonDealProjectFromWorkflow/);
@@ -48,4 +50,4 @@ assert.match(db, /project: \(projects \|\| \[\]\)\.find\(project => String\(proj
 assert.match(db, /async closeWonDealProject\(projectId\)/);
 assert.match(db, /return this\.changeProjectStatus\(projectId, 'COMPLETED'\)/);
 
-console.log('CRM lifecycle, approval, won/lost, and project closing workflow tests passed.');
+console.log('Simplified CRM lifecycle, historical display, won/lost, and project closing checks passed.');
