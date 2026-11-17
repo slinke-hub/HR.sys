@@ -15166,7 +15166,7 @@ window.openAssignedCrmApprovalReview = async function (stepId) {
 };
 
 window.openDealWorkflowModal = async function (dealId) {
-    const [deals, users, workflow, canViewFinancials] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDealWorkflow(dealId), ensureBusinessFinancialAccess()]);
+    const [deals, users, workflow, canViewFinancials, canUseCrm] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDealWorkflow(dealId), ensureBusinessFinancialAccess(), canCurrentUserUseCRM()]);
     const deal = deals.find(item => item.id === dealId);
     if (!deal) return showToast(t('crm_deal_not_found') || 'Deal not found.', 'danger');
     document.getElementById('workflowDealId').value = dealId;
@@ -15205,7 +15205,7 @@ window.openDealWorkflowModal = async function (dealId) {
     document.getElementById('workflowMarketingManager').value = titleMatch(/marketing.*manager/i);
     document.getElementById('workflowGeneralManager').value = titleMatch(/general manager|\bGM\b/i);
     document.getElementById('workflowOperationsManager').value = titleMatch(/operations?.*manager/i);
-    activeDealWorkflowContext = { deal, users, workflow };
+    activeDealWorkflowContext = { deal, users, workflow, canUseCrm };
     renderDealLifecycle(deal);
     renderDealWorkflowContents(workflow);
     window.resetDealAttachmentUploadForm();
@@ -15527,8 +15527,21 @@ function renderDealWorkflowDesignTaskStatus(workflow, isMq08Viewer) {
         </div>`;
 }
 
+function canContinueDealQuoteProposal(context, workflow, user, profile) {
+    const deal = context?.deal;
+    const actor = String(user?.id || '');
+    const assigned = [deal?.created_by, deal?.assigned_to, ...(Array.isArray(deal?.assignee_ids) ? deal.assignee_ids : [])].some(id => id && String(id) === actor);
+    return !!(actor && context?.canUseCrm && assigned && profile?.is_active !== false
+        && canonicalDealLifecycleStage(deal?.stage) === 'DISCUSSION' && !deal?.design_task_id && !workflow?.designTask && !workflow?.error);
+}
+
 function renderDealWorkflowContents(workflow) {
     if (activeDealWorkflowContext) activeDealWorkflowContext.workflow = workflow;
+    const continueButton = document.getElementById('dealQuoteProposalContinue');
+    if (continueButton) {
+        continueButton.hidden = !canContinueDealQuoteProposal(activeDealWorkflowContext, workflow, currentUser, currentUserProfile);
+        continueButton.textContent = taskDetailText('Quote & Proposal', 'عرض السعر والمقترح');
+    }
     const isMq08Viewer = isMq08Profile();
     const canViewFinancials = canCurrentUserViewBusinessFinancials();
     const lifecycleSection = document.getElementById('dealLifecycleSection');
@@ -15979,7 +15992,7 @@ window.openCrmPresentationRequest = function (requestType, dealId = null) {
 
 window.openPresentationRequestFromWorkflow = function () {
     const deal = activeDealWorkflowContext?.deal;
-    if (!deal) return;
+    if (!deal || document.getElementById('dealQuoteProposalContinue')?.hidden !== false) return;
     const requestType = 'QUOTE_PROPOSAL';
     const dealId = deal.id;
     window.closeDealWorkflowModal();
@@ -16104,7 +16117,8 @@ window.handleCrmPresentationRequestSubmit = async function (event) {
         ];
         const replacement = await db.replaceDealPresentationAttachments(dealId, currentUser.id, replacementEntries, {
             replaceClientIdentity: clientIdentityFiles.length > 0,
-            replaceProposal: requestType === 'QUOTE_PROPOSAL'
+            replaceProposal: requestType === 'QUOTE_PROPOSAL',
+            preserveExisting: true
         });
         if (!replacement.success) throw replacement.error || new Error(t('crm_upload_failed') || 'Upload failed');
         const result = await db.startCrmQuoteProposal(dealId);

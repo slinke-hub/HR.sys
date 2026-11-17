@@ -4479,12 +4479,14 @@ const db = {
                 insertedRows.push(createdRow);
             }
 
-            const { error: archiveError } = await supabaseClient.rpc('archive_crm_deal_attachments', {
-                p_deal_id: dealId,
-                p_categories: replacementCategories,
-                p_keep_ids: insertedRows.map(row => row.id).filter(Boolean)
-            });
-            if (archiveError) throw archiveError;
+            if (options.preserveExisting !== true) {
+                const { error: archiveError } = await supabaseClient.rpc('archive_crm_deal_attachments', {
+                    p_deal_id: dealId,
+                    p_categories: replacementCategories,
+                    p_keep_ids: insertedRows.map(row => row.id).filter(Boolean)
+                });
+                if (archiveError) throw archiveError;
+            }
             return { success: true, data: insertedRows };
         } catch (error) {
             if (insertedRows.length) {

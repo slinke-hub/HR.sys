@@ -15,7 +15,7 @@
     "test:backend-readiness": "node tests/backend-shared-logic-readiness.test.cjs && node tests/backend-rls-threat-matrix.test.cjs && node tests/backend-task-readiness.test.cjs && node tests/backend-project-readiness.test.cjs",
     "test:productivity-phase-a": "node tests/productivity-phase-a.test.cjs",
     "test:productivity-phase-b": "node tests/productivity-phase-b.test.cjs",
-    "security:check": "npm run test:security && npm audit --audit-level=high",
+    "security:check": "npm run test:security && node tests/security-audit-exception.test.cjs && node scripts/security-audit.cjs",
     "mobile:web": "node scripts/build-mobile.mjs",
     "mobile:web:preview": "node scripts/build-preview.mjs",
     "mobile:web:production": "node scripts/build-production.mjs",
