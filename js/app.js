@@ -17525,10 +17525,8 @@ async function initApp() {
             appHistoryInitialized = false;
             document.querySelector('.sidebar').style.display = 'none';
             document.querySelector('.topbar').style.display = 'none';
-            if (currentView !== 'login') {
-                currentView = 'login';
-                renderView('login');
-            }
+            currentView = 'login';
+            renderView('login');
         }
     });
 
