@@ -70,7 +70,7 @@
             changeStage: (id, stage) => db.updateDealStage(requireId(id, 'Deal'), String(stage || '').trim()),
             markLost: (id, reason) => db.markDealLost(requireId(id, 'Deal'), String(reason || '').trim()),
             finalizeApproval: id => db.finalizeCrmDealApproval(requireId(id, 'Deal')),
-            startPresentationApproval: (id, requestType) => db.startCrmPresentationApproval(requireId(id, 'Deal'), requestType),
+            startQuoteProposal: id => db.startCrmQuoteProposal(requireId(id, 'Deal')),
             startApproval: (id, approvers) => db.startDealApproval(requireId(id, 'Deal'), approvers || {}),
             decideApproval: (id, decision, note) => db.decideDealApproval(requireId(id, 'Deal'), decision, note),
             decideDesignApproval: (id, decision, note) => db.decideCrmDesignTaskApproval(requireId(id, 'Deal'), decision, note),

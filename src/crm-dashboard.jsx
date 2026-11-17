@@ -12,7 +12,7 @@ const COPY = {
     search: 'Search where in CRM', role: 'HR & Operations Manager', title: 'Client Relationship Management (CRM)',
     subtitle: 'Manage client relationships, active opportunities, and team follow-up from one workspace.',
     addClient: 'Add Client', newDeal: 'New Deal', pipeline: 'Deals Pipeline', pipelineHint: 'Drag cards to update the relationship stage.',
-    lead: 'Lead', contact: 'Contact', presentation: 'Presentation', discussion: 'Discussion', won: 'Won', lost: 'Lost',
+    lead: 'Lead', contact: 'Qualification', presentation: 'Historical presentation', discussion: 'Discussion', negotiation: 'Negotiation', won: 'Won', lost: 'Lost',
     noDeals: 'No deals in this stage', tasks: 'My Assigned Tasks', interactions: 'Client Interaction Logs',
     assignments: 'Employee Assignments', analytics: 'Key Client Analytics', due: 'Due', linkedClient: 'Client',
     noTasks: 'No assigned CRM tasks', noActivity: 'No client activity yet', noAssignments: 'No assignments yet',
@@ -21,7 +21,7 @@ const COPY = {
     activityLabel: 'Client activity', noAnalytics: 'No client analytics yet',
     account: 'account', accounts: 'accounts', today: 'Today', daysAgo: 'days ago', viewDeal: 'View deal', editDeal: 'Edit deal', deleteDeal: 'Delete deal', unassigned: 'Unassigned',
     approvalPending: 'Approval pending', approvalApproved: 'Approved', approvalRejected: 'Needs revision',
-    designInProgress: 'In progress', designLate: 'Late', designCompleted: 'Complete · Waiting for approval',
+    designInProgress: 'In progress', designLate: 'Late', designCompleted: 'Complete',
     designApprovalPending: 'Design approval pending', designRejected: 'Design changes required'
   },
   ar: {
@@ -29,7 +29,7 @@ const COPY = {
     search: 'ابحث في إدارة علاقات العملاء', role: 'مدير الموارد البشرية والعمليات', title: 'إدارة علاقات العملاء',
     subtitle: 'إدارة علاقات العملاء والفرص النشطة ومتابعة الفريق من مساحة عمل واحدة.',
     addClient: 'إضافة عميل', newDeal: 'صفقة جديدة', pipeline: 'مسار الصفقات', pipelineHint: 'اسحب البطاقات لتحديث مرحلة العلاقة.',
-    lead: 'عميل محتمل', contact: 'التواصل', presentation: 'العرض', discussion: 'المناقشة', won: 'مكتسبة', lost: 'مفقودة',
+    lead: 'عميل محتمل', contact: 'التأهيل', presentation: 'العروض السابقة', discussion: 'المناقشة', negotiation: 'التفاوض', won: 'مكتسبة', lost: 'مفقودة',
     noDeals: 'لا توجد صفقات في هذه المرحلة', tasks: 'المهام المعينة لي', interactions: 'سجلات تفاعل العملاء',
     assignments: 'تعيينات الموظفين', analytics: 'تحليلات العملاء الرئيسية', due: 'الاستحقاق', linkedClient: 'العميل',
     noTasks: 'لا توجد مهام CRM معيّنة', noActivity: 'لا يوجد نشاط للعملاء بعد', noAssignments: 'لا توجد تعيينات بعد',
@@ -38,7 +38,7 @@ const COPY = {
     activityLabel: 'نشاط العميل', noAnalytics: 'لا توجد تحليلات للعملاء بعد',
     account: 'حساب', accounts: 'حسابات', today: 'اليوم', daysAgo: 'أيام مضت', viewDeal: 'عرض الصفقة', editDeal: 'تعديل الصفقة', deleteDeal: 'حذف الصفقة', unassigned: 'غير معيّن',
     approvalPending: 'بانتظار الاعتماد', approvalApproved: 'معتمدة', approvalRejected: 'تحتاج تعديلاً',
-    designInProgress: 'قيد التنفيذ', designLate: 'متأخر', designCompleted: 'مكتملة · بانتظار الاعتماد',
+    designInProgress: 'قيد التنفيذ', designLate: 'متأخر', designCompleted: 'مكتملة',
     designApprovalPending: 'بانتظار اعتماد التصميم', designRejected: 'التصميم يحتاج تعديلاً'
   }
 };
@@ -46,17 +46,18 @@ const COPY = {
 const STAGES = [
   { key: 'LEAD', dbStage: 'LEAD', label: 'lead', tone: 'tw-bg-sky-500', soft: 'tw-bg-sky-50', border: 'tw-border-sky-200' },
   { key: 'CONTACT', dbStage: 'QUALIFICATION', label: 'contact', tone: 'tw-bg-cyan-500', soft: 'tw-bg-cyan-50', border: 'tw-border-cyan-200' },
-  { key: 'PRESENTATION', dbStage: 'PITCH', label: 'presentation', tone: 'tw-bg-indigo-500', soft: 'tw-bg-indigo-50', border: 'tw-border-indigo-200' },
-  { key: 'DISCUSSION', dbStage: 'NEGOTIATION', label: 'discussion', tone: 'tw-bg-amber-500', soft: 'tw-bg-amber-50', border: 'tw-border-amber-200' },
+  { key: 'DISCUSSION', dbStage: 'DISCUSSION', label: 'discussion', tone: 'tw-bg-indigo-500', soft: 'tw-bg-indigo-50', border: 'tw-border-indigo-200' },
+  { key: 'NEGOTIATION', dbStage: 'NEGOTIATION', label: 'negotiation', tone: 'tw-bg-amber-500', soft: 'tw-bg-amber-50', border: 'tw-border-amber-200' },
   { key: 'WON', dbStage: 'WON', label: 'won', tone: 'tw-bg-emerald-500', soft: 'tw-bg-emerald-50', border: 'tw-border-emerald-200' },
-  { key: 'LOST', dbStage: 'LOST', label: 'lost', tone: 'tw-bg-slate-500', soft: 'tw-bg-slate-50', border: 'tw-border-slate-200' }
+  { key: 'LOST', dbStage: 'LOST', label: 'lost', tone: 'tw-bg-slate-500', soft: 'tw-bg-slate-50', border: 'tw-border-slate-200' },
+  { key: 'PRESENTATION', dbStage: 'PITCH', label: 'presentation', historical: true, tone: 'tw-bg-slate-500', soft: 'tw-bg-slate-50', border: 'tw-border-slate-200' }
 ];
 
 const normalizeStage = stage => {
   const value = String(stage || 'LEAD').toUpperCase();
   if (['CONTACTED', 'QUALIFICATION'].includes(value)) return 'CONTACT';
   if (['PITCH', 'PROPOSAL'].includes(value)) return 'PRESENTATION';
-  if (value === 'NEGOTIATION') return 'DISCUSSION';
+  if (value === 'NEGOTIATION') return 'NEGOTIATION';
   return value;
 };
 const money = value => new Intl.NumberFormat('en-SA', { maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -90,32 +91,22 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals, canViewFinancial
   const text = COPY[lang];
   const clientName = deal.clientName || deal.crm_clients?.name || deal.title || (lang === 'ar' ? 'عميل' : 'Client');
   const details = deal.details || deal.technical_description || deal.event_type || deal.title;
-  const profile = deal.assignee || {};
+  const assignees = Array.isArray(deal.assignees) && deal.assignees.length
+    ? deal.assignees
+    : (deal.assignee ? [deal.assignee] : []);
+  const profile = assignees[0] || {};
   const isLost = normalizeStage(deal.stage) === 'LOST';
-  const workflowStatus = String(deal.workflow_status || 'NOT_STARTED').toUpperCase();
   const designTaskStatus = String(deal.design_task_status || '').toUpperCase();
   const designDueDate = deal.design_task_due_date ? new Date(`${deal.design_task_due_date}T23:59:59`) : null;
   const designIsLate = designTaskStatus !== 'COMPLETED' && (designTaskStatus === 'LATE' || (designDueDate && designDueDate < new Date()));
-  const designBadge = normalizeStage(deal.stage) === 'PRESENTATION' && deal.design_task_id
+  const designBadge = ['DISCUSSION', 'PRESENTATION'].includes(normalizeStage(deal.stage)) && deal.design_task_id
     ? designIsLate
       ? { label: text.designLate, classes: 'tw-bg-rose-50 tw-text-rose-700 tw-ring-1 tw-ring-rose-200' }
       : designTaskStatus === 'COMPLETED'
         ? { label: text.designCompleted, classes: 'tw-bg-emerald-50 tw-text-emerald-700 tw-ring-1 tw-ring-emerald-200' }
         : { label: text.designInProgress, classes: 'tw-bg-amber-50 tw-text-amber-700 tw-ring-1 tw-ring-amber-200' }
     : null;
-  const workflowBadge = designBadge || (workflowStatus === 'PENDING_APPROVAL'
-    ? { label: text.approvalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
-    : workflowStatus === 'APPROVED'
-      ? { label: text.approvalApproved, classes: 'tw-bg-emerald-50 tw-text-emerald-700' }
-      : workflowStatus === 'REJECTED'
-        ? { label: text.approvalRejected, classes: 'tw-bg-rose-50 tw-text-rose-700' }
-        : workflowStatus === 'DESIGN_IN_PROGRESS'
-          ? { label: text.designInProgress, classes: 'tw-bg-amber-50 tw-text-amber-700' }
-          : workflowStatus === 'DESIGN_PENDING_APPROVAL'
-            ? { label: text.designApprovalPending, classes: 'tw-bg-amber-50 tw-text-amber-700' }
-            : workflowStatus === 'DESIGN_REJECTED'
-              ? { label: text.designRejected, classes: 'tw-bg-rose-50 tw-text-rose-700' }
-              : null);
+  const workflowBadge = designBadge;
   const openDetails = () => {
     if (!canOpenDetails) return;
     if (isLost) window.openLostDealSummaryModal?.(deal);
@@ -142,7 +133,9 @@ function DealCard({ deal, lang, canOpenDetails, canDeleteDeals, canViewFinancial
         {workflowBadge && <span className={`tw-mb-2 tw-inline-flex tw-rounded-full tw-px-2 tw-py-1 tw-text-[9px] tw-font-black ${workflowBadge.classes}`}>{workflowBadge.label}</span>}
         <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-slate-100 tw-pt-3">
           <span className="tw-flex tw-items-center tw-gap-1.5 tw-text-[11px] tw-font-semibold tw-text-slate-500"><CalendarDays size={13} />{dateLabel(deal.closing_date || deal.created_at, lang)}</span>
-          <span className="tw-flex tw-min-w-0 tw-flex-1 tw-justify-end"><EmployeeName profile={profile} lang={lang} /></span>
+          <span className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-wrap tw-justify-end tw-gap-x-2 tw-gap-y-1">
+            {assignees.length ? assignees.map(person => <EmployeeName key={person.id} profile={person} lang={lang} />) : <EmployeeName profile={profile} lang={lang} />}
+          </span>
         </div>
         {canViewFinancials && Number(deal.amount || 0) > 0 && <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-text-[11px] tw-font-bold tw-text-emerald-700"><CircleDollarSign size={13} />SAR {money(deal.amount)}</div>}
       </div>
@@ -159,15 +152,14 @@ function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails, canDele
   const text = COPY[lang];
   const handleDrop = async (event, stage) => {
     event.preventDefault();
+    if (stage.historical) return;
     const dealId = event.dataTransfer.getData('dealId');
     const deal = deals.find(item => String(item.id) === String(dealId));
     if (!deal) return;
     const oldStage = deal.stage;
     if (oldStage === stage.dbStage) return;
-    const requiresApproval = ['NEGOTIATION', 'WON'].includes(stage.dbStage)
-      && deal.workflow_status !== 'APPROVED';
-    const requiresDetails = ['PITCH', 'WON', 'LOST'].includes(stage.dbStage);
-    const canMoveImmediately = !requiresDetails && !requiresApproval;
+    const requiresDetails = ['DISCUSSION', 'WON', 'LOST'].includes(stage.dbStage);
+    const canMoveImmediately = !requiresDetails;
     if (canMoveImmediately) onDealStageChange(dealId, stage.dbStage);
     const result = await window.dropDeal?.(event.nativeEvent, stage.dbStage);
     if (canMoveImmediately && !result?.success) onDealStageChange(dealId, oldStage);
@@ -178,7 +170,7 @@ function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails, canDele
       <span className="tw-rounded-full tw-bg-slate-100 tw-px-3 tw-py-1 tw-text-[11px] tw-font-bold tw-text-slate-600">{deals.length} {lang === 'ar' ? 'صفقة' : 'deals'}</span>
     </div>
     <div id="crmDealPipelineBoard" className="tw-flex tw-snap-x tw-gap-4 tw-overflow-x-auto tw-pb-2 [scrollbar-width:thin]">
-      {STAGES.map(stage => {
+      {STAGES.filter(stage => !stage.historical || deals.some(deal => normalizeStage(deal.stage) === stage.key)).map(stage => {
         const stageDeals = deals.filter(deal => normalizeStage(deal.stage) === stage.key);
         return <section key={stage.key} id={`crm-col-${stage.dbStage}`} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, stage)} className={`kanban-col tw-min-h-[390px] tw-w-[286px] tw-flex-none tw-snap-start tw-rounded-2xl tw-border tw-p-3 ${stage.soft} ${stage.border}`}>
           <header className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-px-1"><h3 id={`crm-header-${stage.dbStage}`} className="tw-m-0 tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-black tw-uppercase tw-tracking-[.08em] tw-text-slate-700"><i className={`tw-h-2.5 tw-w-2.5 tw-rounded-full ${stage.tone}`} />{text[stage.label]}</h3><span className="tw-grid tw-h-6 tw-min-w-6 tw-place-items-center tw-rounded-full tw-bg-white tw-px-1.5 tw-text-[10px] tw-font-black tw-text-slate-600 tw-shadow-sm">{stageDeals.length}</span></header>
@@ -272,11 +264,18 @@ function CrmDashboard({ payload = {} }) {
   );
   const canDeleteDeals = window.canCurrentUserDeleteCrmDeals?.() === true;
   const canViewFinancials = payload.canViewFinancials === true;
-  const sourceDeals = useMemo(() => (payload.deals || []).map(deal => ({
-    ...deal,
-    clientName: deal.crm_clients?.name,
-    assignee: payload.users?.find(user => user.id === deal.assigned_to)
-  })), [payload.deals, payload.users]);
+  const sourceDeals = useMemo(() => (payload.deals || []).map(deal => {
+    const ids = Array.isArray(deal.assignee_ids) && deal.assignee_ids.length
+      ? deal.assignee_ids.map(String)
+      : (deal.assigned_to ? [String(deal.assigned_to)] : []);
+    const assignees = ids.map(id => payload.users?.find(user => String(user.id) === id)).filter(Boolean);
+    return {
+      ...deal,
+      clientName: deal.crm_clients?.name,
+      assignee: assignees[0] || payload.users?.find(user => String(user.id) === String(deal.assigned_to)),
+      assignees
+    };
+  }), [payload.deals, payload.users]);
   const [deals, setDeals] = useState(sourceDeals);
   useEffect(() => setDeals(sourceDeals), [sourceDeals]);
   const handleDealStageChange = (dealId, stage) => {

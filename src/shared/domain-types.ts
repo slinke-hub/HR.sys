@@ -67,6 +67,8 @@ export interface Deal {
   stage: DealStage | string;
   client_id?: string | null;
   assigned_to?: string | null;
+  /** All active deal assignees; assigned_to remains the legacy primary id. */
+  assignee_ids?: string[];
   workflow_status?: string | null;
   approval_type?: string | null;
 }
