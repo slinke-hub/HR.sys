@@ -6,6 +6,7 @@ let currentView = 'login';
 let loginMode = 'login';
 let currentUser = null;
 let viewSessionEpoch = 0;
+const pristineTaskPanelMarkup = document.getElementById('taskSidePanel')?.innerHTML || '';
 function clearSessionViewState() {
     viewSessionEpoch += 1;
     window.viewHTMLCache = {};
@@ -18,6 +19,14 @@ function clearSessionViewState() {
     window.taskV2SelectedProject = 'all';
     window.taskV2HealthFilter = 'all';
     window.MogamCrmDashboard?.unmount?.();
+    const panel = document.getElementById('taskSidePanel');
+    if (panel) {
+        panel.innerHTML = pristineTaskPanelMarkup;
+        panel.classList.remove('active', 'teamwork-task-detail', 'task-v2-detail');
+        panel.hidden = true;
+    }
+    const overlay = document.getElementById('taskSidePanelOverlay');
+    if (overlay) { overlay.classList.remove('active'); overlay.hidden = true; }
     const container = document.getElementById('viewContainer');
     if (container) container.innerHTML = '';
 }
