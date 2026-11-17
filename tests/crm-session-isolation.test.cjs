@@ -1,0 +1,32 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(require('node:path').join(__dirname, '..', 'js', 'app.js'), 'utf8');
+const start = source.indexOf('let viewSessionEpoch = 0;');
+const end = source.indexOf('\nlet viewHistory =', start);
+assert.ok(start >= 0 && end > start);
+const container = {innerHTML:'previous user task'};
+const panel = {innerHTML:'clean panel', classList:{remove(){}}, hidden:false};
+const overlay = {classList:{remove(){}}, hidden:false};
+let unmounted = false;
+const window = {viewHTMLCache:{tasks:'previous user task'}, taskCache:{privateTask:{}}, visibleTaskIds:['privateTask'],
+  taskListsCache:[{}], taskEmployeeAccessGrants:[{}], myDayTaskById:{privateTask:{}}, activeTaskDetail:{id:'privateTask'},
+  taskV2SelectedProject:'list_previous', taskV2HealthFilter:'waiting', MogamCrmDashboard:{unmount(){unmounted=true;}}};
+const context = vm.createContext({window,document:{getElementById:id=>({viewContainer:container,taskSidePanel:panel,taskSidePanelOverlay:overlay})[id]}});
+vm.runInContext(source.slice(start,end), context);
+panel.innerHTML='previous user private task';
+vm.runInContext('clearSessionViewState()',context);
+assert.equal(vm.runInContext('viewSessionEpoch',context),1);
+assert.equal(container.innerHTML,'');
+assert.equal(panel.innerHTML,'clean panel');
+assert.equal(panel.hidden,true);
+assert.equal(overlay.hidden,true);
+assert.equal(Object.keys(window.viewHTMLCache).length,0);
+assert.equal(Object.keys(window.taskCache).length,0);
+assert.equal(window.visibleTaskIds.length,0);
+assert.equal(Object.keys(window.myDayTaskById).length,0);
+assert.equal(window.activeTaskDetail,null);
+assert.equal(window.taskV2SelectedProject,'all');
+assert.equal(window.taskV2HealthFilter,'all');
+assert.equal(unmounted,true);
+console.log('SESSION_VIEW_RESET=PASS');
