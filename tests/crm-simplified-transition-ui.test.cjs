@@ -57,10 +57,25 @@ async function negotiationWorkflowScenario() {
   assert.deepEqual(calls, [['workflow', 'synthetic']]);
 }
 
+async function backwardTransitionScenario() {
+  const calls = [];
+  const card = { getAttribute: name => name === 'data-stage' ? 'DISCUSSION' : '' };
+  const window = { moveDealCard: () => calls.push(['restore']), refreshCrmDashboardInBackground: () => {} };
+  const document = { getElementById: id => id === 'deal-card-synthetic' ? card : null };
+  const db = { updateDealStage: async () => { calls.push(['server']); return { success: false }; } };
+  const context = { window, document, db, currentLang: 'en', showToast: () => {} };
+  vm.runInNewContext(source.slice(start, end), context);
+  const event = { preventDefault() {}, dataTransfer: { getData: key => key === 'dealId' ? 'synthetic' : 'DISCUSSION' } };
+  const result = await window.dropDeal(event, 'QUALIFICATION');
+  assert.equal(result.reason, 'invalid_stage_transition');
+  assert.deepEqual(calls, [['restore']]);
+}
+
 (async () => {
   await scenario(true);
   await scenario(false);
   await unsupportedStageScenario();
   await negotiationWorkflowScenario();
+  await backwardTransitionScenario();
   console.log('DISCUSSION_MODAL_SERVER_ORDER=PASS');
 })().catch(error => { console.error(error); process.exitCode=1; });

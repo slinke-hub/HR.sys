@@ -16241,6 +16241,20 @@ window.dropDeal = async (ev, newStage) => {
         return { success: false, reason: 'workflow_required', dealId, oldStage, newStage };
     }
 
+    // The direct pipeline path is deliberately forward-only. Qualification
+    // and Discussion must be reached in order; backward or skipped moves are
+    // rejected by the database transition guard and should never issue an RPC.
+    const directTransitionAllowed = (oldStage === 'LEAD' && newStage === 'QUALIFICATION')
+        || (oldStage === 'QUALIFICATION' && newStage === 'DISCUSSION');
+    if (oldStage && ['QUALIFICATION', 'DISCUSSION', 'NEGOTIATION'].includes(String(newStage || '').toUpperCase())
+        && !directTransitionAllowed) {
+        if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
+        showToast(currentLang === 'ar'
+            ? 'لا يمكن الرجوع إلى مرحلة سابقة أو تجاوز مراحل الصفقة.'
+            : 'Deals must move through the pipeline in order; backward or skipped moves are not available.', 'warning');
+        return { success: false, reason: 'invalid_stage_transition', dealId, oldStage, newStage };
+    }
+
     if (!['QUALIFICATION', 'DISCUSSION', 'NEGOTIATION'].includes(String(newStage || '').toUpperCase())) {
         if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
         showToast(currentLang === 'ar' ? 'لا يمكن نقل الصفقة إلى هذه المرحلة مباشرة.' : 'This deal cannot be moved to that stage directly.', 'warning');
