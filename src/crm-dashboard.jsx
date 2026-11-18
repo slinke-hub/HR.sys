@@ -158,6 +158,11 @@ function PipelineBoard({ lang, deals, onDealStageChange, canOpenDetails, canDele
     if (!deal) return;
     const oldStage = deal.stage;
     if (oldStage === stage.dbStage) return;
+    const workflowRequired = oldStage === 'DISCUSSION' && stage.dbStage === 'NEGOTIATION';
+    if (workflowRequired) {
+      await window.dropDeal?.(event.nativeEvent, stage.dbStage);
+      return;
+    }
     const requiresDetails = ['DISCUSSION', 'WON', 'LOST'].includes(stage.dbStage);
     const canMoveImmediately = !requiresDetails;
     if (canMoveImmediately) onDealStageChange(dealId, stage.dbStage);

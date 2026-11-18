@@ -16229,6 +16229,18 @@ window.dropDeal = async (ev, newStage) => {
         return { success: false, reason: 'won_details_required', dealId, oldStage, newStage };
     }
 
+    // Discussion -> Negotiation is established by the Quote & Proposal
+    // workflow after its registered task is completed and approved. Do not
+    // issue a direct stage RPC that the server must reject; open the workflow
+    // so the user can complete the required next step from the deal itself.
+    if (oldStage === 'DISCUSSION' && newStage === 'NEGOTIATION') {
+        window.openDealWorkflowModal?.(String(dealId));
+        showToast(currentLang === 'ar'
+            ? 'افتح مسار عرض السعر والمقترح لإكمال الانتقال إلى التفاوض.'
+            : 'Open the Quote & Proposal workflow to continue this deal to Negotiation.', 'warning');
+        return { success: false, reason: 'workflow_required', dealId, oldStage, newStage };
+    }
+
     if (!['QUALIFICATION', 'DISCUSSION', 'NEGOTIATION'].includes(String(newStage || '').toUpperCase())) {
         if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
         showToast(currentLang === 'ar' ? 'لا يمكن نقل الصفقة إلى هذه المرحلة مباشرة.' : 'This deal cannot be moved to that stage directly.', 'warning');
@@ -16247,9 +16259,9 @@ window.dropDeal = async (ev, newStage) => {
         return { success: true, dealId, oldStage, newStage };
     } else {
         const reason = String(res.error?.message || res.data?.message || '');
-        const assignmentRequired = /active deal owner|deal assignee|assignee must be active/i.test(reason);
+        const assignmentRequired = /active deal owner|deal assignee|assignee must be active|deal assignment required/i.test(reason);
         showToast(assignmentRequired
-            ? (t('crm_contact_discussion_assignee_required') || 'Assign an active deal owner before moving this deal to Qualification.')
+            ? (t('crm_contact_discussion_assignee_required') || 'You must be the deal creator or an active assigned owner to move this deal.')
             : (t('toast_failed_to_move_deal') || reason), "danger");
         if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
         return { success: false, reason: 'save_failed', dealId, oldStage, newStage };

@@ -38,9 +38,29 @@ async function unsupportedStageScenario() {
   assert.equal(result.reason, 'unsupported_stage');
   assert.deepEqual(calls, [['restore']]);
 }
+
+async function negotiationWorkflowScenario() {
+  const calls = [];
+  const card = { getAttribute: name => name === 'data-stage' ? 'DISCUSSION' : '' };
+  const window = {
+    openDealWorkflowModal: id => calls.push(['workflow', id]),
+    moveDealCard: () => calls.push(['restore']),
+    refreshCrmDashboardInBackground: () => {}
+  };
+  const document = { getElementById: id => id === 'deal-card-synthetic' ? card : null };
+  const db = { updateDealStage: async () => { calls.push(['server']); return { success: true }; } };
+  const context = { window, document, db, currentLang: 'en', showToast: () => {} };
+  vm.runInNewContext(source.slice(start, end), context);
+  const event = { preventDefault() {}, dataTransfer: { getData: key => key === 'dealId' ? 'synthetic' : 'DISCUSSION' } };
+  const result = await window.dropDeal(event, 'NEGOTIATION');
+  assert.equal(result.reason, 'workflow_required');
+  assert.deepEqual(calls, [['workflow', 'synthetic']]);
+}
+
 (async () => {
   await scenario(true);
   await scenario(false);
   await unsupportedStageScenario();
+  await negotiationWorkflowScenario();
   console.log('DISCUSSION_MODAL_SERVER_ORDER=PASS');
 })().catch(error => { console.error(error); process.exitCode=1; });
