@@ -34,8 +34,8 @@ async function unsupportedStageScenario() {
   const context = { window, document, db, t: key => key, currentLang: 'en', showToast: () => {} };
   vm.runInNewContext(source.slice(start,end), context);
   const event = { preventDefault() {}, dataTransfer: { getData: key => key === 'dealId' ? 'synthetic' : 'QUALIFICATION' } };
-  const result = await window.dropDeal(event, 'LEAD');
-  assert.equal(result.reason, 'unsupported_stage');
+  const result = await window.dropDeal(event, 'PROPOSAL');
+  assert.equal(result.reason, 'historical_stage');
   assert.deepEqual(calls, [['restore']]);
 }
 
@@ -57,18 +57,18 @@ async function negotiationWorkflowScenario() {
   assert.deepEqual(calls, [['workflow', 'synthetic']]);
 }
 
-async function backwardTransitionScenario() {
+async function previousStageScenario() {
   const calls = [];
   const card = { getAttribute: name => name === 'data-stage' ? 'DISCUSSION' : '' };
-  const window = { moveDealCard: () => calls.push(['restore']), refreshCrmDashboardInBackground: () => {} };
+  const window = { moveDealCard: () => calls.push(['move']), refreshCrmDashboardInBackground: () => {} };
   const document = { getElementById: id => id === 'deal-card-synthetic' ? card : null };
-  const db = { updateDealStage: async () => { calls.push(['server']); return { success: false }; } };
-  const context = { window, document, db, currentLang: 'en', showToast: () => {} };
+  const db = { updateDealStage: async (id, stage) => { calls.push(['server', id, stage]); return { success: true }; } };
+  const context = { window, document, db, t: key => key, currentLang: 'en', showToast: () => {} };
   vm.runInNewContext(source.slice(start, end), context);
   const event = { preventDefault() {}, dataTransfer: { getData: key => key === 'dealId' ? 'synthetic' : 'DISCUSSION' } };
   const result = await window.dropDeal(event, 'QUALIFICATION');
-  assert.equal(result.reason, 'invalid_stage_transition');
-  assert.deepEqual(calls, [['restore']]);
+  assert.equal(result.success, true);
+  assert.deepEqual(calls, [['move'], ['server', 'synthetic', 'QUALIFICATION']]);
 }
 
 (async () => {
@@ -76,6 +76,6 @@ async function backwardTransitionScenario() {
   await scenario(false);
   await unsupportedStageScenario();
   await negotiationWorkflowScenario();
-  await backwardTransitionScenario();
+  await previousStageScenario();
   console.log('DISCUSSION_MODAL_SERVER_ORDER=PASS');
 })().catch(error => { console.error(error); process.exitCode=1; });

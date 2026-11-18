@@ -16241,11 +16241,12 @@ window.dropDeal = async (ev, newStage) => {
         return { success: false, reason: 'workflow_required', dealId, oldStage, newStage };
     }
 
-    // The direct pipeline path is deliberately forward-only. Qualification
-    // and Discussion must be reached in order; backward or skipped moves are
-    // rejected by the database transition guard and should never issue an RPC.
+    // Direct moves may advance one stage or return exactly one stage. Won,
+    // Lost, Presentation, and Discussion -> Negotiation remain workflow-led.
     const directTransitionAllowed = (oldStage === 'LEAD' && newStage === 'QUALIFICATION')
-        || (oldStage === 'QUALIFICATION' && newStage === 'DISCUSSION');
+        || (oldStage === 'QUALIFICATION' && ['LEAD', 'DISCUSSION'].includes(newStage))
+        || (oldStage === 'DISCUSSION' && newStage === 'QUALIFICATION')
+        || (oldStage === 'NEGOTIATION' && newStage === 'DISCUSSION');
     if (oldStage && ['QUALIFICATION', 'DISCUSSION', 'NEGOTIATION'].includes(String(newStage || '').toUpperCase())
         && !directTransitionAllowed) {
         if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
@@ -16255,7 +16256,7 @@ window.dropDeal = async (ev, newStage) => {
         return { success: false, reason: 'invalid_stage_transition', dealId, oldStage, newStage };
     }
 
-    if (!['QUALIFICATION', 'DISCUSSION', 'NEGOTIATION'].includes(String(newStage || '').toUpperCase())) {
+    if (!['LEAD', 'QUALIFICATION', 'DISCUSSION', 'NEGOTIATION'].includes(String(newStage || '').toUpperCase())) {
         if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
         showToast(currentLang === 'ar' ? 'لا يمكن نقل الصفقة إلى هذه المرحلة مباشرة.' : 'This deal cannot be moved to that stage directly.', 'warning');
         return { success: false, reason: 'unsupported_stage', dealId, oldStage, newStage };
