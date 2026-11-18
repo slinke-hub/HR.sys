@@ -851,6 +851,18 @@
                         <option value="Short Leave" data-i18n="ui_short_leave">Short Leave</option>
                     </select>
                 </div>
+                <div class="form-group" id="requestLeaveDatesGroup" style="display:none;">
+                    <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem;">
+                        <div>
+                            <label class="form-label" for="requestLeaveStart" data-i18n="start_date">Start Date</label>
+                            <input id="requestLeaveStart" type="date" class="form-control" onchange="syncRequestLeaveDatesToDays()">
+                        </div>
+                        <div>
+                            <label class="form-label" for="requestLeaveEnd" data-i18n="end_date">End Date</label>
+                            <input id="requestLeaveEnd" type="date" class="form-control" onchange="syncRequestLeaveDatesToDays()">
+                        </div>
+                    </div>
+                </div>
                 <div class="form-group" id="leaveDaysGroup" style="display:none;">
                     <label class="form-label" for="requestNumberOfDays" data-i18n="ui_number_of_days">Number of Days</label>
                     <input type="number" id="requestNumberOfDays" class="form-control" min="1" step="1" inputmode="numeric" placeholder="Enter number of days" required>

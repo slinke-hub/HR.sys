@@ -554,7 +554,7 @@ const db = {
         }
     },
 
-    async createRequest(employeeId, requestType, leaveType, loanAmount = null, numberOfDays = null, notes = null) {
+    async createRequest(employeeId, requestType, leaveType, loanAmount = null, numberOfDays = null, notes = null, startDate = null, endDate = null) {
         if (!supabaseClient) return { success: false, error: new Error('Supabase is not initialized') };
         try {
             let initialStatus = 'PENDING';
@@ -567,6 +567,8 @@ const db = {
                 leave_type: leaveType,
                 loan_amount: loanAmount,
                 number_of_days: numberOfDays,
+                start_date: startDate,
+                end_date: endDate,
                 status: initialStatus
             }]).select();
             if (error) throw error;
@@ -614,6 +616,22 @@ const db = {
             return { success: true, data };
         } catch (error) {
             console.error('deleteEmployeeRequest Error:', error);
+            return { success: false, error };
+        }
+    },
+
+    async updateEmployeeRequest(sourceTable, sourceId, patch) {
+        if (!supabaseClient) return { success: false, error: new Error('Supabase is not initialized') };
+        try {
+            const { data, error } = await supabaseClient.rpc('admin_update_employee_request', {
+                p_source_table: sourceTable,
+                p_source_id: sourceId,
+                p_patch: patch
+            });
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('updateEmployeeRequest Error:', error);
             return { success: false, error };
         }
     },

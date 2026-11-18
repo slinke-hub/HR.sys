@@ -1026,6 +1026,8 @@ window.showNewRequestModal = async () => {
     document.getElementById('requestType').value = 'Leave Request';
     document.getElementById('requestLoanAmount').value = '';
     document.getElementById('requestNumberOfDays').value = '';
+    document.getElementById('requestLeaveStart').value = '';
+    document.getElementById('requestLeaveEnd').value = '';
     document.getElementById('requestLeaveType').value = 'Annual/Vacation';
     document.getElementById('requestShortLeaveReason').value = '';
     document.getElementById('requestShortLeaveDuration').value = '15';
@@ -1070,6 +1072,16 @@ window.handleNewRequestTypeChange = function (requestType) {
     const isLeave = requestType === 'Leave Request';
     const isLoan = requestType === 'Loan Request' || requestType === 'Loan';
     document.getElementById('leaveTypeGroup').style.display = isLeave ? 'block' : 'none';
+    const datesGroup = document.getElementById('requestLeaveDatesGroup');
+    const startInput = document.getElementById('requestLeaveStart');
+    const endInput = document.getElementById('requestLeaveEnd');
+    if (datesGroup) datesGroup.style.display = isLeave ? 'block' : 'none';
+    if (startInput) startInput.required = isLeave;
+    if (endInput) endInput.required = isLeave;
+    if (!isLeave) {
+        if (startInput) startInput.value = '';
+        if (endInput) endInput.value = '';
+    }
     const daysGroup = document.getElementById('leaveDaysGroup');
     const daysInput = document.getElementById('requestNumberOfDays');
     daysGroup.style.display = isLeave ? 'block' : 'none';
@@ -1081,6 +1093,16 @@ window.handleNewRequestTypeChange = function (requestType) {
     amountInput.required = isLoan;
     if (!isLoan) amountInput.value = '';
     handleRequestLeaveTypeChange(isLeave ? document.getElementById('requestLeaveType').value : '');
+};
+
+window.syncRequestLeaveDatesToDays = function () {
+    const start = document.getElementById('requestLeaveStart')?.value;
+    const end = document.getElementById('requestLeaveEnd')?.value;
+    const daysInput = document.getElementById('requestNumberOfDays');
+    if (!start || !end || !daysInput) return;
+    const startDate = new Date(`${start}T00:00:00`);
+    const endDate = new Date(`${end}T00:00:00`);
+    if (endDate >= startDate) daysInput.value = Math.floor((endDate - startDate) / 86400000) + 1;
 };
 
 window.handleRequestLeaveTypeChange = function (leaveType) {
@@ -1111,6 +1133,12 @@ window.handleCreateRequest = async (e) => {
     const isLoan = reqType === 'Loan Request' || reqType === 'Loan';
     const loanAmount = isLoan ? Number(document.getElementById('requestLoanAmount').value) : null;
     const numberOfDays = reqType === 'Leave Request' && !isShortLeave ? Number(document.getElementById('requestNumberOfDays').value) : null;
+    const startDate = reqType === 'Leave Request' && !isShortLeave ? document.getElementById('requestLeaveStart').value : (isShortLeave ? new Date().toISOString().slice(0, 10) : null);
+    const endDate = reqType === 'Leave Request' && !isShortLeave ? document.getElementById('requestLeaveEnd').value : (isShortLeave ? startDate : null);
+    if (reqType === 'Leave Request' && (!startDate || !endDate || endDate < startDate)) {
+        showToast('Enter a valid leave start and end date.', 'danger');
+        return;
+    }
     if (isLoan && (!Number.isFinite(loanAmount) || loanAmount <= 0)) {
         showToast(window.t('msg_toast_0') || 'Enter a valid loan amount greater than zero.', 'danger');
         return;
@@ -1132,7 +1160,7 @@ window.handleCreateRequest = async (e) => {
             short_leave_duration_minutes: shortDuration
         });
     } else {
-        res = await db.createRequest(empId, reqType, leaveType, loanAmount, numberOfDays);
+        res = await db.createRequest(empId, reqType, leaveType, loanAmount, numberOfDays, null, startDate, endDate);
     }
     if (res?.success) {
         showToast(t('toast_request_submitted_successfully'), "success");
@@ -17934,6 +17962,7 @@ async function renderRequests() {
 
     // Sort by created_at desc
     allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    window.employeeRequestEditCache = Object.fromEntries(allRequests.map(request => [`${request.source_table}:${request.id}`, request.raw]));
 
     // Render UI
     let rowsHTML = allRequests.map(r => {
@@ -17950,6 +17979,9 @@ async function renderRequests() {
 
         let actionsCell = '';
         if (showApprovalColumns) {
+            const editButton = isAdmin
+                ? `<button class="btn btn-icon request-edit-button" type="button" title="${currentLang === 'ar' ? 'تعديل الطلب' : 'Edit request'}" aria-label="${currentLang === 'ar' ? 'تعديل الطلب' : 'Edit request'}" onclick="openEmployeeRequestEdit('${r.source_table}', '${r.id}')"><i data-lucide="pencil"></i></button>`
+                : '';
             const deleteButton = isAdmin
                 ? `<button class="btn btn-icon request-delete-button" type="button" title="${escapeHTML(t('req_delete') || 'Delete request')}" aria-label="${escapeHTML(t('req_delete') || 'Delete request')}" onclick="handleDeleteEmployeeRequest('${r.source_table}', '${r.id}')"><i data-lucide="trash-2"></i></button>`
                 : ownerCanWithdraw
@@ -17960,11 +17992,11 @@ async function renderRequests() {
                     <td><div class="request-row-actions">
                         <button class="btn-primary" onclick="handleRequestAction('${r.source_table}', '${r.id}', 'APPROVED')">${t('leave_approve')}</button>
                         <button class="btn-primary request-reject-button" onclick="handleRequestAction('${r.source_table}', '${r.id}', 'REJECTED')">${t('leave_reject')}</button>
-                        ${deleteButton}
+                        ${editButton}${deleteButton}
                     </div></td>
                 `;
             } else {
-                actionsCell = `<td><div class="request-row-actions"><span class="request-awaiting-label">${r.status === 'PENDING' ? escapeHTML(getRequestWorkflowStage(r.workflow)) : '—'}</span>${deleteButton}</div></td>`;
+                actionsCell = `<td><div class="request-row-actions"><span class="request-awaiting-label">${r.status === 'PENDING' ? escapeHTML(getRequestWorkflowStage(r.workflow)) : '—'}</span>${editButton}${deleteButton}</div></td>`;
             }
         }
 
@@ -18076,6 +18108,95 @@ async function renderRequests() {
         </div>
     `;
 }
+
+window.openEmployeeRequestEdit = function (sourceTable, requestId) {
+    const isAdministrator = isTaskAdmin() || isExecutiveAdminProfile();
+    if (!isAdministrator) {
+        showToast(t('req_delete_admin_only') || 'Only administrators can edit employee requests.', 'warning');
+        return;
+    }
+    const record = window.employeeRequestEditCache?.[`${sourceTable}:${requestId}`];
+    if (!record) {
+        showToast('The employee request is no longer available.', 'warning');
+        return;
+    }
+    document.getElementById('employeeRequestEditModal')?.remove();
+    const isGeneric = sourceTable === 'requests';
+    const isLeave = sourceTable === 'leave_requests' || (isGeneric && /^leave\s*request$/i.test(record.request_type || ''));
+    const currentType = record.request_type || (sourceTable === 'leave_requests' ? 'Leave Request' : '');
+    const requestTypes = ['Leave Request', 'IT Support', 'Loan Request', 'Early Leaving', 'Payslip print'];
+    const leaveTypes = ['Annual/Vacation', 'Sick Leave', 'Unpaid Leave', 'Bereavement', 'Maternity/Paternity', 'Short Leave'];
+    const typeOptions = requestTypes.includes(currentType) ? requestTypes : [currentType, ...requestTypes];
+    const leaveOptions = leaveTypes.includes(record.leave_type) ? leaveTypes : [record.leave_type || 'Annual/Vacation', ...leaveTypes];
+    const field = (label, id, value, type = 'text', extra = '') => `<div class="form-group"><label class="form-label" for="${id}">${label}</label><input id="${id}" class="form-control" type="${type}" value="${escapeHTML(value || '')}" ${extra}></div>`;
+    const modal = document.createElement('div');
+    modal.id = 'employeeRequestEditModal';
+    modal.className = 'modal active';
+    modal.dataset.sourceTable = sourceTable;
+    modal.dataset.requestId = requestId;
+    modal.innerHTML = `<div class="modal-content fade-in-up" style="max-width:620px"><div class="modal-header"><h2><i data-lucide="pencil"></i> ${currentLang === 'ar' ? 'تعديل طلب الموظف' : 'Edit employee request'}</h2><button type="button" class="icon-btn" data-close-request-edit><i data-lucide="x"></i></button></div><form id="employeeRequestEditForm"><div class="request-edit-fields">
+        ${isGeneric ? `<div class="form-group"><label class="form-label" for="employeeRequestEditType">${currentLang === 'ar' ? 'نوع الطلب' : 'Request type'}</label><select id="employeeRequestEditType" class="form-control">${typeOptions.map(type => `<option value="${escapeHTML(type)}" ${type === currentType ? 'selected' : ''}>${escapeHTML(type)}</option>`).join('')}</select></div><div class="form-group"><label class="form-label" for="employeeRequestEditLeaveType">${currentLang === 'ar' ? 'نوع الإجازة' : 'Leave type'}</label><select id="employeeRequestEditLeaveType" class="form-control">${leaveOptions.map(type => `<option value="${escapeHTML(type)}" ${type === record.leave_type ? 'selected' : ''}>${escapeHTML(type)}</option>`).join('')}</select></div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem">${field(currentLang === 'ar' ? 'تاريخ البدء' : 'Start date', 'employeeRequestEditStart', record.start_date, 'date')}${field(currentLang === 'ar' ? 'تاريخ الانتهاء' : 'End date', 'employeeRequestEditEnd', record.end_date, 'date')}</div>${field(currentLang === 'ar' ? 'عدد الأيام' : 'Number of days', 'employeeRequestEditDays', record.number_of_days, 'number', 'min="1" step="1" readonly')}${field(currentLang === 'ar' ? 'مبلغ السلفة (ريال)' : 'Loan amount (SAR)', 'employeeRequestEditAmount', record.loan_amount, 'number', 'min="0" step="0.01"')}`
+            : sourceTable === 'leave_requests' ? `<div class="form-group"><label class="form-label" for="employeeRequestEditLeaveType">${currentLang === 'ar' ? 'نوع الإجازة' : 'Leave type'}</label><select id="employeeRequestEditLeaveType" class="form-control">${leaveOptions.map(type => `<option value="${escapeHTML(type)}" ${type === record.leave_type ? 'selected' : ''}>${escapeHTML(type)}</option>`).join('')}</select></div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem">${field(currentLang === 'ar' ? 'تاريخ البدء' : 'Start date', 'employeeRequestEditStart', record.start_date, 'date')}${field(currentLang === 'ar' ? 'تاريخ الانتهاء' : 'End date', 'employeeRequestEditEnd', record.end_date, 'date')}</div>${field(currentLang === 'ar' ? 'السبب' : 'Reason', 'employeeRequestEditReason', record.reason || '')}`
+            : sourceTable === 'document_requests' ? `${field(currentLang === 'ar' ? 'نوع المستند' : 'Document type', 'employeeRequestEditDocType', record.doc_type || '')}${field(currentLang === 'ar' ? 'الغرض' : 'Purpose', 'employeeRequestEditPurpose', record.purpose || '')}`
+            : `${field(currentLang === 'ar' ? 'المبلغ' : 'Amount', 'employeeRequestEditAmount', record.amount, 'number', 'min="0" step="0.01"')}${field(currentLang === 'ar' ? 'الوصف' : 'Description', 'employeeRequestEditDescription', record.description || '')}`}
+    </div><div class="form-actions" style="margin-top:1.5rem;display:flex;justify-content:flex-end;gap:1rem"><button type="button" class="btn btn-secondary" data-close-request-edit>${t('html_cancel') || 'Cancel'}</button><button type="submit" class="btn btn-primary">${currentLang === 'ar' ? 'حفظ التغييرات' : 'Save changes'}</button></div></form></div>`;
+    document.body.appendChild(modal);
+    modal.querySelectorAll('[data-close-request-edit]').forEach(button => button.onclick = () => modal.remove());
+    modal.querySelector('#employeeRequestEditForm').onsubmit = window.handleEmployeeRequestEditSubmit;
+    modal.querySelector('#employeeRequestEditStart')?.addEventListener('change', window.syncEmployeeRequestEditDays);
+    modal.querySelector('#employeeRequestEditEnd')?.addEventListener('change', window.syncEmployeeRequestEditDays);
+    window.lucide?.createIcons();
+};
+
+window.syncEmployeeRequestEditDays = function () {
+    const start = document.getElementById('employeeRequestEditStart')?.value;
+    const end = document.getElementById('employeeRequestEditEnd')?.value;
+    const days = document.getElementById('employeeRequestEditDays');
+    if (!start || !end || !days) return;
+    const startDate = new Date(`${start}T00:00:00`);
+    const endDate = new Date(`${end}T00:00:00`);
+    if (endDate >= startDate) days.value = Math.floor((endDate - startDate) / 86400000) + 1;
+};
+
+window.handleEmployeeRequestEditSubmit = async function (event) {
+    event.preventDefault();
+    const modal = document.getElementById('employeeRequestEditModal');
+    if (!modal) return;
+    const sourceTable = modal.dataset.sourceTable;
+    const requestId = modal.dataset.requestId;
+    const patch = {};
+    if (sourceTable === 'requests') {
+        const requestType = document.getElementById('employeeRequestEditType').value;
+        const startDate = document.getElementById('employeeRequestEditStart').value;
+        const endDate = document.getElementById('employeeRequestEditEnd').value;
+        if (/^leave\s*request$/i.test(requestType) && (!startDate || !endDate || endDate < startDate)) return showToast('Enter a valid leave start and end date.', 'danger');
+        patch.request_type = requestType;
+        patch.leave_type = document.getElementById('employeeRequestEditLeaveType').value;
+        patch.start_date = startDate;
+        patch.end_date = endDate;
+        patch.number_of_days = document.getElementById('employeeRequestEditDays').value;
+        patch.loan_amount = document.getElementById('employeeRequestEditAmount').value;
+    } else if (sourceTable === 'leave_requests') {
+        const startDate = document.getElementById('employeeRequestEditStart').value;
+        const endDate = document.getElementById('employeeRequestEditEnd').value;
+        if (!startDate || !endDate || endDate < startDate) return showToast('Enter a valid leave start and end date.', 'danger');
+        patch.leave_type = document.getElementById('employeeRequestEditLeaveType').value;
+        patch.start_date = startDate;
+        patch.end_date = endDate;
+        patch.reason = document.getElementById('employeeRequestEditReason').value;
+    } else if (sourceTable === 'document_requests') {
+        patch.doc_type = document.getElementById('employeeRequestEditDocType').value;
+        patch.purpose = document.getElementById('employeeRequestEditPurpose').value;
+    } else {
+        patch.amount = document.getElementById('employeeRequestEditAmount').value;
+        patch.description = document.getElementById('employeeRequestEditDescription').value;
+    }
+    const result = await db.updateEmployeeRequest(sourceTable, requestId, patch);
+    if (!result.success) return showToast(result.error?.message || 'Unable to update the employee request.', 'danger');
+    modal.remove();
+    showToast(currentLang === 'ar' ? 'تم تحديث طلب الموظف.' : 'Employee request updated.', 'success');
+    renderView('requests');
+};
 
 window.handleDeleteEmployeeRequest = function (sourceTable, requestId, requestType, withdrawal = false) {
     const isAdministrator = isTaskAdmin() || isExecutiveAdminProfile();
