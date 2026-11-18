@@ -352,7 +352,7 @@ async function primeExecutiveEmployeeNameDirectory(profile = currentUserProfile)
     window.companyEmployeeNamesById = Object.fromEntries((profiles || []).map(employee => [String(employee.id), employee]));
     return profiles || [];
 }
-const isAdminRole = role => ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMIN'].includes(normalizeAccessValue(role));
+const isAdminRole = role => ['ADMIN', 'OWNER', 'ROLE SYSTEM ADMIN', 'SYSTEM ADMIN', 'SYSTEM ADMINISTRATOR'].includes(normalizeAccessValue(role));
 const canCurrentUserManageUsers = () => isAdminRole(currentUserRole) && !isExecutiveAdminProfile();
 window.isExecutiveAdminProfile = isExecutiveAdminProfile;
 window.canCurrentUserManageUsers = canCurrentUserManageUsers;
