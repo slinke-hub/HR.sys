@@ -5300,7 +5300,7 @@ const db = {
                 .from('user_permissions')
                 .select(`
                     *,
-                    profiles:user_id(full_name, email, role)
+                    profiles:user_id(full_name, role)
                 `);
             if (error) throw error;
             return data || [];
