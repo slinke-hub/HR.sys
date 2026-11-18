@@ -1670,6 +1670,56 @@ html[data-platform="android"] .sidebar-nav > .nav-item {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* Keep Employees Radar near the top of the dashboard while allowing users to
+   collapse the live attendance detail when they need more room for the rest
+   of the page. */
+#viewContainer details.employees-radar-collapsible {
+  padding: 0;
+  overflow: hidden;
+}
+
+#viewContainer .employees-radar-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1.15rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+#viewContainer .employees-radar-summary::-webkit-details-marker { display: none; }
+#viewContainer .employees-radar-summary::marker { content: ''; }
+#viewContainer .employees-radar-summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+#viewContainer .employees-radar-summary .employees-radar-header {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+#viewContainer .employees-radar-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  transition: transform .2s ease;
+}
+#viewContainer details.employees-radar-collapsible[open] .employees-radar-toggle { transform: rotate(180deg); }
+#viewContainer .employees-radar-panel-body { padding: 0 1.15rem 1.15rem; }
+
+@media (max-width: 680px) {
+  #viewContainer .employees-radar-summary { padding: .95rem; }
+  #viewContainer .employees-radar-panel-body { padding: 0 .95rem .95rem; }
+}
+
 #viewContainer .ui02-admin-control-section {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

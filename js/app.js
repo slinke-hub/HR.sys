@@ -3641,10 +3641,10 @@ async function renderDashboard() {
         const radarGroups = renderEmployeesRadarGroups(dashboardAttendance || []);
 
         employeesRadarWidgetHTML = `
-            <section class="card col-span-12 employees-radar-card" id="employeesRadarWidget" aria-live="polite">
-                <div class="employees-radar-header"><div><div class="card-title">${currentLang === 'ar' ? 'رادار الموظفين' : 'Employees Radar'}</div><p class="employees-radar-subtitle">${currentLang === 'ar' ? 'عرض مباشر لحضور وانصراف الموظفين اليوم' : 'Live view of today&rsquo;s clocked-in and clocked-out employees'}</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> ${currentLang === 'ar' ? 'مباشر' : 'Live'}</span></div>
-                <div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>${currentLang === 'ar' ? 'حاضرون الآن' : 'clocked in now'}</small><span class="employees-radar-out-count" id="employeesRadarOutCount">${clockedOutEmployees.length} ${currentLang === 'ar' ? 'انصرفوا' : 'clocked out'}</span></div><div class="employees-radar-groups" id="employeesRadarList">${radarGroups}</div></div>
-            </section>
+            <details class="card col-span-12 employees-radar-card employees-radar-collapsible" id="employeesRadarWidget" aria-live="polite" open>
+                <summary class="employees-radar-summary"><div class="employees-radar-header"><div><div class="card-title">${currentLang === 'ar' ? 'رادار الموظفين' : 'Employees Radar'}</div><p class="employees-radar-subtitle">${currentLang === 'ar' ? 'عرض مباشر لحضور وانصراف الموظفين اليوم' : 'Live view of today&rsquo;s clocked-in and clocked-out employees'}</p></div><span class="employees-radar-live"><i data-lucide="radio"></i> ${currentLang === 'ar' ? 'مباشر' : 'Live'}</span></div><span class="employees-radar-toggle" aria-hidden="true"><i data-lucide="chevron-down"></i></span></summary>
+                <div class="employees-radar-panel-body"><div class="employees-radar-layout"><div class="employees-radar-visual"><span class="employees-radar-ring ring-one"></span><span class="employees-radar-ring ring-two"></span><span class="employees-radar-ring ring-three"></span><span class="employees-radar-sweep"></span><strong id="employeesRadarCount">${clockedInEmployees.length}</strong><small>${currentLang === 'ar' ? 'حاضرون الآن' : 'clocked in now'}</small><span class="employees-radar-out-count" id="employeesRadarOutCount">${clockedOutEmployees.length} ${currentLang === 'ar' ? 'انصرفوا' : 'clocked out'}</span></div><div class="employees-radar-groups" id="employeesRadarList">${radarGroups}</div></div></div>
+            </details>
         `;
         dashboardKpiWidgetHTML = currentUserRole === 'ADMIN' ? `<section class="card admin-kpi-card" id="dashboardKpiOverview" aria-live="polite"><div class="card-title">${currentLang === 'ar' ? 'نظرة عامة على مؤشرات الأداء' : 'KPI overview'}</div><div class="admin-kpi-grid"><div><strong id="dashboardKpiEmployees">${allProfiles.length}</strong><span>${currentLang === 'ar' ? 'إجمالي الموظفين' : 'Total employees'}</span></div><div><strong id="dashboardKpiClockedIn">${clockedInEmployees.length}</strong><span>${currentLang === 'ar' ? 'الحاضرون الآن' : 'Clocked in now'}</span></div><div><strong id="dashboardKpiOpenTasks">${openTasks}</strong><span>${currentLang === 'ar' ? 'المهام المفتوحة' : 'Open tasks'}</span></div><div><strong id="dashboardKpiPendingRequests">${pendingRequests}</strong><span>${currentLang === 'ar' ? 'الطلبات المعلقة' : 'Pending requests'}</span></div></div></section>` : '';
         lastLoginWidgetHTML = currentUserRole === 'ADMIN' ? `<section class="card ui02-last-login-card">
@@ -3747,6 +3747,14 @@ async function renderDashboard() {
                 </div>
             </section>
 
+            <section class="ui02-dashboard-section ui02-dashboard-operating-section ui02-employees-radar-section" aria-label="${employeesRadarWidgetHTML ? (currentLang === 'ar' ? 'رادار الموظفين وتركيز العمل' : 'Employees Radar and work focus') : (currentLang === 'ar' ? 'تركيز العمل' : 'Work focus')}">
+                ${employeesRadarWidgetHTML ? `<div class="ui02-radar-primary">${employeesRadarWidgetHTML}</div>` : ''}
+                <div class="ui02-radar-followup-row">
+                    <div class="ui02-dashboard-work-focus-slot">${dashboardWorkFocusHTML}</div>
+                    ${lastLoginWidgetHTML ? `<div class="ui02-dashboard-last-login-slot">${lastLoginWidgetHTML}</div>` : ''}
+                </div>
+            </section>
+
             <section class="card ui02-announcement-panel ui02-dashboard-announcements">
                 <div class="ui02-panel-heading"><div class="card-title" style="margin:0;">${t('announcements')}</div>${currentUserRole === 'ADMIN' ? `<button class="btn-primary btn-sm" onclick="showAnnouncementModal()">${t('post_announcement')}</button>` : ''}</div>
                 <div class="announcement-list ui02-scroll-region">${announcementsHTML}</div>
@@ -3757,13 +3765,6 @@ async function renderDashboard() {
                 <div class="ui02-kpi-announcement-grid ui02-dashboard-kpi-updates${dashboardKpiWidgetHTML ? '' : ' ui02-dashboard-pair--single'}"><div class="ui02-dashboard-kpi-slot">${dashboardKpiWidgetHTML}</div>${recentUpdatesHTML}</div>
             </section>
 
-            <section class="ui02-dashboard-section ui02-dashboard-operating-section ui02-employees-radar-section" aria-label="${employeesRadarWidgetHTML ? (currentLang === 'ar' ? 'رادار الموظفين وتركيز العمل' : 'Employees Radar and work focus') : (currentLang === 'ar' ? 'تركيز العمل' : 'Work focus')}">
-                ${employeesRadarWidgetHTML ? `<div class="ui02-radar-primary">${employeesRadarWidgetHTML}</div>` : ''}
-                <div class="ui02-radar-followup-row">
-                    <div class="ui02-dashboard-work-focus-slot">${dashboardWorkFocusHTML}</div>
-                    ${lastLoginWidgetHTML ? `<div class="ui02-dashboard-last-login-slot">${lastLoginWidgetHTML}</div>` : ''}
-                </div>
-            </section>
             <section class="card ui02-news-panel ui02-dashboard-news" aria-label="${currentLang === 'ar' ? 'مركز الأخبار في السعودية' : 'News Hub Saudi Arabia'}">
                 <div class="ui02-panel-heading"><div class="card-title">${t('news_hub')} (${currentLang === 'ar' ? 'السعودية' : 'Saudi Arabia'})</div><span class="ui02-panel-note">${reducedMotionPreferred ? (currentLang === 'ar' ? 'استخدم الأسهم للتنقل' : 'Use the arrows to navigate') : (currentLang === 'ar' ? 'تحديث كل ١٠ ثوانٍ' : 'Changes every 10 seconds')}</span></div>
                 <div class="ui02-news-carousel" id="dashboardNewsCarousel" role="region" aria-roledescription="carousel" aria-label="${currentLang === 'ar' ? 'أخبار السعودية' : 'Saudi Arabia news'}" data-autoplay="${newsSlideCount > 1 && !reducedMotionPreferred ? 'true' : 'false'}">

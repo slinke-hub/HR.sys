@@ -24,9 +24,9 @@ const dashboard = app.slice(dashboardStart, dashboardEnd);
 const orderedSections = [
   'ui02-admin-control-section',
   'ui02-dashboard-snapshot-section',
+  'ui02-dashboard-operating-section',
   'ui02-dashboard-announcements',
   'ui02-dashboard-kpi-section',
-  'ui02-dashboard-operating-section',
   'ui02-dashboard-news',
   'ui02-dashboard-team-section',
 ];
@@ -44,6 +44,8 @@ assert.match(app, /prefers-reduced-motion:\s*reduce/, 'Reduced-motion preference
 assert.match(dashboard, /data-news-previous[\s\S]*data-news-next/, 'News includes manual previous and next controls');
 assert.match(app, /<details class="card col-span-12 ui02-team-hierarchy" open>/, 'Team hierarchy starts expanded and can collapse through native details');
 assert.match(app, /<summary class="ui02-team-summary">/, 'Team hierarchy has a summary control');
+assert.match(app, /<details class="card col-span-12 employees-radar-card employees-radar-collapsible"[^>]*open>/, 'Employees Radar is a native collapsible details panel');
+assert.match(app, /employees-radar-toggle/, 'Employees Radar exposes a clear collapse control');
 assert.equal((dashboard.match(/class="card ui02-expiry-card"/g) || []).length, 1, 'Documents Health appears once');
 assert.equal((dashboard.match(/class="card ui02-quick-actions"/g) || []).length, 1, 'Work Shortcuts appears once');
 const adminControlStart = dashboard.indexOf('ui02-admin-control-section');
@@ -65,9 +67,9 @@ const fixture = direction => `<!doctype html><html lang="${direction === 'rtl' ?
   <div class="ui02-dashboard-shell"><div class="ui02-dashboard-primary">
     <section class="ui02-dashboard-section ui02-admin-control-section"><section class="card ui02-admin-banner">Admin Control</section><div class="ui02-dashboard-top-grid ui02-admin-tools-grid"><section class="card ui02-expiry-card">Documents Health</section><section class="card ui02-quick-actions">Work Shortcuts</section></div></section>
     <section class="ui02-dashboard-section ui02-dashboard-snapshot-section"><div class="ui02-command-grid"><article class="card ui02-command-card">Attendance</article><article class="card ui02-command-card">Announcements</article><article class="card ui02-command-card">Requests</article></div></section>
+    <section class="ui02-dashboard-section ui02-dashboard-operating-section ui02-employees-radar-section"><div class="ui02-radar-primary"><details class="card employees-radar-card employees-radar-collapsible" open><summary class="employees-radar-summary">Employees Radar</summary><div class="employees-radar-panel-body"><section class="employees-radar-card">Radar body</section></div></details></div><div class="ui02-radar-followup-row"><div class="ui02-dashboard-work-focus-slot"><section class="card ui02-operating-overview ui02-dashboard-work-focus">Work Focus</section></div><div class="ui02-dashboard-last-login-slot"><section class="card ui02-last-login-card">Last Login</section></div></div></section>
     <section class="card ui02-dashboard-announcements">Announcements panel</section>
     <section class="ui02-dashboard-section ui02-dashboard-kpi-section"><div class="ui02-kpi-announcement-grid ui02-dashboard-kpi-updates"><div class="ui02-dashboard-kpi-slot"><section class="card">KPI</section></div><section class="card ui02-activity-panel">Recent updates</section></div></section>
-    <section class="ui02-dashboard-section ui02-dashboard-operating-section ui02-employees-radar-section"><div class="ui02-radar-primary"><section class="card employees-radar-card">Employees Radar</section></div><div class="ui02-radar-followup-row"><div class="ui02-dashboard-work-focus-slot"><section class="card ui02-operating-overview ui02-dashboard-work-focus">Work Focus</section></div><div class="ui02-dashboard-last-login-slot"><section class="card ui02-last-login-card">Last Login</section></div></div></section>
     <section class="card ui02-news-panel ui02-dashboard-news"><div class="ui02-news-carousel"><article class="ui02-news-slide">News item</article></div></section>
     <section class="ui02-dashboard-team-section"><div class="ui02-team-widgets"><details class="card ui02-team-hierarchy" open><summary class="ui02-team-summary">Team hierarchy</summary><div>Team content</div></details></div></section>
   </div></div>
