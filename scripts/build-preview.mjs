@@ -18,7 +18,7 @@ function readStagingAnonKey() {
   ).trim();
 }
 
-function isStagingAnonKey(value) {
+function isLegacyStagingAnonKey(value) {
   try {
     const parts = value.split('.');
     if (parts.length !== 3) return false;
@@ -29,8 +29,25 @@ function isStagingAnonKey(value) {
   }
 }
 
+async function isStagingPublicKey(value) {
+  if (isLegacyStagingAnonKey(value)) return true;
+  if (!value.startsWith('sb_publishable_')) return false;
+
+  try {
+    // Publishable keys do not encode a project reference. Validate the key
+    // against this build's fixed disposable project before embedding it.
+    const response = await fetch(`${stagingOrigin}/auth/v1/health`, {
+      headers: { apikey: value },
+      signal: AbortSignal.timeout(8000),
+    });
+    return response.ok;
+  } catch (_) {
+    return false;
+  }
+}
+
 const anonKey = readStagingAnonKey();
-if (!isStagingAnonKey(anonKey)) {
+if (!await isStagingPublicKey(anonKey)) {
   throw new Error('Preview build requires a valid staging public anon key; production fallback is disabled.');
 }
 
