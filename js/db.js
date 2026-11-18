@@ -5265,12 +5265,12 @@ const db = {
             return [];
         }
     },
-    async updateRolePermissions(role, allowedPages) {
+    async updateRolePermissions(role, allowedPages, disabledFeatures = [], disabledPages = []) {
         if (!supabaseClient) return { success: false };
         try {
             const { error } = await supabaseClient
                 .from('role_permissions')
-                .upsert({ role, allowed_pages: allowedPages, updated_at: new Date().toISOString() }, { onConflict: 'role' });
+                .upsert({ role, allowed_pages: allowedPages, disabled_features: disabledFeatures, disabled_pages: disabledPages, updated_at: new Date().toISOString() }, { onConflict: 'role' });
             if (error) throw error;
             return { success: true };
         } catch (error) {
@@ -5287,7 +5287,7 @@ const db = {
                 .eq('user_id', userId)
                 .maybeSingle();
             if (error) throw error;
-            return data ? data.allowed_pages : null;
+            return data ? { allowedPages: data.allowed_pages || [], disabledFeatures: data.disabled_features || [], disabledPages: data.disabled_pages || [] } : null;
         } catch (error) {
             console.error("fetchUserPermissions Error:", error);
             return null;
@@ -5309,12 +5309,12 @@ const db = {
             return [];
         }
     },
-    async updateUserPermissions(userId, allowedPages) {
+    async updateUserPermissions(userId, allowedPages, disabledFeatures = [], disabledPages = []) {
         if (!supabaseClient) return { success: false };
         try {
             const { error } = await supabaseClient
                 .from('user_permissions')
-                .upsert({ user_id: userId, allowed_pages: allowedPages, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+                .upsert({ user_id: userId, allowed_pages: allowedPages, disabled_features: disabledFeatures, disabled_pages: disabledPages, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
             if (error) throw error;
             return { success: true };
         } catch (error) {

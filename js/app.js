@@ -1124,6 +1124,7 @@ window.handleRequestLeaveTypeChange = function (leaveType) {
 };
 
 window.handleCreateRequest = async (e) => {
+    if (!window.requireFeature('request_edit', currentLang === 'ar' ? 'إنشاء الطلبات معطل لحسابك.' : 'Creating requests is disabled for your account.')) return;
     e.preventDefault();
     if (!currentUser) return;
     const empId = document.getElementById('requestEmployeeId').value;
@@ -1172,6 +1173,7 @@ window.handleCreateRequest = async (e) => {
 };
 
 window.updateRequestStatus = async (reqId, status) => {
+    if (!window.requireFeature('request_approval')) return;
     if (!supabaseClient) return;
     try {
         const decision = status.toUpperCase();
@@ -2773,6 +2775,29 @@ async function getCurrentDepartmentName() {
 
 window.appRolePermissionsCache = [];
 window.appUserPermissions = [];
+window.appUserDisabledFeatures = [];
+window.appUserDisabledPages = [];
+
+const APP_FEATURE_CATALOG = [
+    { id: 'dashboard_kpis', label: 'Dashboard KPI cards', labelAr: 'بطاقات مؤشرات لوحة التحكم', group: 'Dashboard' },
+    { id: 'dashboard_announcements', label: 'Dashboard announcements', labelAr: 'إعلانات لوحة التحكم', group: 'Dashboard' },
+    { id: 'dashboard_employees_radar', label: 'Employees Radar', labelAr: 'رادار الموظفين', group: 'Dashboard' },
+    { id: 'dashboard_quick_actions', label: 'Dashboard quick actions', labelAr: 'الإجراءات السريعة', group: 'Dashboard' },
+    { id: 'task_create', label: 'Create tasks', labelAr: 'إنشاء المهام', group: 'Task Manager' },
+    { id: 'task_edit', label: 'Edit tasks', labelAr: 'تعديل المهام', group: 'Task Manager' },
+    { id: 'task_delete', label: 'Delete tasks', labelAr: 'حذف المهام', group: 'Task Manager' },
+    { id: 'task_complete', label: 'Complete tasks', labelAr: 'إكمال المهام', group: 'Task Manager' },
+    { id: 'task_pipeline', label: 'Task pipeline view', labelAr: 'عرض مسار المهام', group: 'Task Manager' },
+    { id: 'crm_create_deal', label: 'Create CRM deals', labelAr: 'إنشاء صفقات CRM', group: 'CRM' },
+    { id: 'crm_stage_change', label: 'Move CRM deals between stages', labelAr: 'تغيير مراحل صفقات CRM', group: 'CRM' },
+    { id: 'crm_delete_deal', label: 'Delete CRM deals', labelAr: 'حذف صفقات CRM', group: 'CRM' },
+    { id: 'request_approval', label: 'Approve employee requests', labelAr: 'اعتماد طلبات الموظفين', group: 'Requests' },
+    { id: 'request_edit', label: 'Edit employee requests', labelAr: 'تعديل طلبات الموظفين', group: 'Requests' },
+    { id: 'attendance_clock', label: 'Clock in and clock out', labelAr: 'تسجيل الحضور والانصراف', group: 'Attendance' },
+    { id: 'reports', label: 'Reports and analytics', labelAr: 'التقارير والتحليلات', group: 'Administration' },
+    { id: 'notifications', label: 'Notifications', labelAr: 'الإشعارات', group: 'Shared' }
+];
+window.appFeatureCatalog = APP_FEATURE_CATALOG;
 
 window.loadRolePermissions = async function() {
     try {
@@ -2788,17 +2813,71 @@ window.loadUserPermissions = async function(userId) {
     if (!userId) return;
     try {
         const userPerms = await db.fetchUserPermissions(userId);
-        window.appUserPermissions = userPerms || [];
+        if (Array.isArray(userPerms)) {
+            window.appUserPermissions = userPerms;
+            window.appUserDisabledFeatures = [];
+            window.appUserDisabledPages = [];
+        } else {
+            window.appUserPermissions = userPerms?.allowedPages || [];
+            window.appUserDisabledFeatures = userPerms?.disabledFeatures || [];
+            window.appUserDisabledPages = userPerms?.disabledPages || [];
+        }
     } catch (e) {
         console.error("Failed to load user permissions", e);
         window.appUserPermissions = [];
+        window.appUserDisabledFeatures = [];
+        window.appUserDisabledPages = [];
     }
 };
+
+function getCurrentRolePermission() {
+    const normalizedRole = normalizeAccessValue(currentUserRole || currentUserProfile?.role || '');
+    const exact = (window.appRolePermissionsCache || []).find(permission => normalizeAccessValue(permission.role) === normalizedRole);
+    if (exact) return exact;
+    const departmentId = currentUserProfile?.department_id || currentUser?.department_id;
+    return departmentId ? (window.appRolePermissionsCache || []).find(permission => permission.role === `DEPT_${departmentId}`) : null;
+}
+
+function canCurrentUserUseFeature(featureId) {
+    if (!featureId || isAdminRole(currentUserRole || currentUserProfile?.role)) return true;
+    if ((window.appUserDisabledFeatures || []).includes(featureId)) return false;
+    const permission = getCurrentRolePermission();
+    return !((permission?.disabled_features || []).includes(featureId));
+}
+function canCurrentUserAccessPageOverride(viewId) {
+    if (!viewId || isAdminRole(currentUserRole || currentUserProfile?.role)) return true;
+    if ((window.appUserDisabledPages || []).includes(viewId)) return false;
+    const permission = getCurrentRolePermission();
+    return !((permission?.disabled_pages || []).includes(viewId));
+}
+window.canCurrentUserAccessPageOverride = canCurrentUserAccessPageOverride;
+window.canCurrentUserUseFeature = canCurrentUserUseFeature;
+window.requireFeature = function (featureId, message) {
+    if (canCurrentUserUseFeature(featureId)) return true;
+    showToast(message || (currentLang === 'ar' ? 'هذه الميزة معطلة لحسابك.' : 'This feature is disabled for your account.'), 'warning');
+    return false;
+};
+
+function applyFeatureAccessControls(root = document) {
+    const selectors = {
+        dashboard_kpis: '#dashboardKpiOverview',
+        dashboard_announcements: '.ui02-dashboard-announcements',
+        dashboard_employees_radar: '.employees-radar-widget, .ui02-employees-radar-section',
+        dashboard_quick_actions: '.ui02-quick-actions',
+        task_pipeline: '#tasks-view-board',
+        notifications: '[data-view="notifications"]'
+    };
+    Object.entries(selectors).forEach(([featureId, selector]) => {
+        root.querySelectorAll?.(selector).forEach(element => { element.hidden = !canCurrentUserUseFeature(featureId); });
+    });
+}
+window.applyFeatureAccessControls = applyFeatureAccessControls;
 
 async function canCurrentUserAccessView(viewId) {
     const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
     const isAdmin = isAdminRole(normalizedRole);
     if (isAdmin) return true;
+    if (!canCurrentUserAccessPageOverride(viewId)) return false;
     if (viewId === 'dashboard') return true;
     if (viewId === 'my-day') return true;
     if (viewId === 'archived_tasks') {
@@ -2915,7 +2994,9 @@ window.updateSidebarVisibility = async function () {
     
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
         const viewId = item.dataset.view;
-        if (viewId === 'dashboard' || viewId === 'my-day') {
+        if (!canCurrentUserAccessPageOverride(viewId)) {
+            item.style.display = 'none';
+        } else if (viewId === 'dashboard' || viewId === 'my-day') {
             item.style.display = 'flex';
         } else if (viewId === 'archived_tasks') {
             item.style.display = (normalizedRole === 'EMPLOYEE' || canViewAllArchivedTaskRecords()) ? 'flex' : 'none';
@@ -2924,7 +3005,8 @@ window.updateSidebarVisibility = async function () {
         } else if (window.appUserPermissions && window.appUserPermissions.includes(viewId)) {
             item.style.display = 'flex';
         } else if (window.appRolePermissionsCache && window.appRolePermissionsCache.length > 0) {
-            const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole);
+            const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole)
+                || (currentUserProfile?.department_id ? window.appRolePermissionsCache.find(p => p.role === `DEPT_${currentUserProfile.department_id}`) : null);
             item.style.display = perm && perm.allowed_pages && perm.allowed_pages.includes(viewId) ? 'flex' : 'none';
         } else {
             const employeeAllowedViews = new Set(['dashboard', 'my-day', 'requests', 'time', 'tasks', 'archived_tasks', 'documents', 'employees']);
@@ -4308,6 +4390,7 @@ const setDashboardClockInAction = (button) => {
 };
 
 window.handleClockIn = async () => {
+    if (!window.requireFeature('attendance_clock', currentLang === 'ar' ? 'تسجيل الحضور والانصراف معطل لحسابك.' : 'Clock in and clock out are disabled for your account.')) return;
     const button = document.getElementById('attendanceClockButton');
     if (button?.disabled) return;
     if (button) {
@@ -4338,6 +4421,7 @@ window.handleClockIn = async () => {
 };
 
 window.handleClockOutPrompt = (attendanceId) => {
+    if (!window.requireFeature('attendance_clock', currentLang === 'ar' ? 'تسجيل الحضور والانصراف معطل لحسابك.' : 'Clock in and clock out are disabled for your account.')) return;
     currentAttendanceId = attendanceId;
     document.getElementById('clockOutModal').classList.add('show');
 };
@@ -6411,7 +6495,7 @@ async function renderAdmin() {
 }
 
 async function renderAdminPageAccess() {
-    if (currentUserRole !== 'ADMIN') return `<div class="page-header"><h1 class="page-title">${t('analy_unauth') || 'Unauthorized'}</h1></div>`;
+    if (!isAdminRole(currentUserRole)) return `<div class="page-header"><h1 class="page-title">${t('analy_unauth') || 'Unauthorized'}</h1></div>`;
 
     const [perms, allUserPerms, allProfiles, depts] = await Promise.all([
         db.fetchAllRolePermissions(),
@@ -6440,6 +6524,23 @@ async function renderAdminPageAccess() {
         { id: 'custody_handover', label: localize('Custody & Handover', 'العهد والتسليم'), icon: 'package-check', group: 'records' },
         { id: 'archived', label: localize('Archived Records', 'السجلات المؤرشفة'), icon: 'archive', group: 'records' }
     ];
+    const additionalViews = [
+        ['my-day', 'My Day', 'يومي', 'sun', 'core'], ['admin', 'Admin Hub', 'مركز الإدارة', 'shield-check', 'core'],
+        ['admin_page_access', 'Page & feature access', 'صلاحيات الصفحات والميزات', 'shield', 'core'], ['users', 'User Management', 'إدارة المستخدمين', 'user-cog', 'core'],
+        ['departments', 'Departments', 'الأقسام', 'building-2', 'workforce'], ['schedule', 'Schedule', 'الجدول', 'calendar-clock', 'workforce'],
+        ['notifications', 'Notifications', 'الإشعارات', 'bell', 'core'], ['performance', 'Performance', 'الأداء', 'chart-no-axes-combined', 'workforce'],
+        ['analytics', 'Analytics', 'التحليلات', 'chart-column', 'finance'], ['contract', 'Contracts', 'العقود', 'file-signature', 'records'],
+        ['contract_form', 'Contract form', 'نموذج العقد', 'file-pen-line', 'records'], ['contract_preview', 'Contract preview', 'معاينة العقد', 'file-search', 'records'], ['archived_contracts', 'Archived contracts', 'العقود المؤرشفة', 'archive', 'records'], ['archived_tasks', 'Archived tasks', 'المهام المؤرشفة', 'archive-restore', 'workforce'],
+        ['translations', 'Translations', 'الترجمات', 'languages', 'core'], ['templates', 'Templates', 'القوالب', 'copy', 'core'],
+        ['project-command-center', 'Project command center', 'مركز قيادة المشاريع', 'layout-dashboard', 'business'], ['integrations', 'Integrations', 'التكاملات', 'plug', 'business'],
+        ['whatsapp_inbox', 'WhatsApp inbox', 'صندوق واتساب', 'message-circle', 'business'], ['hr_suite_beta', 'HR Suite', 'حزمة الموارد البشرية', 'layers-3', 'workforce'],
+        ['ats_beta', 'Recruiting', 'التوظيف', 'briefcase', 'workforce'], ['lms_beta', 'Learning', 'التعلم', 'graduation-cap', 'workforce'],
+        ['appraisals_beta', 'Appraisals', 'التقييمات', 'star', 'workforce'], ['surveys_beta', 'Surveys', 'الاستبيانات', 'clipboard-list', 'workforce'],
+        ['shifts_beta', 'Shifts', 'المناوبات', 'repeat-2', 'workforce'], ['expenses_beta', 'Expenses beta', 'المصروفات التجريبية', 'receipt', 'finance']
+    ];
+    additionalViews.forEach(([id, english, arabic, icon, group]) => {
+        if (!availableViews.some(view => view.id === id)) availableViews.push({ id, label: localize(english, arabic), icon, group });
+    });
     const roles = ['EMPLOYEE', 'SUPERVISOR', 'MANAGER', 'HR_MANAGER', 'ADMIN'];
     const roleLabels = currentLang === 'ar'
         ? { EMPLOYEE: 'جميع الموظفين', SUPERVISOR: 'المشرفون', MANAGER: 'المديرون', HR_MANAGER: 'مديرو الموارد البشرية', ADMIN: 'مسؤولو النظام' }
@@ -6452,11 +6553,15 @@ async function renderAdminPageAccess() {
         if (!p || !p.allowed_pages) return false;
         return p.allowed_pages.includes(v);
     };
+    const hasRolePageDisabled = (r, v) => (perms.find(x => x.role === r)?.disabled_pages || []).includes(v);
     const hasUserPerm = (userId, v) => {
         const up = allUserPerms.find(x => x.user_id === userId);
         if (!up || !up.allowed_pages) return false;
         return up.allowed_pages.includes(v);
     };
+    const hasUserPageDisabled = (userId, v) => (allUserPerms.find(x => x.user_id === userId)?.disabled_pages || []).includes(v);
+    const hasRoleFeatureDisabled = (principal, featureId) => (perms.find(x => x.role === principal)?.disabled_features || []).includes(featureId);
+    const hasUserFeatureDisabled = (userId, featureId) => (allUserPerms.find(x => x.user_id === userId)?.disabled_features || []).includes(featureId);
     const roleGrantCount = roles.reduce((total, role) => total + availableViews.filter(view => hasRolePerm(role, view.id)).length, 0);
     const departmentGrantCount = depts.reduce((total, department) => total + availableViews.filter(view => hasRolePerm(`DEPT_${department.id}`, view.id)).length, 0);
     const userGrantCount = allProfiles.reduce((total, profile) => total + availableViews.filter(view => hasUserPerm(profile.id, view.id)).length, 0);
@@ -6475,25 +6580,42 @@ async function renderAdminPageAccess() {
         const roleChips = roles.filter(role => hasRolePerm(role, view.id)).map(role => renderChip('ROLE', role, view.id, formatRole(role), 'role', 'shield')).join('');
         const departmentChips = depts.filter(department => hasRolePerm(`DEPT_${department.id}`, view.id)).map(department => renderChip('ROLE', `DEPT_${department.id}`, view.id, departmentName(department), 'department', 'building-2')).join('');
         const userChips = allProfiles.filter(profile => hasUserPerm(profile.id, view.id)).map(profile => renderChip('USER', profile.id, view.id, employeeName(profile), 'employee', 'user-round')).join('');
+        const disabledRoleChips = roles.filter(role => hasRolePageDisabled(role, view.id)).map(role => renderChip('PAGE_DISABLED_ROLE', role, view.id, `${formatRole(role)} (${localize('disabled', 'معطل')})`, 'role', 'shield-minus')).join('');
+        const disabledDepartmentChips = depts.filter(department => hasRolePageDisabled(`DEPT_${department.id}`, view.id)).map(department => renderChip('PAGE_DISABLED_ROLE', `DEPT_${department.id}`, view.id, `${departmentName(department)} (${localize('disabled', 'معطل')})`, 'department', 'shield-minus')).join('');
+        const disabledUserChips = allProfiles.filter(profile => hasUserPageDisabled(profile.id, view.id)).map(profile => renderChip('PAGE_DISABLED_USER', profile.id, view.id, `${employeeName(profile)} (${localize('disabled', 'معطل')})`, 'employee', 'shield-minus')).join('');
         const grantCount = [roleChips, departmentChips, userChips].filter(Boolean).length;
         const remainingRoles = roles.filter(role => !hasRolePerm(role, view.id));
         const remainingDepartments = depts.filter(department => !hasRolePerm(`DEPT_${department.id}`, view.id));
         const remainingUsers = allProfiles.filter(profile => !hasUserPerm(profile.id, view.id));
+        const remainingPageDisableRoles = roles.filter(role => !hasRolePageDisabled(role, view.id));
+        const remainingPageDisableDepartments = depts.filter(department => !hasRolePageDisabled(`DEPT_${department.id}`, view.id));
+        const remainingPageDisableUsers = allProfiles.filter(profile => !hasUserPageDisabled(profile.id, view.id));
         return `<article class="page-access-card" data-page-access-card data-page-label="${escapeHTML(`${view.label} ${view.id}`.toLowerCase())}" data-page-configured="${grantCount ? 'true' : 'false'}">
             <header class="page-access-card-header"><span class="page-access-card-icon"><i data-lucide="${view.icon}"></i></span><div><h3>${escapeHTML(view.label)}</h3><code>${escapeHTML(view.id)}</code></div><span class="page-access-grant-count">${roles.filter(role => hasRolePerm(role, view.id)).length + depts.filter(department => hasRolePerm(`DEPT_${department.id}`, view.id)).length + allProfiles.filter(profile => hasUserPerm(profile.id, view.id)).length}</span></header>
-            <div class="page-access-chip-list">${roleChips}${departmentChips}${userChips || ''}${!roleChips && !departmentChips && !userChips ? `<p class="page-access-empty">${escapeHTML(localize('No explicit access assigned', 'لم يتم تعيين صلاحية مباشرة'))}</p>` : ''}</div>
+            <div class="page-access-chip-list">${roleChips}${departmentChips}${userChips || ''}${disabledRoleChips}${disabledDepartmentChips}${disabledUserChips}${!roleChips && !departmentChips && !userChips && !disabledRoleChips && !disabledDepartmentChips && !disabledUserChips ? `<p class="page-access-empty">${escapeHTML(localize('No explicit access assigned', 'لم يتم تعيين صلاحية مباشرة'))}</p>` : ''}</div>
             <label class="page-access-add"><span>${escapeHTML(localize('Grant access', 'منح صلاحية'))}</span><select class="form-control" onchange="handleGrantAccess(this, '${view.id}')"><option value="">${escapeHTML(localize('Choose a role, department, or employee…', 'اختر دوراً أو قسماً أو موظفاً…'))}</option>
                 ${remainingRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${remainingRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}
                 ${remainingDepartments.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${remainingDepartments.map(department => `<option value="ROLE:DEPT_${department.id}">${escapeHTML(departmentName(department))}</option>`).join('')}</optgroup>` : ''}
                 ${remainingUsers.length ? `<optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${remainingUsers.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>` : ''}
             </select></label>
+            <label class="page-access-add"><span>${escapeHTML(localize('Disable page for', 'تعطيل الصفحة لـ'))}</span><select class="form-control" onchange="handleDisableAccess(this, '${view.id}')"><option value="">${escapeHTML(localize('Choose a role, department, or employee…', 'اختر دوراً أو قسماً أو موظفاً…'))}</option>${remainingPageDisableRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${remainingPageDisableRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}${remainingPageDisableDepartments.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${remainingPageDisableDepartments.map(department => `<option value="ROLE:DEPT_${department.id}">${escapeHTML(departmentName(department))}</option>`).join('')}</optgroup>` : ''}${remainingPageDisableUsers.length ? `<optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${remainingPageDisableUsers.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>` : ''}</select></label>
         </article>`;
+    };
+    const renderFeatureCard = feature => {
+        const roleChips = roles.filter(role => hasRoleFeatureDisabled(role, feature.id)).map(role => renderChip('FEATURE_ROLE', role, feature.id, formatRole(role), 'role', 'shield-minus')).join('');
+        const departmentChips = depts.filter(department => hasRoleFeatureDisabled(`DEPT_${department.id}`, feature.id)).map(department => renderChip('FEATURE_ROLE', `DEPT_${department.id}`, feature.id, departmentName(department), 'department', 'building-2')).join('');
+        const userChips = allProfiles.filter(profile => hasUserFeatureDisabled(profile.id, feature.id)).map(profile => renderChip('FEATURE_USER', profile.id, feature.id, employeeName(profile), 'employee', 'user-round')).join('');
+        const remainingRoles = roles.filter(role => !hasRoleFeatureDisabled(role, feature.id));
+        const remainingDepartments = depts.filter(department => !hasRoleFeatureDisabled(`DEPT_${department.id}`, feature.id));
+        const remainingUsers = allProfiles.filter(profile => !hasUserFeatureDisabled(profile.id, feature.id));
+        return `<article class="page-access-card feature-access-card" data-feature-access-card data-page-label="${escapeHTML(`${feature.label} ${feature.id}`.toLowerCase())}" data-page-configured="${roleChips || departmentChips || userChips ? 'true' : 'false'}"><header class="page-access-card-header"><span class="page-access-card-icon"><i data-lucide="toggle-right"></i></span><div><h3>${escapeHTML(currentLang === 'ar' ? feature.labelAr : feature.label)}</h3><code>${escapeHTML(feature.id)}</code></div></header><div class="page-access-chip-list">${roleChips}${departmentChips}${userChips || `<p class="page-access-empty">${escapeHTML(localize('Enabled by default for everyone', 'مفعلة افتراضياً للجميع'))}</p>`}</div><label class="page-access-add"><span>${escapeHTML(localize('Disable for', 'تعطيل لـ'))}</span><select class="form-control" onchange="handleGrantFeature(this, '${feature.id}')"><option value="">${escapeHTML(localize('Choose a role, department, or employee…', 'اختر دوراً أو قسماً أو موظفاً…'))}</option>${remainingRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${remainingRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}${remainingDepartments.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${remainingDepartments.map(department => `<option value="ROLE:DEPT_${department.id}">${escapeHTML(departmentName(department))}</option>`).join('')}</optgroup>` : ''}${remainingUsers.length ? `<optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${remainingUsers.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>` : ''}</select></label></article>`;
     };
     const groupsHTML = Object.keys(groupLabels).map(group => `<section class="page-access-group" data-page-access-group><div class="page-access-group-heading"><h2>${escapeHTML(groupLabels[group])}</h2><span>${availableViews.filter(view => view.group === group).length}</span></div><div class="page-access-grid">${availableViews.filter(view => view.group === group).map(renderViewCard).join('')}</div></section>`).join('');
     const savedFilters = window.adminPageAccessFilterState || { query: '', status: 'all' };
     window.allUserPermsData = allUserPerms;
     window.adminPageAccessRoleData = perms;
     window.adminPageAccessViewIds = availableViews.map(view => view.id);
+    window.adminPageAccessFeatureIds = APP_FEATURE_CATALOG.map(feature => feature.id);
     return `
         <div class="page-access-workspace fade-in-up">
             <header class="page-access-hero">
@@ -6517,7 +6639,8 @@ async function renderAdminPageAccess() {
                 <label><span>${escapeHTML(localize('Show', 'عرض'))}</span><select id="pageAccessStatusFilter" class="form-control" onchange="filterAdminPageAccess()"><option value="all" ${savedFilters.status === 'all' ? 'selected' : ''}>${escapeHTML(localize('All pages', 'كل الصفحات'))}</option><option value="configured" ${savedFilters.status === 'configured' ? 'selected' : ''}>${escapeHTML(localize('Configured only', 'المهيأة فقط'))}</option><option value="unconfigured" ${savedFilters.status === 'unconfigured' ? 'selected' : ''}>${escapeHTML(localize('Without explicit access', 'بدون صلاحية مباشرة'))}</option></select></label>
                 <div class="page-access-results"><strong id="pageAccessVisibleCount">${availableViews.length}</strong><span>${escapeHTML(localize('pages shown', 'صفحة ظاهرة'))}</span></div>
             </section>
-            <div id="pageAccessGroups">${groupsHTML}</div>
+                <div id="pageAccessGroups">${groupsHTML}</div>
+                <section class="page-access-group feature-access-section" data-page-access-group><div class="page-access-group-heading"><h2>${escapeHTML(localize('Feature controls', 'التحكم في الميزات'))}</h2><span>${APP_FEATURE_CATALOG.length}</span></div><p class="page-access-help">${escapeHTML(localize('Features are enabled by default. Disable a feature for a role, department, or employee when needed.', 'الميزات مفعلة افتراضياً. عطّل الميزة لدور أو قسم أو موظف عند الحاجة.'))}</p><div class="page-access-grid">${APP_FEATURE_CATALOG.map(renderFeatureCard).join('')}</div></section>
             <div id="pageAccessNoResults" class="card page-access-no-results" hidden><i data-lucide="search-x"></i><h3>${escapeHTML(localize('No pages found', 'لم يتم العثور على صفحات'))}</h3><p>${escapeHTML(localize('Try another search or filter.', 'جرّب بحثاً أو تصفية مختلفة.'))}</p></div>
         </div>
     `;
@@ -6557,12 +6680,14 @@ window.handleBulkPageAccess = async function (action) {
     if (type === 'USER') {
         currentPages = [...(window.allUserPermsData?.find(item => item.user_id === id)?.allowed_pages || [])];
         const nextPages = isGrant ? [...new Set([...currentPages, ...managedPages])] : currentPages.filter(page => !managedPages.includes(page));
-        result = await db.updateUserPermissions(id, nextPages);
+        const record = window.allUserPermsData?.find(item => item.user_id === id);
+        result = await db.updateUserPermissions(id, nextPages, record?.disabled_features || [], record?.disabled_pages || []);
         if (result?.success && currentUser.id === id) await window.loadUserPermissions(currentUser.id);
     } else {
         currentPages = [...(window.adminPageAccessRoleData?.find(item => item.role === id)?.allowed_pages || [])];
         const nextPages = isGrant ? [...new Set([...currentPages, ...managedPages])] : currentPages.filter(page => !managedPages.includes(page));
-        result = await db.updateRolePermissions(id, nextPages);
+        const record = window.adminPageAccessRoleData?.find(item => item.role === id);
+        result = await db.updateRolePermissions(id, nextPages, record?.disabled_features || [], record?.disabled_pages || []);
         if (result?.success) await window.loadRolePermissions();
     }
     if (!result?.success) return showToast(currentLang === 'ar' ? 'تعذر تحديث الصلاحيات.' : 'Permission update failed.', 'danger');
@@ -6585,6 +6710,10 @@ window.handleGrantAccess = async function(selectElement, viewId) {
 };
 
 window.handleRevokeAccess = async function(type, id, viewId) {
+    if (type === 'FEATURE_USER') return window.toggleUserFeature(id, viewId, false);
+    if (type === 'FEATURE_ROLE') return window.toggleRoleFeature(id, viewId, false);
+    if (type === 'PAGE_DISABLED_USER') return window.toggleUserPageDisabled(id, viewId, false);
+    if (type === 'PAGE_DISABLED_ROLE') return window.toggleRolePageDisabled(id, viewId, false);
     if (type === 'USER') {
         await window.toggleUserPermission(id, viewId, false);
     } else {
@@ -6603,7 +6732,7 @@ window.toggleUserPermission = async function(userId, viewId, isGranted) {
         allowedPages = allowedPages.filter(v => v !== viewId);
     }
 
-    const res = await db.updateUserPermissions(userId, allowedPages);
+    const res = await db.updateUserPermissions(userId, allowedPages, up?.disabled_features || [], up?.disabled_pages || []);
     if (res && res.success) {
         showToast('User permission updated successfully', 'success');
         if (currentUser.id === userId) {
@@ -6624,7 +6753,7 @@ window.toggleRolePermission = async function(role, viewId, isAllowed) {
         allowedPages = allowedPages.filter(v => v !== viewId);
     }
 
-    const res = await db.updateRolePermissions(role, allowedPages);
+    const res = await db.updateRolePermissions(role, allowedPages, perm?.disabled_features || [], perm?.disabled_pages || []);
     if (res && res.success) {
         showToast('Role permission updated successfully', 'success');
         await window.loadRolePermissions();
@@ -6635,6 +6764,66 @@ window.toggleRolePermission = async function(role, viewId, isAllowed) {
     } else {
         showToast('Failed to update role permission', 'error');
     }
+};
+
+window.handleGrantFeature = async function (selectElement, featureId) {
+    const value = selectElement.value;
+    selectElement.value = '';
+    if (!value) return;
+    if (value.startsWith('USER:')) return window.toggleUserFeature(value.slice(5), featureId, true);
+    if (value.startsWith('ROLE:')) return window.toggleRoleFeature(value.slice(5), featureId, true);
+};
+
+window.toggleUserFeature = async function (userId, featureId, isDisabled) {
+    const record = (window.allUserPermsData || []).find(item => item.user_id === userId);
+    const disabled = new Set(record?.disabled_features || []);
+    if (isDisabled) disabled.add(featureId); else disabled.delete(featureId);
+    const result = await db.updateUserPermissions(userId, record?.allowed_pages || [], [...disabled], record?.disabled_pages || []);
+    if (!result?.success) return showToast(currentLang === 'ar' ? 'تعذر تحديث إعداد الميزة.' : 'Feature setting update failed.', 'danger');
+    if (currentUser?.id === userId) await window.loadUserPermissions(currentUser.id);
+    showToast(currentLang === 'ar' ? 'تم تحديث إعداد الميزة.' : 'Feature setting updated.', 'success');
+    renderView('admin_page_access');
+};
+
+window.toggleRoleFeature = async function (role, featureId, isDisabled) {
+    const record = (window.adminPageAccessRoleData || window.appRolePermissionsCache || []).find(item => item.role === role);
+    const disabled = new Set(record?.disabled_features || []);
+    if (isDisabled) disabled.add(featureId); else disabled.delete(featureId);
+    const result = await db.updateRolePermissions(role, record?.allowed_pages || [], [...disabled], record?.disabled_pages || []);
+    if (!result?.success) return showToast(currentLang === 'ar' ? 'تعذر تحديث إعداد الميزة.' : 'Feature setting update failed.', 'danger');
+    await window.loadRolePermissions();
+    showToast(currentLang === 'ar' ? 'تم تحديث إعداد الميزة.' : 'Feature setting updated.', 'success');
+    renderView('admin_page_access');
+};
+
+window.handleDisableAccess = async function (selectElement, viewId) {
+    const value = selectElement.value;
+    selectElement.value = '';
+    if (!value) return;
+    if (value.startsWith('USER:')) return window.toggleUserPageDisabled(value.slice(5), viewId, true);
+    if (value.startsWith('ROLE:')) return window.toggleRolePageDisabled(value.slice(5), viewId, true);
+};
+
+window.toggleUserPageDisabled = async function (userId, viewId, isDisabled) {
+    const record = (window.allUserPermsData || []).find(item => item.user_id === userId);
+    const disabled = new Set(record?.disabled_pages || []);
+    if (isDisabled) disabled.add(viewId); else disabled.delete(viewId);
+    const result = await db.updateUserPermissions(userId, record?.allowed_pages || [], record?.disabled_features || [], [...disabled]);
+    if (!result?.success) return showToast(currentLang === 'ar' ? 'تعذر تحديث صلاحية الصفحة.' : 'Page access update failed.', 'danger');
+    if (currentUser?.id === userId) { await window.loadUserPermissions(currentUser.id); await window.updateSidebarVisibility(); }
+    showToast(currentLang === 'ar' ? 'تم تحديث صلاحية الصفحة.' : 'Page access updated.', 'success');
+    renderView('admin_page_access');
+};
+
+window.toggleRolePageDisabled = async function (role, viewId, isDisabled) {
+    const record = (window.adminPageAccessRoleData || window.appRolePermissionsCache || []).find(item => item.role === role);
+    const disabled = new Set(record?.disabled_pages || []);
+    if (isDisabled) disabled.add(viewId); else disabled.delete(viewId);
+    const result = await db.updateRolePermissions(role, record?.allowed_pages || [], record?.disabled_features || [], [...disabled]);
+    if (!result?.success) return showToast(currentLang === 'ar' ? 'تعذر تحديث صلاحية الصفحة.' : 'Page access update failed.', 'danger');
+    await window.loadRolePermissions();
+    showToast(currentLang === 'ar' ? 'تم تحديث صلاحية الصفحة.' : 'Page access updated.', 'success');
+    renderView('admin_page_access');
 };
 // Render User Management (Admin Only)
 window.handleCreateUser = async function (e) {
@@ -10602,6 +10791,7 @@ window.openQuickAddModal = function(focusTarget) {
 };
 
 window.handleQuickAddTask = async function(e) {
+    if (!window.requireFeature('task_create')) return;
     if (e.key !== 'Enter') return;
     e.preventDefault();
 
@@ -10687,6 +10877,7 @@ window.handleQuickAddTask = async function(e) {
 };
 
 window.handleCreateTask = async function (e) {
+    if (!window.requireFeature('task_create')) return;
     e.preventDefault();
 
     const canCreateTask = !!currentUser && !isMq20Profile();
@@ -10993,6 +11184,7 @@ window.handleCrmDesignCompletionSubmit = async function (event) {
 };
 
 window.handleUpdateTaskStatus = async function (id, status) {
+    if ((status === 'completed' || status === 'Approved') && !window.requireFeature('task_complete')) return { error: new Error('Task completion disabled') };
     const task = window.taskCache ? window.taskCache[id] : null;
     if (task && !canChangeTaskStageRecord(task)) {
         showToast(taskDetailText('This task is available in view-only mode.', 'هذه المهمة متاحة للعرض فقط.'), 'warning');
@@ -11350,6 +11542,7 @@ window.setEditTaskTab = function (tab) {
 
 window.handleEditTaskSubmit = async function (e) {
     e.preventDefault();
+    if (!window.requireFeature('task_edit')) return;
     const id = document.getElementById('editTaskId').value;
     const taskBeingEdited = window.taskCache?.[id];
     if (!canEditTaskRecord(taskBeingEdited) || isMq20Profile()) {
@@ -11546,6 +11739,7 @@ window.renderTaskCommentAttachmentSelection = function () {
 };
 
 window.handleDeleteTask = async function (id) {
+    if (!window.requireFeature('task_delete')) return;
     const task = window.taskCache?.[id];
     const taskList = task ? (window.taskListsCache || []).find(list => list.id === task.task_list_id) : null;
     const canDeleteTask = !!task && !isMq20Profile() && (isTaskAdmin() || task.created_by === currentUser?.id
@@ -13385,6 +13579,7 @@ window.renderView = async function (viewId, isBack = false) {
         window.viewHTMLCache[viewId] = content;
         // Always update the view with the fresh content!
         viewContainer.innerHTML = content;
+        applyFeatureAccessControls(viewContainer);
         translateArabicInterface(viewContainer);
         applySemanticStatusIcons(viewContainer);
         applyIconOnlyButtonNames(document);
@@ -15152,6 +15347,7 @@ window.selectDealWorkflowStage = function (stage) {
 };
 
 window.saveDealWorkflowStage = async function () {
+    if (!window.requireFeature('crm_stage_change')) return { success: false, reason: 'feature_disabled' };
     const context = activeDealWorkflowContext;
     const dealId = document.getElementById('workflowDealId')?.value;
     if (!context?.deal || !dealId) return;
@@ -15231,6 +15427,7 @@ window.closeLostDealSummaryModal = function () {
 window.deleteCrmDeal = function (dealId = null) {
     const selectedDealId = String(dealId || activeLostDealId || '');
     if (!selectedDealId) return;
+    if (!window.requireFeature('crm_delete_deal')) return;
     if (!canCurrentUserDeleteCrmDeals()) return showToast(t('crm_delete_deal_forbidden') || 'You do not have permission to delete deals.', 'danger');
     window.showConfirmModal(
         t('crm_delete_deal') || 'Delete deal',
@@ -15286,6 +15483,7 @@ window.openAssignedCrmApprovalReview = async function (stepId) {
 };
 
 window.openDealWorkflowModal = async function (dealId) {
+    if (!window.requireFeature('crm_stage_change')) return;
     const [deals, users, workflow, canViewFinancials, canUseCrm] = await Promise.all([db.fetchDeals(), db.fetchUsers(), db.fetchDealWorkflow(dealId), ensureBusinessFinancialAccess(), canCurrentUserUseCRM()]);
     const deal = deals.find(item => item.id === dealId);
     if (!deal) return showToast(t('crm_deal_not_found') || 'Deal not found.', 'danger');
@@ -17415,6 +17613,8 @@ window.handleCreateClient = async (e) => {
 };
 
 window.showCRMDealModal = async (id = null, isViewOnly = false) => {
+    if (!id && !window.requireFeature('crm_create_deal')) return;
+    if (id && !isViewOnly && !window.requireFeature('crm_create_deal', currentLang === 'ar' ? 'تعديل الصفقات معطل لحسابك.' : 'Deal editing is disabled for your account.')) return;
     await ensureBusinessFinancialAccess();
     if (id) {
         const selectedDeal = (await db.fetchDeals()).find(deal => String(deal.id) === String(id));
@@ -17930,6 +18130,7 @@ function renderRequestPipeline(request, approverNames = {}) {
 }
 
 window.handleRequestAction = async function (sourceTable, id, decision) {
+    if (!window.requireFeature('request_approval')) return;
     let note = null;
     if (decision === 'REJECTED') {
         note = await window.showPromptModal(t('approval_rejection_reason_prompt'), t('ui_rejected'), { required: true });
@@ -18289,6 +18490,7 @@ window.syncEmployeeRequestEditDays = function () {
 };
 
 window.handleEmployeeRequestEditSubmit = async function (event) {
+    if (!window.requireFeature('request_edit')) return;
     event.preventDefault();
     const modal = document.getElementById('employeeRequestEditModal');
     if (!modal) return;
@@ -18329,6 +18531,7 @@ window.handleEmployeeRequestEditSubmit = async function (event) {
 };
 
 window.handleDeleteEmployeeRequest = function (sourceTable, requestId, requestType, withdrawal = false) {
+    if (!window.requireFeature('request_edit')) return;
     const isAdministrator = isTaskAdmin() || isExecutiveAdminProfile();
     if (!isAdministrator && !withdrawal) {
         showToast(t('req_delete_admin_only') || 'Only administrators can delete employee requests.', 'warning');
