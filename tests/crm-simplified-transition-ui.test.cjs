@@ -24,8 +24,23 @@ async function scenario(success) {
   assert.deepEqual(calls[0],['server','synthetic','DISCUSSION']);
   assert.deepEqual(calls.slice(1),success ? [['modal','QUOTE_PROPOSAL','synthetic']] : []);
 }
+
+async function unsupportedStageScenario() {
+  const calls = [];
+  const card = { getAttribute: name => name === 'data-stage' ? 'QUALIFICATION' : '' };
+  const window = { moveDealCard: () => calls.push(['restore']), refreshCrmDashboardInBackground: () => {} };
+  const document = { getElementById: id => id === 'deal-card-synthetic' ? card : null };
+  const db = { updateDealStage: async () => { calls.push(['server']); return { success: true }; } };
+  const context = { window, document, db, t: key => key, currentLang: 'en', showToast: () => {} };
+  vm.runInNewContext(source.slice(start,end), context);
+  const event = { preventDefault() {}, dataTransfer: { getData: key => key === 'dealId' ? 'synthetic' : 'QUALIFICATION' } };
+  const result = await window.dropDeal(event, 'LEAD');
+  assert.equal(result.reason, 'unsupported_stage');
+  assert.deepEqual(calls, [['restore']]);
+}
 (async () => {
   await scenario(true);
   await scenario(false);
+  await unsupportedStageScenario();
   console.log('DISCUSSION_MODAL_SERVER_ORDER=PASS');
 })().catch(error => { console.error(error); process.exitCode=1; });

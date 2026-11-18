@@ -16207,9 +16207,14 @@ window.dropDeal = async (ev, newStage) => {
 
     const card = document.getElementById(`deal-card-${dealId}`);
     const oldStage = ev.dataTransfer.getData('oldStage') || (card ? card.getAttribute('data-stage') : null);
+    const reactManaged = Boolean(card && document.getElementById('crm-react-root')?.contains(card));
     if (oldStage === newStage) return { success: true, reason: 'same_stage', dealId, oldStage, newStage };
 
-    if (newStage === 'PITCH' || newStage === 'PROPOSAL') return { success: false, reason: 'historical_stage', dealId, oldStage, newStage };
+    if (newStage === 'PITCH' || newStage === 'PROPOSAL') {
+        if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
+        showToast(currentLang === 'ar' ? 'هذه المرحلة تستخدم مسار عمل مخصصاً.' : 'This stage uses a dedicated workflow.', 'warning');
+        return { success: false, reason: 'historical_stage', dealId, oldStage, newStage };
+    }
 
     if (newStage === 'LOST') {
         document.getElementById('lostDealId').value = dealId;
@@ -16224,7 +16229,12 @@ window.dropDeal = async (ev, newStage) => {
         return { success: false, reason: 'won_details_required', dealId, oldStage, newStage };
     }
 
-    const reactManaged = Boolean(card && document.getElementById('crm-react-root')?.contains(card));
+    if (!['QUALIFICATION', 'DISCUSSION', 'NEGOTIATION'].includes(String(newStage || '').toUpperCase())) {
+        if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
+        showToast(currentLang === 'ar' ? 'لا يمكن نقل الصفقة إلى هذه المرحلة مباشرة.' : 'This deal cannot be moved to that stage directly.', 'warning');
+        return { success: false, reason: 'unsupported_stage', dealId, oldStage, newStage };
+    }
+
     if (!reactManaged) window.moveDealCard(dealId, newStage);
 
     const res = await (window.hrDomainServices?.deals?.changeStage
