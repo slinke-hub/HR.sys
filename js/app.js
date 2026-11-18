@@ -15098,16 +15098,107 @@ function renderDealLifecycle(deal) {
     if (!container) return;
     const currentStage = canonicalDealLifecycleStage(deal?.stage);
     const currentIndex = dealLifecycleStages.findIndex(entry => entry.stage === currentStage);
+    const selectedStage = canonicalDealLifecycleStage(activeDealWorkflowContext?.selectedStage || currentStage);
+    const selectableStages = new Set(['LEAD', 'QUALIFICATION', 'DISCUSSION', 'NEGOTIATION']);
     container.innerHTML = dealLifecycleStages.map((entry, index) => {
         const isLost = entry.stage === 'LOST';
         const active = entry.stage === currentStage;
+        const selected = entry.stage === selectedStage && !active;
         const complete = !isLost && currentStage !== 'LOST' && index < currentIndex;
-        return `<div class="deal-lifecycle-step ${active ? 'active' : ''} ${complete ? 'complete' : ''} ${isLost ? 'lost' : ''}">
+        const selectable = selectableStages.has(entry.stage);
+        return `<button type="button" class="deal-lifecycle-step ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${complete ? 'complete' : ''} ${isLost ? 'lost' : ''} ${selectable ? 'selectable' : ''}" ${selectable ? `onclick="selectDealWorkflowStage('${entry.stage}')"` : 'disabled'} aria-current="${active ? 'step' : 'false'}" aria-pressed="${selected ? 'true' : 'false'}">
             <span>${complete ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : index + 1}</span>
             <strong>${escapeHTML(dealLifecycleLabel(entry.stage))}</strong>
-        </div>`;
+        </button>`;
     }).join('');
+    updateDealWorkflowStageSaveState();
+    if (window.lucide) window.lucide.createIcons();
 }
+
+function isDealWorkflowDirectTransition(oldStage, newStage) {
+    return (oldStage === 'LEAD' && newStage === 'QUALIFICATION')
+        || (oldStage === 'QUALIFICATION' && ['LEAD', 'DISCUSSION'].includes(newStage))
+        || (oldStage === 'DISCUSSION' && newStage === 'QUALIFICATION')
+        || (oldStage === 'NEGOTIATION' && newStage === 'DISCUSSION');
+}
+
+function updateDealWorkflowStageSaveState() {
+    const button = document.getElementById('dealWorkflowStageSave');
+    const hint = document.getElementById('dealWorkflowStageHint');
+    const context = activeDealWorkflowContext;
+    if (!button || !context?.deal) return;
+    const currentStage = canonicalDealLifecycleStage(context.deal.stage);
+    const selectedStage = canonicalDealLifecycleStage(context.selectedStage || currentStage);
+    const changed = selectedStage !== currentStage;
+    button.disabled = !changed || context.canUseCrm === false;
+    const label = button.querySelector('span');
+    if (label) label.textContent = taskDetailText('Save stage', 'حفظ المرحلة');
+    button.title = button.disabled && !changed
+        ? taskDetailText('Select a different stage first.', 'اختر مرحلة مختلفة أولاً.')
+        : '';
+    if (hint) {
+        hint.textContent = changed
+            ? taskDetailText(`Selected stage: ${dealLifecycleLabel(selectedStage)}`, `المرحلة المحددة: ${dealLifecycleLabel(selectedStage)}`)
+            : taskDetailText('Select a stage to save.', 'اختر مرحلة لحفظها.');
+    }
+}
+
+window.selectDealWorkflowStage = function (stage) {
+    if (!activeDealWorkflowContext?.deal) return;
+    const selectedStage = canonicalDealLifecycleStage(stage);
+    if (!['LEAD', 'QUALIFICATION', 'DISCUSSION', 'NEGOTIATION'].includes(selectedStage)) return;
+    activeDealWorkflowContext.selectedStage = selectedStage;
+    renderDealLifecycle(activeDealWorkflowContext.deal);
+};
+
+window.saveDealWorkflowStage = async function () {
+    const context = activeDealWorkflowContext;
+    const dealId = document.getElementById('workflowDealId')?.value;
+    if (!context?.deal || !dealId) return;
+    const oldStage = canonicalDealLifecycleStage(context.deal.stage);
+    const newStage = canonicalDealLifecycleStage(context.selectedStage || oldStage);
+    if (oldStage === newStage) return showToast(taskDetailText('Select a different stage first.', 'اختر مرحلة مختلفة أولاً.'), 'warning');
+
+    // Negotiation is reached through the registered Quote & Proposal workflow,
+    // never by bypassing its task and approval requirements.
+    if (oldStage === 'DISCUSSION' && newStage === 'NEGOTIATION') {
+        closeDealWorkflowModal();
+        window.openCrmPresentationRequest?.('QUOTE_PROPOSAL', String(dealId));
+        showToast(taskDetailText(
+            'Complete the Quote & Proposal workflow before moving to Negotiation.',
+            'أكمل مسار عرض السعر والمقترح قبل الانتقال إلى التفاوض.'
+        ), 'warning');
+        return { success: false, reason: 'workflow_required', dealId, oldStage, newStage };
+    }
+
+    if (!isDealWorkflowDirectTransition(oldStage, newStage)) {
+        return showToast(taskDetailText(
+            'This deal can move only one stage at a time.',
+            'يمكن نقل الصفقة مرحلة واحدة فقط في كل مرة.'
+        ), 'warning');
+    }
+
+    const button = document.getElementById('dealWorkflowStageSave');
+    if (button) button.disabled = true;
+    const result = await (window.hrDomainServices?.deals?.changeStage
+        ? window.hrDomainServices.deals.changeStage(String(dealId), newStage)
+        : db.updateDealStage(String(dealId), newStage));
+    if (!result.success) {
+        updateDealWorkflowStageSaveState();
+        const reason = String(result.error?.message || result.data?.message || '');
+        showToast(reason || (t('toast_failed_to_move_deal') || 'Could not move the deal.'), 'danger');
+        return { success: false, reason: 'save_failed', dealId, oldStage, newStage };
+    }
+
+    context.deal.stage = newStage;
+    context.selectedStage = newStage;
+    window.setCrmDealStageLocally?.(String(dealId), newStage);
+    showToast(`${t('toast_deal_moved_to') || 'Deal moved to'} ${dealLifecycleLabel(newStage)}`, 'success');
+    closeDealWorkflowModal();
+    void window.refreshCrmDashboardInBackground?.();
+    if (newStage === 'DISCUSSION') window.openCrmPresentationRequest?.('QUOTE_PROPOSAL', String(dealId));
+    return { success: true, dealId, oldStage, newStage };
+};
 
 function dealEmployeeName(profile) {
     return currentLang === 'ar' && profile?.display_name_ar
@@ -15234,12 +15325,13 @@ window.openDealWorkflowModal = async function (dealId) {
     document.getElementById('workflowMarketingManager').value = titleMatch(/marketing.*manager/i);
     document.getElementById('workflowGeneralManager').value = titleMatch(/general manager|\bGM\b/i);
     document.getElementById('workflowOperationsManager').value = titleMatch(/operations?.*manager/i);
-    activeDealWorkflowContext = { deal, users, workflow, canUseCrm };
+    activeDealWorkflowContext = { deal, users, workflow, canUseCrm, selectedStage: canonicalDealLifecycleStage(deal.stage) };
     renderDealLifecycle(deal);
     renderDealWorkflowContents(workflow);
     window.resetDealAttachmentUploadForm();
     document.getElementById('dealWorkflowModal').classList.add('show');
     updateTranslations();
+    updateDealWorkflowStageSaveState();
     if (window.lucide) window.lucide.createIcons();
 };
 

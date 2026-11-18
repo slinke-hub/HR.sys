@@ -2667,6 +2667,38 @@ button.btn-icon [data-lucide] {
   background: var(--color-bg-elevated);
   color: var(--color-text-secondary);
   font-size: .75rem;
+  font-family: inherit;
+  text-align: start;
+  cursor: default;
+}
+
+.deal-lifecycle-step.selectable { cursor: pointer; }
+.deal-lifecycle-step.selectable:hover { border-color: var(--color-primary); }
+.deal-lifecycle-step.selected {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-bg-elevated));
+  color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+.deal-lifecycle-step:disabled { opacity: 1; }
+
+.deal-workflow-stage-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-top: .75rem;
+}
+
+.deal-workflow-stage-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: .85rem;
+}
+
+@media (max-width: 720px) {
+  .deal-workflow-stage-actions { align-items: stretch; flex-direction: column; }
+  .deal-workflow-stage-actions .btn { width: 100%; justify-content: center; }
 }
 
 .deal-lifecycle-step > span {
