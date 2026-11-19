@@ -246,27 +246,6 @@
   }
 }
 
-/* Keep compact pipeline cards readable when a stage column is narrower than
-   the combined status, progress, assignee, and date controls. */
-.task-v2-shell .task-pipeline-card-footer .task-card-progress-action {
-  flex: 0 0 auto !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  inline-size: max-content !important;
-  min-inline-size: max-content !important;
-  white-space: nowrap !important;
-  word-break: keep-all !important;
-  overflow-wrap: normal !important;
-  writing-mode: horizontal-tb !important;
-}
-.task-v2-shell .task-pipeline-card-footer .task-card-progress-action > span {
-  flex: 0 0 auto;
-  min-inline-size: max-content;
-  white-space: nowrap !important;
-  word-break: keep-all !important;
-  overflow-wrap: normal !important;
-}
-
 @media (max-width: 900px) {
   .task-v2-shell .task-pipeline-card-footer {
     display: grid !important;
@@ -290,34 +269,6 @@
   .task-v2-shell .task-pipeline-card-footer .task-stage-select {
     width: 100%;
     min-width: 0;
-  }
-
-  .task-v2-shell .task-pipeline-card-footer .task-card-progress-action {
-    display: inline-flex !important;
-    flex: 0 0 auto !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    inline-size: max-content !important;
-    min-inline-size: max-content !important;
-    max-inline-size: 100%;
-    width: max-content !important;
-    min-width: max-content !important;
-    justify-self: start;
-    white-space: nowrap !important;
-    word-break: keep-all !important;
-    overflow-wrap: normal !important;
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed;
-  }
-
-  .task-v2-shell .task-pipeline-card-footer .task-card-progress-action > span {
-    display: inline-block;
-    flex: 0 0 auto;
-    min-inline-size: max-content;
-    white-space: nowrap !important;
-    word-break: keep-all !important;
-    overflow-wrap: normal !important;
-    writing-mode: horizontal-tb !important;
   }
 
   .task-v2-shell .task-pipeline-card-footer .task-assignee {

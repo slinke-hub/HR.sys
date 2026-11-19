@@ -39,8 +39,8 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css?v=2026110801">
     <link rel="stylesheet" href="css/layout.css?v=2026100801">
-    <link rel="stylesheet" href="css/components.css?v=2026110401">
-    <link rel="stylesheet" href="css/task-manager-mobile-final.css?v=2026111902">
+    <link rel="stylesheet" href="css/components.css?v=2026111901">
+    <link rel="stylesheet" href="css/task-manager-mobile-final.css?v=2026111903">
     <link rel="stylesheet" href="css/hr-suite-beta.css?v=2026100408">
     <link rel="stylesheet" href="css/android.css?v=2026090702">
     <link rel="stylesheet" href="css/crm-tailwind.css?v=2026111701">
@@ -1371,13 +1371,6 @@
                                 <span class="select-ui-value" style="font-size: 0.9rem;" data-i18n="ui_none">None</span>
                             </div>
                         </div>
-                        <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                            <span style="font-size: 0.85rem; font-weight: 500;" data-i18n="ui_progress2">Progress</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); opacity: 0.6;">
-                                <i data-lucide="percent" style="width: 16px; height: 16px;"></i>
-                                <span style="font-size: 0.9rem;"> <output id="editTaskProgressValue" data-i18n="ui_0_percent">0%</output> <input id="editTaskProgress" type="range" min="0" max="100" value="0" oninput="window.updateEditTaskProgress(this.value)" style="width: 100px; vertical-align: middle;"></span>
-                            </div>
-                        </div>
                         <div class="property-cell" id="editTaskSubTypeGroupWrap" style="display: none; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;" data-i18n="ui_task_type2">Task Type</span>
                             <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-secondary); cursor: pointer; position: relative; overflow: hidden;" onclick="if (event.target.tagName !== 'SELECT') try{this.querySelector('select').showPicker()}catch(e){}">
@@ -1450,19 +1443,6 @@
                 <div><strong data-i18n="html_est_time">Est. Time</strong> <span id="detailsTaskEstimate"></span></div>
             </div>
 
-            <section id="taskProgressQuickActions" class="task-progress-quick-actions" aria-label="Task progress actions">
-                <div class="task-progress-quick-actions-heading">
-                    <h3 data-i18n="ui_progress2">Progress</h3>
-                    <span id="detailsTaskProgressLabel">To do</span>
-                </div>
-                <div class="task-progress-quick-actions-buttons" role="group" aria-label="Task progress">
-                    <button type="button" class="task-progress-action" data-status="todo" onclick="window.handleTaskProgressQuickAction('todo')" data-i18n="task_todo">To Do</button>
-                    <button type="button" class="task-progress-action" data-status="in_progress" onclick="window.handleTaskProgressQuickAction('in_progress')" data-i18n="task_in_progress">In progress</button>
-                    <button type="button" class="task-progress-action" data-status="review" onclick="window.handleTaskProgressQuickAction('review')" data-i18n="task_review">Review</button>
-                    <button type="button" class="task-progress-action" data-status="completed" onclick="window.handleTaskProgressQuickAction('completed')" data-i18n="task_done">Done</button>
-                </div>
-            </section>
-            
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
                 <h3 style="margin: 0;" data-i18n="html_sub_tasks">Sub-Tasks</h3>
                 <button class="btn btn-secondary btn-sm" onclick="openInlineSubtaskComposer()" data-i18n="html_create_sub_task">+ Create Sub-Task</button>
@@ -1724,7 +1704,7 @@
     <script defer src="js/enterprise-beta.js"></script>
     <script defer src="js/whatsapp-mock-data.js"></script>
     <script defer src="js/whatsapp-inbox.js"></script>
-    <script defer src="js/app.js?v=2026111705"></script>
+    <script defer src="js/app.js?v=2026111901"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

@@ -12,16 +12,13 @@ function assert(condition, message) {
 }
 
 assert(index.includes('id="detailsTaskCreator"') && index.includes('id="detailsTaskDue"'), 'task details show creator and due date');
-for (const status of ['todo', 'in_progress', 'review', 'completed']) {
-    assert(index.includes(`data-status="${status}"`), `task details include ${status} progress action`);
-}
-assert(app.includes('window.handleTaskProgressQuickAction'), 'progress actions use a shared task handler');
-assert(app.includes('window.updateTaskProgressQuickActions(task);'), 'task details synchronize progress controls');
-assert(app.includes("const progressCardAction = task.status === 'in_progress' && canChangeTaskStage"), 'in-progress task cards render a progress action');
-assert(app.includes('function syncTaskCardProgressAction(task)'), 'status changes synchronize the card progress action');
+assert(!index.includes('taskProgressQuickActions') && !index.includes('task-progress-action'), 'task details omit progress controls');
+assert(!app.includes('handleTaskProgressQuickAction') && !app.includes('updateTaskProgressQuickActions'), 'task details do not wire removed progress controls');
+assert(!index.includes('editTaskProgress') && !index.includes('editTaskProgressValue') && !app.includes('updateEditTaskProgress'), 'edit task omits the progress slider');
+assert(!app.includes('progressCardAction') && !app.includes('syncTaskCardProgressAction'), 'pipeline cards omit progress action');
 assert(app.includes("if (!assignee) {") && app.includes('Please select an assignee.'), 'new task assignee is enforced in the handler');
 assert(app.includes('const effectiveAssignee = assignee;'), 'new task creation no longer silently falls back to the creator');
-assert(css.includes('.task-progress-quick-actions') && css.includes('grid-template-columns: repeat(4'), 'progress actions have responsive styling');
+assert(!css.includes('.task-progress-quick-actions') && !css.includes('.task-card-progress-action'), 'removed task progress controls have no remaining styles');
 assert(css.includes('.edit-task-scroll-body') && css.includes('position: sticky !important'), 'edit modal scroll body and pinned footer are styled');
 assert(migration.includes('Task assignee is required') && migration.includes('Task due date is required'), 'database guard enforces required creation fields');
 assert(migration.includes('BEFORE INSERT ON public.tasks'), 'database guard only applies to new rows');
