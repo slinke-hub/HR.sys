@@ -25,6 +25,7 @@ assert.match(pageAccessSource, /data-page-access-group/);
 assert.match(pageAccessSource, /const grantDepartmentOptions = depts\.map\(department =>/);
 assert.match(pageAccessSource, /Already granted/);
 assert.match(pageAccessSource, /db\.fetchDepartments\(false, true\)/);
+assert.doesNotMatch(pageAccessSource, /Disable page for|handleDisableAccess|PAGE_DISABLED/);
 assert.match(pageAccessSource, /window\.filterAdminPageAccess = function/);
 assert.match(pageAccessSource, /window\.handleBulkPageAccess = async function/);
 assert.match(pageAccessSource, /currentPages\.filter\(page => !managedPages\.includes\(page\)\)/);
@@ -39,6 +40,6 @@ assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.page-access-toolbar \{ gr
 assert.match(db, /from\('user_permissions'\)[\s\S]*\.eq\('user_id', userId\)[\s\S]*\.maybeSingle\(\)/);
 assert.match(html, /frame-src 'self' blob: https:\/\/vercel\.live/);
 assert.match(vercel, /frame-src 'self' blob: https:\/\/vercel\.live/);
-assert.match(serviceWorker, /muqam-hr-mobile-v255/);
+assert.match(serviceWorker, /muqam-hr-mobile-v260/);
 
 console.log('Admin page access layout and interaction checks passed.');

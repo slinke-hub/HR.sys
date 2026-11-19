@@ -11,8 +11,8 @@ const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '202
 const managerMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20261115100000_archived_task_manager_supervisor_read_access.sql'), 'utf8');
 
 assert.match(app, /const canViewAllArchivedTaskRecords = \(\) =>[\s\S]*?MANAGER[\s\S]*?SUPERVISOR/);
-assert.match(app, /if \(viewId === 'archived_tasks'\)[\s\S]*?currentUserRole[\s\S]*?canViewAllArchivedTaskRecords\(\)/);
-assert.match(app, /employeeAllowedViews = new Set\(\[[\s\S]*?'archived_tasks'/);
+assert.match(app, /async function canCurrentUserAccessView\(viewId\)[\s\S]*?return hasExplicitPageGrant\(viewId\)/);
+assert.doesNotMatch(app, /employeeAllowedViews = new Set\(\[[\s\S]*?'archived_tasks'/);
 assert.match(app, /const canViewArchivedTaskRecord = task => !!task\?\.archived_at[\s\S]*?canViewAllArchivedTaskRecords\(\)[\s\S]*?task\.created_by === currentUser\.id[\s\S]*?task\.assignee_id === currentUser\.id[\s\S]*?task\.assignee_ids\.includes\(currentUser\.id\)[\s\S]*?task\.watchers\.includes\(currentUser\.id\)/);
 assert.match(app, /const canInteractWithTask = task => !!task && !task\.archived_at/);
 assert.match(app, /const canOpenTaskDetails = task =>[\s\S]*canViewArchivedTaskRecord\(task\)/);

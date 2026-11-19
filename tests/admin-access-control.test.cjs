@@ -17,7 +17,8 @@ assert(db.includes('disabled_pages: disabledPages'), 'database writes disabled p
 assert(db.includes('disabledPages: data.disabled_pages'), 'database reads disabled pages');
 assert(app.includes('APP_FEATURE_CATALOG'), 'application defines a stable feature catalog');
 assert(app.includes('canCurrentUserUseFeature'), 'application evaluates feature access');
-assert(app.includes('canCurrentUserAccessPageOverride'), 'application evaluates explicit page disables');
+assert(app.includes('hasExplicitPageGrant'), 'application evaluates explicit Grant Access permissions');
+assert(!app.includes('handleDisableAccess') && !app.includes('Disable page for'), 'Disable page controls are removed');
 assert(app.includes('handleGrantFeature'), 'admin UI can disable a feature');
 assert(app.includes('toggleUserFeature') && app.includes('toggleRoleFeature'), 'admin UI can scope feature controls');
 assert(app.includes('admin_page_access') && app.includes('project-command-center'), 'admin page catalog includes full application routes');

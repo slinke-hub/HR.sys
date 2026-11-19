@@ -22,17 +22,14 @@ const commandCenter = app.slice(commandCenterStart, app.indexOf('function canVie
 
 assert.match(db, /rpc\('list_accessible_projects_secure'\)/, 'Project membership must be decided by the scoped secure list RPC');
 assert.match(db, /rpc\('get_project_detail_secure',\s*\{\s*p_project_id:\s*projectId\s*\}\)/, 'Project detail must use the secure detail RPC');
-assert.match(accessView, /async function hasAccessibleProjectMembership\([\s\S]*?db\.fetchProjects\(\)[\s\S]*?projects\.some\(project => !!project\?\.id\)/);
-assert.match(accessView, /if \(await hasAccessibleProjectMembership\(\)\) return true/, 'Scoped Project membership should grant the Projects page, not Command Center');
-assert.match(accessView, /const detail = await db\.fetchProjectDetails\(projectId\)[\s\S]*?detail\?\.success[\s\S]*?detail\.data\?\.project\?\.id/, 'Specific Project routes must ask the secure detail RPC');
-assert.match(accessView, /new Set\(\['dashboard', 'requests', 'time', 'tasks', 'documents', 'profile'\]\)\.has\(viewId\)/, 'Unassigned employees do not gain Projects through the default Employee allowlist');
-assert.match(sidebar, /const hasProjectMembership = [\s\S]*?await hasAccessibleProjectMembership\(\)/);
-assert.match(sidebar, /canUseProjectPages = canUseMarketingPages \|\| managerProjectAccess \|\| canViewFullProjectCommandCenter\(\) \|\| hasProjectMembership/);
-assert.match(sidebar, /projectsNav\.forEach\(item => \{ item\.style\.display = canUseProjectPages \? 'flex' : 'none'; \}\)/, 'Desktop and mobile navigation share the scoped Projects visibility');
+assert.match(accessView, /return hasExplicitPageGrant\(viewId\)/, 'All page routes require an explicit Grant Access permission');
+assert.doesNotMatch(accessView, /hasAccessibleProjectMembership|fetchProjectDetails\(projectId\)/, 'Project membership does not bypass Grant Access');
+assert.doesNotMatch(sidebar, /hasProjectMembership|canUseProjectPages|canUseMarketingPages/, 'Navigation does not use role or membership fallbacks');
+assert.match(sidebar, /projectsNav\.forEach\(item => \{ item\.style\.display = canShowPage\(item\.dataset\.view \|\| 'projects'\) \? 'flex' : 'none'; \}\)/, 'Desktop and mobile navigation share Grant Access visibility');
 assert.match(openDetail, /const detailResult = usePreAuthorized[\s\S]*?: await db\.fetchProjectDetails\(id\)/);
 assert.doesNotMatch(openDetail.slice(0, openDetail.indexOf('const detailResult')), /canViewFullProjectCommandCenter/, 'Do not deny assigned Project members before the backend detail RPC decides');
 assert.match(openDetail, /if \(!canViewFullProjectCommandCenter\(\)\) return openAssignedProjectTodoDetail\(id\)/, 'Preserve the narrower assigned-To-Do fallback after a denied detail RPC');
-assert.match(app, /viewId === 'project-command-center'\) return canViewFullProjectCommandCenter\(\)/, 'Command Center route must retain its separate admin gate');
+assert.doesNotMatch(app, /viewId === 'project-command-center'\) return canViewFullProjectCommandCenter\(\)/, 'Command Center no longer bypasses Grant Access');
 assert.match(commandCenter, /if \(!currentUser \|\| !canViewFullProjectCommandCenter\(\)\)/, 'Command Center renderer must retain its separate admin gate');
 assert.match(app, /if \(directProjectId && !route\.get\('todo'\)\) void window\.openProjectDetail\(directProjectId\)/, 'Direct Project URLs open the detail after route authorization');
 assert.match(phase1, /IF v_user IS NULL OR NOT public\.is_project_portfolio_admin\(v_user\) THEN[\s\S]*?Project command center access denied/);

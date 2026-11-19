@@ -2844,11 +2844,22 @@ function canCurrentUserUseFeature(featureId) {
     const permission = getCurrentRolePermission();
     return !((permission?.disabled_features || []).includes(featureId));
 }
-function canCurrentUserAccessPageOverride(viewId) {
+function hasExplicitPageGrant(viewId) {
     if (!viewId || isAdminRole(currentUserRole || currentUserProfile?.role)) return true;
-    if ((window.appUserDisabledPages || []).includes(viewId)) return false;
-    const permission = getCurrentRolePermission();
-    return !((permission?.disabled_pages || []).includes(viewId));
+    if (Array.isArray(window.appUserPermissions) && window.appUserPermissions.includes(viewId)) return true;
+    const normalizedRole = normalizeAccessValue(currentUserRole || currentUserProfile?.role || '');
+    const departmentId = currentUserProfile?.department_id || currentUser?.department_id;
+    return (window.appRolePermissionsCache || []).some(permission => {
+        const isRoleMatch = normalizeAccessValue(permission.role) === normalizedRole;
+        const isDepartmentMatch = departmentId && permission.role === `DEPT_${departmentId}`;
+        return (isRoleMatch || isDepartmentMatch) && Array.isArray(permission.allowed_pages) && permission.allowed_pages.includes(viewId);
+    });
+}
+
+// Kept as a compatibility hook for older integrations. Page visibility is now
+// governed only by explicit Grant Access permissions.
+function canCurrentUserAccessPageOverride() {
+    return true;
 }
 window.canCurrentUserAccessPageOverride = canCurrentUserAccessPageOverride;
 window.canCurrentUserUseFeature = canCurrentUserUseFeature;
@@ -2874,100 +2885,7 @@ function applyFeatureAccessControls(root = document) {
 window.applyFeatureAccessControls = applyFeatureAccessControls;
 
 async function canCurrentUserAccessView(viewId) {
-    const normalizedRole = String(currentUserRole || currentUserProfile?.role || '').toUpperCase();
-    const isAdmin = isAdminRole(normalizedRole);
-    if (isAdmin) return true;
-    if (!canCurrentUserAccessPageOverride(viewId)) return false;
-    if (viewId === 'dashboard') return true;
-    if (viewId === 'my-day') return true;
-    if (viewId === 'archived_tasks') {
-        return String(currentUserRole || currentUserProfile?.role || '').trim().toUpperCase() === 'EMPLOYEE'
-            || canViewAllArchivedTaskRecords();
-    }
-    if (viewId === 'project-command-center') return canViewFullProjectCommandCenter();
-
-    if (viewId === 'users') return canCurrentUserManageUsers();
-    if (['hr_suite_beta', 'ats_beta', 'lms_beta', 'appraisals_beta', 'surveys_beta', 'shifts_beta', 'expenses_beta'].includes(viewId)) return window.canCurrentUserUseHrSuiteBeta?.() === true;
-    if (viewId === 'crm') return canCurrentUserUseCRM();
-    if (viewId === 'archived_contracts') return normalizedRole !== 'EMPLOYEE' && window.canCurrentUserEditContracts();
-
-    if (viewId === 'projects' && !canViewFullProjectCommandCenter()) {
-        const params = new URLSearchParams(window.location.search);
-        const projectId = params.get('project');
-        const todoId = params.get('todo');
-        if (projectId && todoId) {
-            const cached = window.assignedProjectTodoContext;
-            if (cached?.projectId === projectId && cached?.todoId === todoId && cached?.items?.length) return true;
-            const result = await db.fetchAssignedProjectTodoContext(projectId, todoId);
-            if (result.success) {
-                window.assignedProjectTodoContext = { projectId, todoId, items: result.data };
-                if (window.viewHTMLCache) delete window.viewHTMLCache.projects;
-                return true;
-            }
-            // Keep notification/deep-link access to assigned Project To-Dos
-            // narrower than general Project membership.
-            return false;
-        }
-        if (projectId) {
-            // A specific Project route is authorized by the same secure RPC
-            // used to load its detail, not by client-side role/title rules.
-            const detail = await db.fetchProjectDetails(projectId);
-            if (detail?.success && String(detail.data?.project?.id || '') === String(projectId)) {
-                window.preAuthorizedProjectDetail = {
-                    userId: currentUser.id,
-                    projectId: String(projectId),
-                    data: detail.data,
-                    expiresAt: Date.now() + 10000
-                };
-                return true;
-            }
-        }
-        // The secure list RPC returns only Projects this user can access. Its
-        // result is the authority for whether an ordinary member can reach
-        // the scoped Projects portfolio.
-        if (await hasAccessibleProjectMembership()) return true;
-    }
-
-    if (viewId === 'projects' || viewId === 'crm' || viewId === 'clients') {
-        const dept = (await getCurrentDepartmentName()).trim().toLowerCase();
-        if (normalizedRole === 'EMPLOYEE' && (dept === 'marketing & sales' || dept === 'sales' || dept === 'marketing')) return true;
-    }
-
-    if (window.appUserPermissions && window.appUserPermissions.includes(viewId)) {
-        return true;
-    }
-
-    if (window.appRolePermissionsCache && window.appRolePermissionsCache.length > 0) {
-        // Check exact role
-        let perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole);
-        if (perm && perm.allowed_pages && perm.allowed_pages.includes(viewId)) return true;
-        
-        // Check department role prefix (e.g. DEPT_uuid)
-        const currentUserDept = currentUserProfile?.department_id || currentUser?.department_id;
-        if (currentUserDept) {
-            let deptPerm = window.appRolePermissionsCache.find(p => p.role === `DEPT_${currentUserDept}`);
-            if (deptPerm && deptPerm.allowed_pages && deptPerm.allowed_pages.includes(viewId)) return true;
-        }
-    }
-
-    if (viewId === 'leave_calculator') return normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
-    if (normalizedRole === 'EMPLOYEE') {
-        return new Set(['dashboard', 'requests', 'time', 'tasks', 'documents', 'profile']).has(viewId);
-    }
-    if (viewId === 'employees') return normalizedRole !== 'EMPLOYEE';
-
-    return true;
-}
-
-async function hasAccessibleProjectMembership() {
-    if (!currentUser?.id || typeof db?.fetchProjects !== 'function') return false;
-    try {
-        const projects = await db.fetchProjects();
-        return Array.isArray(projects) && projects.some(project => !!project?.id);
-    } catch (error) {
-        console.warn('Accessible Project membership check failed; Projects remain hidden.', error?.message || error);
-        return false;
-    }
+    return hasExplicitPageGrant(viewId);
 }
 
 window.updateSidebarVisibility = async function () {
@@ -2989,77 +2907,31 @@ window.updateSidebarVisibility = async function () {
     const hrSuiteBetaNav = document.getElementById('navHrSuiteBeta');
 
     const isAdmin = isAdminRole(normalizedRole);
-    const canManageUsers = canCurrentUserManageUsers();
-    const isHrManager = normalizedRole === 'HR_MANAGER' || /HR\s*MANAGER/i.test(String(currentUserProfile?.job_title || ''));
-    
+    const canShowPage = viewId => hasExplicitPageGrant(viewId);
+
     document.querySelectorAll('.sidebar-nav > .nav-item[data-view]').forEach(item => {
         const viewId = item.dataset.view;
-        if (!canCurrentUserAccessPageOverride(viewId)) {
-            item.style.display = 'none';
-        } else if (viewId === 'dashboard' || viewId === 'my-day') {
-            item.style.display = 'flex';
-        } else if (viewId === 'archived_tasks') {
-            item.style.display = (normalizedRole === 'EMPLOYEE' || canViewAllArchivedTaskRecords()) ? 'flex' : 'none';
-        } else if (isAdmin) {
-            item.style.display = 'flex';
-        } else if (window.appUserPermissions && window.appUserPermissions.includes(viewId)) {
-            item.style.display = 'flex';
-        } else if (window.appRolePermissionsCache && window.appRolePermissionsCache.length > 0) {
-            const perm = window.appRolePermissionsCache.find(p => p.role === normalizedRole)
-                || (currentUserProfile?.department_id ? window.appRolePermissionsCache.find(p => p.role === `DEPT_${currentUserProfile.department_id}`) : null);
-            item.style.display = perm && perm.allowed_pages && perm.allowed_pages.includes(viewId) ? 'flex' : 'none';
-        } else {
-            const employeeAllowedViews = new Set(['dashboard', 'my-day', 'requests', 'time', 'tasks', 'archived_tasks', 'documents', 'employees']);
-            if (normalizedRole === 'EMPLOYEE') {
-                item.style.display = employeeAllowedViews.has(viewId) ? 'flex' : 'none';
-            } else {
-                if (item.style.display === 'none' && !['admin', 'users', 'departments', 'translations', 'templates', 'analytics'].includes(viewId)) {
-                    item.style.display = 'flex';
-                }
-            }
-        }
+        item.style.display = canShowPage(viewId) ? 'flex' : 'none';
     });
 
-    if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
+    if (adminNav) adminNav.style.display = canShowPage('admin') ? 'flex' : 'none';
     if (headerNavAdmin) headerNavAdmin.style.display = isAdmin ? 'inline-flex' : 'none';
-    if (usersNav) usersNav.style.display = canManageUsers ? 'flex' : 'none';
+    if (usersNav) usersNav.style.display = canShowPage('users') ? 'flex' : 'none';
     if (analyticsNav) analyticsNav.style.display = 'none';
-    if (employeesNav) employeesNav.style.display = 'flex';
-    if (departmentsNav) departmentsNav.style.display = isAdmin ? 'flex' : 'none';
-    if (translationsNav) translationsNav.style.display = isAdmin ? 'flex' : 'none';
-    if (templatesNav) templatesNav.style.display = isAdmin ? 'flex' : 'none';
-    if (leaveCalculatorNav) leaveCalculatorNav.style.display = (isAdmin || isHrManager) ? 'flex' : 'none';
-    if (hrSuiteBetaNav) hrSuiteBetaNav.style.display = window.canCurrentUserUseHrSuiteBeta?.() ? 'flex' : 'none';
+    if (employeesNav) employeesNav.style.display = canShowPage('employees') ? 'flex' : 'none';
+    if (departmentsNav) departmentsNav.style.display = canShowPage('departments') ? 'flex' : 'none';
+    if (translationsNav) translationsNav.style.display = canShowPage('translations') ? 'flex' : 'none';
+    if (templatesNav) templatesNav.style.display = canShowPage('templates') ? 'flex' : 'none';
+    if (leaveCalculatorNav) leaveCalculatorNav.style.display = canShowPage('leave_calculator') ? 'flex' : 'none';
+    if (hrSuiteBetaNav) hrSuiteBetaNav.style.display = canShowPage('hr_suite_beta') ? 'flex' : 'none';
     const custodyHandoverNav = document.getElementById('navCustodyHandover');
-    if (custodyHandoverNav) custodyHandoverNav.style.display = (isAdmin || isHrManager) ? 'flex' : 'none';
+    if (custodyHandoverNav) custodyHandoverNav.style.display = canShowPage('custody_handover') ? 'flex' : 'none';
 
-    const isAccountantManager = currentUserProfile && /accountant manager|finance manager/i.test(currentUserProfile.job_title || '');
-    if (payrollNav) payrollNav.style.display = (isAdmin || isAccountantManager) ? 'flex' : 'none';
-
-    const canUseMarketingPages = await canCurrentUserUseCRM();
-    // Managers and supervisors can use the Project Command Center even when
-    // they are not members of the Sales/Marketing departments. Keep the
-    // portfolio entry reachable for those users instead of hiding the only
-    // navigation path to a page they are already authorized to open.
-    const managerProjectAccess = ['MANAGER', 'SUPERVISOR'].includes(normalizedRole)
-        || /manager|supervisor|مدير|مشرف/i.test(String(currentUserProfile?.job_title || currentUserProfile?.job_title_ar || ''));
-    const hasProjectMembership = !canUseMarketingPages && !managerProjectAccess && !canViewFullProjectCommandCenter()
-        ? await hasAccessibleProjectMembership()
-        : false;
-    const canUseProjectPages = canUseMarketingPages || managerProjectAccess || canViewFullProjectCommandCenter() || hasProjectMembership;
-    projectsNav.forEach(item => { item.style.display = canUseProjectPages ? 'flex' : 'none'; });
-    if (crmNav) crmNav.style.display = canUseMarketingPages ? 'flex' : 'none';
-    if (clientsNav) clientsNav.style.display = canUseMarketingPages ? 'flex' : 'none';
-
-    let isHussain = false;
-    if (typeof currentUser !== 'undefined' && currentUser) {
-        isHussain = (currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain')) || (currentUser.email && currentUser.email.toLowerCase().includes('hussain'));
-    }
-    const hasGeneralApprovalAccess = isAdmin || ['MANAGER', 'SUPERVISOR'].includes(normalizedRole) || isHussain;
-    const ownPendingApprovals = !hasGeneralApprovalAccess && currentUser?.id
-        ? await db.fetchPendingCrmApprovals() : [];
-    const hasAssignedCrmApproval = ownPendingApprovals.some(step => String(step.approver_id) === String(currentUser?.id));
-    if (approvalsNav) approvalsNav.style.display = (hasGeneralApprovalAccess || hasAssignedCrmApproval) ? 'flex' : 'none';
+    if (payrollNav) payrollNav.style.display = canShowPage('payroll') ? 'flex' : 'none';
+    projectsNav.forEach(item => { item.style.display = canShowPage(item.dataset.view || 'projects') ? 'flex' : 'none'; });
+    if (crmNav) crmNav.style.display = canShowPage('crm') ? 'flex' : 'none';
+    if (clientsNav) clientsNav.style.display = canShowPage('clients') ? 'flex' : 'none';
+    if (approvalsNav) approvalsNav.style.display = canShowPage('approvals') ? 'flex' : 'none';
 };
 
 window.handleLoginSubmit = async function (e) {
@@ -6586,13 +6458,11 @@ async function renderAdminPageAccess() {
         if (!p || !p.allowed_pages) return false;
         return p.allowed_pages.includes(v);
     };
-    const hasRolePageDisabled = (r, v) => (perms.find(x => x.role === r)?.disabled_pages || []).includes(v);
     const hasUserPerm = (userId, v) => {
         const up = allUserPerms.find(x => x.user_id === userId);
         if (!up || !up.allowed_pages) return false;
         return up.allowed_pages.includes(v);
     };
-    const hasUserPageDisabled = (userId, v) => (allUserPerms.find(x => x.user_id === userId)?.disabled_pages || []).includes(v);
     const hasRoleFeatureDisabled = (principal, featureId) => (perms.find(x => x.role === principal)?.disabled_features || []).includes(featureId);
     const hasUserFeatureDisabled = (userId, featureId) => (allUserPerms.find(x => x.user_id === userId)?.disabled_features || []).includes(featureId);
     const roleGrantCount = roles.reduce((total, role) => total + availableViews.filter(view => hasRolePerm(role, view.id)).length, 0);
@@ -6613,9 +6483,6 @@ async function renderAdminPageAccess() {
         const roleChips = roles.filter(role => hasRolePerm(role, view.id)).map(role => renderChip('ROLE', role, view.id, formatRole(role), 'role', 'shield')).join('');
         const departmentChips = depts.filter(department => hasRolePerm(`DEPT_${department.id}`, view.id)).map(department => renderChip('ROLE', `DEPT_${department.id}`, view.id, departmentName(department), 'department', 'building-2')).join('');
         const userChips = allProfiles.filter(profile => hasUserPerm(profile.id, view.id)).map(profile => renderChip('USER', profile.id, view.id, employeeName(profile), 'employee', 'user-round')).join('');
-        const disabledRoleChips = roles.filter(role => hasRolePageDisabled(role, view.id)).map(role => renderChip('PAGE_DISABLED_ROLE', role, view.id, `${formatRole(role)} (${localize('disabled', 'معطل')})`, 'role', 'shield-minus')).join('');
-        const disabledDepartmentChips = depts.filter(department => hasRolePageDisabled(`DEPT_${department.id}`, view.id)).map(department => renderChip('PAGE_DISABLED_ROLE', `DEPT_${department.id}`, view.id, `${departmentName(department)} (${localize('disabled', 'معطل')})`, 'department', 'shield-minus')).join('');
-        const disabledUserChips = allProfiles.filter(profile => hasUserPageDisabled(profile.id, view.id)).map(profile => renderChip('PAGE_DISABLED_USER', profile.id, view.id, `${employeeName(profile)} (${localize('disabled', 'معطل')})`, 'employee', 'shield-minus')).join('');
         const grantCount = [roleChips, departmentChips, userChips].filter(Boolean).length;
         const remainingRoles = roles.filter(role => !hasRolePerm(role, view.id));
         const grantDepartmentOptions = depts.map(department => {
@@ -6625,18 +6492,14 @@ async function renderAdminPageAccess() {
         }).join('');
         const remainingDepartments = depts.filter(department => !hasRolePerm(`DEPT_${department.id}`, view.id));
         const remainingUsers = allProfiles.filter(profile => !hasUserPerm(profile.id, view.id));
-        const remainingPageDisableRoles = roles.filter(role => !hasRolePageDisabled(role, view.id));
-        const remainingPageDisableDepartments = depts.filter(department => !hasRolePageDisabled(`DEPT_${department.id}`, view.id));
-        const remainingPageDisableUsers = allProfiles.filter(profile => !hasUserPageDisabled(profile.id, view.id));
         return `<article class="page-access-card" data-page-access-card data-page-label="${escapeHTML(`${view.label} ${view.id}`.toLowerCase())}" data-page-configured="${grantCount ? 'true' : 'false'}">
             <header class="page-access-card-header"><span class="page-access-card-icon"><i data-lucide="${view.icon}"></i></span><div><h3>${escapeHTML(view.label)}</h3><code>${escapeHTML(view.id)}</code></div><span class="page-access-grant-count">${roles.filter(role => hasRolePerm(role, view.id)).length + depts.filter(department => hasRolePerm(`DEPT_${department.id}`, view.id)).length + allProfiles.filter(profile => hasUserPerm(profile.id, view.id)).length}</span></header>
-            <div class="page-access-chip-list">${roleChips}${departmentChips}${userChips || ''}${disabledRoleChips}${disabledDepartmentChips}${disabledUserChips}${!roleChips && !departmentChips && !userChips && !disabledRoleChips && !disabledDepartmentChips && !disabledUserChips ? `<p class="page-access-empty">${escapeHTML(localize('No explicit access assigned', 'لم يتم تعيين صلاحية مباشرة'))}</p>` : ''}</div>
+            <div class="page-access-chip-list">${roleChips}${departmentChips}${userChips || ''}${!roleChips && !departmentChips && !userChips ? `<p class="page-access-empty">${escapeHTML(localize('No explicit access assigned', 'لم يتم تعيين صلاحية مباشرة'))}</p>` : ''}</div>
             <label class="page-access-add"><span>${escapeHTML(localize('Grant access', 'منح صلاحية'))}</span><select class="form-control" onchange="handleGrantAccess(this, '${view.id}')"><option value="">${escapeHTML(localize('Choose a role, department, or employee…', 'اختر دوراً أو قسماً أو موظفاً…'))}</option>
                 ${remainingRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${remainingRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}
                 ${depts.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${grantDepartmentOptions}</optgroup>` : ''}
                 ${remainingUsers.length ? `<optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${remainingUsers.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>` : ''}
             </select></label>
-            <label class="page-access-add"><span>${escapeHTML(localize('Disable page for', 'تعطيل الصفحة لـ'))}</span><select class="form-control" onchange="handleDisableAccess(this, '${view.id}')"><option value="">${escapeHTML(localize('Choose a role, department, or employee…', 'اختر دوراً أو قسماً أو موظفاً…'))}</option>${remainingPageDisableRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${remainingPageDisableRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}${remainingPageDisableDepartments.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${remainingPageDisableDepartments.map(department => `<option value="ROLE:DEPT_${department.id}">${escapeHTML(departmentName(department))}</option>`).join('')}</optgroup>` : ''}${remainingPageDisableUsers.length ? `<optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${remainingPageDisableUsers.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>` : ''}</select></label>
         </article>`;
     };
     const renderFeatureCard = feature => {
@@ -6750,8 +6613,6 @@ window.handleGrantAccess = async function(selectElement, viewId) {
 window.handleRevokeAccess = async function(type, id, viewId) {
     if (type === 'FEATURE_USER') return window.toggleUserFeature(id, viewId, false);
     if (type === 'FEATURE_ROLE') return window.toggleRoleFeature(id, viewId, false);
-    if (type === 'PAGE_DISABLED_USER') return window.toggleUserPageDisabled(id, viewId, false);
-    if (type === 'PAGE_DISABLED_ROLE') return window.toggleRolePageDisabled(id, viewId, false);
     if (type === 'USER') {
         await window.toggleUserPermission(id, viewId, false);
     } else {
@@ -6834,35 +6695,6 @@ window.toggleRoleFeature = async function (role, featureId, isDisabled) {
     renderView('admin_page_access');
 };
 
-window.handleDisableAccess = async function (selectElement, viewId) {
-    const value = selectElement.value;
-    selectElement.value = '';
-    if (!value) return;
-    if (value.startsWith('USER:')) return window.toggleUserPageDisabled(value.slice(5), viewId, true);
-    if (value.startsWith('ROLE:')) return window.toggleRolePageDisabled(value.slice(5), viewId, true);
-};
-
-window.toggleUserPageDisabled = async function (userId, viewId, isDisabled) {
-    const record = (window.allUserPermsData || []).find(item => item.user_id === userId);
-    const disabled = new Set(record?.disabled_pages || []);
-    if (isDisabled) disabled.add(viewId); else disabled.delete(viewId);
-    const result = await db.updateUserPermissions(userId, record?.allowed_pages || [], record?.disabled_features || [], [...disabled]);
-    if (!result?.success) return showToast(currentLang === 'ar' ? 'تعذر تحديث صلاحية الصفحة.' : 'Page access update failed.', 'danger');
-    if (currentUser?.id === userId) { await window.loadUserPermissions(currentUser.id); await window.updateSidebarVisibility(); }
-    showToast(currentLang === 'ar' ? 'تم تحديث صلاحية الصفحة.' : 'Page access updated.', 'success');
-    renderView('admin_page_access');
-};
-
-window.toggleRolePageDisabled = async function (role, viewId, isDisabled) {
-    const record = (window.adminPageAccessRoleData || window.appRolePermissionsCache || []).find(item => item.role === role);
-    const disabled = new Set(record?.disabled_pages || []);
-    if (isDisabled) disabled.add(viewId); else disabled.delete(viewId);
-    const result = await db.updateRolePermissions(role, record?.allowed_pages || [], record?.disabled_features || [], [...disabled]);
-    if (!result?.success) return showToast(currentLang === 'ar' ? 'تعذر تحديث صلاحية الصفحة.' : 'Page access update failed.', 'danger');
-    await window.loadRolePermissions();
-    showToast(currentLang === 'ar' ? 'تم تحديث صلاحية الصفحة.' : 'Page access updated.', 'success');
-    renderView('admin_page_access');
-};
 // Render User Management (Admin Only)
 window.handleCreateUser = async function (e) {
     e.preventDefault();
