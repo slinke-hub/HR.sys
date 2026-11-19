@@ -261,20 +261,18 @@
     max-width: 100%;
   }
 
-  .task-v2-shell .task-pipeline-card-footer .task-stage-select-wrap {
-    grid-column: 1 / -1;
-    width: 100%;
-  }
-
-  .task-v2-shell .task-pipeline-card-footer .task-stage-select {
-    width: 100%;
-    min-width: 0;
-  }
-
   .task-v2-shell .task-pipeline-card-footer .task-assignee {
     width: 100%;
     min-width: 0;
     justify-content: flex-start;
+  }
+
+  .task-v2-shell .task-pipeline-card-footer .task-card-people,
+  .task-v2-shell .task-pipeline-card-footer .task-assignee,
+  .task-v2-shell .task-pipeline-card-footer .task-card-creator,
+  .task-v2-shell .task-pipeline-card-footer .task-person-copy {
+    min-width: 0;
+    max-width: 100%;
   }
 
   .task-v2-shell .task-pipeline-card-footer .task-card-signals {

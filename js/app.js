@@ -8729,7 +8729,8 @@ function renderTaskCard(task) {
     const assigneeName = window.formatEmployeeName(task.assignee) || (assignedUsers[0] ? window.formatEmployeeName(assignedUsers[0]) : '') || t('task_unknown') || 'Unassigned';
     const assigneeProfiles = assignedUsers.length ? assignedUsers : [task.assignee].filter(Boolean);
     const assigneeLabel = assigneeProfiles.map(user => window.formatEmployeeName(user)).filter(Boolean).join(', ') || assigneeName;
-    const isCrmProposalDesignTask = ['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task.crm_workflow_kind);
+    const creatorProfile = task.creator || (window.taskAllUsersCache || []).find(user => user.id === task.created_by);
+    const creatorName = window.formatEmployeeName(creatorProfile) || taskDetailText('Unknown', 'غير معروف');
     const isOverdue = task.status === 'late' || (task.due_date && !['completed', 'Approved'].includes(task.status) && new Date(`${task.due_date}T23:59:59`) < new Date());
     const dueLabel = task.due_date
         ? new Intl.DateTimeFormat(currentLang === 'ar' ? 'ar-SA' : 'en', { month: 'short', day: 'numeric' }).format(new Date(`${task.due_date}T12:00:00`))
@@ -8742,13 +8743,16 @@ function renderTaskCard(task) {
             </div>
             ${task.parent_task_id ? `<div class="task-parent-reference"><i data-lucide="corner-down-right"></i> ${escapeHTML(parentTask?.displayTitle || parentTask?.title || 'Parent task')}</div>` : ''}
             <div class="task-pipeline-card-footer">
-                ${canChangeTaskStage ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select status-${taskStatusClass(task.status)}" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
-                    ['todo','To do'],['in_progress','In progress'], ...(isCrmProposalDesignTask ? [['late','Late']] : []), ['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done'],['canceled','Canceled']
-                ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
-                <button type="button" class="task-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>
-                    <i data-lucide="users"></i>
-                    <span class="task-assignee-full-name">${escapeHTML(assigneeLabel)}</span>
-                </button>
+                <div class="task-card-people">
+                    <button type="button" class="task-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>
+                        <i data-lucide="users"></i>
+                        <span class="task-person-copy"><span class="task-person-label">${taskDetailText('Assigned to', 'مُعيّنة إلى')}</span><strong class="task-assignee-full-name">${escapeHTML(assigneeLabel)}</strong></span>
+                    </button>
+                    <div class="task-card-creator" title="${taskDetailText('Created by', 'أنشأها')}: ${escapeHTML(creatorName)}">
+                        <i data-lucide="user-round-plus"></i>
+                        <span class="task-person-copy"><span class="task-person-label">${taskDetailText('Created by', 'أنشأها')}</span><strong class="task-creator-full-name">${escapeHTML(creatorName)}</strong></span>
+                    </div>
+                </div>
                 <div class="task-card-signals">
                     <span class="task-priority-label"><i></i>${escapeHTML(priorityLabel)}</span>
                     <span class="task-due-date ${isOverdue ? 'is-overdue' : ''}"><i data-lucide="calendar"></i>${escapeHTML(dueLabel)}</span>
