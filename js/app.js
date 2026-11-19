@@ -17146,13 +17146,16 @@ window.filterDepartmentHeadOptions = function (selectedHeadId = '') {
     const department = (window.departmentModalDepartmentsCache || []).find(item =>
         item.id === departmentId || (!departmentId && item.name?.trim().toLowerCase() === departmentName)
     );
+    // A new department has no members yet, so its manager must be selectable
+    // from the active employee directory. Existing departments keep the
+    // narrower department-member list used by the edit flow.
     const employees = department
         ? (window.departmentProfilesCache || []).filter(profile => profile.department_id === department.id)
-        : [];
+        : (window.departmentProfilesCache || []).filter(profile => profile.is_active !== false);
     headSelect.innerHTML = '<option value="">Select a department employee...</option>' + employees.map(profile =>
         `<option value="${profile.id}">${escapeHTML(window.formatEmployeeName(profile) || 'Employee')} — ${escapeHTML(profile.job_title || 'No job title')}</option>`
     ).join('');
-    headSelect.disabled = !department || employees.length === 0;
+    headSelect.disabled = employees.length === 0;
     if (selectedHeadId && employees.some(profile => profile.id === selectedHeadId)) headSelect.value = selectedHeadId;
 };
 window.closeDepartmentModal = () => {
