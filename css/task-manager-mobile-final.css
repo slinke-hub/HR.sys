@@ -245,3 +245,47 @@
     overflow: visible;
   }
 }
+
+/* Keep compact pipeline cards readable when a stage column is narrower than
+   the combined status, progress, assignee, and date controls. */
+@media (max-width: 900px) {
+  .task-v2-shell .task-pipeline-card-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: .5rem;
+  }
+
+  .task-v2-shell .task-pipeline-card-footer .task-stage-select-wrap {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .task-v2-shell .task-pipeline-card-footer .task-stage-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .task-v2-shell .task-pipeline-card-footer .task-card-progress-action {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .task-v2-shell .task-pipeline-card-footer .task-assignee {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .task-v2-shell .task-pipeline-card-footer:not(:has(.task-card-progress-action)) .task-assignee,
+  .task-v2-shell .task-pipeline-card-footer .task-card-signals {
+    grid-column: 1 / -1;
+  }
+
+  .task-v2-shell .task-pipeline-card-footer .task-card-signals {
+    width: 100%;
+    min-width: 0;
+    justify-content: space-between;
+    gap: .5rem;
+  }
+}
