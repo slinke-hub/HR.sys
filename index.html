@@ -1445,7 +1445,7 @@
         <div class="side-panel-body">
             <div class="task-details-grid">
                 <div><strong data-i18n="html_assignee">Assignee</strong> <span id="detailsTaskAssignee"></span></div>
-                <div><strong data-i18n="html_creator">Creator</strong> <span id="detailsTaskCreator"></span></div>
+                <div><strong data-i18n="html_creator">Created by</strong> <span id="detailsTaskCreator"></span></div>
                 <div><strong data-i18n="html_status">Status</strong> <span id="detailsTaskStatus" class="badge"></span></div>
                 <div><strong data-i18n="html_priority">Priority</strong> <span id="detailsTaskPriority" class="badge"></span></div>
                 <div><strong data-i18n="html_visibility">Visibility</strong> <span id="detailsTaskVisibility"></span></div>
@@ -1454,6 +1454,19 @@
                 <div><strong data-i18n="html_due_date">Due Date</strong> <span id="detailsTaskDue"></span></div>
                 <div><strong data-i18n="html_est_time">Est. Time</strong> <span id="detailsTaskEstimate"></span></div>
             </div>
+
+            <section id="taskProgressQuickActions" class="task-progress-quick-actions" aria-label="Task progress actions">
+                <div class="task-progress-quick-actions-heading">
+                    <h3 data-i18n="ui_progress2">Progress</h3>
+                    <span id="detailsTaskProgressLabel">To do</span>
+                </div>
+                <div class="task-progress-quick-actions-buttons" role="group" aria-label="Task progress">
+                    <button type="button" class="task-progress-action" data-status="todo" onclick="window.handleTaskProgressQuickAction('todo')" data-i18n="task_todo">To Do</button>
+                    <button type="button" class="task-progress-action" data-status="in_progress" onclick="window.handleTaskProgressQuickAction('in_progress')" data-i18n="task_in_progress">In progress</button>
+                    <button type="button" class="task-progress-action" data-status="review" onclick="window.handleTaskProgressQuickAction('review')" data-i18n="task_review">Review</button>
+                    <button type="button" class="task-progress-action" data-status="completed" onclick="window.handleTaskProgressQuickAction('completed')" data-i18n="task_done">Done</button>
+                </div>
+            </section>
             
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
                 <h3 style="margin: 0;" data-i18n="html_sub_tasks">Sub-Tasks</h3>

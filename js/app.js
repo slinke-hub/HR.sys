@@ -4800,6 +4800,7 @@ window.openTaskDetailsModal = async function (id) {
     document.getElementById('detailsTaskDue').textContent = task.due_date || taskDetailText('Not set', 'غير محدد');
     if(document.getElementById('detailsTaskEnd')) document.getElementById('detailsTaskEnd').textContent = task.end_date || taskDetailText('Not set', 'غير محدد');
     document.getElementById('detailsTaskEstimate').textContent = task.estimated_time || taskDetailText('Not set', 'غير محدد');
+    window.updateTaskProgressQuickActions(task);
     prepareTeamworkTaskDetail(task);
 
     const list = document.getElementById('taskCommentsList');
@@ -4861,6 +4862,38 @@ window.openTaskDetailsModal = async function (id) {
         `).join('');
         if (window.lucide) window.lucide.createIcons();
     }
+};
+
+window.updateTaskProgressQuickActions = function (task) {
+    const root = document.getElementById('taskProgressQuickActions');
+    if (!root || !task) return;
+    const currentStatus = String(task.status || 'todo');
+    const canChange = canChangeTaskStageRecord(task) && !task.archived_at;
+    root.querySelectorAll('.task-progress-action').forEach(button => {
+        const isActive = button.dataset.status === currentStatus;
+        button.classList.toggle('is-active', isActive);
+        button.disabled = !canChange || isActive;
+    });
+    const label = root.querySelector('#detailsTaskProgressLabel');
+    if (label) label.textContent = taskDetailValue(currentStatus, 'status');
+};
+
+window.handleTaskProgressQuickAction = async function (status) {
+    const taskId = document.getElementById('detailsTaskId')?.value;
+    const task = taskId ? window.taskCache?.[taskId] : null;
+    if (!task || !['todo', 'in_progress', 'review', 'completed'].includes(status)) return;
+    if (!canChangeTaskStageRecord(task) || task.archived_at) {
+        showToast(taskDetailText('This task is available in view-only mode.', 'هذه المهمة متاحة للعرض فقط.'), 'warning');
+        return;
+    }
+    const result = await window.taskV2ChangeStage(task.id, status);
+    if (result?.error) return;
+    const savedStatus = result.status || status;
+    task.status = savedStatus;
+    document.getElementById('detailsTaskStatus').textContent = taskDetailValue(savedStatus, 'status');
+    window.updateTaskProgressQuickActions(task);
+    patchCachedTaskNodes(task);
+    window.scheduleTaskWorkspaceRefresh(0);
 };
 
 // Use one explicit action handler for Focus/Pipeline view buttons. Keeping the
@@ -10924,6 +10957,11 @@ window.handleCreateTask = async function (e) {
 
     const title = document.getElementById('taskTitle').value;
     const assignee = document.getElementById('taskAssignee').value;
+    if (!assignee) {
+        showToast(currentLang === 'ar' ? 'يرجى اختيار الموظف المعيّن.' : 'Please select an assignee.', 'warning');
+        document.getElementById('taskAssignee')?.focus();
+        return;
+    }
     const due = document.getElementById('taskDue')?.value || null;
     if (!due) {
         showToast(currentLang === 'ar' ? 'يرجى تحديد تاريخ التسليم.' : 'Please select a due date.', 'warning');
@@ -10944,7 +10982,7 @@ window.handleCreateTask = async function (e) {
     const taskListId = document.getElementById('taskListId')?.value
         || (activeSelection.startsWith('list_') ? activeSelection.slice(5) : null);
     const projectId = taskListId ? null : (document.getElementById('taskProject')?.value || null);
-    const effectiveAssignee = assignee || currentUser.id;
+    const effectiveAssignee = assignee;
 
     // Check if assignee is in Designing
     const allUsers = getTaskAssignmentDirectory();
