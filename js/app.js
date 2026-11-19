@@ -6534,7 +6534,7 @@ async function renderAdminPageAccess() {
         db.fetchAllRolePermissions(),
         db.fetchAllUserPermissions(),
         db.fetchAllProfiles(),
-        db.fetchDepartments(false)
+        db.fetchDepartments(false, true)
     ]);
 
     const localize = (english, arabic) => currentLang === 'ar' ? arabic : english;
@@ -6618,6 +6618,11 @@ async function renderAdminPageAccess() {
         const disabledUserChips = allProfiles.filter(profile => hasUserPageDisabled(profile.id, view.id)).map(profile => renderChip('PAGE_DISABLED_USER', profile.id, view.id, `${employeeName(profile)} (${localize('disabled', 'معطل')})`, 'employee', 'shield-minus')).join('');
         const grantCount = [roleChips, departmentChips, userChips].filter(Boolean).length;
         const remainingRoles = roles.filter(role => !hasRolePerm(role, view.id));
+        const grantDepartmentOptions = depts.map(department => {
+            const alreadyGranted = hasRolePerm(`DEPT_${department.id}`, view.id);
+            const statusLabel = alreadyGranted ? ` (${localize('Already granted', 'ممنوح مسبقاً')})` : '';
+            return `<option value="ROLE:DEPT_${department.id}"${alreadyGranted ? ' disabled' : ''}>${escapeHTML(departmentName(department) + statusLabel)}</option>`;
+        }).join('');
         const remainingDepartments = depts.filter(department => !hasRolePerm(`DEPT_${department.id}`, view.id));
         const remainingUsers = allProfiles.filter(profile => !hasUserPerm(profile.id, view.id));
         const remainingPageDisableRoles = roles.filter(role => !hasRolePageDisabled(role, view.id));
@@ -6628,7 +6633,7 @@ async function renderAdminPageAccess() {
             <div class="page-access-chip-list">${roleChips}${departmentChips}${userChips || ''}${disabledRoleChips}${disabledDepartmentChips}${disabledUserChips}${!roleChips && !departmentChips && !userChips && !disabledRoleChips && !disabledDepartmentChips && !disabledUserChips ? `<p class="page-access-empty">${escapeHTML(localize('No explicit access assigned', 'لم يتم تعيين صلاحية مباشرة'))}</p>` : ''}</div>
             <label class="page-access-add"><span>${escapeHTML(localize('Grant access', 'منح صلاحية'))}</span><select class="form-control" onchange="handleGrantAccess(this, '${view.id}')"><option value="">${escapeHTML(localize('Choose a role, department, or employee…', 'اختر دوراً أو قسماً أو موظفاً…'))}</option>
                 ${remainingRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${remainingRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}
-                ${remainingDepartments.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${remainingDepartments.map(department => `<option value="ROLE:DEPT_${department.id}">${escapeHTML(departmentName(department))}</option>`).join('')}</optgroup>` : ''}
+                ${depts.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${grantDepartmentOptions}</optgroup>` : ''}
                 ${remainingUsers.length ? `<optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${remainingUsers.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>` : ''}
             </select></label>
             <label class="page-access-add"><span>${escapeHTML(localize('Disable page for', 'تعطيل الصفحة لـ'))}</span><select class="form-control" onchange="handleDisableAccess(this, '${view.id}')"><option value="">${escapeHTML(localize('Choose a role, department, or employee…', 'اختر دوراً أو قسماً أو موظفاً…'))}</option>${remainingPageDisableRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${remainingPageDisableRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}${remainingPageDisableDepartments.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${remainingPageDisableDepartments.map(department => `<option value="ROLE:DEPT_${department.id}">${escapeHTML(departmentName(department))}</option>`).join('')}</optgroup>` : ''}${remainingPageDisableUsers.length ? `<optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${remainingPageDisableUsers.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>` : ''}</select></label>

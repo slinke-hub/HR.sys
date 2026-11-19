@@ -271,6 +271,7 @@ function normalizeMarketingAccount(value) {
 let appCache = {
     profiles: { data: null, time: 0 },
     departments: { data: null, time: 0 },
+    departmentsAll: { data: null, time: 0 },
     jobTitles: { data: null, time: 0 }
 };
 const CACHE_TTL = 60000; // 60 seconds
@@ -3686,19 +3687,22 @@ const db = {
         }
     },
     
-    async fetchDepartments(forceRefresh = false) {
+    async fetchDepartments(forceRefresh = false, includeInactive = false) {
         if (!supabaseClient) return [];
-        if (!forceRefresh && appCache.departments.data && (Date.now() - appCache.departments.time < CACHE_TTL)) {
-            return appCache.departments.data;
+        const cacheKey = includeInactive ? 'departmentsAll' : 'departments';
+        if (!forceRefresh && appCache[cacheKey].data && (Date.now() - appCache[cacheKey].time < CACHE_TTL)) {
+            return appCache[cacheKey].data;
         }
         try {
-            let { data, error } = await supabaseClient.from('departments').select('*').eq('is_active', true).order('name');
+            let query = supabaseClient.from('departments').select('*');
+            if (!includeInactive) query = query.eq('is_active', true);
+            let { data, error } = await query.order('name');
             if (error && error.message?.includes('is_active')) {
                 ({ data, error } = await supabaseClient.from('departments').select('*').order('name'));
             }
             if (error) throw error;
             const mapped = (data || []).map(applyI18nGetters);
-            appCache.departments = { data: mapped, time: Date.now() };
+            appCache[cacheKey] = { data: mapped, time: Date.now() };
             return mapped;
         } catch (error) {
             console.error("fetchDepartments Error:", error);
