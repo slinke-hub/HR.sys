@@ -10,9 +10,10 @@ assert.notEqual(pipelineStart, -1, 'Pipeline stage definitions exist');
 assert.notEqual(pipelineEnd, -1, 'Pipeline board follows its stage definitions');
 
 const stageDefinitions = app.slice(pipelineStart, pipelineEnd);
-assert.match(stageDefinitions, /status: 'in_progress'/);
-assert.match(stageDefinitions, /tasks: inProgress/);
+for (const status of ['in_progress', 'review', 'Pending Approval', 'completed', 'canceled']) {
+    assert.ok(stageDefinitions.includes(`status: '${status}'`), `Pipeline retains ${status} stage`);
+}
 assert.doesNotMatch(stageDefinitions, /status: 'todo'|label: 'To Do'/);
-assert.match(app, /const inProgress = tasks\.filter\(t => t\.status === 'in_progress'\)/);
+assert.match(app, /const inProgress = tasks\.filter\(t => \['in_progress', 'late'\]\.includes\(t\.status\)\)/);
 
 console.log('task-pipeline-inprogress-only: PASS');
