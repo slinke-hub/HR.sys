@@ -9128,6 +9128,81 @@ html[dir="rtl"] .project-card-top h3 { padding-inline:0; }
   white-space: nowrap;
 }
 
+/* Keep Edit Task content scrollable while the action footer stays visible. */
+#editTaskModal .edit-task-scroll-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+#editTaskModal .edit-task-scroll-body > .edit-task-tab-content {
+  min-height: auto;
+  overflow: visible;
+}
+#editTaskModal .edit-task-v2 #editTaskForm {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+#editTaskModal .edit-task-v2 .modal-footer {
+  flex: 0 0 auto !important;
+  position: sticky !important;
+  bottom: 0;
+  z-index: 12;
+  background: var(--color-bg-surface) !important;
+  box-shadow: 0 -8px 18px color-mix(in srgb, var(--color-bg-surface) 82%, transparent);
+}
+
+.task-card-progress-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .25rem;
+  min-height: 28px;
+  padding: .25rem .5rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 58%, var(--color-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg-surface));
+  color: var(--color-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: .68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.task-card-progress-action:hover { background: color-mix(in srgb, var(--color-primary) 20%, var(--color-bg-surface)); }
+.task-card-progress-action svg { width: 14px; height: 14px; }
+
+@media (max-width: 720px) {
+  #editTaskModal .edit-task-top-row,
+  #editTaskModal .edit-task-meta-row,
+  #editTaskModal .edit-task-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #editTaskModal .edit-task-list-indicator { flex-wrap: wrap; }
+  #editTaskModal .edit-task-list-select { min-width: 0; width: 100%; }
+  #editTaskModal .modal-footer,
+  #editTaskModal .modal-footer[style] {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    align-items: center !important;
+  }
+  #editTaskModal .modal-footer > div,
+  #editTaskModal .modal-footer > div[style] {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+    width: 100% !important;
+  }
+  #editTaskModal .modal-footer button,
+  #editTaskModal .modal-footer > div > button {
+    min-width: 0 !important;
+    width: 100% !important;
+    padding-inline: .45rem !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 /* Task-list access selectors use the shared input and menu surfaces. */
 #taskListModal .custom-multi-select-header,
 #taskListModal .custom-multi-select-dropdown {
@@ -11588,5 +11663,61 @@ textarea.form-control { min-height: 112px; resize: vertical; }
     height: 44px !important;
     min-width: 44px;
     min-height: 44px;
+  }
+}
+
+/* Final Edit Task modal layout guard: the body scrolls, actions never cover fields. */
+#editTaskModal .edit-task-v2 #editTaskForm {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+#editTaskModal .edit-task-scroll-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+#editTaskModal .edit-task-scroll-body > .edit-task-tab-content {
+  min-height: auto !important;
+  overflow: visible !important;
+}
+#editTaskModal .edit-task-v2 .modal-footer,
+#editTaskModal .edit-task-v2 .modal-footer[style] {
+  flex: 0 0 auto !important;
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 12 !important;
+  background: var(--color-bg-surface) !important;
+  box-shadow: 0 -8px 18px color-mix(in srgb, var(--color-bg-surface) 82%, transparent) !important;
+}
+@media (max-width: 720px) {
+  #editTaskModal .edit-task-top-row,
+  #editTaskModal .edit-task-meta-row,
+  #editTaskModal .edit-task-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #editTaskModal .edit-task-list-indicator { flex-wrap: wrap; }
+  #editTaskModal .edit-task-list-select { min-width: 0; width: 100%; }
+  #editTaskModal .edit-task-v2 .modal-footer,
+  #editTaskModal .edit-task-v2 .modal-footer[style] {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) !important;
+    flex-wrap: nowrap !important;
+  }
+  #editTaskModal .edit-task-v2 .modal-footer > div,
+  #editTaskModal .edit-task-v2 .modal-footer > div[style] {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    width: 100% !important;
+    min-width: 0;
+  }
+  #editTaskModal .edit-task-v2 .modal-footer button,
+  #editTaskModal .edit-task-v2 .modal-footer > div > button {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding-inline: .45rem !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

@@ -17,9 +17,12 @@ for (const status of ['todo', 'in_progress', 'review', 'completed']) {
 }
 assert(app.includes('window.handleTaskProgressQuickAction'), 'progress actions use a shared task handler');
 assert(app.includes('window.updateTaskProgressQuickActions(task);'), 'task details synchronize progress controls');
+assert(app.includes("const progressCardAction = task.status === 'in_progress' && canChangeTaskStage"), 'in-progress task cards render a progress action');
+assert(app.includes('function syncTaskCardProgressAction(task)'), 'status changes synchronize the card progress action');
 assert(app.includes("if (!assignee) {") && app.includes('Please select an assignee.'), 'new task assignee is enforced in the handler');
 assert(app.includes('const effectiveAssignee = assignee;'), 'new task creation no longer silently falls back to the creator');
 assert(css.includes('.task-progress-quick-actions') && css.includes('grid-template-columns: repeat(4'), 'progress actions have responsive styling');
+assert(css.includes('.edit-task-scroll-body') && css.includes('position: sticky !important'), 'edit modal scroll body and pinned footer are styled');
 assert(migration.includes('Task assignee is required') && migration.includes('Task due date is required'), 'database guard enforces required creation fields');
 assert(migration.includes('BEFORE INSERT ON public.tasks'), 'database guard only applies to new rows');
 

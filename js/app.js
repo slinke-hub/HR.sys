@@ -8927,6 +8927,9 @@ function renderTaskCard(task) {
     const assigneeLabel = assigneeProfiles.map(user => window.formatEmployeeName(user)).filter(Boolean).join(', ') || assigneeName;
     const isCrmProposalDesignTask = ['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'].includes(task.crm_workflow_kind);
     const isOverdue = task.status === 'late' || (task.due_date && !['completed', 'Approved'].includes(task.status) && new Date(`${task.due_date}T23:59:59`) < new Date());
+    const progressCardAction = task.status === 'in_progress' && canChangeTaskStage
+        ? `<button type="button" class="task-card-progress-action" onclick="event.stopPropagation(); window.openTaskDetailsModal('${task.id}')"><i data-lucide="list-checks"></i><span data-i18n="ui_progress2">Progress</span></button>`
+        : '';
     const dueLabel = task.due_date
         ? new Intl.DateTimeFormat(currentLang === 'ar' ? 'ar-SA' : 'en', { month: 'short', day: 'numeric' }).format(new Date(`${task.due_date}T12:00:00`))
         : (t('task_no_date') || 'No date');
@@ -8941,6 +8944,7 @@ function renderTaskCard(task) {
                 ${canChangeTaskStage ? `<label class="task-stage-select-wrap" onclick="event.stopPropagation()"><span class="sr-only">Change stage</span><select class="task-stage-select status-${taskStatusClass(task.status)}" aria-label="Change task stage" onchange="window.handleTaskCardStageChange('${task.id}', this.value)">${[
                     ['todo','To do'],['in_progress','In progress'], ...(isCrmProposalDesignTask ? [['late','Late']] : []), ['review','Review'],['Pending Approval','Awaiting approval'],['completed','Done'],['canceled','Canceled']
                 ].map(([value,label]) => `<option value="${value}" ${task.status === value ? 'selected' : ''}>${localizeRuntimeText(label)}</option>`).join('')}</select></label>` : ''}
+                ${progressCardAction}
                 <button type="button" class="task-assignee ${canEditTask ? '' : 'is-disabled'}" ${canEditTask ? `title="Change assignees" onclick="window.handleTaskAssigneeClick(event, '${task.id}')"` : `disabled title="${taskDetailText('View only', 'عرض فقط')}"`}>
                     <i data-lucide="users"></i>
                     <span class="task-assignee-full-name">${escapeHTML(assigneeLabel)}</span>
@@ -10163,6 +10167,32 @@ window.handleTaskCardStageChange = async function (taskId, nextStatus) {
     if (!result?.error) window.scheduleTaskWorkspaceRefresh(0);
 };
 
+function syncTaskCardProgressAction(task) {
+    if (!task?.id) return;
+    const shouldShow = task.status === 'in_progress' && canChangeTaskStageRecord(task);
+    document.querySelectorAll(`[data-task-id="${task.id}"]`).forEach(node => {
+        const footer = node.querySelector('.task-pipeline-card-footer');
+        if (!footer) return;
+        const existing = footer.querySelector('.task-card-progress-action');
+        if (!shouldShow) {
+            existing?.remove();
+            return;
+        }
+        if (existing) return;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'task-card-progress-action';
+        button.innerHTML = '<i data-lucide="list-checks"></i><span data-i18n="ui_progress2">Progress</span>';
+        button.addEventListener('click', event => {
+            event.stopPropagation();
+            window.openTaskDetailsModal(task.id);
+        });
+        const assignee = footer.querySelector('.task-assignee');
+        footer.insertBefore(button, assignee || null);
+    });
+    if (window.lucide) window.lucide.createIcons();
+}
+
 window.taskV2ToggleComplete = async function (taskId, event) {
     if (event) event.stopPropagation();
     taskId = resolveTaskActionId(taskId, event);
@@ -10360,6 +10390,7 @@ window.taskV2ChangeStage = async function (taskId, requestedStatus, options = {}
     }
     const actualStatus = result.status || requestedStatus;
     task.status = actualStatus;
+    syncTaskCardProgressAction(task);
     document.querySelectorAll(`[data-task-id="${taskId}"]`).forEach(node => {
         node.dataset.status = actualStatus;
         const select = node.querySelector('.task-v2-stage-select, .task-stage-select');

@@ -1267,7 +1267,8 @@
                 </button>
             </div>
             
-            <form id="editTaskForm" onsubmit="handleEditTaskSubmit(event)" style="display: flex; flex-direction: column; overflow: auto;">
+            <form id="editTaskForm" onsubmit="handleEditTaskSubmit(event)" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                <div class="edit-task-scroll-body">
                 <div style="padding: 0 1.5rem;">
                     <div class="edit-task-top-row">
                         <div class="edit-task-list-indicator" style="background: var(--color-surface); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.9rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 0.5rem;">
@@ -1421,6 +1422,8 @@
                         <div id="editTaskFilesList" style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;"></div>
                         <label class="attachment-sharing-choice"><input id="editTaskFilesProjectVisible" type="checkbox"><span data-i18n="attachment_share_project_replacements">Allow the project assignee to view and download the replacement files</span></label>
                     </div>
+                </div>
+
                 </div>
 
                 <!-- Footer -->
