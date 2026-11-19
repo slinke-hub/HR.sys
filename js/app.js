@@ -10855,11 +10855,9 @@ window.handleCreateTask = async function (e) {
     const userDept = assigneeObj ? depts.find(d => d.id === assigneeObj.department_id) : null;
     const isDesigner = userDept && userDept.name.toLowerCase().includes('designing');
 
+    // Every newly created task starts in To Do. Workflow-specific statuses
+    // are applied only by the later completion/approval actions.
     let status = 'todo';
-    const isHussain = currentUser.full_name && currentUser.full_name.toLowerCase().includes('hussain') || currentUser.email && currentUser.email.toLowerCase().includes('hussain');
-    if (isDesigner && !isHussain) {
-        status = 'Pending Approval';
-    }
 
     let contentType = null, sourceLink = null, uploadLink = null;
     if (isDesigner) {
@@ -10908,7 +10906,6 @@ window.handleCreateTask = async function (e) {
     }
     const isMarketingDesign = isMarketingTaskDepartment(department) && subType === 'Designing Task';
     const isRegularTask = subType === 'Regular Task' || subType === 'Regular Tasks';
-    if (isMarketingDesign) status = 'review';
     const description = document.getElementById('taskDesc')?.value.trim() || '';
     const marketingDepartment = isMarketingDesign ? document.getElementById('taskMarketingDepartment')?.value : null;
     const contentLinks = isMarketingDesign ? getMarketingLinks('taskContentLinks') : [];
