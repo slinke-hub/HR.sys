@@ -16,6 +16,7 @@ assert.doesNotMatch(createTaskSource, /status = 'Pending Approval'/);
 assert.doesNotMatch(createTaskSource, /status = 'review'/);
 assert.match(createTaskSource, /db\.createTask\([\s\S]*?, status, effectiveSupervisor/);
 assert.match(app, /const todo = tasks\.filter\(t => t\.status === 'todo'\)/);
+assert.match(app, /\{ status: 'todo', badge: 'todo', label: 'To Do', tone: 'slate', tasks: todo \}/);
 assert.match(app, /status: 'todo'/);
 assert.match(migration, /ALTER COLUMN status SET DEFAULT 'todo'/);
 assert.match(migration, /IF NEW\.status IS NULL OR NULLIF\(BTRIM\(NEW\.status\), ''\) IS NULL/);

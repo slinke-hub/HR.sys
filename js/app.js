@@ -9102,7 +9102,7 @@ async function renderTasksV2() {
     const rejected = tasks.filter(t => t.status === 'Rejected');
 
     const stageDefinitions = [
-        { status: 'todo', badge: 'todo', label: 'To do', tone: 'slate', tasks: todo },
+        { status: 'todo', badge: 'todo', label: 'To Do', tone: 'slate', tasks: todo },
         { status: 'in_progress', badge: 'in_progress', label: 'In progress', tone: 'blue', tasks: inProgress },
         { status: 'review', badge: 'review', label: 'Review', tone: 'purple', tasks: review },
         { status: 'Pending Approval', badge: 'pending', label: 'Awaiting approval', tone: 'amber', tasks: pending },
