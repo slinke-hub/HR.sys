@@ -2,6 +2,19 @@
  * Presentation-only composition layer. Existing data hooks, IDs and action
  * handlers remain in js/app.js; this file gives them a new information order.
  */
+/* Give desktop pages more usable width while keeping a small, consistent
+   gutter around the shared application frame. */
+@media (min-width: 768px) {
+  .main-content {
+    padding-inline: clamp(.75rem, 1.2vw, 1.25rem) !important;
+  }
+
+  .main-content > .view-container,
+  .main-content > #viewContainer {
+    padding-inline: clamp(.75rem, 1.2vw, 1.25rem) !important;
+  }
+}
+
 #viewContainer > .ui02-dashboard-header {
   margin-bottom: 1.25rem;
 }

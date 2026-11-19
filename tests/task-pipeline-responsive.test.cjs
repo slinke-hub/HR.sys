@@ -19,6 +19,6 @@ assert.match(css, /task-card-signals[\s\S]*justify-content: space-between/);
 assert.match(app, /class="task-pipeline-card-footer"/);
 assert.match(app, /class="task-stage-select-wrap"/);
 assert.match(app, /class="task-card-signals"/);
-assert.match(index, /css\/task-manager-mobile-final\.css\?v=2026111901/);
+assert.match(index, /css\/task-manager-mobile-final\.css\?v=2026111902/);
 
 console.log('task-pipeline-responsive: PASS');
