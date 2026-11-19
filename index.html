@@ -1267,7 +1267,7 @@
                 </button>
             </div>
             
-            <form id="editTaskForm" onsubmit="handleEditTaskSubmit(event)" style="display: flex; flex-direction: column;">
+            <form id="editTaskForm" onsubmit="handleEditTaskSubmit(event)" style="display: flex; flex-direction: column; overflow: auto;">
                 <div style="padding: 0 1.5rem;">
                     <div class="edit-task-top-row">
                         <div class="edit-task-list-indicator" style="background: var(--color-surface); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.9rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 0.5rem;">
@@ -1299,14 +1299,10 @@
                         </div>
                     </div>
                     
-                    <div class="edit-task-tabs" style="display: flex; background: var(--color-surface); border-radius: 8px; padding: 0.25rem; margin-bottom: 1rem;">
-                        <button type="button" class="edit-task-tab active" onclick="window.switchEditTaskTab('details')" style="flex: 1; padding: 0.5rem; border: none; background: var(--color-bg); border-radius: 6px; font-weight: 500; cursor: pointer; color: var(--color-text);" data-i18n="ui_details">Details</button>
-                        <button type="button" class="edit-task-tab" onclick="window.switchEditTaskTab('advanced')" style="flex: 1; padding: 0.5rem; border: none; background: transparent; border-radius: 6px; font-weight: 500; cursor: pointer; color: var(--color-text-secondary);" data-i18n="ui_advanced_options">Advanced options</button>
-                    </div>
                 </div>
 
-                <!-- Tab: Details -->
-                <div id="editTaskTabDetails" class="edit-task-tab-content active" style="padding: 0 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;">
+                <!-- Combined details and advanced task fields -->
+                <div id="editTaskTabDetails" class="edit-task-tab-content active" style="padding: 0 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; overflow: visible;">
                     <div class="floating-input-group" style="position: relative;">
                         <input type="text" id="editTaskTitle" class="form-control" required style="width: 100%; padding: 1.25rem 1rem 0.5rem; border-radius: 8px; border: 1px solid var(--color-primary); outline: none;">
                         <label style="position: absolute; left: 1rem; top: 0.25rem; font-size: 0.75rem; color: var(--color-primary);" data-i18n="ui_task_name">Task name</label>
@@ -1372,8 +1368,7 @@
                     </div>
                 </div>
 
-                <!-- Tab: Advanced -->
-                <div id="editTaskTabAdvanced" class="edit-task-tab-content" style="padding: 0 1.5rem 1.5rem; display: none; flex-direction: column; gap: 1.5rem;">
+                <div id="editTaskTabAdvanced" class="edit-task-tab-content" style="padding: 0 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; overflow: visible;">
                     <div class="edit-task-grid edit-task-advanced-grid" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 1rem;">
                         <div class="property-cell" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <span style="font-size: 0.85rem; font-weight: 500;" data-i18n="ui_department">Department</span>

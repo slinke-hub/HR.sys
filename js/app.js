@@ -9349,8 +9349,8 @@ async function renderTasksV2() {
                                 <input type="time" id="taskCreatedTime" class="form-control" readonly aria-readonly="true" tabindex="-1" style="opacity:0.7; cursor:default;">
                             </div>
                             <div class="form-group">
-                                <label class="form-label" for="taskDue">Due Date</label>
-                                <input type="date" id="taskDue" class="form-control" min="${todayDate}">
+                                <label class="form-label" for="taskDue" data-i18n="html_due_date">Due Date</label>
+                                <input type="date" id="taskDue" class="form-control" min="${todayDate}" required>
                             </div>
                             <div class="form-group">
                                 <label class="form-label" id="taskTitleLabel">${t('task_title') || 'Task Title'}</label>
@@ -9407,6 +9407,34 @@ async function renderTasksV2() {
                                 <label class="form-label">Watchers (Optional)</label>
                                 ${renderTaskWatcherPicker('taskWatchers', window.taskWatcherOptionsCache)}
                             </div>
+                            </div>
+
+                            <div class="create-task-fields-row create-task-options-row">
+                                <div class="form-group">
+                                    <label class="form-label" for="taskPriority" data-i18n="ui_priority">Priority</label>
+                                    <select id="taskPriority" class="form-control">
+                                        <option value="urgent" data-i18n="ui_critical">Critical</option>
+                                        <option value="high" data-i18n="ui_high">High</option>
+                                        <option value="medium" selected data-i18n="ui_medium">Medium</option>
+                                        <option value="low" data-i18n="ui_low">Low</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="taskEstimate" data-i18n="ui_estimated_time">Estimated time</label>
+                                    <input type="text" id="taskEstimate" class="form-control" placeholder="e.g. 2 hours" autocomplete="off">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="taskVisibility" data-i18n="ui_privacy">Privacy</label>
+                                    <select id="taskVisibility" class="form-control">
+                                        <option value="public" data-i18n="ui_no_privacy">No privacy</option>
+                                        <option value="team" data-i18n="ui_team_only">Team Only</option>
+                                        <option value="private" data-i18n="ui_private">Private</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="taskTags" data-i18n="ui_tags">Tags</label>
+                                    <input type="text" id="taskTags" class="form-control" placeholder="e.g. onboarding, urgent" autocomplete="off">
+                                </div>
                             </div>
 
                             <!-- Marketing Design Fields (hidden by default) -->
@@ -10467,6 +10495,8 @@ window.toggleTaskV2Create = function () {
         projectInput.value = listId ? '' : (selected !== 'all' ? selected : '');
         projectInput.disabled = !!listId;
     }
+    const visibilityInput = document.getElementById('taskVisibility');
+    if (visibilityInput) visibilityInput.value = listId ? 'private' : 'public';
     if (modal.parentElement !== document.body) {
         window.createTaskModalPortalHome = {
             parent: modal.parentElement,
@@ -10560,6 +10590,9 @@ function updateTaskAssigneeOptions(prefix, departmentName, selectedAssigneeId = 
             );
             employees = [...new Map([...employees, ...formerIt].map(user => [user.id, user])).values()];
         }
+        const managerId = department.head_id || department.manager_id;
+        const manager = (window.taskAllUsersCache || []).find(user => user.id === managerId);
+        if (manager && !employees.some(user => user.id === manager.id)) employees.push(manager);
     }
 
     const creator = (window.taskAllUsersCache || []).find(user => user.id === currentUser?.id);
@@ -10580,9 +10613,12 @@ window.filterEditTaskAssigneeOptions = function (departmentIdOrName) {
     const root = document.getElementById('editTaskAssigneeOptions');
     if (!root) return;
     const department = (window.taskDepartmentsCache || []).find(item => item.id === departmentIdOrName || item.name === departmentIdOrName || getCanonicalDepartmentName(item) === departmentIdOrName);
-    const users = canAssignTasksCompanyWide()
+    let users = canAssignTasksCompanyWide()
         ? getTaskAssignmentDirectory()
         : (department ? (window.taskAllUsersCache || []).filter(user => user.department_id === department.id) : []);
+    const managerId = department?.head_id || department?.manager_id;
+    const manager = (window.taskAllUsersCache || []).find(user => user.id === managerId);
+    if (manager && !users.some(user => user.id === manager.id)) users = [...users, manager];
     const selected = new Set(Array.from(root.querySelectorAll('input[type="checkbox"]:checked')).map(input => input.value));
     root.innerHTML = `<label class="picker-select-all" for="editTaskAssigneeSelectAll"><input id="editTaskAssigneeSelectAll" type="checkbox" onchange="window.toggleEditTaskAssignees(this.checked)"><span>Select all employees</span></label>` + users.map((user, index) => {
         const inputId = `editTaskAssigneeOption-${index}`;
@@ -10889,8 +10925,19 @@ window.handleCreateTask = async function (e) {
     const title = document.getElementById('taskTitle').value;
     const assignee = document.getElementById('taskAssignee').value;
     const due = document.getElementById('taskDue')?.value || null;
+    if (!due) {
+        showToast(currentLang === 'ar' ? 'يرجى تحديد تاريخ التسليم.' : 'Please select a due date.', 'warning');
+        document.getElementById('taskDue')?.focus();
+        return;
+    }
     const notifyViaEmail = document.getElementById('taskNotifyViaEmail')?.checked === true;
-    const priority = 'medium'; // Default priority
+    const priority = document.getElementById('taskPriority')?.value || 'medium';
+    const estimatedTime = document.getElementById('taskEstimate')?.value.trim() || null;
+    const visibility = document.getElementById('taskVisibility')?.value || 'public';
+    const tags = String(document.getElementById('taskTags')?.value || '')
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(Boolean);
     // Always fall back to the active sidebar selection. This covers modal
     // entry points that do not pass through toggleTaskV2Create first.
     const activeSelection = String(window.taskV2SelectedProject || 'all');
@@ -10944,6 +10991,14 @@ window.handleCreateTask = async function (e) {
     // Get department, sub-type, and watchers
     const department = document.getElementById('taskDepartment') ? document.getElementById('taskDepartment').value : null;
     const selectedDepartment = (window.taskDepartmentsCache || []).find(item => item.id === department || item.name === department || getCanonicalDepartmentName(item) === department);
+    if (!canAssignTasksCompanyWide() && selectedDepartment && assigneeObj) {
+        const managerId = selectedDepartment.head_id || selectedDepartment.manager_id || null;
+        const isOwnDepartment = assigneeObj.department_id === selectedDepartment.id;
+        if (!isOwnDepartment && assigneeObj.id !== managerId) {
+            showToast(currentLang === 'ar' ? 'يمكنك إسناد المهمة لموظفي قسمك فقط.' : 'You can assign tasks only to employees in your department.', 'warning');
+            return;
+        }
+    }
     const effectiveSupervisor = document.getElementById('taskSupervisorId')?.value
         || selectedDepartment?.head_id
         || selectedDepartment?.manager_id
@@ -10981,7 +11036,7 @@ window.handleCreateTask = async function (e) {
     if (String(repeatType).toUpperCase() === 'DAILY' && status === 'Pending Approval') {
         status = 'todo';
     }
-    const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, null, taskListId ? 'private' : 'public', projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId, repeatType, repeatInterval, notifyViaEmail);
+    const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, estimatedTime, visibility, projectId, tags, visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId, repeatType, repeatInterval, notifyViaEmail);
     if (success) {
         if (createdTask) cacheTaskRecord(createdTask);
 
@@ -11527,17 +11582,19 @@ window.openEditTaskModal = async function (id) {
 };
 
 function prepareTeamworkEditModal(task) {
-    // Removed old teamwork modal hack, as the new modal design supports tabs natively.
+    // The edit modal now presents details and advanced fields together.
 }
 
-window.setEditTaskTab = function (tab) {
+window.setEditTaskTab = function () {
     const modal = document.getElementById('editTaskModal');
     if (!modal) return;
-    modal.dataset.editTab = tab;
-    modal.querySelectorAll('.edit-task-tabs button').forEach((button, index) => button.classList.toggle('active', tab === 'details' ? index === 0 : index === 1));
-    modal.querySelectorAll('.edit-task-advanced').forEach(field => field.style.display = tab === 'advanced' ? '' : 'none');
+    modal.dataset.editTab = 'combined';
+    modal.querySelectorAll('.edit-task-tab-content').forEach(content => {
+        content.classList.add('active');
+        content.style.display = 'flex';
+    });
     const marketingFields = document.getElementById('editMarketingDesignFields');
-    if (marketingFields && tab === 'advanced') handleMarketingTaskTypeChange('edit', document.getElementById('editTaskSubType')?.value || '');
+    if (marketingFields) handleMarketingTaskTypeChange('edit', document.getElementById('editTaskSubType')?.value || '');
 };
 
 window.handleEditTaskSubmit = async function (e) {
@@ -19749,23 +19806,7 @@ document.addEventListener('click', function (e) {
 
 initApp();
 window.switchEditTaskTab = function(tab) {
-    document.querySelectorAll('.edit-task-tab').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    const activeBtn = document.querySelector(`.edit-task-tab[onclick="window.switchEditTaskTab('${tab}')"]`);
-    if(activeBtn) {
-        activeBtn.classList.add('active');
-    }
-
-    document.querySelectorAll('.edit-task-tab-content').forEach(content => {
-        content.classList.remove('active');
-        content.style.display = 'none';
-    });
-    const activeContent = document.getElementById(tab === 'details' ? 'editTaskTabDetails' : 'editTaskTabAdvanced');
-    if(activeContent) {
-        activeContent.classList.add('active');
-        activeContent.style.display = 'flex';
-    }
+    window.setEditTaskTab(tab);
 };
 
 window.updateEditTaskSelectUI = function(selectElem) {
