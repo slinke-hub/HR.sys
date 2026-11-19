@@ -17,7 +17,8 @@ const advanced = modal.slice(advancedStart, advancedEnd);
 
 assert.match(modal, /class="edit-task-top-row"[\s\S]*editTaskMoveList[\s\S]*editTaskDue/);
 assert.match(modal, /class="edit-task-grid edit-task-details-grid"/);
-assert.match(modal, /editTaskEstimate[\s\S]*editTaskPriority[\s\S]*editTaskVisibility[\s\S]*editTaskCategory/);
+assert.match(modal, /editTaskEstimate[\s\S]*editTaskPriority[\s\S]*editTaskVisibility/);
+assert.doesNotMatch(modal, /editTaskCategory|ui_tags|No tags/);
 assert.match(advanced, /id="editTaskDepartment"/);
 assert.doesNotMatch(advanced, /editTaskReminders|editTaskWatchers|editTaskRepeat|ui_reminders|ui_followers|ui_set_to_repeat2/);
 

@@ -9468,10 +9468,6 @@ async function renderTasksV2() {
                                         <option value="private" data-i18n="ui_private">Private</option>
                                     </select>
                                 </div>
-                                <div class="form-group">
-                                    <label class="form-label" for="taskTags" data-i18n="ui_tags">Tags</label>
-                                    <input type="text" id="taskTags" class="form-control" placeholder="e.g. onboarding, urgent" autocomplete="off">
-                                </div>
                             </div>
 
                             <!-- Marketing Design Fields (hidden by default) -->
@@ -10885,7 +10881,6 @@ window.openQuickAddModal = function(focusTarget) {
     requestAnimationFrame(() => {
         if (focusTarget === 'more') document.getElementById('taskTitle')?.focus();
         else if (focusTarget === 'attach') document.getElementById('taskAttachment')?.focus();
-        else if (focusTarget === 'tags') document.getElementById('taskTitle')?.focus(); // Tags not explicitly in create form yet
         else if (focusTarget === 'estimate') document.getElementById('taskTitle')?.focus(); // Est not in create form yet
     });
 };
@@ -11003,10 +10998,6 @@ window.handleCreateTask = async function (e) {
     const priority = document.getElementById('taskPriority')?.value || 'medium';
     const estimatedTime = document.getElementById('taskEstimate')?.value.trim() || null;
     const visibility = document.getElementById('taskVisibility')?.value || 'public';
-    const tags = String(document.getElementById('taskTags')?.value || '')
-        .split(',')
-        .map(tag => tag.trim())
-        .filter(Boolean);
     // Always fall back to the active sidebar selection. This covers modal
     // entry points that do not pass through toggleTaskV2Create first.
     const activeSelection = String(window.taskV2SelectedProject || 'all');
@@ -11105,7 +11096,7 @@ window.handleCreateTask = async function (e) {
     if (String(repeatType).toUpperCase() === 'DAILY' && status === 'Pending Approval') {
         status = 'todo';
     }
-    const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, estimatedTime, visibility, projectId, tags, visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId, repeatType, repeatInterval, notifyViaEmail);
+    const { success, data: createdTask, error } = await db.createTask(title, description, effectiveAssignee, finalDue, currentUser.id, priority, 'General', titleI18n, {}, null, null, estimatedTime, visibility, projectId, [], visibleTo, contentType, sourceLink, uploadLink, status, effectiveSupervisor, department, subType, watchers, parentTaskId, marketingDepartment, contentLinks, submissionLinks, deliveryStatus, taskListId, repeatType, repeatInterval, notifyViaEmail);
     if (success) {
         if (createdTask) cacheTaskRecord(createdTask);
 
@@ -11501,9 +11492,6 @@ window.openEditTaskModal = async function (id) {
         const creator = (window.taskAllUsersCache || []).find(user => user.id === task.created_by) || task.creator;
         const creatorField = document.getElementById('editTaskCreatedBy');
         if (creatorField) creatorField.value = window.formatEmployeeName(creator) || (task.created_by === currentUser?.id ? window.formatEmployeeName(currentUserProfile || currentUser) : task.created_by || '');
-        document.getElementById('editTaskCategory').value = task.category || '';
-        document.querySelector('.category-ui-value').textContent = task.category || 'No tags';
-
         document.getElementById('editTaskPriority').value = task.priority || 'medium';
 
         const formatDate = (dateStr) => {
@@ -11676,8 +11664,6 @@ window.handleEditTaskSubmit = async function (e) {
         return;
     }
     const title = document.getElementById('editTaskTitle').value;
-    const category = document.getElementById('editTaskCategory').value;
-
     const priority = document.getElementById('editTaskPriority').value;
     const assigneeId = document.getElementById('editTaskAssignee').value;
     const selectedAssigneeIds = Array.from(document.querySelectorAll('#editTaskAssigneeOptions input[type="checkbox"]:checked:not(#editTaskAssigneeSelectAll)')).map(input => input.value);
@@ -11703,7 +11689,7 @@ window.handleEditTaskSubmit = async function (e) {
     const updates = {
         title: title,
         description: document.getElementById('editTaskDescription').value.trim(),
-        category: category || null,
+        category: taskBeingEdited?.category || null,
         priority: priority,
         assignee_id: primaryAssigneeId,
         assignee_ids: assigneeIds,
@@ -19971,15 +19957,6 @@ window.editTaskPromptEstimate = async function() {
     if(val !== null) {
         el.value = val;
         document.querySelector('.estimate-ui-value').textContent = val || 'Not set';
-    }
-};
-
-window.editTaskPromptCategory = async function() {
-    const el = document.getElementById('editTaskCategory');
-    const val = await window.showPromptModal('Enter tags (comma separated):', 'Task tags', { value: el.value });
-    if(val !== null) {
-        el.value = val;
-        document.querySelector('.category-ui-value').textContent = val || 'No tags';
     }
 };
 
