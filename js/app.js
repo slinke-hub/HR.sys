@@ -9088,33 +9088,12 @@ async function renderTasksV2() {
         `;
     }).join('');
 
-    const pending = tasks.filter(t => t.status === 'Pending Approval');
-    const todo = tasks.filter(t => t.status === 'todo');
-    const inProgress = tasks.filter(t => ['in_progress', 'late'].includes(t.status));
+    const inProgress = tasks.filter(t => t.status === 'in_progress');
     const selectedWaitingCount = selectedScopeTasks.filter(task => ['todo', 'Pending Approval'].includes(task.status)).length;
     const selectedActiveCount = selectedScopeTasks.filter(task => ['in_progress', 'late'].includes(task.status)).length;
-    const review = tasks.filter(t => t.status === 'review');
-    const done = tasks.filter(t => t.status === 'completed');
-    const canceled = tasks.filter(t => ['canceled', 'cancelled'].includes(String(t.status || '').toLowerCase()));
-    
-    // Add additional statuses like Approved/Rejected if used
-    const approved = tasks.filter(t => t.status === 'Approved');
-    const rejected = tasks.filter(t => t.status === 'Rejected');
-
     const stageDefinitions = [
-        { status: 'todo', badge: 'todo', label: 'To Do', tone: 'slate', tasks: todo },
-        { status: 'in_progress', badge: 'in_progress', label: 'In progress', tone: 'blue', tasks: inProgress },
-        { status: 'review', badge: 'review', label: 'Review', tone: 'purple', tasks: review },
-        { status: 'Pending Approval', badge: 'pending', label: 'Awaiting approval', tone: 'amber', tasks: pending },
-        { status: 'completed', badge: 'completed', label: 'Done', tone: 'green', tasks: done },
-        { status: 'canceled', badge: 'canceled', label: taskDetailText('Canceled', 'ملغاة'), tone: 'slate', tasks: canceled }
+        { status: 'in_progress', badge: 'in_progress', label: taskDetailText('In progress', 'قيد التنفيذ'), tone: 'blue', tasks: inProgress }
     ];
-    if (approved.length || rejected.length) {
-        stageDefinitions.push(
-            { status: 'Approved', badge: 'approved', label: 'Approved', tone: 'green', tasks: approved },
-            { status: 'Rejected', badge: 'rejected', label: 'Rejected', tone: 'red', tasks: rejected }
-        );
-    }
 
     const boardHTML = `
         <div id="tasks-view-board" class="task-pipeline-view" style="display: ${taskViewMode === 'board' ? 'block' : 'none'};">
