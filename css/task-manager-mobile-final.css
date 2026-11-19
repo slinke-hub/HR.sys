@@ -250,10 +250,17 @@
    the combined status, progress, assignee, and date controls. */
 @media (max-width: 900px) {
   .task-v2-shell .task-pipeline-card-footer {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: center;
-    gap: .5rem;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: stretch;
+    justify-items: stretch;
+    gap: .55rem;
+  }
+
+  .task-v2-shell .task-pipeline-card-footer > * {
+    grid-column: 1 / -1;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .task-v2-shell .task-pipeline-card-footer .task-stage-select-wrap {
@@ -267,7 +274,6 @@
   }
 
   .task-v2-shell .task-pipeline-card-footer .task-card-progress-action {
-    grid-column: 1 / -1;
     display: inline-flex !important;
     flex: 0 0 auto !important;
     flex-direction: row !important;
@@ -299,11 +305,6 @@
     width: 100%;
     min-width: 0;
     justify-content: flex-start;
-  }
-
-  .task-v2-shell .task-pipeline-card-footer:not(:has(.task-card-progress-action)) .task-assignee,
-  .task-v2-shell .task-pipeline-card-footer .task-card-signals {
-    grid-column: 1 / -1;
   }
 
   .task-v2-shell .task-pipeline-card-footer .task-card-signals {
