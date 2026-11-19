@@ -9386,7 +9386,7 @@ async function renderTasksV2() {
                                 <input type="time" id="taskCreatedTime" class="form-control" readonly aria-readonly="true" tabindex="-1" style="opacity:0.7; cursor:default;">
                             </div>
                             <div class="form-group">
-                                <label class="form-label" for="taskDue" data-i18n="html_due_date">Due Date</label>
+                                <label class="form-label" for="taskDue" data-i18n="ui_due_date">Due Date</label>
                                 <input type="date" id="taskDue" class="form-control" min="${todayDate}" required>
                             </div>
                             <div class="form-group">

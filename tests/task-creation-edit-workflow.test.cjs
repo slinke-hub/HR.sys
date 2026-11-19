@@ -22,6 +22,8 @@ assert(app.includes('const managerId = department.head_id || department.manager_
 assert(app.includes("modal.dataset.editTab = 'combined';"), 'edit modal uses a combined details state');
 assert(index.includes('class="edit-task-scroll-body"') && index.includes('id="editTaskTabAdvanced"') && index.includes('display: flex'), 'edit modal renders advanced fields in the same scrollable form');
 assert(!index.includes('class="edit-task-tabs"'), 'edit modal tabs are removed');
-assert(data.includes('ui_dates: "Due Date"') && data.includes('ui_dates: "تاريخ التسليم"'), 'Dates label is localized as Due Date');
+assert(data.includes('ui_due_date: "Due Date"') && data.includes('ui_due_date: "تاريخ التسليم"'), 'Due Date label is shared across languages');
+assert(index.includes('data-i18n="ui_due_date">Due Date</span>'), 'edit task uses the shared Due Date label');
+assert(app.includes('for="taskDue" data-i18n="ui_due_date">Due Date</label>'), 'new task uses the shared Due Date label');
 
 console.log('task-creation-edit-workflow: PASS');
