@@ -9520,8 +9520,10 @@ async function renderTasksV2() {
                     <div class="task-v2-toolbar-left">
                         <div class="task-v2-filter-group task-v2-search">
                             <span class="task-v2-filter-label">${taskDetailText('Find work', 'ابحث في العمل')}</span>
-                            <i data-lucide="search"></i>
-                            <input type="text" id="taskV2Search" placeholder="Search tasks..." onkeyup="window.filterTasksV2()">
+                            <div class="task-v2-search-input">
+                                <i data-lucide="search"></i>
+                                <input type="text" id="taskV2Search" placeholder="Search tasks..." onkeyup="window.filterTasksV2()">
+                            </div>
                         </div>
                         <label class="task-v2-filter-group"><span class="task-v2-filter-label">${taskDetailText('Status', 'الحالة')}</span><select id="taskV2StatusFilter" class="form-control" onchange="window.filterTasksV2()">
                             <option value="all">All Status</option>

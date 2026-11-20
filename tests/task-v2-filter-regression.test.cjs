@@ -40,5 +40,8 @@ assert.match(app, /id="btn-v2-board"[\s\S]*setTaskV2Mode\('board'\)/, 'Task Mana
 assert.match(app, /\['focus', 'board', 'list'\]\.includes\(window\.taskV2Mode\)/, 'Pipeline mode must survive Task Manager rendering');
 assert.match(app, /if \(!\['focus', 'board', 'list'\]\.includes\(mode\)\)/, 'Pipeline mode must be accepted by the view switcher');
 assert.match(app, /boardContainer\.style\.display = mode === 'board' \? 'block' : 'none'/, 'Pipeline mode must show the board and hide the list');
+assert.match(app, /task-v2-filter-label[^\n]*Find work[\s\S]*task-v2-search-input[\s\S]*id="taskV2Search"/, 'Find Work title is separate and above its input box');
+assert.match(css, /task-v2-search-input\s*\{[\s\S]*border: 1px solid/);
+assert.match(css, /task-v2-search:focus-within \.task-v2-search-input/);
 
 console.log('Task V2 List/Focus/Pipeline filter regression coverage passed.');
