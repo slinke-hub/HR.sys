@@ -22,7 +22,7 @@ for (const id of [
   'orderProjectAssignees', 'orderEventDate', 'orderEventEndDate', 'orderEventStartTime', 'orderInstallationTime',
   'orderUninstallationTime', 'orderClientName', 'orderClientCompany', 'orderClientEmail',
   'orderClientPhone', 'orderLocationUrl', 'orderLocationText',
-  'orderEquipmentList'
+  'orderEquipmentList', 'orderOutstandingAmount', 'editOrderOutstandingAmount', 'editOrderProjectAmount'
 ]) assert.match(html, new RegExp(`id="${id}"`), `Missing workflow field ${id}`);
 
 for (const id of [
@@ -51,6 +51,10 @@ assert.match(app, /if \(!item && !quantity && !imageFile\) continue/);
 assert.match(app, /if \(!item \|\| !quantity\) throw new Error\(t\('crm_equipment_row_incomplete'\)/);
 assert.doesNotMatch(html.match(/id="orderProjectAmount"[^>]*>/)?.[0] || '', /required/);
 assert.doesNotMatch(html.match(/id="orderPaidAmount"[^>]*>/)?.[0] || '', /required/);
+assert.match(app, /projectAmount - paidAmount/);
+assert.match(app, /syncOrderOutstandingAmount\(\)/);
+assert.match(app, /syncEditOrderOutstandingAmount\(\)/);
+assert.match(app, /applyBusinessFinancialVisibility\(document\.getElementById\('editOrderModal'\)\)/);
 assert.match(html, /crm-add-proposal-image[^>]*onclick="addProposalImageRow\(\)"/);
 assert.match(html, /id="addProposalImageButton"[^>]*aria-controls="presentationProposalDescriptions"/);
 assert.match(html, /id="presentationProposalDescriptions"[\s\S]*id="addProposalImageButton"/);

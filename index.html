@@ -462,8 +462,9 @@
                     </div>
                     <p class="page-subtitle" data-i18n="crm_financial_optional_help">Leave these fields blank if the financial values are not available yet.</p>
                     <div class="crm-order-grid crm-order-grid-two">
-                        <div class="form-group"><label class="form-label" data-i18n="crm_order_project_amount">Project amount (SAR)</label><input type="number" min="0" step="0.01" id="orderProjectAmount" class="form-control"></div>
-                        <div class="form-group"><label class="form-label" data-i18n="crm_paid_amount">Paid Amount (SAR)</label><input type="number" min="0" step="0.01" id="orderPaidAmount" class="form-control"></div>
+                        <div class="form-group"><label class="form-label" data-i18n="crm_order_project_amount">Project amount (SAR)</label><input type="number" min="0" step="0.01" id="orderProjectAmount" class="form-control" oninput="syncOrderOutstandingAmount()"></div>
+                        <div class="form-group"><label class="form-label" data-i18n="crm_paid_amount">Paid Amount (SAR)</label><input type="number" min="0" step="0.01" id="orderPaidAmount" class="form-control" oninput="syncOrderOutstandingAmount()"></div>
+                        <div class="form-group"><label class="form-label" data-i18n="crm_outstanding">Outstanding (SAR)</label><input type="number" id="orderOutstandingAmount" class="form-control" readonly aria-readonly="true"></div>
                     </div>
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
@@ -597,9 +598,11 @@
             </div>
             <form onsubmit="handleEditOrderSubmit(event)">
                 <input type="hidden" id="editOrderId">
+                <input type="hidden" id="editOrderProjectAmount">
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group" style="margin-bottom: 0;"><label class="form-label" data-i18n="crm_event_date">Event Date</label><input type="date" id="editOrderEventDate" class="form-control"></div>
-                    <div class="form-group" style="margin-bottom: 0;"><label class="form-label" data-i18n="crm_paid_amount">Paid Amount (SAR)</label><input type="number" min="0" step="0.01" id="editOrderPaidAmount" class="form-control"></div>
+                    <div class="form-group" style="margin-bottom: 0;"><label class="form-label" data-i18n="crm_paid_amount">Paid Amount (SAR)</label><input type="number" min="0" step="0.01" id="editOrderPaidAmount" class="form-control" oninput="syncEditOrderOutstandingAmount()"></div>
+                    <div class="form-group" data-business-financials style="margin-bottom: 0;"><label class="form-label" data-i18n="crm_outstanding">Outstanding (SAR)</label><input type="number" id="editOrderOutstandingAmount" class="form-control" readonly aria-readonly="true"></div>
                     <div class="form-group" style="margin-bottom: 0;"><label class="form-label" data-i18n="crm_uninstallation_date">Uninstallation Date</label><input type="date" id="editOrderUninstallationDate" class="form-control"></div>
                 </div>
                 <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
@@ -1696,7 +1699,7 @@
     <script defer src="runtime-config.js"></script>
     <script defer src="js/db.js?v=2026111702"></script>
     <script defer src="js/shared-services.js?v=2026111701"></script>
-    <script defer src="js/data.js?v=2026091510"></script>
+    <script defer src="js/data.js?v=2026112202"></script>
     <script defer src="js/contract.js?v=1788202890003"></script>
     <script defer src="js/payroll.js"></script>
     <script defer src="js/crm-dashboard.bundle.js?v=2026111701"></script>
@@ -1704,7 +1707,7 @@
     <script defer src="js/enterprise-beta.js"></script>
     <script defer src="js/whatsapp-mock-data.js"></script>
     <script defer src="js/whatsapp-inbox.js"></script>
-    <script defer src="js/app.js?v=2026112201"></script>
+    <script defer src="js/app.js?v=2026112202"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">

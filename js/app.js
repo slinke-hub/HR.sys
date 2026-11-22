@@ -16534,6 +16534,20 @@ window.syncCrmOrderScheduleDefaults = function () {
     }
 };
 
+window.syncOrderOutstandingAmount = function () {
+    const projectAmount = Number(document.getElementById('orderProjectAmount')?.value || 0);
+    const paidAmount = Number(document.getElementById('orderPaidAmount')?.value || 0);
+    const outstanding = document.getElementById('orderOutstandingAmount');
+    if (outstanding) outstanding.value = Number.isFinite(projectAmount - paidAmount) ? (projectAmount - paidAmount).toFixed(2) : '';
+};
+
+window.syncEditOrderOutstandingAmount = function () {
+    const projectAmount = Number(document.getElementById('editOrderProjectAmount')?.value || 0);
+    const paidAmount = Number(document.getElementById('editOrderPaidAmount')?.value || 0);
+    const outstanding = document.getElementById('editOrderOutstandingAmount');
+    if (outstanding) outstanding.value = Number.isFinite(projectAmount - paidAmount) ? (projectAmount - paidAmount).toFixed(2) : '';
+};
+
 window.prepareCrmOrderModal = async function (dealId, oldStage) {
     const [deals, users, canViewFinancials] = await Promise.all([db.fetchDeals(), db.fetchProjectAssignmentEmployees(), ensureBusinessFinancialAccess()]);
     const deal = deals.find(item => item.id === dealId);
@@ -16555,6 +16569,7 @@ window.prepareCrmOrderModal = async function (dealId, oldStage) {
     document.getElementById('orderClientPhone').value = client.phone || '';
     document.getElementById('orderProjectAmount').value = canViewFinancials ? (deal.amount ?? '') : '';
     document.getElementById('orderPaidAmount').value = '';
+    window.syncOrderOutstandingAmount();
     applyBusinessFinancialVisibility(modal);
     const assigneeSelect = document.getElementById('orderProjectAssignees');
     assigneeSelect.innerHTML = `<option value="">${escapeHTML(t('crm_select_project_assignee') || 'Select an employee...')}</option>`
@@ -16663,8 +16678,12 @@ window.showEditOrderModal = async (id) => {
     document.getElementById('editOrderNotes').value = order.notes || '';
     document.getElementById('editOrderEventDate').value = order.event_date || '';
     document.getElementById('editOrderPaidAmount').value = order.paid_amount || '';
+    document.getElementById('editOrderProjectAmount').value = order.project_amount || '';
+    window.syncEditOrderOutstandingAmount();
     document.getElementById('editOrderUninstallationDate').value = order.uninstallation_date || '';
 
+    await ensureBusinessFinancialAccess();
+    applyBusinessFinancialVisibility(document.getElementById('editOrderModal'));
     document.getElementById('editOrderModal').classList.add('show');
     if (window.lucide) window.lucide.createIcons();
 };
