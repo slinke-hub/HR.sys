@@ -15101,15 +15101,6 @@ function handleCrmPipelineWheel(event) {
 
 document.addEventListener('wheel', handleCrmPipelineWheel, { passive: false });
 
-const dealApprovalStageLabels = {
-    CEO: 'crm_ceo',
-    MARKETING_MANAGER: 'crm_marketing_manager',
-    GENERAL_MANAGER: 'crm_general_manager',
-    OPERATIONS_MANAGER: 'crm_operations_manager',
-    MQ_04: 'crm_employee_mq04',
-    MQ_05: 'crm_employee_mq05'
-};
-
 const dealLifecycleStages = [
     { stage: 'LEAD', label: 'crm_lead' },
     { stage: 'QUALIFICATION', label: 'crm_contact' },
@@ -15133,39 +15124,6 @@ function dealLifecycleLabel(stage) {
     if (['PITCH', 'PROPOSAL'].includes(String(stage || '').toUpperCase())) return taskDetailText('Historical presentation', 'العرض السابق');
     const item = dealLifecycleStages.find(entry => entry.stage === canonicalDealLifecycleStage(stage));
     return item ? (t(item.label) || item.stage) : String(stage || 'LEAD').replace(/_/g, ' ');
-}
-
-function areDealApprovalsComplete(workflow) {
-    const approvals = Array.isArray(workflow?.approvals) ? workflow.approvals : [];
-    return approvals.length > 0 && approvals.every(step => String(step.status || '').toUpperCase() === 'APPROVED');
-}
-
-async function ensureApprovedDealIsInDiscussion(deal, workflow) {
-    if (!deal || !areDealApprovalsComplete(workflow)) return false;
-    const previousStage = canonicalDealLifecycleStage(deal.stage);
-    if (['NEGOTIATION', 'WON', 'LOST'].includes(previousStage)) return false;
-    const isProposalDesignWorkflow = String(deal.approval_type || '').toUpperCase() === 'QUOTE_PROPOSAL';
-    // Quote + proposal requests remain in Presentation until the MQ-08 task
-    // and its own approval cycle are complete. The database moves that deal
-    // to Discussion after the last Design approval.
-    if (isProposalDesignWorkflow) return false;
-
-    // Finalization is an atomic server-side operation. The client only asks
-    // the database to verify unanimous approval and perform the transition.
-    const stageResult = await (window.hrDomainServices?.deals?.finalizeApproval
-        ? window.hrDomainServices.deals.finalizeApproval(deal.id)
-        : db.finalizeCrmDealApproval(deal.id));
-    if (!stageResult.success) {
-        showToast(stageResult.error?.message || t('crm_stage_update_failed') || 'Could not move the approved deal to Discussion.', 'danger');
-        return false;
-    }
-
-    await db.logDealActivity(deal.id, 'STAGE_CHANGED', previousStage, 'NEGOTIATION', t('crm_approval_completed') || 'Internal approval completed');
-    deal.stage = 'NEGOTIATION';
-    deal.workflow_status = 'APPROVED';
-    window.setCrmDealStageLocally?.(String(deal.id), 'NEGOTIATION');
-    void window.refreshCrmDashboardInBackground?.();
-    return true;
 }
 
 function renderDealLifecycle(deal) {
@@ -15193,7 +15151,7 @@ function renderDealLifecycle(deal) {
 function isDealWorkflowDirectTransition(oldStage, newStage) {
     return (oldStage === 'LEAD' && newStage === 'QUALIFICATION')
         || (oldStage === 'QUALIFICATION' && ['LEAD', 'DISCUSSION'].includes(newStage))
-        || (oldStage === 'DISCUSSION' && newStage === 'QUALIFICATION')
+        || (oldStage === 'DISCUSSION' && ['QUALIFICATION', 'NEGOTIATION'].includes(newStage))
         || (oldStage === 'NEGOTIATION' && newStage === 'DISCUSSION');
 }
 
@@ -15235,18 +15193,6 @@ window.saveDealWorkflowStage = async function () {
     const newStage = canonicalDealLifecycleStage(context.selectedStage || oldStage);
     if (oldStage === newStage) return showToast(taskDetailText('Select a different stage first.', 'اختر مرحلة مختلفة أولاً.'), 'warning');
 
-    // Negotiation is reached through the registered Quote & Proposal workflow,
-    // never by bypassing its task and approval requirements.
-    if (oldStage === 'DISCUSSION' && newStage === 'NEGOTIATION') {
-        closeDealWorkflowModal();
-        window.openCrmPresentationRequest?.('QUOTE_PROPOSAL', String(dealId));
-        showToast(taskDetailText(
-            'Complete the Quote & Proposal workflow before moving to Negotiation.',
-            'أكمل مسار عرض السعر والمقترح قبل الانتقال إلى التفاوض.'
-        ), 'warning');
-        return { success: false, reason: 'workflow_required', dealId, oldStage, newStage };
-    }
-
     if (!isDealWorkflowDirectTransition(oldStage, newStage)) {
         return showToast(taskDetailText(
             'This deal can move only one stage at a time.',
@@ -15273,6 +15219,9 @@ window.saveDealWorkflowStage = async function () {
     closeDealWorkflowModal();
     void window.refreshCrmDashboardInBackground?.();
     if (newStage === 'DISCUSSION') window.openCrmPresentationRequest?.('QUOTE_PROPOSAL', String(dealId));
+    if (oldStage === 'DISCUSSION' && newStage === 'NEGOTIATION') {
+        await window.prepareCrmOrderModal(String(dealId), newStage);
+    }
     return { success: true, dealId, oldStage, newStage };
 };
 
@@ -15393,16 +15342,6 @@ window.openDealWorkflowModal = async function (dealId) {
         summary.innerHTML = summaryFields.map(([label, value]) => `<div><dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd></div>`).join('')
             + `<div class="deal-workflow-summary-wide deal-presentation-summary"><dt>${escapeHTML(t('crm_technical_description') || 'Technical Presentation / Project Description')}</dt><dd id="dealPresentationAssetsSummary" class="deal-presentation-assets"></dd></div>`;
     }
-    const options = `<option value="">${t('crm_select_employee') || 'Select employee'}</option>` + users.map(user =>
-        `<option value="${user.id}">${escapeHTML(dealEmployeeName(user))}${user.job_title ? ` — ${escapeHTML(user.job_title)}` : ''}</option>`
-    ).join('');
-    ['workflowMarketingManager', 'workflowGeneralManager', 'workflowOperationsManager'].forEach(id => {
-        document.getElementById(id).innerHTML = options;
-    });
-    const titleMatch = (pattern) => users.find(user => pattern.test(String(user.job_title || '')))?.id || '';
-    document.getElementById('workflowMarketingManager').value = titleMatch(/marketing.*manager/i);
-    document.getElementById('workflowGeneralManager').value = titleMatch(/general manager|\bGM\b/i);
-    document.getElementById('workflowOperationsManager').value = titleMatch(/operations?.*manager/i);
     activeDealWorkflowContext = { deal, users, workflow, canUseCrm, selectedStage: canonicalDealLifecycleStage(deal.stage) };
     renderDealLifecycle(deal);
     renderDealWorkflowContents(workflow);
@@ -15762,12 +15701,6 @@ function renderDealWorkflowContents(workflow) {
         documentsSection.hidden = canonicalDealLifecycleStage(activeDealWorkflowContext?.deal?.stage) === 'LEAD';
         if (isMq08Viewer) documentsSection.hidden = false;
     }
-    const setupSection = document.getElementById('workflowSetupSection');
-    if (setupSection) {
-        setupSection.hidden = true;
-        setupSection.style.display = 'none';
-    }
-
     const attachmentCategories = new Set(workflow.attachments.map(file => String(file.category || '').toUpperCase()));
     renderDealPresentationAssets(workflow.attachments);
     const quoteReady = attachmentCategories.has('QUOTATION');
@@ -15777,52 +15710,6 @@ function renderDealWorkflowContents(workflow) {
         checklist.innerHTML = `<strong>${escapeHTML(t('crm_proposal_readiness') || 'Proposal readiness')}</strong>
             <div class="deal-readiness-item ${quoteReady ? 'ready' : ''}"><i data-lucide="${quoteReady ? 'check-circle-2' : 'circle'}"></i><span>${escapeHTML(t('crm_quote_required') || 'Quotation uploaded')}</span></div>
             <div class="deal-readiness-item ${proposalReady ? 'ready' : ''}"><i data-lucide="${proposalReady ? 'check-circle-2' : 'circle'}"></i><span>${escapeHTML(t('crm_proposal_required') || 'Proposal form uploaded')}</span></div>`;
-    }
-
-    const approvalsEl = document.getElementById('dealApprovalSteps');
-    const approvalHistory = document.getElementById('dealApprovalProgressSection');
-    if (approvalHistory) {
-        approvalHistory.hidden = !workflow.approvals.length;
-        const heading = approvalHistory.querySelector('h3');
-        if (heading) heading.textContent = taskDetailText('Historical approval decisions', 'قرارات الموافقة السابقة');
-    }
-    approvalsEl.innerHTML = workflow.approvals.length ? workflow.approvals.map(step => {
-        const canDecide = false;
-        const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
-        return `<article class="deal-approval-step ${step.status.toLowerCase()}">
-            <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
-            <div class="deal-approval-copy"><strong>${escapeHTML(label)}</strong><span>${escapeHTML(dealEmployeeName(step.profiles))}</span>${step.decision_note ? `<small>${escapeHTML(step.decision_note)}</small>` : ''}</div>
-            ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideDealApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideDealApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${step.status === 'APPROVED' ? 'success' : (step.status === 'REJECTED' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + step.status.toLowerCase()) || step.status)}</span>`}
-        </article>`;
-    }).join('') : `<p class="empty-state-inline">${t('crm_approval_not_started') || 'Approval has not started.'}</p>`;
-    const designFiles = Array.isArray(workflow.designFiles) ? workflow.designFiles : [];
-    if (workflow.designTask && (designFiles.length || workflow.designApprovals?.length)) {
-        const designFileCards = designFiles.map(file => {
-            const fileUrl = safeExternalUrl(file.file_url);
-            if (!fileUrl) return '';
-            const fileName = file.file_name || taskDetailText('Design file', 'ملف التصميم');
-            const isImage = String(file.file_type || '').startsWith('image/')
-                || /\.(png|jpe?g|webp|gif|bmp)(?:\?|$)/i.test(String(fileName))
-                || /\.(png|jpe?g|webp|gif|bmp)(?:\?|$)/i.test(String(fileUrl));
-            return isImage
-                ? `<figure class="crm-design-review-image"><button type="button" data-image-url="${escapeHTML(fileUrl)}" data-image-name="${escapeHTML(fileName)}" onclick="openDealImagePreview(this)" aria-label="${escapeHTML(taskDetailText('Open completed design image', 'فتح صورة التصميم المكتمل'))}"><img src="${escapeHTML(fileUrl)}" alt="${escapeHTML(fileName)}" loading="lazy"></button><figcaption>${escapeHTML(fileName)}</figcaption></figure>`
-                : `<a class="crm-design-review-document" href="${escapeHTML(fileUrl)}" target="_blank" rel="noopener"><i data-lucide="file-text"></i><span><strong>${escapeHTML(fileName)}</strong><small>${taskDetailText('Open completed Design PDF', 'فتح ملف PDF للتصميم المكتمل')}</small></span><i data-lucide="external-link"></i></a>`;
-        }).join('');
-        approvalsEl.innerHTML += `<section class="crm-design-review-files">
-            <header><i data-lucide="palette"></i><div><h4>${taskDetailText('Completed Design files', 'ملفات التصميم المكتمل')}</h4><p>${taskDetailText('Review every submitted file before approving or rejecting the Design task.', 'راجع جميع الملفات المرسلة قبل اعتماد مهمة التصميم أو رفضها.')}</p></div></header>
-            ${designFileCards ? `<div class="crm-design-review-grid">${designFileCards}</div>` : `<p class="empty-state-inline">${taskDetailText('No completed Design files were submitted.', 'لم يتم إرسال ملفات التصميم المكتمل.')}</p>`}
-        </section>`;
-    }
-    if (workflow.designApprovals?.length) {
-        approvalsEl.innerHTML += `<h4 class="deal-design-approval-title">${escapeHTML(t('crm_design_approval') || 'Design task approval')}</h4>` + workflow.designApprovals.map(step => {
-            const canDecide = false;
-            const label = t(dealApprovalStageLabels[step.stage_key]) || step.stage_key.replace(/_/g, ' ');
-            return `<article class="deal-approval-step ${step.status.toLowerCase()}">
-                <div class="deal-approval-index">${step.status === 'APPROVED' ? '<i data-lucide="circle-check" aria-hidden="true"></i>' : (step.status === 'REJECTED' ? '<i data-lucide="circle-x" aria-hidden="true"></i>' : step.step_order)}</div>
-                <div class="deal-approval-copy"><strong>${escapeHTML(label)}</strong><span>${escapeHTML(dealEmployeeName(step.profiles))}</span>${step.decision_note ? `<small>${escapeHTML(step.decision_note)}</small>` : ''}</div>
-                ${canDecide ? `<div class="deal-approval-actions"><button class="btn btn-primary btn-sm" onclick="decideCrmDesignTaskApproval('${step.id}','APPROVED')">${t('crm_approve') || 'Approve'}</button><button class="btn btn-secondary btn-sm" onclick="decideCrmDesignTaskApproval('${step.id}','REJECTED')">${t('crm_reject') || 'Reject'}</button></div>` : `<span class="status-badge ${step.status === 'APPROVED' ? 'success' : (step.status === 'REJECTED' ? 'danger' : 'warning')}">${escapeHTML(t('crm_status_' + step.status.toLowerCase()) || step.status)}</span>`}
-            </article>`;
-        }).join('');
     }
 
     const renderAttachmentItems = files => files.map(file => {
@@ -15898,77 +15785,6 @@ window.setProjectAttachmentVisibility = async function (input, attachmentType, a
     showToast(requested
         ? taskDetailText('The project assignee can now view and download this attachment.', 'يمكن للمكلّف بالمشروع الآن عرض هذا المرفق وتنزيله.')
         : taskDetailText('This attachment is now hidden from the project assignee.', 'تم إخفاء هذا المرفق عن المكلّف بالمشروع.'), 'success');
-};
-
-window.startDealApprovalWorkflow = async function () {
-    const dealId = document.getElementById('workflowDealId').value;
-    const workflow = activeDealWorkflowContext?.workflow || await db.fetchDealWorkflow(dealId);
-    const categories = new Set(workflow.attachments.map(file => String(file.category || '').toUpperCase()));
-    if (!categories.has('QUOTATION') || !categories.has('PROPOSAL')) {
-        return showToast(t('crm_upload_quote_and_proposal') || 'Upload the quotation and proposal form before starting approval.', 'warning');
-    }
-    const approvers = {
-        marketingManager: document.getElementById('workflowMarketingManager').value,
-        generalManager: document.getElementById('workflowGeneralManager').value,
-        operationsManager: document.getElementById('workflowOperationsManager').value
-    };
-    if (Object.values(approvers).some(value => !value)) return showToast(t('crm_select_all_approvers') || 'Select all three approvers.', 'warning');
-    const previousStage = activeDealWorkflowContext?.deal?.stage || 'LEAD';
-    const result = window.hrDomainServices?.deals?.startApproval
-        ? await window.hrDomainServices.deals.startApproval(dealId, approvers)
-        : await db.startDealApproval(dealId, approvers);
-    if (!result.success) return showToast(result.error?.message || t('crm_approval_start_failed') || 'Could not start approval.', 'danger');
-    if (canonicalDealLifecycleStage(previousStage) !== 'PITCH') await db.logDealActivity(dealId, 'STAGE_CHANGED', previousStage, 'PITCH', null);
-    showToast(t('crm_approval_started') || 'Approval workflow started.', 'success');
-    const refreshed = await db.fetchDealWorkflow(dealId);
-    if (activeDealWorkflowContext) activeDealWorkflowContext.deal.stage = 'PITCH';
-    renderDealLifecycle(activeDealWorkflowContext?.deal);
-    renderDealWorkflowContents(refreshed);
-    if (currentView === 'crm') void window.refreshCrmDashboardInBackground?.();
-    if (window.lucide) window.lucide.createIcons();
-};
-
-window.decideDealApproval = async function (stepId, decision) {
-    let note = '';
-    if (decision === 'REJECTED') {
-        note = await window.showPromptModal(t('crm_rejection_note_prompt') || 'Enter the rejection reason:', t('crm_approval'), { required: true });
-        if (note === null || !String(note).trim()) return showToast(t('crm_rejection_note_required') || 'A rejection reason is required.', 'warning');
-    }
-    const result = await db.decideDealApproval(stepId, decision, note || '');
-    if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the decision.', 'danger');
-    const dealId = document.getElementById('workflowDealId').value;
-    let workflow = await db.fetchDealWorkflow(dealId);
-    const allApproved = areDealApprovalsComplete(workflow);
-    if (decision === 'APPROVED' && allApproved) {
-        const movedToDiscussion = await ensureApprovedDealIsInDiscussion(activeDealWorkflowContext?.deal, workflow);
-        if (movedToDiscussion) {
-            renderDealLifecycle(activeDealWorkflowContext?.deal);
-            workflow = await db.fetchDealWorkflow(dealId);
-        }
-    }
-    renderDealWorkflowContents(workflow);
-    showToast(decision === 'APPROVED' ? (t('crm_approval_saved') || 'Approval saved.') : (t('crm_rejection_saved') || 'Rejection saved.'), 'success');
-    if (currentView === 'crm') void window.refreshCrmDashboardInBackground?.();
-    if (window.lucide) window.lucide.createIcons();
-};
-
-window.decideCrmDesignTaskApproval = async function (stepId, decision) {
-    let note = '';
-    if (decision === 'REJECTED') {
-        note = await window.showPromptModal(
-            t('crm_rejection_note_prompt') || 'Enter the rejection reason:',
-            t('crm_design_approval') || 'Design task approval',
-            { required: true }
-        );
-        if (note === null || !String(note).trim()) return showToast(t('crm_rejection_note_required') || 'A rejection reason is required.', 'warning');
-    }
-    const result = await db.decideCrmDesignTaskApproval(stepId, decision, note || '');
-    if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the decision.', 'danger');
-    const dealId = document.getElementById('workflowDealId').value;
-    renderDealWorkflowContents(await db.fetchDealWorkflow(dealId));
-    showToast(decision === 'APPROVED' ? (t('crm_approval_saved') || 'Approval saved.') : (t('crm_rejection_saved') || 'Rejection saved.'), 'success');
-    void window.refreshCrmDashboardInBackground?.();
-    if (window.lucide) window.lucide.createIcons();
 };
 
 let dealAttachmentUploadRowCounter = 0;
@@ -16399,23 +16215,11 @@ window.dropDeal = async (ev, newStage) => {
         return { success: false, reason: 'won_details_required', dealId, oldStage, newStage };
     }
 
-    // Discussion -> Negotiation is established by the Quote & Proposal
-    // workflow after its registered task is completed and approved. Do not
-    // issue a direct stage RPC that the server must reject; open the workflow
-    // so the user can complete the required next step from the deal itself.
-    if (oldStage === 'DISCUSSION' && newStage === 'NEGOTIATION') {
-        window.openDealWorkflowModal?.(String(dealId));
-        showToast(currentLang === 'ar'
-            ? 'افتح مسار عرض السعر والمقترح لإكمال الانتقال إلى التفاوض.'
-            : 'Open the Quote & Proposal workflow to continue this deal to Negotiation.', 'warning');
-        return { success: false, reason: 'workflow_required', dealId, oldStage, newStage };
-    }
-
-    // Direct moves may advance one stage or return exactly one stage. Won,
-    // Lost, Presentation, and Discussion -> Negotiation remain workflow-led.
+    // Negotiation is directly saveable. Project creation still uses the
+    // validated order form and its server-side document/access checks.
     const directTransitionAllowed = (oldStage === 'LEAD' && newStage === 'QUALIFICATION')
         || (oldStage === 'QUALIFICATION' && ['LEAD', 'DISCUSSION'].includes(newStage))
-        || (oldStage === 'DISCUSSION' && newStage === 'QUALIFICATION')
+        || (oldStage === 'DISCUSSION' && ['QUALIFICATION', 'NEGOTIATION'].includes(newStage))
         || (oldStage === 'NEGOTIATION' && newStage === 'DISCUSSION');
     if (oldStage && ['QUALIFICATION', 'DISCUSSION', 'NEGOTIATION'].includes(String(newStage || '').toUpperCase())
         && !directTransitionAllowed) {
@@ -16441,6 +16245,9 @@ window.dropDeal = async (ev, newStage) => {
         if (newStage === 'DISCUSSION') window.openCrmPresentationRequest('QUOTE_PROPOSAL', dealId);
         showToast(t('toast_deal_moved_to') + newStage, "success");
         void window.refreshCrmDashboardInBackground?.();
+        if (oldStage === 'DISCUSSION' && newStage === 'NEGOTIATION') {
+            await window.prepareCrmOrderModal(dealId, newStage);
+        }
         return { success: true, dealId, oldStage, newStage };
     } else {
         const reason = String(res.error?.message || res.data?.message || '');
@@ -19468,40 +19275,6 @@ window.handleApprovalRequestDecision = async function (sourceTable, sourceId, de
     if (!result.success) return showToast(result.error?.message || 'Unable to record this approval.', 'danger');
     showToast(decision === 'APPROVED' ? 'Request approved and moved to its next stage.' : 'Request rejected and employee notified.', 'success');
     renderView('approvals');
-};
-
-window.handleCrmApprovalDecision = async function (dealId, stepId, decision) {
-    let note = '';
-    if (decision === 'REJECTED') {
-        note = await window.showPromptModal(t('crm_rejection_note_prompt') || 'Enter the rejection reason:', t('crm_approval'), { required: true });
-        if (note === null || !String(note).trim()) return;
-    }
-    const result = await db.decideDealApproval(stepId, decision, note || '');
-    if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the CRM decision.', 'danger');
-    if (decision === 'APPROVED') {
-        const workflow = await db.fetchDealWorkflow(dealId);
-        const allApproved = areDealApprovalsComplete(workflow);
-        if (allApproved) {
-            const deals = await db.fetchDeals();
-            const deal = deals.find(item => item.id === dealId);
-            await ensureApprovedDealIsInDiscussion(deal, workflow);
-        }
-    }
-    showToast(decision === 'APPROVED' ? (t('crm_approval_saved') || 'CRM approval saved.') : (t('crm_rejection_saved') || 'CRM rejection saved.'), 'success');
-    if (currentView === 'approvals') renderView('approvals');
-};
-
-window.handleCrmDesignApprovalDecision = async function (dealId, stepId, decision) {
-    let note = '';
-    if (decision === 'REJECTED') {
-        note = await window.showPromptModal(t('crm_rejection_note_prompt') || 'Enter the rejection reason:', t('crm_design_approval'), { required: true });
-        if (note === null || !String(note).trim()) return;
-    }
-    const result = await db.decideCrmDesignTaskApproval(stepId, decision, note || '');
-    if (!result.success) return showToast(result.error?.message || t('crm_decision_failed') || 'Could not save the Design approval.', 'danger');
-    showToast(decision === 'APPROVED' ? (t('crm_approval_saved') || 'Approval saved.') : (t('crm_rejection_saved') || 'Rejection saved and MQ-08 notified.'), 'success');
-    if (currentView === 'approvals') renderView('approvals');
-    else void window.refreshCrmDashboardInBackground?.();
 };
 
 window.handleCrmDesignAdminApproveAll = async function (dealId, taskId) {

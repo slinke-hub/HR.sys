@@ -25,21 +25,22 @@ assert.match(source, /\['PITCH', 'PROPOSAL'\]\.includes\(value\).*'PRESENTATION'
 assert.match(source, /dbStage: 'PITCH'[^\n]*historical: true/);
 assert.match(source, /if \(stage\.historical\) return/);
 assert.match(source, /requiresDetails = \['DISCUSSION', 'WON', 'LOST'\]/);
-assert.match(app, /newStage === 'PITCH' \|\| newStage === 'PROPOSAL'.*historical_stage/);
+assert.match(app, /newStage === 'PITCH' \|\| newStage === 'PROPOSAL'[\s\S]*?historical_stage/);
 assert.match(app, /newStage === 'DISCUSSION'\) window\.openCrmPresentationRequest\('QUOTE_PROPOSAL'/);
 assert.match(html, /id="dealQuoteProposalContinue"/);
 
 assert.match(html, /id="dealLifecycleStepper"/);
-assert.match(html, /id="dealProposalChecklist"/);
+assert.doesNotMatch(html, /id="dealApprovalProgressSection"|id="workflowSetupSection"|id="dealProposalChecklist"/);
 assert.match(html, /id="dealProjectSection"/);
 assert.match(html, /id="closeDealProjectBtn"/);
 
 assert.match(app, /const dealLifecycleStages = \[/);
-assert.match(app, /categories\.has\('QUOTATION'\).*categories\.has\('PROPOSAL'\)/s);
+assert.doesNotMatch(app, /function areDealApprovalsComplete|function ensureApprovedDealIsInDiscussion/);
 assert.match(app, /db\.startCrmQuoteProposal\(dealId\)/);
 assert.match(db, /rpc\('start_crm_quote_proposal'/);
 assert.match(app, /newStage === 'LOST'/);
 assert.match(app, /newStage === 'WON'/);
+assert.match(app, /await window\.prepareCrmOrderModal\(dealId, newStage\)/);
 assert.match(app, /closeWonDealProjectFromWorkflow/);
 assert.match(app, /categories\.has\('PHOTO'\)/);
 assert.match(app, /typeof workflow\.project\.payment_ready === 'boolean'/);
