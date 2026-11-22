@@ -4273,11 +4273,28 @@ const db = {
     async startCrmQuoteProposal(dealId) {
         if (!supabaseClient) return { success: false };
         try {
-            const { error } = await supabaseClient.rpc('start_crm_quote_proposal', { p_deal_id: dealId });
+            const { data, error } = await supabaseClient.rpc('start_crm_quote_proposal', { p_deal_id: dealId });
             if (error) throw error;
-            return { success: true };
+            return { success: true, taskId: data || null };
         } catch (error) {
             console.error('startCrmQuoteProposal Error:', {
+                code: error?.code,
+                message: error?.message,
+                details: error?.details,
+                hint: error?.hint,
+                status: error?.status
+            });
+            return { success: false, error };
+        }
+    },
+    async startCrmQuoteProposalAndAdvance(dealId) {
+        if (!supabaseClient) return { success: false };
+        try {
+            const { data, error } = await supabaseClient.rpc('start_crm_quote_proposal_and_advance', { p_deal_id: dealId });
+            if (error) throw error;
+            return { success: true, taskId: data || null };
+        } catch (error) {
+            console.error('startCrmQuoteProposalAndAdvance Error:', {
                 code: error?.code,
                 message: error?.message,
                 details: error?.details,
