@@ -15719,6 +15719,9 @@ function renderDealWorkflowContents(workflow) {
             <input type="checkbox" ${file.visible_to_project_assignee ? 'checked' : ''} onchange="setProjectAttachmentVisibility(this,'DEAL','${escapeHTML(file.id)}')">
             <span>${escapeHTML(taskDetailText('Share with project assignee', 'مشاركة مع المكلّف بالمشروع'))}</span>
         </label>` : '';
+        const canDeleteAttachment = !isMq08Viewer && (
+            String(file.uploaded_by || '') === String(currentUser?.id || '') || canCurrentUserDeleteCrmDeals()
+        );
         return `<article class="deal-attachment-item ${isImage ? 'deal-attachment-image' : ''}">
             ${isImage ? `<img src="${escapeHTML(file.file_url)}" alt="${escapeHTML(file.description || file.file_name)}" loading="lazy">` : '<i data-lucide="paperclip"></i>'}
             <span><strong>${escapeHTML(file.file_name)}</strong><small>${escapeHTML(file.description || file.category.replace(/_/g, ' '))}</small></span>
@@ -15727,6 +15730,7 @@ function renderDealWorkflowContents(workflow) {
                     ? `<button type="button" class="btn btn-secondary btn-sm" data-image-url="${escapeHTML(file.file_url)}" data-image-name="${escapeHTML(file.file_name || '')}" data-image-description="${escapeHTML(file.description || '')}" onclick="openDealImagePreview(this)">${escapeHTML(t('crm_open_image') || 'Open image')}</button>`
                     : `<a class="btn btn-secondary btn-sm" href="${escapeHTML(file.file_url)}" target="_blank" rel="noopener">${escapeHTML(t('crm_open_file') || 'Open file')}</a>`}
                 ${isClientIdentity ? `<button type="button" class="btn btn-secondary btn-sm" data-download-url="${escapeHTML(file.file_url)}" data-file-name="${escapeHTML(file.file_name || 'client-identity')}" onclick="downloadCrmAttachment(this)"><i data-lucide="download"></i>${escapeHTML(taskDetailText('Download', 'تنزيل'))}</button>` : ''}
+                ${canDeleteAttachment ? `<button type="button" class="btn btn-danger btn-sm" onclick="deleteCrmDealAttachment('${escapeHTML(file.id)}')" aria-label="${escapeHTML(taskDetailText('Delete attachment', 'حذف المرفق'))}" title="${escapeHTML(taskDetailText('Delete attachment', 'حذف المرفق'))}"><i data-lucide="trash-2"></i>${escapeHTML(taskDetailText('Delete', 'حذف'))}</button>` : ''}
                 ${shareControl}
             </div>
         </article>`;
@@ -15785,6 +15789,34 @@ window.setProjectAttachmentVisibility = async function (input, attachmentType, a
     showToast(requested
         ? taskDetailText('The project assignee can now view and download this attachment.', 'يمكن للمكلّف بالمشروع الآن عرض هذا المرفق وتنزيله.')
         : taskDetailText('This attachment is now hidden from the project assignee.', 'تم إخفاء هذا المرفق عن المكلّف بالمشروع.'), 'success');
+};
+
+window.deleteCrmDealAttachment = function (attachmentId) {
+    const context = activeDealWorkflowContext;
+    const attachment = context?.workflow?.attachments?.find(file => String(file.id) === String(attachmentId));
+    if (!attachment) return;
+    const canDelete = String(attachment.uploaded_by || '') === String(currentUser?.id || '')
+        || canCurrentUserDeleteCrmDeals();
+    if (!canDelete || isMq08Profile()) {
+        return showToast(taskDetailText('You do not have permission to delete this attachment.', 'ليس لديك صلاحية حذف هذا المرفق.'), 'danger');
+    }
+    window.showConfirmModal(
+        taskDetailText('Delete attachment', 'حذف المرفق'),
+        taskDetailText('Delete this attachment? This cannot be undone.', 'هل تريد حذف هذا المرفق؟ لا يمكن التراجع عن هذا الإجراء.'),
+        async () => {
+            const result = await db.removeDealAttachment(attachment.id, attachment.storage_reference || attachment.file_url);
+            if (!result.success) {
+                showToast(result.error?.message || taskDetailText('Could not delete the attachment.', 'تعذر حذف المرفق.'), 'danger');
+                return;
+            }
+            const refreshed = await db.fetchDealWorkflow(context.deal.id);
+            renderDealWorkflowContents(refreshed);
+            showToast(result.cleanupWarning
+                ? taskDetailText('Attachment removed; stored file cleanup needs administrator attention.', 'تمت إزالة المرفق؛ يحتاج تنظيف الملف المخزن إلى مراجعة المسؤول.')
+                : taskDetailText('Attachment deleted.', 'تم حذف المرفق.'), result.cleanupWarning ? 'warning' : 'success');
+            if (window.lucide) window.lucide.createIcons();
+        }
+    );
 };
 
 let dealAttachmentUploadRowCounter = 0;

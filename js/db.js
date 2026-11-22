@@ -4086,14 +4086,23 @@ const db = {
             return { success: false, error };
         }
     },
-    async removeDealAttachment(attachmentId) {
+    async removeDealAttachment(attachmentId, storageReference = '') {
         if (!supabaseClient || !attachmentId) return { success: false };
         try {
             const { data, error } = await supabaseClient.rpc('delete_crm_deal_attachment_secure', {
                 p_attachment_id: attachmentId
             });
             if (error) throw error;
-            return { success: data === true, data };
+            if (data !== true) return { success: false, data };
+            const reference = parseStorageReference(storageReference);
+            if (reference?.bucket === 'crm-deal-files') {
+                const { error: storageError } = await supabaseClient.storage.from(reference.bucket).remove([reference.path]);
+                if (storageError) {
+                    console.warn('CRM attachment record deleted, but stored file cleanup failed:', storageError.message || storageError);
+                    return { success: true, data, cleanupWarning: true };
+                }
+            }
+            return { success: true, data };
         } catch (error) {
             console.error('removeDealAttachment Error:', error);
             return { success: false, error };
