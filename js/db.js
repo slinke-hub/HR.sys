@@ -4086,14 +4086,23 @@ const db = {
             return { success: false, error };
         }
     },
-    async removeDealAttachment(attachmentId) {
+    async removeDealAttachment(attachmentId, storageReference = '') {
         if (!supabaseClient || !attachmentId) return { success: false };
         try {
             const { data, error } = await supabaseClient.rpc('delete_crm_deal_attachment_secure', {
                 p_attachment_id: attachmentId
             });
             if (error) throw error;
-            return { success: data === true, data };
+            if (data !== true) return { success: false, data };
+            const reference = parseStorageReference(storageReference);
+            if (reference?.bucket === 'crm-deal-files') {
+                const { error: storageError } = await supabaseClient.storage.from(reference.bucket).remove([reference.path]);
+                if (storageError) {
+                    console.warn('CRM attachment record deleted, but stored file cleanup failed:', storageError.message || storageError);
+                    return { success: true, data, cleanupWarning: true };
+                }
+            }
+            return { success: true, data };
         } catch (error) {
             console.error('removeDealAttachment Error:', error);
             return { success: false, error };
@@ -4194,15 +4203,13 @@ const db = {
     async fetchDealWorkflow(dealId) {
         if (!supabaseClient) return { approvals: [], designApprovals: [], attachments: [], designFiles: [], activity: [], project: null };
         try {
-            const [approvals, designApprovals, attachments, activity, projects, designTask] = await Promise.all([
-                supabaseClient.from('crm_deal_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
-                supabaseClient.from('crm_design_task_approval_steps').select('*, profiles:approver_id(full_name, display_name_ar, job_title, emp_index)').eq('deal_id', dealId).order('step_order'),
+            const [attachments, activity, projects, designTask] = await Promise.all([
                 supabaseClient.rpc('list_crm_deal_attachments_secure', { p_deal_id: dealId }),
                 supabaseClient.rpc('list_crm_deal_activity_secure', { p_deal_id: dealId }),
                 this.fetchProjects(),
                 supabaseClient.from('tasks').select('id, title, status, submission_links, completion_requested_at, crm_workflow_kind, crm_deal_id, assignee_id, assignee_ids').eq('crm_deal_id', dealId).in('crm_workflow_kind', ['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL']).order('created_at', { ascending: false }).limit(1).maybeSingle()
             ]);
-            const firstError = approvals.error || designApprovals.error || attachments.error || activity.error || designTask.error;
+            const firstError = attachments.error || activity.error || designTask.error;
             if (firstError) throw firstError;
             const resolvedAttachments = await Promise.all((attachments.data || []).map(async attachment => ({
                 ...attachment,
@@ -4230,8 +4237,8 @@ const db = {
                 };
             }));
             return {
-                approvals: approvals.data || [],
-                designApprovals: designApprovals.data || [],
+                approvals: [],
+                designApprovals: [],
                 attachments: resolvedAttachments,
                 designTask: designTask.data || null,
                 designFiles,
@@ -4263,35 +4270,6 @@ const db = {
         if (!supabaseClient) return { success: false };
         return this.changeProjectStatus(projectId, 'COMPLETED');
     },
-    async startDealApproval(dealId, approvers) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { error } = await supabaseClient.rpc('start_deal_approval', {
-                p_deal_id: dealId,
-                p_marketing_manager: approvers.marketingManager,
-                p_general_manager: approvers.generalManager,
-                p_operations_manager: approvers.operationsManager
-            });
-            if (error) throw error;
-            return { success: true };
-        } catch (error) {
-            console.error('startDealApproval Error:', error);
-            return { success: false, error };
-        }
-    },
-    async finalizeCrmDealApproval(dealId) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { data, error } = await supabaseClient.rpc('finalize_crm_deal_approval', {
-                p_deal_id: dealId
-            });
-            if (error) throw error;
-            return { success: true, data };
-        } catch (error) {
-            console.error('finalizeCrmDealApproval Error:', error);
-            return { success: false, error };
-        }
-    },
     async startCrmQuoteProposal(dealId) {
         if (!supabaseClient) return { success: false };
         try {
@@ -4306,38 +4284,6 @@ const db = {
                 hint: error?.hint,
                 status: error?.status
             });
-            return { success: false, error };
-        }
-    },
-    async decideDealApproval(stepId, decision, note) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { error } = await supabaseClient.rpc('decide_deal_approval', {
-                p_step_id: stepId,
-                p_decision: decision,
-                p_note: note || null
-            });
-            if (error) throw error;
-            await this.flushTaskNotificationEmails();
-            return { success: true };
-        } catch (error) {
-            console.error('decideDealApproval Error:', error);
-            return { success: false, error };
-        }
-    },
-    async decideCrmDesignTaskApproval(stepId, decision, note) {
-        if (!supabaseClient) return { success: false };
-        try {
-            const { error } = await supabaseClient.rpc('decide_crm_design_task_approval', {
-                p_step_id: stepId,
-                p_decision: decision,
-                p_note: note || null
-            });
-            if (error) throw error;
-            await this.flushTaskNotificationEmails();
-            return { success: true };
-        } catch (error) {
-            console.error('decideCrmDesignTaskApproval Error:', error);
             return { success: false, error };
         }
     },

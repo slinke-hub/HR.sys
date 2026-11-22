@@ -14,11 +14,15 @@ assert.match(app, /window\.selectDealWorkflowStage = function \(stage\)/,
     'Deal Workflow stages must be selectable');
 assert.match(app, /window\.saveDealWorkflowStage = async function \(\)/,
     'Deal Workflow stage save handler is missing');
-assert.match(app, /oldStage === 'DISCUSSION' && newStage === 'NEGOTIATION'/,
-    'Discussion to Negotiation must remain workflow-controlled');
+assert.match(app, /oldStage === 'DISCUSSION' && \['QUALIFICATION', 'NEGOTIATION'\]\.includes\(newStage\)/,
+    'Discussion to Negotiation must be directly saveable');
+assert.match(app, /await window\.prepareCrmOrderModal\(String\(dealId\), newStage\)/,
+    'Saving Negotiation must continue to project order entry');
 assert.match(app, /oldStage === 'NEGOTIATION' && newStage === 'DISCUSSION'/,
     'Negotiation to Discussion must remain directly saveable');
 assert.match(app, /context\.deal\.stage = newStage/,
     'Successful stage saves must update the active deal context');
+assert.doesNotMatch(index, /dealApprovalProgressSection|workflowSetupSection/,
+    'The CRM deal workflow must not expose the approval setup or historical approval panel');
 
 console.log('CRM_WORKFLOW_STAGE_SAVE=PASS');

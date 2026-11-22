@@ -15,6 +15,7 @@ const autoDiscussionMigration = read('supabase/migrations/20260910110000_crm_app
 const wonProjectScheduleMigration = read('supabase/migrations/20260915140000_won_project_client_and_schedule.sql');
 const eventEndScheduleMigration = read('supabase/migrations/20260915180000_won_project_event_end_schedule_defaults.sql');
 const optionalEquipmentMigration = read('supabase/migrations/20260915190000_won_project_optional_equipment.sql');
+const approvalRemovalMigration = read('supabase/migrations/20261122100000_crm_remove_deal_approval_gate.sql');
 
 for (const id of [
   'crmPresentationChoiceModal', 'crmPresentationRequestModal', 'presentationQuoteFile',
@@ -67,8 +68,8 @@ assert.match(html, /id="dealAttachmentCategory"[\s\S]*value="QUOTATION"[\s\S]*va
 assert.doesNotMatch(html.match(/<select id="dealAttachmentCategory"[\s\S]*?<\/select>/)?.[0] || '', /TECHNICAL_PRESENTATION|PHOTO|OTHER/);
 assert.match(html, /onclick="addDealQuoteUploadRow\(\)"/);
 assert.match(html, /onclick="addDealProposalUploadRow\(\)"/);
-assert.match(source, /requiresDetails = \['PITCH', 'WON', 'LOST'\]/);
-assert.match(app, /newStage === 'PITCH'.*openCrmPresentationChoiceModal/s);
+assert.match(source, /requiresDetails = \['DISCUSSION', 'WON', 'LOST'\]/);
+assert.match(app, /if \(newStage === 'PITCH' \|\| newStage === 'PROPOSAL'\)[\s\S]*?historical_stage/);
 assert.match(app, /documentsSection\.hidden = canonicalDealLifecycleStage\(activeDealWorkflowContext\?\.deal\?\.stage\) === 'LEAD'/);
 assert.match(app, /window\.addProposalImageRow = function/);
 assert.match(app, /scrollIntoView\(\{ behavior: 'smooth', block: 'nearest' \}\)/);
@@ -91,14 +92,9 @@ assert.match(app, /category \|\| ''\)\.toUpperCase\(\) === 'CLIENT_IDENTITY'/);
 assert.match(app, /clientIdentityFiles\.map\(file => \(\{[\s\S]*?category: 'CLIENT_IDENTITY'/);
 assert.match(app, /deal-presentation-image-card/);
 assert.match(app, /<figcaption>[\s\S]*file\.description/);
-assert.match(app, /db\.startCrmPresentationApproval\(dealId, requestType\)/);
-assert.match(app, /db\.decideCrmDesignTaskApproval/);
-assert.match(app, /function areDealApprovalsComplete\(workflow\)/);
-assert.match(app, /async function ensureApprovedDealIsInDiscussion\(deal, workflow\)/);
-assert.match(app, /await ensureApprovedDealIsInDiscussion\(deal, workflow\)/);
-assert.doesNotMatch(app, /allApproved\s*&&[^\n]*approval_type\s*!==\s*'QUOTE_PROPOSAL'/);
-assert.doesNotMatch(app, /crm_approval_note_prompt/, 'Approving CRM requests must not open an optional note prompt');
-assert.match(app, /decision === 'REJECTED'[\s\S]*showPromptModal[\s\S]*crm_rejection_note_prompt/);
+assert.match(app, /db\.startCrmQuoteProposal\(dealId\)/);
+assert.doesNotMatch(app, /db\.decideCrmDesignTaskApproval\(|function areDealApprovalsComplete|function ensureApprovedDealIsInDiscussion/);
+assert.doesNotMatch(app, /dealApprovalSteps|Historical approval decisions|Start Approval/);
 assert.match(app, /db\.createProjectFromWonDealV2\(orderData, dealId\)/);
 assert.match(app, /function shiftCrmOrderDateTime\(dateValue, timeValue, dayOffset\)/);
 assert.match(app, /window\.syncCrmOrderScheduleDefaults = function/);
@@ -115,7 +111,7 @@ assert.match(app, /const assignedPeople = selectedAssignee \? \[selectedAssignee
 assert.match(app, /assigneeSelect\.innerHTML = `<option value="">[\s\S]*users\.map\(user =>/);
 assert.doesNotMatch(app, /const operationDepartmentIds/);
 assert.doesNotMatch(app, /const operationsUsers/);
-assert.match(app, /task\?\.crm_workflow_kind === 'QUOTE_PROPOSAL_DESIGN'/);
+assert.match(app, /\['QUOTE_PROPOSAL_DESIGN', 'QUOTE_PROPOSAL'\]\.includes\(task\?\.crm_workflow_kind\)/);
 assert.match(app, /updateResult\?\.data\?\.status \|\| actualStatus/);
 assert.match(app, /max-height:360px|deal-attachment-image/s);
 assert.match(css, /\.deal-attachment-item\.deal-attachment-image img/);
@@ -129,9 +125,10 @@ assert.match(css, /\.crm-datetime-control:focus-within/);
 assert.match(css, /\.crm-request-file-section\[hidden\]\s*\{\s*display:\s*none;/);
 assert.match(css, /max-height: calc\(100dvh - 2rem\)/);
 
-assert.match(db, /async startCrmPresentationApproval\(dealId, requestType\)/);
+assert.match(db, /async startCrmQuoteProposal\(dealId\)/);
 assert.match(db, /async fetchPendingCrmDesignTaskApprovals\(\)/);
-assert.match(db, /async decideCrmDesignTaskApproval\(stepId, decision, note\)/);
+assert.doesNotMatch(db, /async (?:startDealApproval|finalizeCrmDealApproval|decideDealApproval|decideCrmDesignTaskApproval)\(/);
+assert.match(db, /approvals: \[\],\s*designApprovals: \[\]/);
 assert.match(db, /async createProjectFromWonDealV2\(orderData, dealId\)/);
 assert.match(db, /rpc\('list_crm_deals_secure'\)/);
 assert.match(db, /rpc\('change_task_status'/);
@@ -176,5 +173,7 @@ assert.match(optionalEquipmentMigration, /jsonb_typeof\(p_order->'equipment'\) =
 assert.doesNotMatch(optionalEquipmentMigration, /jsonb_array_length[\s\S]*= 0/);
 assert.match(optionalEquipmentMigration, /jsonb_array_elements\(v_equipment\)/);
 assert.match(optionalEquipmentMigration, /equipment = v_equipment/);
+assert.match(approvalRemovalMigration, /OLD\.stage = 'DISCUSSION' AND NEW\.stage IN \('QUALIFICATION', 'NEGOTIATION'\)/);
+assert.match(approvalRemovalMigration, /Deal assignment required/);
 
-console.log('CRM presentation approvals, Design review, and Won order workflow tests passed.');
+console.log('CRM presentation documents, deal-stage transition, and Won order workflow checks passed.');

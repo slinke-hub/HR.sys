@@ -526,21 +526,6 @@
                 <div id="dealWorkflowDesignTaskStatus" class="task-crm-design-status-control deal-workflow-design-status-control" hidden></div>
                 <button id="dealQuoteProposalContinue" type="button" class="btn btn-primary" onclick="openPresentationRequestFromWorkflow()" hidden>Quote &amp; Proposal</button>
             </section>
-            <section class="deal-workflow-section" id="workflowSetupSection" hidden style="display:none">
-                <h3 data-i18n="crm_approval_setup">Approval Setup</h3>
-                <p class="page-subtitle" data-i18n="crm_approval_sequence_help">Select the approvers in sequence. The next approver is unlocked only after the previous approval.</p>
-                <div id="dealProposalChecklist" class="deal-readiness-checklist"></div>
-                <div class="workflow-approver-grid">
-                    <label><span data-i18n="crm_marketing_manager">Marketing Manager</span><select id="workflowMarketingManager" class="form-control"></select></label>
-                    <label><span data-i18n="crm_general_manager">General Manager</span><select id="workflowGeneralManager" class="form-control"></select></label>
-                    <label><span data-i18n="crm_operations_manager">Operations Manager</span><select id="workflowOperationsManager" class="form-control"></select></label>
-                </div>
-                <button type="button" class="btn btn-primary" onclick="startDealApprovalWorkflow()" data-i18n="crm_start_approval">Start Approval</button>
-            </section>
-            <section class="deal-workflow-section" id="dealApprovalProgressSection" hidden>
-                <h3>Historical approval decisions</h3>
-                <div id="dealApprovalSteps" class="deal-approval-steps"></div>
-            </section>
             <section class="deal-workflow-section" id="dealDocumentsSection">
                 <h3 id="dealDocumentsTitle" data-i18n="crm_documents_photos">Documents & Photos</h3>
                 <form id="dealAttachmentForm" onsubmit="handleDealAttachmentUpload(event)" class="deal-attachment-form">
@@ -1697,7 +1682,7 @@
     <script defer src="js/document-ocr.js?v=2026091503"></script>
     <script defer src="js/runtime-config-resolver.js?v=2026100201"></script>
     <script defer src="runtime-config.js"></script>
-    <script defer src="js/db.js?v=2026111702"></script>
+    <script defer src="js/db.js?v=2026112205"></script>
     <script defer src="js/shared-services.js?v=2026111701"></script>
     <script defer src="js/data.js?v=2026112202"></script>
     <script defer src="js/contract.js?v=1788202890003"></script>
@@ -1707,7 +1692,7 @@
     <script defer src="js/enterprise-beta.js"></script>
     <script defer src="js/whatsapp-mock-data.js"></script>
     <script defer src="js/whatsapp-inbox.js"></script>
-    <script defer src="js/app.js?v=2026112203"></script>
+    <script defer src="js/app.js?v=2026112206"></script>
 
     <!-- Payroll Log Sales Modal -->
     <div class="modal" id="payrollLogSalesModal">
