@@ -19195,11 +19195,19 @@ async function openAssignedProjectTodoDetail(projectId, todoId = null) {
         assignee_ids: [currentUser.id]
     }));
 
+    const detailTitle = document.getElementById('projectDetailTitle');
+    const detailBody = document.getElementById('projectDetailBody');
+    const detailModal = document.getElementById('projectDetailModal');
+    if (!detailTitle || !detailBody || !detailModal) {
+        showToast(projectText('projectDetailUnavailable'), 'error');
+        return false;
+    }
+
     window.activeProjectDetailId = projectId;
-    document.getElementById('projectDetailTitle').textContent = project.project_name || 'Project';
-    document.getElementById('projectDetailBody').innerHTML = `<div class="project-assignee-privacy-note"><i data-lucide="shield-check"></i><span>${projectText('assignedTodoPrivacy')}</span></div>
+    detailTitle.textContent = project.project_name || 'Project';
+    detailBody.innerHTML = `<div class="project-assignee-privacy-note"><i data-lucide="shield-check"></i><span>${projectText('assignedTodoPrivacy')}</span></div>
         <div class="project-detail-layout project-detail-layout--todo-only"><section class="project-todo-section project-detail-span-2"><div class="project-todo-heading"><h3><i data-lucide="list-checks"></i>${projectText('todoList')}</h3><span>${todos.filter(todo => todo.status !== 'DONE').length}</span></div><div class="project-todo-list">${projectTodoList(todos, project, false)}</div></section></div>`;
-    document.getElementById('projectDetailModal').classList.add('active');
+    detailModal.classList.add('active');
     if (window.lucide) window.lucide.createIcons();
     return true;
 }
@@ -19283,8 +19291,15 @@ window.openProjectDetail = async function (id) {
         </form>` : '';
     const operationalCountKeys = ['tasks', 'completed_tasks', 'actionable_tasks', 'due_today_tasks', 'waiting_tasks', 'blocked_tasks', 'dependency_blocked_tasks', 'overdue_tasks', 'open_todos', 'overdue_todos'];
     const operationalCountLabels = { tasks: 'TASKS', completed_tasks: 'COMPLETED_TASKS', actionable_tasks: 'ACTIONABLE_TASKS', due_today_tasks: 'DUE_TODAY_TASKS', waiting_tasks: 'WAITING_TASKS', blocked_tasks: 'BLOCKED_TASKS', dependency_blocked_tasks: 'DEPENDENCY_RISK', overdue_tasks: 'OVERDUE_TASKS', open_todos: 'OPEN_TODOS', overdue_todos: 'OVERDUE_TODOS' };
-    document.getElementById('projectDetailTitle').textContent = project.project_name || 'Project';
-    document.getElementById('projectDetailBody').innerHTML = `<div class="project-command-summary"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span>${project.source === 'WON_DEAL' ? `<span class="project-source-badge"><i data-lucide="handshake"></i>${projectText('createdFromDeal')}</span>` : ''}</div><div class="project-command-actions" style="display:flex;gap:0.5rem;align-items:center;">${canEditProject ? `<button class="btn btn-secondary" onclick="closeProjectDetail();openEditProjectModal('${id}')"><i data-lucide="pencil"></i>${projectText('edit')}</button>` : ''}${canDeleteProject ? `<button class="btn btn-secondary" style="color:var(--color-danger);border-color:var(--color-danger);" onclick="closeProjectDetail();handleDeleteProject('${id}')"><i data-lucide="trash-2"></i>${projectText('delete') || 'Delete'}</button>` : ''}</div></div>
+    const detailTitle = document.getElementById('projectDetailTitle');
+    const detailBody = document.getElementById('projectDetailBody');
+    const detailModal = document.getElementById('projectDetailModal');
+    if (!detailTitle || !detailBody || !detailModal) {
+        showToast(projectText('projectDetailUnavailable'), 'error');
+        return false;
+    }
+    detailTitle.textContent = project.project_name || 'Project';
+    detailBody.innerHTML = `<div class="project-command-summary"><div><span class="project-health project-health-${health.toLowerCase().replace('_', '-')}"><i></i>${projectHealthLabel(health)}</span><span class="project-status project-status-${status.toLowerCase().replace('_', '-')}">${projectStatusLabel(status)}</span>${project.source === 'WON_DEAL' ? `<span class="project-source-badge"><i data-lucide="handshake"></i>${projectText('createdFromDeal')}</span>` : ''}</div><div class="project-command-actions" style="display:flex;gap:0.5rem;align-items:center;">${canEditProject ? `<button class="btn btn-secondary" onclick="closeProjectDetail();openEditProjectModal('${id}')"><i data-lucide="pencil"></i>${projectText('edit')}</button>` : ''}${canDeleteProject ? `<button class="btn btn-secondary" style="color:var(--color-danger);border-color:var(--color-danger);" onclick="closeProjectDetail();handleDeleteProject('${id}')"><i data-lucide="trash-2"></i>${projectText('delete') || 'Delete'}</button>` : ''}</div></div>
         <div class="project-detail-kpis"><div><span>${projectText('progress')}</span><strong>${escapeHTML(projectProgressLabel(project.progress_percent))}</strong></div><div><span>${projectText('owner')}</span><strong>${escapeHTML(projectProfileName(ownerId))}</strong></div><div><span>${projectText('target')}</span><strong>${projectDate(project.end_date || project.event_date)}</strong></div>${canViewFinancials ? `<div><span>${projectText('budget')}</span><strong>${projectMoney(budget)}</strong></div><div><span>${projectText('cost')}</span><strong>${projectMoney(cost)}</strong></div><div><span>${projectText('variance')}</span><strong class="${budget - cost < 0 ? 'is-negative' : ''}">${projectMoney(budget - cost)}</strong></div>` : ''}</div>${operationalSummary ? `<section class="project-operational-summary"><div class="project-todo-heading"><h3><i data-lucide="activity"></i>${projectText('operationalSummary')}</h3><span class="project-health project-health-${effectiveProjectHealth(operationalSummary).toLowerCase().replace('_', '-')} ">${escapeHTML(projectHealthLabel(effectiveProjectHealth(operationalSummary)))}</span></div><div class="project-operational-summary-grid">${operationalCountKeys.filter(key => Object.prototype.hasOwnProperty.call(operationalSummary.counts || {}, key)).map(key => `<div><span>${escapeHTML(projectCommandReasonLabel(operationalCountLabels[key]))}</span><strong>${Number(operationalSummary.counts[key] || 0)}</strong></div>`).join('')}</div></section>` : ''}
         <div class="project-detail-layout"><section><h3><i data-lucide="file-text"></i>${projectText('overview')}</h3><dl class="project-overview-list"><div><dt>${projectText('description')}</dt><dd>${escapeHTML(project.description || '—')}</dd></div><div><dt>${projectText('client')}</dt><dd>${escapeHTML(project.client_name || project.crm_clients?.company || project.crm_clients?.name || '—')}</dd></div><div><dt>${projectText('team')}</dt><dd>${(project.assigned_people || []).map(id => escapeHTML(projectProfileName(id))).join(', ') || '—'}</dd></div></dl></section>
         <section><h3><i data-lucide="milestone"></i>${projectText('milestones')}</h3><div class="project-detail-list">${projectDetailList(milestones, 'milestone', id, canEditProject)}</div>${canEditProject ? `<form class="project-inline-form" onsubmit="addProjectMilestone(event,'${id}')"><input id="projectMilestoneTitle" class="form-control" placeholder="${projectText('milestoneHint')}" required><input id="projectMilestoneDate" type="date" class="form-control"><button class="btn btn-secondary" type="submit"><i data-lucide="plus"></i>${projectText('addMilestone')}</button></form>` : ''}</section>
@@ -19293,9 +19308,9 @@ window.openProjectDetail = async function (id) {
         <section class="project-attachments-section project-detail-span-2"><div class="project-todo-heading"><h3><i data-lucide="paperclip"></i>${taskDetailText('Project attachments', 'مرفقات المشروع')}</h3><span>${attachments.length}</span></div>${projectAttachmentList(attachments, canManageTodos)}</section>
         <section class="project-todo-section project-detail-span-2"><div class="project-todo-heading"><h3><i data-lucide="list-checks"></i>${projectText('todoList')}</h3><span>${todos.filter(todo => todo.status !== 'DONE').length}</span></div><div class="project-todo-list">${projectTodoList(todos, project, canManageTodos)}</div>${todoForm}</section></div>`;
     if (!operationalSummary) {
-        document.getElementById('projectDetailBody').querySelector('.project-detail-kpis')?.insertAdjacentHTML('afterend', `<section class="project-operational-summary"><div class="project-todo-heading"><h3><i data-lucide="activity"></i>${projectText('operationalSummary')}</h3></div><p class="project-detail-empty">${projectText('operationalSummaryUnavailable')}</p></section>`);
+        detailBody.querySelector('.project-detail-kpis')?.insertAdjacentHTML('afterend', `<section class="project-operational-summary"><div class="project-todo-heading"><h3><i data-lucide="activity"></i>${projectText('operationalSummary')}</h3></div><p class="project-detail-empty">${projectText('operationalSummaryUnavailable')}</p></section>`);
     }
-    document.getElementById('projectDetailModal').classList.add('active');
+    detailModal.classList.add('active');
     if (window.lucide) window.lucide.createIcons();
 };
 window.closeProjectDetail = () => { window.activeProjectDetailId = null; document.getElementById('projectDetailModal')?.classList.remove('active'); };

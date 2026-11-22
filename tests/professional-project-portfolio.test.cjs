@@ -14,6 +14,8 @@ assert.match(app, /projectPortfolioFilters/);
 assert.match(app, /project-kpi-grid/);
 assert.match(app, /project-portfolio-grid/);
 assert.match(app, /openProjectDetail/);
+assert.match(app, /const detailBody = document\.getElementById\('projectDetailBody'\);[\s\S]{0,180}if \(!detailTitle \|\| !detailBody \|\| !detailModal\)/, 'Project detail renderers must guard modal elements before use');
+assert.doesNotMatch(app, /document\.getElementById\('projectDetailBody'\)\.querySelector/, 'Project detail must not query a potentially missing body element');
 assert.match(app, /addProjectMilestone/);
 assert.match(app, /addProjectRisk/);
 assert.match(app, /addProjectUpdate/);
