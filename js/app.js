@@ -16504,13 +16504,13 @@ function shiftCrmOrderDateTime(dateValue, timeValue, dayOffset) {
     const dateMatch = String(dateValue || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
     const timeMatch = String(timeValue || '00:00').match(/^(\d{2}):(\d{2})/);
     if (!dateMatch || !timeMatch) return '';
-    const shifted = new Date(
-        Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]),
-        Number(timeMatch[1]), Number(timeMatch[2]), 0, 0
-    );
+    const shifted = new Date(0);
+    shifted.setFullYear(Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]));
+    shifted.setHours(Number(timeMatch[1]), Number(timeMatch[2]), 0, 0);
     shifted.setDate(shifted.getDate() + Number(dayOffset || 0));
     const pad = value => String(value).padStart(2, '0');
-    return `${shifted.getFullYear()}-${pad(shifted.getMonth() + 1)}-${pad(shifted.getDate())}T${pad(shifted.getHours())}:${pad(shifted.getMinutes())}`;
+    const year = String(shifted.getFullYear()).padStart(4, '0');
+    return `${year}-${pad(shifted.getMonth() + 1)}-${pad(shifted.getDate())}T${pad(shifted.getHours())}:${pad(shifted.getMinutes())}`;
 }
 
 window.syncCrmOrderScheduleDefaults = function () {
@@ -16587,8 +16587,11 @@ window.closeCRMOrderModal = () => {
 
 window.handleOrderSubmit = async (event) => {
     event.preventDefault();
+    const orderForm = event.currentTarget;
+    if (!orderForm) return showToast(t('crm_project_create_failed') || 'Unable to open the project.', 'danger');
     window.syncCrmOrderScheduleDefaults();
-    const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+    const submitButton = orderForm.querySelector('button[type="submit"]');
+    if (!submitButton) return showToast(t('crm_project_create_failed') || 'Unable to open the project.', 'danger');
     const dealId = document.getElementById('orderDealId').value;
     const oldStage = document.getElementById('crmOrderModal').dataset.oldStage || '';
     const eventDate = document.getElementById('orderEventDate').value || '';
@@ -16636,7 +16639,7 @@ window.handleOrderSubmit = async (event) => {
             },
             location_url: document.getElementById('orderLocationUrl').value.trim() || null,
             location_text: document.getElementById('orderLocationText').value.trim() || null,
-            installation_type: event.currentTarget.querySelector('[name="orderInstallationType"]:checked')?.value || null,
+            installation_type: orderForm.querySelector('[name="orderInstallationType"]:checked')?.value || null,
             assigned_people: assignedPeople,
             equipment,
             notes: document.getElementById('orderNotes').value.trim() || null
