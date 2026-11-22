@@ -11108,6 +11108,9 @@ window.handleUpdateTaskStatus = async function (id, status) {
         actualStatus = savedStatus;
         if (task) task.status = savedStatus;
         db.triggerWebhooks('task_status_updated', { task_id: id, status: savedStatus }).catch(error => console.warn('Task status webhook failed:', error));
+        if (task?.crm_workflow_kind === 'QUOTE_PROPOSAL' && String(savedStatus).trim().toLowerCase() === 'completed') {
+            void window.refreshCrmDashboardInBackground?.();
+        }
 
         if (needsManagerApproval) {
             showToast(window.t('msg_toast_30') || 'Task moved to Awaiting Approval. The department manager has been notified.', 'info');
