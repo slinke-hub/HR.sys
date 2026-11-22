@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20261122130000_crm_quote_proposal_completion_advances_negotiation.sql'), 'utf8');
+const submissionMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20261122140000_crm_quote_proposal_submission_advances_negotiation.sql'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8');
 
 assert.match(migration, /crm_quote_proposal_completion_advances_deal[\s\S]*?AFTER UPDATE OF status ON public\.tasks/,
@@ -27,5 +28,14 @@ assert.match(migration, /has_function_privilege\('authenticated', 'hrsys_private
   'The private readiness helper must not be callable by authenticated users');
 assert.match(app, /task\?\.crm_workflow_kind === 'QUOTE_PROPOSAL'[\s\S]*?refreshCrmDashboardInBackground/,
   'The CRM board should refresh after task completion');
+assert.match(submissionMigration, /AFTER UPDATE OF submission_links ON public\.tasks/,
+  'Submitting required Quote & Proposal files must trigger the deal transition immediately');
+assert.match(submissionMigration, /NEW\.submission_links IS DISTINCT FROM OLD\.submission_links/,
+  'The submission trigger must ignore unrelated task updates');
+assert.doesNotMatch(submissionMigration.match(/CREATE OR REPLACE FUNCTION hrsys_private\.crm_quote_proposal_submission_ready[\s\S]*?\$function\$;/)?.[0] || '',
+  /LOWER\(BTRIM\(COALESCE\(task\.status/,
+  'Submission readiness must not wait for a separate task status change');
+assert.match(submissionMigration, /crm_deal_activity[\s\S]*?Required Quote & Proposal files submitted/,
+  'Automatic advancement must be recorded in CRM activity');
 
 console.log('CRM_QUOTE_PROPOSAL_AUTO_NEGOTIATION=PASS');
