@@ -15203,6 +15203,12 @@ window.saveDealWorkflowStage = async function () {
         ), 'warning');
     }
 
+    if (oldStage === 'DISCUSSION' && newStage === 'NEGOTIATION') {
+        closeDealWorkflowModal();
+        window.openCrmPresentationRequest?.('QUOTE_PROPOSAL', String(dealId), { advanceToNegotiation: true });
+        return { success: false, reason: 'quote_proposal_upload_required', dealId, oldStage, newStage };
+    }
+
     const button = document.getElementById('dealWorkflowStageSave');
     if (button) button.disabled = true;
     const result = await (window.hrDomainServices?.deals?.changeStage
@@ -16019,11 +16025,15 @@ window.closeCrmPresentationRequestModal = function () {
     document.getElementById('crmPresentationRequestModal').classList.remove('show');
     document.getElementById('crmPresentationRequestForm')?.reset();
     document.getElementById('presentationProposalDescriptions').innerHTML = '';
+    pendingCrmPresentationAdvanceToNegotiation = false;
 };
 
-window.openCrmPresentationRequest = function (requestType, dealId = null) {
+let pendingCrmPresentationAdvanceToNegotiation = false;
+
+window.openCrmPresentationRequest = function (requestType, dealId = null, options = {}) {
     const normalizedType = 'QUOTE_PROPOSAL';
     const selectedDealId = dealId || document.getElementById('presentationChoiceDealId').value;
+    pendingCrmPresentationAdvanceToNegotiation = options.advanceToNegotiation === true;
     window.closeCrmPresentationChoiceModal();
     document.getElementById('presentationRequestDealId').value = selectedDealId;
     document.getElementById('presentationRequestType').value = normalizedType;
@@ -16033,8 +16043,12 @@ window.openCrmPresentationRequest = function (requestType, dealId = null) {
     document.getElementById('crmPresentationRequestTitle').textContent = normalizedType === 'QUOTE_PROPOSAL'
         ? (t('crm_quote_and_proposal') || 'Quote and proposal')
         : (t('crm_quote_only') || 'Quote');
-    document.getElementById('crmPresentationRequestHelp').textContent = taskDetailText('Create the Quote & Proposal task for Design.', 'إنشاء مهمة عرض السعر والمقترح للتصميم.');
-    document.querySelector('#sendPresentationApprovalBtn span').textContent = taskDetailText('Create task', 'إنشاء المهمة');
+    document.getElementById('crmPresentationRequestHelp').textContent = pendingCrmPresentationAdvanceToNegotiation
+        ? taskDetailText('Upload the required Quote & Proposal files to move this deal to Negotiation and assign the Design task to MQ-08.', 'ارفع ملفات عرض السعر والمقترح المطلوبة لنقل الصفقة إلى التفاوض وإسناد مهمة التصميم إلى MQ-08.')
+        : taskDetailText('Create the Quote & Proposal task for Design.', 'إنشاء مهمة عرض السعر والمقترح للتصميم.');
+    document.querySelector('#sendPresentationApprovalBtn span').textContent = pendingCrmPresentationAdvanceToNegotiation
+        ? taskDetailText('Upload and move to Negotiation', 'ارفع وانقل إلى التفاوض')
+        : taskDetailText('Create task', 'إنشاء المهمة');
     document.getElementById('crmPresentationRequestModal').classList.add('show');
     updateTranslations();
     if (window.lucide) window.lucide.createIcons();
@@ -16171,12 +16185,21 @@ window.handleCrmPresentationRequestSubmit = async function (event) {
             preserveExisting: true
         });
         if (!replacement.success) throw replacement.error || new Error(t('crm_upload_failed') || 'Upload failed');
-        const result = await db.startCrmQuoteProposal(dealId);
+        const advanceToNegotiation = pendingCrmPresentationAdvanceToNegotiation;
+        const result = advanceToNegotiation
+            ? await db.startCrmQuoteProposalAndAdvance(dealId)
+            : await db.startCrmQuoteProposal(dealId);
         if (!result.success) throw result.error || new Error('Unable to create the Quote & Proposal task');
-        window.setCrmDealStageLocally?.(dealId, 'DISCUSSION');
+        const nextStage = advanceToNegotiation ? 'NEGOTIATION' : 'DISCUSSION';
+        window.setCrmDealStageLocally?.(dealId, nextStage);
         window.closeCrmPresentationRequestModal();
-        showToast(taskDetailText('Quote & Proposal task created.', 'تم إنشاء مهمة عرض السعر والمقترح.'), 'success');
+        showToast(advanceToNegotiation
+            ? taskDetailText('Deal moved to Negotiation. The Quote & Proposal task was assigned to MQ-08.', 'نُقلت الصفقة إلى التفاوض وأُسندت مهمة عرض السعر والمقترح إلى MQ-08.')
+            : taskDetailText('Quote & Proposal task created.', 'تم إنشاء مهمة عرض السعر والمقترح.'), 'success');
         void window.refreshCrmDashboardInBackground?.();
+        if (advanceToNegotiation && result.taskId && isMq08Profile()) {
+            await window.openTaskDetailsModal(result.taskId);
+        }
     } catch (error) {
         showToast(error?.message || t('crm_approval_start_failed') || 'Unable to start approval.', 'danger');
     } finally {
@@ -16230,6 +16253,11 @@ window.dropDeal = async (ev, newStage) => {
     const oldStage = ev.dataTransfer.getData('oldStage') || (card ? card.getAttribute('data-stage') : null);
     const reactManaged = Boolean(card && document.getElementById('crm-react-root')?.contains(card));
     if (oldStage === newStage) return { success: true, reason: 'same_stage', dealId, oldStage, newStage };
+
+    if (oldStage === 'DISCUSSION' && newStage === 'NEGOTIATION') {
+        window.openCrmPresentationRequest('QUOTE_PROPOSAL', dealId, { advanceToNegotiation: true });
+        return { success: false, reason: 'quote_proposal_upload_required', dealId, oldStage, newStage };
+    }
 
     if (newStage === 'PITCH' || newStage === 'PROPOSAL') {
         if (!reactManaged && oldStage) window.moveDealCard(dealId, oldStage);
