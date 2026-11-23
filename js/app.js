@@ -2884,7 +2884,20 @@ function applyFeatureAccessControls(root = document) {
 }
 window.applyFeatureAccessControls = applyFeatureAccessControls;
 
+let pageAccessRefreshPromise = null;
 async function canCurrentUserAccessView(viewId) {
+    if (hasExplicitPageGrant(viewId)) return true;
+    if (!currentUser?.id || isAdminRole(currentUserRole || currentUserProfile?.role)) return false;
+
+    // Admins may grant access while another employee session is still open.
+    // Refresh once on a denied check so the new grant takes effect immediately.
+    if (!pageAccessRefreshPromise) {
+        pageAccessRefreshPromise = Promise.all([
+            window.loadUserPermissions(currentUser.id),
+            window.loadRolePermissions()
+        ]).finally(() => { pageAccessRefreshPromise = null; });
+    }
+    await pageAccessRefreshPromise;
     return hasExplicitPageGrant(viewId);
 }
 
@@ -3399,6 +3412,7 @@ async function renderDashboard() {
     const newsCeid = 'SA:ar';
     const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(newsQuery)}&hl=${newsHl}&gl=${newsGl}&ceid=${newsCeid}`;
     const newsApiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
+    const canOpenEmployeeDirectory = await canCurrentUserAccessView('employees');
 
     // Run independent fetches in parallel. News is optional and gets a short
     // timeout so a slow external feed cannot hold up the dashboard.
@@ -3685,7 +3699,7 @@ async function renderDashboard() {
             ` : ''}
             <section class="ui02-dashboard-top-grid ui02-admin-tools-grid" aria-label="${currentLang === 'ar' ? 'صحة المستندات والإجراءات السريعة' : 'Documents health and work shortcuts'}">
                 <section class="card ui02-expiry-card"><div class="ui02-panel-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'صحة المستندات' : 'DOCUMENT HEALTH'}</span><div class="card-title">${currentLang === 'ar' ? 'المستندات المنتهية أو القريبة من الانتهاء' : 'Expired documents / expiring soon'}</div></div></div>${expirationAlerts || `<p class="ui02-empty-state">${currentLang === 'ar' ? 'لا توجد مستندات تحتاج إلى متابعة.' : 'No document expirations require attention.'}</p>`}</section>
-                <section class="card ui02-quick-actions"><div class="ui02-panel-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'اختصارات العمل' : 'WORK SHORTCUTS'}</span><div class="card-title">${currentLang === 'ar' ? 'إجراءات سريعة' : 'Quick actions'}</div></div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اختصارات' : 'Shortcuts'}</span></div><div class="ui02-action-grid"><button type="button" class="ui02-action-tile" onclick="renderView('tasks')"><i data-lucide="list-checks"></i><span>${currentLang === 'ar' ? 'إدارة المهام' : 'Task manager'}</span></button><button type="button" class="ui02-action-tile" onclick="renderView('requests')"><i data-lucide="inbox"></i><span>${currentLang === 'ar' ? 'عرض الطلبات' : 'Review requests'}</span></button>${canViewEmployeesRadar() ? `<button type="button" class="ui02-action-tile" onclick="renderView('employees')"><i data-lucide="users-round"></i><span>${currentLang === 'ar' ? 'دليل الموظفين' : 'Employee directory'}</span></button>` : ''}${currentUserRole === 'ADMIN' ? `<button type="button" class="ui02-action-tile" onclick="showAnnouncementModal()"><i data-lucide="megaphone"></i><span>${currentLang === 'ar' ? 'إضافة إعلان' : 'Post announcement'}</span></button>` : ''}</div></section>
+                <section class="card ui02-quick-actions"><div class="ui02-panel-heading"><div><span class="ui02-section-kicker">${currentLang === 'ar' ? 'اختصارات العمل' : 'WORK SHORTCUTS'}</span><div class="card-title">${currentLang === 'ar' ? 'إجراءات سريعة' : 'Quick actions'}</div></div><span class="ui02-panel-note">${currentLang === 'ar' ? 'اختصارات' : 'Shortcuts'}</span></div><div class="ui02-action-grid"><button type="button" class="ui02-action-tile" onclick="renderView('tasks')"><i data-lucide="list-checks"></i><span>${currentLang === 'ar' ? 'إدارة المهام' : 'Task manager'}</span></button><button type="button" class="ui02-action-tile" onclick="renderView('requests')"><i data-lucide="inbox"></i><span>${currentLang === 'ar' ? 'عرض الطلبات' : 'Review requests'}</span></button>${canOpenEmployeeDirectory ? `<button type="button" class="ui02-action-tile" onclick="renderView('employees')"><i data-lucide="users-round"></i><span>${currentLang === 'ar' ? 'دليل الموظفين' : 'Employee directory'}</span></button>` : ''}${currentUserRole === 'ADMIN' ? `<button type="button" class="ui02-action-tile" onclick="showAnnouncementModal()"><i data-lucide="megaphone"></i><span>${currentLang === 'ar' ? 'إضافة إعلان' : 'Post announcement'}</span></button>` : ''}</div></section>
             </section>
             </section>
 
