@@ -2844,6 +2844,8 @@ function canCurrentUserUseFeature(featureId) {
     const permission = getCurrentRolePermission();
     return !((permission?.disabled_features || []).includes(featureId));
 }
+const ALL_EMPLOYEES_ACCESS_ROLE = 'ALL_EMPLOYEES';
+
 function hasExplicitPageGrant(viewId) {
     if (!viewId || isAdminRole(currentUserRole || currentUserProfile?.role)) return true;
     if (Array.isArray(window.appUserPermissions) && window.appUserPermissions.includes(viewId)) return true;
@@ -2852,7 +2854,8 @@ function hasExplicitPageGrant(viewId) {
     return (window.appRolePermissionsCache || []).some(permission => {
         const isRoleMatch = normalizeAccessValue(permission.role) === normalizedRole;
         const isDepartmentMatch = departmentId && permission.role === `DEPT_${departmentId}`;
-        return (isRoleMatch || isDepartmentMatch) && Array.isArray(permission.allowed_pages) && permission.allowed_pages.includes(viewId);
+        const isAllEmployeesMatch = permission.role === ALL_EMPLOYEES_ACCESS_ROLE;
+        return (isRoleMatch || isDepartmentMatch || isAllEmployeesMatch) && Array.isArray(permission.allowed_pages) && permission.allowed_pages.includes(viewId);
     });
 }
 
@@ -6429,9 +6432,11 @@ async function renderAdminPageAccess() {
     });
     const roles = ['EMPLOYEE', 'SUPERVISOR', 'MANAGER', 'HR_MANAGER', 'ADMIN'];
     const roleLabels = currentLang === 'ar'
-        ? { EMPLOYEE: 'جميع الموظفين', SUPERVISOR: 'المشرفون', MANAGER: 'المديرون', HR_MANAGER: 'مديرو الموارد البشرية', ADMIN: 'مسؤولو النظام' }
-        : { EMPLOYEE: 'All employees', SUPERVISOR: 'Supervisors', MANAGER: 'Managers', HR_MANAGER: 'HR managers', ADMIN: 'Administrators' };
-    const formatRole = role => roleLabels[role] || role;
+        ? { EMPLOYEE: 'دور الموظف', SUPERVISOR: 'المشرفون', MANAGER: 'المديرون', HR_MANAGER: 'مديرو الموارد البشرية', ADMIN: 'مسؤولو النظام' }
+        : { EMPLOYEE: 'Employee role', SUPERVISOR: 'Supervisors', MANAGER: 'Managers', HR_MANAGER: 'HR managers', ADMIN: 'Administrators' };
+    const formatRole = role => role === ALL_EMPLOYEES_ACCESS_ROLE
+        ? localize('All employees', 'جميع الموظفين')
+        : roleLabels[role] || role;
     const departmentName = department => currentLang === 'ar' ? (department.name_ar || department.name) : department.name;
     const employeeName = profile => window.formatEmployeeName(profile) || profile.email || localize('Unnamed employee', 'موظف بدون اسم');
     const hasRolePerm = (r, v) => {
@@ -6446,13 +6451,15 @@ async function renderAdminPageAccess() {
     };
     const hasRoleFeatureDisabled = (principal, featureId) => (perms.find(x => x.role === principal)?.disabled_features || []).includes(featureId);
     const hasUserFeatureDisabled = (userId, featureId) => (allUserPerms.find(x => x.user_id === userId)?.disabled_features || []).includes(featureId);
-    const roleGrantCount = roles.reduce((total, role) => total + availableViews.filter(view => hasRolePerm(role, view.id)).length, 0);
+    const allEmployeesGrantCount = availableViews.filter(view => hasRolePerm(ALL_EMPLOYEES_ACCESS_ROLE, view.id)).length;
+    const roleGrantCount = allEmployeesGrantCount + roles.reduce((total, role) => total + availableViews.filter(view => hasRolePerm(role, view.id)).length, 0);
     const departmentGrantCount = depts.reduce((total, department) => total + availableViews.filter(view => hasRolePerm(`DEPT_${department.id}`, view.id)).length, 0);
     const userGrantCount = allProfiles.reduce((total, profile) => total + availableViews.filter(view => hasUserPerm(profile.id, view.id)).length, 0);
-    const configuredPageCount = availableViews.filter(view => roles.some(role => hasRolePerm(role, view.id))
+    const configuredPageCount = availableViews.filter(view => hasRolePerm(ALL_EMPLOYEES_ACCESS_ROLE, view.id)
+        || roles.some(role => hasRolePerm(role, view.id))
         || depts.some(department => hasRolePerm(`DEPT_${department.id}`, view.id))
         || allProfiles.some(profile => hasUserPerm(profile.id, view.id))).length;
-    const principalOptions = `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${roles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>
+    const principalOptions = `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}"><option value="ROLE:${ALL_EMPLOYEES_ACCESS_ROLE}">${escapeHTML(formatRole(ALL_EMPLOYEES_ACCESS_ROLE))}</option>${roles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>
         <optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${depts.map(department => `<option value="ROLE:DEPT_${department.id}">${escapeHTML(departmentName(department))}</option>`).join('')}</optgroup>
         <optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${allProfiles.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>`;
     const groupLabels = {
@@ -6461,10 +6468,16 @@ async function renderAdminPageAccess() {
     };
     const renderChip = (type, id, viewId, label, kind, icon) => `<span class="page-access-chip ${kind}"><i data-lucide="${icon}"></i><span>${escapeHTML(label)}</span><button type="button" onclick="handleRevokeAccess('${type}','${id}','${viewId}')" aria-label="${escapeHTML(localize('Remove access for', 'إزالة صلاحية'))} ${escapeHTML(label)}"><i data-lucide="x"></i></button></span>`;
     const renderViewCard = view => {
-        const roleChips = roles.filter(role => hasRolePerm(role, view.id)).map(role => renderChip('ROLE', role, view.id, formatRole(role), 'role', 'shield')).join('');
+        const allEmployeesChip = hasRolePerm(ALL_EMPLOYEES_ACCESS_ROLE, view.id)
+            ? renderChip('ROLE', ALL_EMPLOYEES_ACCESS_ROLE, view.id, formatRole(ALL_EMPLOYEES_ACCESS_ROLE), 'role', 'users-round')
+            : '';
+        const roleChips = allEmployeesChip + roles.filter(role => hasRolePerm(role, view.id)).map(role => renderChip('ROLE', role, view.id, formatRole(role), 'role', 'shield')).join('');
         const departmentChips = depts.filter(department => hasRolePerm(`DEPT_${department.id}`, view.id)).map(department => renderChip('ROLE', `DEPT_${department.id}`, view.id, departmentName(department), 'department', 'building-2')).join('');
         const userChips = allProfiles.filter(profile => hasUserPerm(profile.id, view.id)).map(profile => renderChip('USER', profile.id, view.id, employeeName(profile), 'employee', 'user-round')).join('');
         const grantCount = [roleChips, departmentChips, userChips].filter(Boolean).length;
+        const allEmployeesOption = hasRolePerm(ALL_EMPLOYEES_ACCESS_ROLE, view.id)
+            ? ''
+            : `<option value="ROLE:${ALL_EMPLOYEES_ACCESS_ROLE}">${escapeHTML(formatRole(ALL_EMPLOYEES_ACCESS_ROLE))}</option>`;
         const remainingRoles = roles.filter(role => !hasRolePerm(role, view.id));
         const grantDepartmentOptions = depts.map(department => {
             const alreadyGranted = hasRolePerm(`DEPT_${department.id}`, view.id);
@@ -6474,10 +6487,10 @@ async function renderAdminPageAccess() {
         const remainingDepartments = depts.filter(department => !hasRolePerm(`DEPT_${department.id}`, view.id));
         const remainingUsers = allProfiles.filter(profile => !hasUserPerm(profile.id, view.id));
         return `<article class="page-access-card" data-page-access-card data-page-label="${escapeHTML(`${view.label} ${view.id}`.toLowerCase())}" data-page-configured="${grantCount ? 'true' : 'false'}">
-            <header class="page-access-card-header"><span class="page-access-card-icon"><i data-lucide="${view.icon}"></i></span><div><h3>${escapeHTML(view.label)}</h3><code>${escapeHTML(view.id)}</code></div><span class="page-access-grant-count">${roles.filter(role => hasRolePerm(role, view.id)).length + depts.filter(department => hasRolePerm(`DEPT_${department.id}`, view.id)).length + allProfiles.filter(profile => hasUserPerm(profile.id, view.id)).length}</span></header>
+            <header class="page-access-card-header"><span class="page-access-card-icon"><i data-lucide="${view.icon}"></i></span><div><h3>${escapeHTML(view.label)}</h3><code>${escapeHTML(view.id)}</code></div><span class="page-access-grant-count">${(hasRolePerm(ALL_EMPLOYEES_ACCESS_ROLE, view.id) ? 1 : 0) + roles.filter(role => hasRolePerm(role, view.id)).length + depts.filter(department => hasRolePerm(`DEPT_${department.id}`, view.id)).length + allProfiles.filter(profile => hasUserPerm(profile.id, view.id)).length}</span></header>
             <div class="page-access-chip-list">${roleChips}${departmentChips}${userChips || ''}${!roleChips && !departmentChips && !userChips ? `<p class="page-access-empty">${escapeHTML(localize('No explicit access assigned', 'لم يتم تعيين صلاحية مباشرة'))}</p>` : ''}</div>
             <label class="page-access-add"><span>${escapeHTML(localize('Grant access', 'منح صلاحية'))}</span><select class="form-control" onchange="handleGrantAccess(this, '${view.id}')"><option value="">${escapeHTML(localize('Choose a role, department, or employee…', 'اختر دوراً أو قسماً أو موظفاً…'))}</option>
-                ${remainingRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${remainingRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}
+                ${allEmployeesOption || remainingRoles.length ? `<optgroup label="${escapeHTML(localize('Roles', 'الأدوار'))}">${allEmployeesOption}${remainingRoles.map(role => `<option value="ROLE:${role}">${escapeHTML(formatRole(role))}</option>`).join('')}</optgroup>` : ''}
                 ${depts.length ? `<optgroup label="${escapeHTML(localize('Departments', 'الأقسام'))}">${grantDepartmentOptions}</optgroup>` : ''}
                 ${remainingUsers.length ? `<optgroup label="${escapeHTML(localize('Employees', 'الموظفون'))}">${remainingUsers.map(profile => `<option value="USER:${profile.id}">${escapeHTML(employeeName(profile))}</option>`).join('')}</optgroup>` : ''}
             </select></label>
